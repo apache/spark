@@ -265,10 +265,13 @@ class StreamingQuery:
         .. versionchanged:: 3.5.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Returns a :class:`StreamingQueryStatus` instead of a dict.
+
         Returns
         -------
         list
-            List of dict which is the most recent :class:`StreamingQueryProgress` updates
+            List of :class:`StreamingQueryProgress` which is the most recent :class:`StreamingQueryProgress` updates
             for this query.
 
         Examples
@@ -299,9 +302,12 @@ class StreamingQuery:
         .. versionchanged:: 3.5.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Returns a list of :class:`StreamingQueryProgress` instead of a dict.
+
         Returns
         -------
-        dict, optional
+        :class:`StreamingQueryProgress`, optional
             The most recent :class:`StreamingQueryProgress` update of this streaming query or
             None if there were no progress updates.
 

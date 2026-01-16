@@ -3116,17 +3116,17 @@ There are multiple ways to monitor active streaming queries. You can either push
 You can directly get the current status and metrics of an active query using
 `streamingQuery.lastProgress()` and `streamingQuery.status()`.
 `lastProgress()` returns a `StreamingQueryProgress` object
-in [Scala](/api/scala/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
-and [Java](/api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
-and a dictionary with the same fields in Python. It has all the information about
+in [Scala](/docs/latest/api/scala/org/apache/spark/sql/streaming/StreamingQueryProgress.html),
+[Java](/docs/latest/api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
+and [Python](/docs/latest/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.StreamingQuery.lastProgress.html). It has all the information about
 the progress made in the last trigger of the stream - what data was processed,
 what were the processing rates, latencies, etc. There is also
 `streamingQuery.recentProgress` which returns an array of last few progresses.
 
 In addition, `streamingQuery.status()` returns a `StreamingQueryStatus` object
-in [Scala](/api/scala/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
-and [Java](/api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
-and a dictionary with the same fields in Python. It gives information about
+in [Scala](/docs/latest/api/scala/org/apache/spark/sql/streaming/StreamingQueryStatus.html),
+[Java](/docs/latest/api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
+and [Python](/docs/latest/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.StreamingQuery.status.html). It gives information about
 what the query is immediately doing - is a trigger active, is data being processed, etc.
 
 Here are a few examples.
