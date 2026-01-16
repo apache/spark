@@ -466,6 +466,11 @@ private[spark] class SparkSubmit extends Logging {
         def avoidJarDownload(scheme: String): Boolean =
           avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
 
+        val avoidArchiveDownloadSchemes = sparkConf.get(KUBERNETES_ARCHIVES_AVOID_DOWNLOAD_SCHEMES)
+
+        def avoidArchiveDownload(scheme: String): Boolean =
+          avoidArchiveDownloadSchemes.contains("*") || avoidArchiveDownloadSchemes.contains(scheme)
+
         val filesLocalFiles = Option(args.files).map {
           downloadResourcesToCurrentDirectory(_)
         }.orNull
@@ -473,7 +478,7 @@ private[spark] class SparkSubmit extends Logging {
           downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
-          downloadResourcesToCurrentDirectory(_, true)
+          downloadResourcesToCurrentDirectory(_, isArchive = true, avoidDownload = avoidArchiveDownload)
         }.orNull
         val pyLocalFiles = Option(args.pyFiles).map {
           downloadResourcesToCurrentDirectory(_)
