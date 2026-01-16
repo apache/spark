@@ -176,7 +176,7 @@ class JDBCTableCatalog extends TableCatalog
         JDBCRDD.resolveTable(optionsWithTableName, conn, Some(ident), Some(name()))
       }
       JDBCTable(ident, schema, optionsWithTableName,
-        additionalMetrics = Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
+        Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
     }
   }
 
