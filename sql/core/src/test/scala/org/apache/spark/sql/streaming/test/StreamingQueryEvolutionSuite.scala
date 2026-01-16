@@ -107,24 +107,28 @@ class StreamingQueryEvolutionSuite extends StreamTest {
   // Duplicate Detection Tests
   // ==========================
 
-  testWithSourceEvolution("duplicate source names - rejected during analysis") {
-    val df1 = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .name("duplicate_name")
-      .load()
+  testWithSourceEvolution("duplicate source names - rejected when starting stream") {
+    withTempDir { checkpointDir =>
+      val df1 = spark.readStream
+        .format("org.apache.spark.sql.streaming.test")
+        .name("duplicate_name")
+        .load()
 
-    val df2 = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .name("duplicate_name")  // Same name - should fail
-      .load()
+      val df2 = spark.readStream
+        .format("org.apache.spark.sql.streaming.test")
+        .name("duplicate_name")  // Same name - should fail
+        .load()
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        // Union operation triggers analysis, which detects duplicates
-        df1.union(df2).queryExecution.analyzed
-      },
-      condition = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
-      parameters = Map("names" -> "duplicate_name"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.union(df2).writeStream
+            .format("org.apache.spark.sql.streaming.test")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start()
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
+        parameters = Map("names" -> "'duplicate_name'"))
+    }
   }
 
   testWithSourceEvolution("enforcement enabled - unnamed source rejected") {
