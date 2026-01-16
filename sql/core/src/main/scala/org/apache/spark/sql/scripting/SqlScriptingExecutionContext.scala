@@ -25,7 +25,6 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingExecutionContextExtension, VariableDefinition}
 import org.apache.spark.sql.catalyst.expressions.CursorDefinition
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
@@ -295,13 +294,9 @@ class SqlScriptingExecutionFrame(
   def enterScope(
       label: String,
       triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap): Unit = {
-    // Normalize label for case-insensitive lookups
-    val normalizedLabel = if (SQLConf.get.caseSensitiveAnalysis) {
-      label
-    } else {
-      label.toLowerCase(Locale.ROOT)
-    }
-    scopes.append(new SqlScriptingExecutionScope(normalizedLabel, triggerToExceptionHandlerMap))
+    // Note: Labels are already lowercased in ParserUtils#enterLabeledScope during parsing,
+    // so no need to normalize here. Labels are always case-insensitive in SQL/PSM.
+    scopes.append(new SqlScriptingExecutionScope(label, triggerToExceptionHandlerMap))
   }
 
   def exitScope(label: String): Unit = {

@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CURSOR_REFERENCE, TreePa
 import org.apache.spark.sql.types.DataType
 
 /**
- * Immutable cursor definition containing the cursor's name and SQL query text.
+ * Immutable cursor definition containing the cursor's normalized name and SQL query text.
  * This is stored in the scripting context and referenced by CursorReference during analysis.
+ * Similar to VariableDefinition, this stores the normalized name for consistent lookups.
  *
- * @param name The cursor name as declared
+ * @param name The normalized cursor name (lowercase if case-insensitive analysis)
  * @param queryText The SQL query text defining the cursor result set
  */
 case class CursorDefinition(

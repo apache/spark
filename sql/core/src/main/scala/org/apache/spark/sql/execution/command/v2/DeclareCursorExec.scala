@@ -59,10 +59,11 @@ case class DeclareCursorExec(
         messageParameters = Map("cursorName" -> toSQLId(cursorName)))
     }
 
-    // Create immutable cursor definition with name and SQL text
+    // Create immutable cursor definition with normalized name and SQL text
     // Query parsing and analysis is deferred until OPEN time
+    // Note: Stores normalized name for consistency with VariableDefinition
     val cursorDef = CursorDefinition(
-      name = cursorName,
+      name = normalizedName,
       queryText = queryText)
 
     // Store cursor definition and initial state

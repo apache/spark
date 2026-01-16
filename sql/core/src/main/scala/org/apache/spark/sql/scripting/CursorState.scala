@@ -42,14 +42,15 @@ case class CursorOpened(
 
 /**
  * Cursor is being fetched from - result iterator is active.
- * Uses toLocalIterator() to avoid loading all data into memory at once.
+ * Uses executeToIterator() to avoid loading all data into memory at once.
+ * Uses InternalRow format to avoid unnecessary conversions.
  *
  * @param analyzedQuery The analyzed logical plan
- * @param resultIterator Iterator over result rows
+ * @param resultIterator Iterator over InternalRow results
  */
 case class CursorFetching(
     analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
-    resultIterator: java.util.Iterator[org.apache.spark.sql.Row]) extends CursorState
+    resultIterator: Iterator[org.apache.spark.sql.catalyst.InternalRow]) extends CursorState
 
 /**
  * Cursor has been closed and resources released.

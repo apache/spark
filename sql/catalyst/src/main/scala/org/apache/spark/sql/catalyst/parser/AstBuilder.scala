@@ -6655,14 +6655,12 @@ class AstBuilder extends DataTypeAstBuilder
     val cursor = createUnresolvedCursor(nameParts)
 
     // Parse optional USING clause parameters
-    // Note: Parameter name inference from attributes (e.g., USING p where p is a variable)
-    // happens during analysis, not during parsing. At parse time, we extract:
-    // - For aliased expressions (expr AS name): extract name from Alias
-    // - For non-aliased expressions: use empty string as placeholder
+    // Extract names from Alias nodes at parse time since Alias nodes may not survive analysis.
+    // The shared ParameterBindingUtils will use these pre-extracted names at execution time.
     val (args, paramNames) = Option(ctx.params).map { params =>
       params.namedExpression().asScala.toSeq.map(visitNamedExpression).map {
         case alias: Alias => (alias.child, alias.name)
-        case expr => (expr, "")  // Empty string for positional/inferred parameter
+        case expr => (expr, "")
       }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 

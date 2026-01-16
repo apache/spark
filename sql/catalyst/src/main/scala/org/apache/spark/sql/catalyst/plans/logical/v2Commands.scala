@@ -1945,18 +1945,16 @@ case class DeclareCursor(
 /**
  * The logical plan of the OPEN cursor command.
  *
- * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
+ * @param cursor Cursor reference (UnresolvedCursor during parsing,
+ *               CursorReference after analysis)
  * @param args Parameter expressions from USING clause
- * @param paramNames Names for each parameter (empty string "" for positional parameters)
+ * @param paramNames Parameter names extracted from Alias at parse time
+ *                   (empty string for positional parameters)
  */
 case class OpenCursor(
     cursor: Expression,
     args: Seq[Expression] = Seq.empty,
-    paramNames: Seq[String] = Seq.empty) extends LeafCommand {
-
-  assert(args.length == paramNames.length,
-    s"args.length (${args.length}) must equal paramNames.length (${paramNames.length})")
-}
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand
 
 /**
  * The logical plan of the FETCH cursor command.

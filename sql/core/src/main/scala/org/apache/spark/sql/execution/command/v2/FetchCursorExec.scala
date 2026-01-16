@@ -61,10 +61,11 @@ case class FetchCursorExec(
     val (iterator, analyzedQuery) = currentState match {
       case CursorOpened(query) =>
         // First fetch - create iterator and transition to Fetching state
+        // Use executeToIterator() to get InternalRow directly, avoiding conversion overhead
         val df = Dataset.ofRows(
           session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
           query)
-        val iter = df.toLocalIterator()
+        val iter = df.queryExecution.executedPlan.executeToIterator()
         scriptingContext.updateCursorState(
           cursorRef.normalizedName,
           cursorRef.scopeLabel,
@@ -88,14 +89,8 @@ case class FetchCursorExec(
         messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name)))
     }
 
-    val externalRow = iterator.next()
-
-    // Convert Row to InternalRow for processing
-    val schema = org.apache.spark.sql.catalyst.types.DataTypeUtils
-      .fromAttributes(analyzedQuery.output)
-    val converter = org.apache.spark.sql.catalyst.CatalystTypeConverters
-      .createToCatalystConverter(schema)
-    val currentRow = converter(externalRow).asInstanceOf[InternalRow]
+    // Get InternalRow directly - no conversion needed
+    val currentRow = iterator.next()
 
     // SQL Standard special case: FETCH multiple columns INTO single STRUCT variable
     if (shouldFetchIntoStruct(targetVariables, currentRow)) {
