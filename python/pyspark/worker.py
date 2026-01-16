@@ -197,6 +197,10 @@ class RunnerConf:
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
+    @property
+    def profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.udf.profiler", None)
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -1427,7 +1431,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
 
     args_offsets = []
@@ -1448,14 +1452,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         else:
             chained_func = chain(chained_func, f)
 
+    result_id = read_long(infile)
+
+    profiler = runner_conf.profiler
     if profiler == "perf":
-        result_id = read_long(infile)
-
         profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
-
     elif profiler == "memory":
-        result_id = read_long(infile)
-
         profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
@@ -2908,16 +2910,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
-    is_profiling = read_bool(infile)
-    if is_profiling:
-        profiler = utf8_deserializer.loads(infile)
-    else:
-        profiler = None
-
     # Read all UDFs
     num_udfs = read_int(infile)
     udfs = [
-        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler)
+        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i)
         for i in range(num_udfs)
     ]
 

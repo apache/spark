@@ -629,7 +629,7 @@ class UnsafeRowDataEncoder(
   override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
     keyStateEncoderSpec match {
       case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
-        decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+        decodeToUnsafeRow(bytes, numFields = keySchema.length - numColsPrefixKey)
       case RangeKeyScanStateEncoderSpec(_, orderingOrdinals) =>
         decodeToUnsafeRow(bytes, keySchema.length - orderingOrdinals.length)
       case _ => throw unsupportedOperationForKeyStateEncoder("decodeRemainingKey")

@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
-import org.apache.spark.sql.catalyst.streaming.Unassigned
+import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationParserSuite extends AnalysisTest {
@@ -242,5 +242,85 @@ class StreamRelationParserSuite extends AnalysisTest {
     interceptParseException(parsePlan)(
       "SELECT * FROM STREAM t WITH ()"
     )(None)
+  }
+
+  // ===================================
+  // IDENTIFIED BY syntax tests
+  // ===================================
+
+  test("STREAM with IDENTIFIED BY parses correctly") {
+    Seq(
+      "SELECT * FROM STREAM(t1) IDENTIFIED BY my_source",
+      "SELECT * FROM STREAM t1 IDENTIFIED BY my_source"
+    ).foreach { query =>
+      val plan = parsePlan(query)
+      val namedStreamingRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1)
+      assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
+    }
+  }
+
+  test("STREAM with IDENTIFIED BY and alias") {
+    val plan = parsePlan("SELECT * FROM STREAM t1 IDENTIFIED BY my_source AS src")
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1)
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
+  }
+
+  test("STREAM with WITH options and IDENTIFIED BY") {
+    val plan = parsePlan(
+      "SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source")
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1)
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
+
+    // Also verify options are parsed
+    val unresolvedRelation = plan.collectFirst {
+      case rel: UnresolvedRelation if rel.isStreaming => rel
+    }
+    assert(unresolvedRelation.isDefined)
+    assert(unresolvedRelation.get.options.get("key") == "value")
+  }
+
+  test("STREAM with WITH options, IDENTIFIED BY, and alias") {
+    val plan = parsePlan(
+      "SELECT * FROM STREAM t1 WITH ('key' = 'value') IDENTIFIED BY my_source AS src")
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1)
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
+  }
+
+  test("join of two streaming sources with IDENTIFIED BY") {
+    val plan = parsePlan(
+      """SELECT *
+        |FROM STREAM t1 IDENTIFIED BY source_one
+        |JOIN STREAM t2 IDENTIFIED BY source_two
+        |ON t1.a = t2.a""".stripMargin)
+
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 2,
+      "Expected 2 NamedStreamingRelation nodes for join of two streaming tables")
+
+    val names = namedStreamingRelations.map(_.sourceIdentifyingName).toSet
+    assert(names == Set(UserProvided("source_one"), UserProvided("source_two")))
+  }
+
+  test("IDENTIFIED BY with backtick-quoted identifier") {
+    val plan = parsePlan("SELECT * FROM STREAM t1 IDENTIFIED BY `my-source-name`")
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1)
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my-source-name"))
   }
 }

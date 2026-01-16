@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -34,8 +35,13 @@ import org.apache.spark.sql.sources.SupportsStreamSourceMetadataColumns
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
+    // Extract source identifying name from CatalogTable for stable checkpoints
+    val sourceIdentifyingName = dataSource.catalogTable
+      .flatMap(_.streamingSourceIdentifyingName)
+      .getOrElse(Unassigned)
     StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema))
+      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
+      sourceIdentifyingName)
   }
 }
 
@@ -46,10 +52,19 @@ object StreamingRelation {
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
-case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
+case class StreamingRelation(
+    dataSource: DataSource,
+    sourceName: String,
+    output: Seq[Attribute],
+    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
+
+  // Provide a concise representation for plan comparison output
+  override def simpleString(maxFields: Int): String = {
+    s"StreamingRelation $sourceName, ${output.mkString("[", ", ", "]")}, $sourceIdentifyingName"
+  }
 
   // There's no sensible value here. On the execution path, this relation will be
   // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
@@ -88,7 +103,9 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
 case class StreamingExecutionRelation(
     source: SparkDataStream,
     output: Seq[Attribute],
-    catalogTable: Option[CatalogTable])(session: SparkSession)
+    catalogTable: Option[CatalogTable],
+    sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
+    (session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil

@@ -141,7 +141,7 @@
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.16.0</parquet.version>
+    <parquet.version>1.17.0</parquet.version>
     <orc.version>2.2.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>12.1.5</jetty.version>

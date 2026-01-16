@@ -28,7 +28,6 @@ import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
@@ -77,11 +76,7 @@ import org.apache.spark.util.SparkFileUtils
  * `sql/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite
-    extends ConnectFunSuite
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with Logging {
+class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
