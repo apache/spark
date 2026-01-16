@@ -413,6 +413,8 @@ private[arrow] class ArrayWriter(
 
   override def reset(): Unit = {
     super.reset()
+    // Re-initialize offset buffer after reset (see constructor comment)
+    valueVector.getOffsetBuffer.setInt(0, 0)
     elementWriter.reset()
   }
 }
