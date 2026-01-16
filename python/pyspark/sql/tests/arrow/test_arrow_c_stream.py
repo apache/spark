@@ -67,12 +67,6 @@ class TestSparkArrowCStreamer(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_c_stream import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        test_runner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        test_runner = None
-    unittest.main(testRunner=test_runner, verbosity=2)
+    main()
