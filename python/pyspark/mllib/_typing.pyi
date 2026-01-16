@@ -27,7 +27,6 @@ from pyspark.mllib.linalg import Vector
 if TYPE_CHECKING:
     from scipy.sparse import spmatrix, sparray
 
-
 if TYPE_CHECKING:
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], spmatrix, sparray, range]
 C = TypeVar("C", bound=type)
