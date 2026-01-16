@@ -54,6 +54,27 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
 
+    // flatten all the arguments
+    val allInputs = new ArrayBuffer[Expression]
+    val dataTypes = new ArrayBuffer[DataType]
+    val argMetas = udtf.children.zip(
+      udtf.tableArguments.getOrElse(Seq.fill(udtf.children.length)(false))
+    ).map { case (e: Expression, isTableArg: Boolean) =>
+      val (key, value) = e match {
+        case NamedArgumentExpression(key, value) =>
+          (Some(key), value)
+        case _ =>
+          (None, e)
+      }
+      if (allInputs.exists(_.semanticEquals(value))) {
+        ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key, isTableArg)
+      } else {
+        allInputs += value
+        dataTypes += value.dataType
+        ArgumentMetadata(allInputs.length - 1, key, isTableArg)
+      }
+    }.toArray
+
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
 
@@ -65,26 +86,6 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         queue.close()
       }
 
-      // flatten all the arguments
-      val allInputs = new ArrayBuffer[Expression]
-      val dataTypes = new ArrayBuffer[DataType]
-      val argMetas = udtf.children.zip(
-        udtf.tableArguments.getOrElse(Seq.fill(udtf.children.length)(false))
-      ).map { case (e: Expression, isTableArg: Boolean) =>
-        val (key, value) = e match {
-          case NamedArgumentExpression(key, value) =>
-            (Some(key), value)
-          case _ =>
-            (None, e)
-        }
-        if (allInputs.exists(_.semanticEquals(value))) {
-          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key, isTableArg)
-        } else {
-          allInputs += value
-          dataTypes += value.dataType
-          ArgumentMetadata(allInputs.length - 1, key, isTableArg)
-        }
-      }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
       projection.initialize(context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
