@@ -2480,11 +2480,18 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
     // IDENTIFIED BY is only valid for streaming TVFs
-    if (ctx.functionTable.identifiedByClause != null) {
+    if (ctx.tableFunctionCallWithTrailingClauses.identifiedByClause != null) {
       operationNotAllowed("IDENTIFIED BY clause is only supported for streaming sources", ctx)
     }
-    val func = ctx.functionTable
-    buildTvfFromTableFunctionCall(func.tableFunctionCall, func.tableAlias, func.watermarkClause)
+    visitTableFunctionCallWithTrailingClauses(ctx.tableFunctionCallWithTrailingClauses)
+  }
+
+  /**
+   * Create a table-valued function call with optional trailing clauses.
+   */
+  override def visitTableFunctionCallWithTrailingClauses(
+      ctx: TableFunctionCallWithTrailingClausesContext): LogicalPlan = withOrigin(ctx) {
+    buildTvfFromTableFunctionCall(ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
   }
 
   /**
@@ -2516,14 +2523,14 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Create a logical plan for a stream TVF.
    * Handles two forms:
-   * 1. STREAM functionTable - clauses are inside functionTable
+   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
    * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
    *    table names
    */
   override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
     withOrigin(ctx) {
-      Option(ctx.functionTable).map { funcTable =>
-        // Form: STREAM functionTable
+      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
+        // Form: STREAM tableFunctionCallWithTrailingClauses
         val sourceName = extractSourceName(funcTable.identifiedByClause)
         val tvfPlan = buildTvfFromTableFunctionCall(
           funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
