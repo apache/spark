@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.{Dataset, Encoder, Row}
-import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions}
+import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -45,51 +45,56 @@ class OfflineStateRepartitionIntegrationSuite
   }
 
   /**
-   * Reads state data from checkpoint directory using StateStore data source.
-   * Returns sorted rows for deterministic comparison.
+   * Reads state data for a specific store and column family
    */
-  private def readStateData(checkpointDir: String, batchId: Long): Dataset[Row] = {
-    spark.read
+  private def readStateData(
+      checkpointDir: String,
+      batchId: Long,
+      storeName: String,
+      columnFamilyName: String,
+      additionalOptions: Map[String, String]): Dataset[Row] = {
+    var reader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
       .option(StateSourceOptions.BATCH_ID, batchId)
-      .load()
+      .option(StateSourceOptions.STORE_NAME, storeName)
+
+    // Apply additional options dynamically
+    additionalOptions.foreach { case (k, v) =>
+      reader = reader.option(k, v)
+    }
+
+    reader.load()
       .selectExpr("key", "value", "partition_id")
       .orderBy("key")
   }
 
   /**
-   * Validates that state data after repartition matches state data before repartition.
+   * Captures state for all specified stores and column families.
+   * Returns Map[store -> Map[columnFamily -> state rows]]
    */
-  private def validateStateDataAfterRepartition(
+  private def captureStateByStoreName(
       checkpointDir: String,
-      stateBeforeRepartition: Array[Row],
-      repartitionBatchId: Long): Unit = {
-
-    val stateAfterRepartition = readStateData(checkpointDir, repartitionBatchId).collect()
-
-    // Validate row count
-    assert(stateBeforeRepartition.length == stateAfterRepartition.length,
-      s"State row count mismatch: before=${stateBeforeRepartition.length}, " +
-        s"after=${stateAfterRepartition.length}")
-
-    // Extract (key, value) pairs, ignoring partition_id (which changes)
-    val beforeByKey = stateBeforeRepartition
-      .map(row => (row.get(0).toString, row.get(1).toString))
-      .sortBy(_._1)
-
-    val afterByKey = stateAfterRepartition
-      .map(row => (row.get(0).toString, row.get(1).toString))
-      .sortBy(_._1)
-
-    // Compare each (key, value) pair
-    beforeByKey.zip(afterByKey).zipWithIndex.foreach {
-      case (((keyBefore, valueBefore), (keyAfter, valueAfter)), idx) =>
-        assert(keyBefore == keyAfter,
-          s"Key mismatch at index $idx: $keyBefore vs $keyAfter")
-        assert(valueBefore == valueAfter,
-          s"Value mismatch at index $idx for key $keyBefore")
+      batchId: Long,
+      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]]
+  ): Map[String, Map[String, Array[Row]]] = {
+    storeToColumnFamilyToStateSourceOptions.map { case (storeName, columnFamilyToOptions) =>
+      val columnFamilyData = columnFamilyToOptions.map { case (cfName, options) =>
+        val stateData = readStateData(
+          checkpointDir, batchId, storeName, cfName, options).collect()
+        cfName -> stateData
+      }
+      storeName -> columnFamilyData
     }
+  }
+
+  /**
+   * Extracts (key, value) pairs from Row array and sorts by key.
+   */
+  private def extractKeyValuePairs(rows: Array[Row]): Array[(String, String)] = {
+    rows
+      .map(row => (row.get(0).toString, row.get(1).toString))
+      .sortBy(_._1)
   }
 
   /**
@@ -106,13 +111,18 @@ class OfflineStateRepartitionIntegrationSuite
    * @param verifyResumedQuery Callback to verify resumed query
    *                           (receives inputStream, checkpointDir, clock)
    * @param useManualClock Whether this test requires a manual clock (for processing time)
+   * @param storeToColumnFamilyToStateSourceOptions Map of store name -> column family
+   *                                                 name -> options
    * @tparam T The type of data in the input stream (requires implicit Encoder)
    */
   def testRepartitionWorkflow[T : Encoder](
       newPartitions: Int,
       setupInitialState: (MemoryStream[T], String, Option[StreamManualClock]) => Unit,
       verifyResumedQuery: (MemoryStream[T], String, Option[StreamManualClock]) => Unit,
-      useManualClock: Boolean = false): Unit = {
+      useManualClock: Boolean = false,
+      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]] =
+        Map(StateStoreId.DEFAULT_STORE_NAME ->
+          Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty))): Unit = {
     withTempDir { checkpointDir =>
       val clock = if (useManualClock) Some(new StreamManualClock) else None
       val inputData = MemoryStream[T]
@@ -124,8 +134,18 @@ class OfflineStateRepartitionIntegrationSuite
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(
         spark, checkpointDir.getAbsolutePath)
       val lastBatchId = checkpointMetadata.commitLog.getLatestBatchId().get
-      val stateBeforeRepartition =
-        readStateData(checkpointDir.getAbsolutePath, lastBatchId)
+
+      val stateBeforeRepartition = captureStateByStoreName(
+        checkpointDir.getAbsolutePath, lastBatchId, storeToColumnFamilyToStateSourceOptions)
+
+      // Verify all stores and column families have data before repartition
+      storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
+        columnFamilies.keys.foreach { cfName =>
+          val data = stateBeforeRepartition(storeName)(cfName)
+          assert(data.length > 0,
+            s"Store '$storeName', CF '$cfName' has no state data before repartition")
+        }
+      }
 
       // Step 3: Run repartition
       spark.streamingCheckpointManager.repartition(
@@ -134,15 +154,39 @@ class OfflineStateRepartitionIntegrationSuite
       val repartitionBatchId = lastBatchId + 1
       val hadoopConf = spark.sessionState.newHadoopConf()
 
-      // Step 4: Verify offset and commit logs are updated correctly
+      // Step 4: Verify offset and commit logs
       verifyRepartitionBatch(
         repartitionBatchId, checkpointMetadata, hadoopConf,
         checkpointDir.getAbsolutePath, newPartitions, spark)
 
-      // Step 5: Validate state data matches after repartition
-      validateStateDataAfterRepartition(
-        checkpointDir.getAbsolutePath, stateBeforeRepartition.collect(),
-        repartitionBatchId)
+      // Step 5: Validate state for each store and column family after repartition
+      val stateAfterRepartition = captureStateByStoreName(
+        checkpointDir.getAbsolutePath, repartitionBatchId, storeToColumnFamilyToStateSourceOptions)
+
+      storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
+        columnFamilies.keys.foreach { cfName =>
+          val beforeState = stateBeforeRepartition(storeName)(cfName)
+          val afterState = stateAfterRepartition(storeName)(cfName)
+
+          // Validate row count
+          assert(beforeState.length == afterState.length,
+            s"Store '$storeName', CF '$cfName': State row count mismatch: " +
+              s"before=${beforeState.length}, after=${afterState.length}")
+
+          // Extract (key, value) pairs and compare
+          val beforeByKey = extractKeyValuePairs(beforeState)
+          val afterByKey = extractKeyValuePairs(afterState)
+
+          // Compare each (key, value) pair
+          beforeByKey.zip(afterByKey).zipWithIndex.foreach {
+            case (((keyBefore, valueBefore), (keyAfter, valueAfter)), idx) =>
+              assert(keyBefore == keyAfter,
+                s"Store '$storeName', CF '$cfName': Key mismatch at index $idx")
+              assert(valueBefore == valueAfter,
+                s"Store '$storeName', CF '$cfName': Value mismatch for key $keyBefore")
+          }
+        }
+      }
 
       // Step 6: Resume query with new input and verify
       verifyResumedQuery(inputData, checkpointDir.getAbsolutePath, clock)
@@ -478,5 +522,49 @@ class OfflineStateRepartitionIntegrationSuite
         )
       }
     )
+  }
+
+  // Test stream-stream join V3 repartitioning with column family validation
+  Seq(1, 2, 3).foreach { version =>
+    testWithAllRepartitionOperations(s"stream-stream join ver $version") { newPartitions =>
+      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
+        val allStoreNames = StreamStreamJoinTestUtils.allStoreNames
+        val storeToOptions = if (version <= 2) {
+          allStoreNames.map { storeName =>
+            storeName -> Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty[String, String])
+          }.toMap
+        } else {
+          Map(StateStoreId.DEFAULT_STORE_NAME -> allStoreNames.map { storeName =>
+            storeName -> Map(StateSourceOptions.STORE_NAME -> storeName)
+          }.toMap)
+        }
+
+        testRepartitionWorkflow[(Int, Long)](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, _) => {
+            val query = getStreamStreamJoinQuery(inputData)
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir),
+              // Batch 1: Creates state in all 4 column families
+              AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+              CheckNewAnswer((2, 2, 2, 2), (4, 4, 4, 4)),
+              // Batch 2: Adds more state to all column families
+              AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+              CheckNewAnswer((6, 6, 6, 6), (8, 8, 8, 8), (10, 10, 10, 10)),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, _) => {
+            val query = getStreamStreamJoinQuery(inputData)
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir),
+              AddData(inputData, (11, 16L), (12, 16L), (13, 17L)),
+              CheckNewAnswer((12, 16, 12, 16))
+            )
+          },
+          storeToColumnFamilyToStateSourceOptions = storeToOptions
+        )
+      }
+    }
   }
 }
