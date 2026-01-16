@@ -18,6 +18,7 @@
 .ensime
 .ensime_cache/
 .ensime_lucene
+.env
 .generated-mima*
 .idea/
 .idea_modules/
