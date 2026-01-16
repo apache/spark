@@ -21,7 +21,6 @@ import threading
 import calendar
 import time
 import unittest
-from typing import cast
 from collections import namedtuple
 
 from pyspark import SparkConf

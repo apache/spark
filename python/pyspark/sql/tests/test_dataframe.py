@@ -22,7 +22,6 @@ import shutil
 import tempfile
 import warnings
 import unittest
-from typing import cast
 import io
 from contextlib import redirect_stdout
 

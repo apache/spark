@@ -23,7 +23,6 @@ import unittest
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import cast
 
 from pyspark import TaskContext
 from pyspark.util import PythonEvalType, is_remote_only

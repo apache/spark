@@ -22,7 +22,7 @@ import os
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast, Iterator, Tuple, Any
+from typing import Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType

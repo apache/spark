@@ -17,7 +17,6 @@
 
 import unittest
 import datetime
-from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import (
