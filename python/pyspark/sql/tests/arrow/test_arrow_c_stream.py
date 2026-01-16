@@ -33,7 +33,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message or pandas_requirement_message,
 )
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer_arrow_consumer(self):
