@@ -55,3 +55,53 @@ message Proto2AllTypes {
   }
   map<string, string> map = 13;
 }
+
+// Message with extension range for testing proto2 extension support
+message Proto2ExtensionTest {
+  optional string name = 1;
+  optional int32 id = 2;
+
+  extensions 100 to 200;
+}
+
+// File-level extensions for Proto2ExtensionTest
+extend Proto2ExtensionTest {
+  optional string extension_string = 100;
+  optional int32 extension_int = 101;
+  optional NestedExtensionMessage extension_message = 102;
+  repeated int32 extension_repeated_int = 103;
+}
+
+// Nested message type used in an extension field
+message NestedExtensionMessage {
+  optional string nested_value = 1;
+  optional int32 nested_id = 2;
+}
+
+message ContainerWithNestedExtension {
+  optional string container_name = 1;
+
+  // Extension within the scope of another message.
+  extend Proto2ExtensionTest {
+    optional bool nested_extension_bool = 150;
+  }
+}
+
+// Test nested message extensions: a top-level message containing a nested
+// message type that itself has extensions.
+message MessageWithExtendableNested {
+  optional string top_level_name = 1;
+  optional ExtendableNestedMessage nested = 2;
+}
+
+message ExtendableNestedMessage {
+  optional string nested_name = 1;
+  optional int32 nested_id = 2;
+
+  extensions 100 to 200;
+}
+
+extend ExtendableNestedMessage {
+  optional string nested_ext_field = 100;
+  optional int32 nested_ext_int = 101;
+}

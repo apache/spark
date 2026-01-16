@@ -152,7 +152,8 @@ class ProtobufCatalystDataConversionSuite
       expected: Option[Any],
       filters: StructFilters = new NoopFilters): Unit = {
 
-    val descriptor = ProtobufUtils.buildDescriptor(descFileBytes, messageName)
+    val descriptor =
+      ProtobufUtils.buildDescriptor(messageName, Some(descFileBytes)).descriptor
     val dataType = SchemaConverters.toSqlType(descriptor).dataType
 
     val deserializer = new ProtobufDeserializer(descriptor, dataType, filters)
@@ -199,7 +200,8 @@ class ProtobufCatalystDataConversionSuite
       .add("name", "string")
       .add("age", "int")
 
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Person")
+    val descriptor =
+      ProtobufUtils.buildDescriptor("Person", Some(testFileDesc)).descriptor
     val dynamicMessage = DynamicMessage
       .newBuilder(descriptor)
       .setField(descriptor.findFieldByName("name"), "Maxim")
@@ -237,11 +239,13 @@ class ProtobufCatalystDataConversionSuite
   }
 
   test("Full names for message using descriptor file") {
-    val withShortName = ProtobufUtils.buildDescriptor(testFileDesc, "BytesMsg")
+    val withShortName =
+      ProtobufUtils.buildDescriptor("BytesMsg", Some(testFileDesc)).descriptor
     assert(withShortName.findFieldByName("bytes_type") != null)
 
-    val withFullName = ProtobufUtils.buildDescriptor(
-      testFileDesc, "org.apache.spark.sql.protobuf.protos.BytesMsg")
+    val withFullName = ProtobufUtils
+      .buildDescriptor("org.apache.spark.sql.protobuf.protos.BytesMsg", Some(testFileDesc))
+      .descriptor
     assert(withFullName.findFieldByName("bytes_type") != null)
   }
 

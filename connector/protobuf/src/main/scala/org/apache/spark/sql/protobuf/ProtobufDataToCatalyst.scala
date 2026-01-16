@@ -40,17 +40,24 @@ private[sql] case class ProtobufDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType =
-    SchemaConverters.toSqlType(messageDescriptor, protobufOptions).dataType
+    SchemaConverters.toSqlType(messageDescriptor, fullNamesToExtensions, protobufOptions).dataType
 
   override def nullable: Boolean = true
 
   private lazy val protobufOptions = ProtobufOptions(options)
 
-  @transient private lazy val messageDescriptor =
+  @transient private lazy val descriptorWithExtensions =
     ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
-  @transient private lazy val fieldsNumbers =
-    messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
+  @transient private lazy val messageDescriptor = descriptorWithExtensions.descriptor
+
+  @transient private lazy val extensionRegistry = descriptorWithExtensions.extensionRegistry
+
+  @transient private lazy val fullNamesToExtensions =
+    descriptorWithExtensions.fullNamesToExtensions
+
+  @transient private lazy val regularFieldNumbers =
+    messageDescriptor.getFields.asScala.map(_.getNumber).toSet
 
   @transient private lazy val deserializer = {
     val typeRegistry = binaryFileDescriptorSet match {
@@ -65,8 +72,8 @@ private[sql] case class ProtobufDataToCatalyst(
       dataType,
       typeRegistry = typeRegistry,
       emitDefaultValues = protobufOptions.emitDefaultValues,
-      enumsAsInts = protobufOptions.enumsAsInts
-    )
+      enumsAsInts = protobufOptions.enumsAsInts,
+      fullNamesToExtensions = fullNamesToExtensions)
   }
 
   @transient private var result: DynamicMessage = _
@@ -96,10 +103,14 @@ private[sql] case class ProtobufDataToCatalyst(
       // If the Java class is available, it is likely more efficient to parse with it than using
       // DynamicMessage. Can consider it in the future if parsing overhead is noticeable.
 
-      result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
+      result.getUnknownFields
+        .asMap()
+        .keySet()
+        .asScala
+        .find(regularFieldNumbers.contains(_)) match {
         case Some(number) =>
-          // Unknown fields contain a field with same number as a known field. Must be due to
-          // mismatch of schema between writer and reader here.
+          // Unknown fields contain a field with same number as a known regular field. Must be due
+          // to mismatch of schema between writer and reader here.
           throw QueryCompilationErrors.protobufFieldTypeMismatchError(
             messageDescriptor.getFields.get(number).toString)
         case None =>
