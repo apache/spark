@@ -31,8 +31,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
  * 3. Query can resume successfully and compute correctly with repartitioned state
  */
 class OfflineStateRepartitionOperatorSuite
-  extends StateDataSourceTestBase
-  with AlsoTestWithRocksDBFeatures{
+  extends StateDataSourceTestBase with AlsoTestWithRocksDBFeatures{
 
   import testImplicits._
   import OfflineStateRepartitionTestUtils._
@@ -210,6 +209,44 @@ class OfflineStateRepartitionOperatorSuite
         )
       }
     }
+
+    testWithAllRepartitionOperations(s"composite key aggregation state v$version") {
+      newPartitions =>
+        withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> version.toString) {
+          testRepartitionWorkflow[Int](
+            newPartitions = newPartitions,
+            setupInitialState = (inputData, checkpointDir, _) => {
+              val aggregated = getCompositeKeyStreamingAggregationQuery(inputData)
+              testStream(aggregated, OutputMode.Update)(
+                StartStream(checkpointLocation = checkpointDir),
+                AddData(inputData, 0 until 10: _*),
+                CheckLastBatch(
+                  (0, "Apple", 1, 0, 0, 0), (1, "Banana", 1, 1, 1, 1),
+                  (2, "Carrot", 1, 2, 2, 2), (3, "Date", 1, 3, 3, 3),
+                  (4, "Eggplant", 1, 4, 4, 4), (5, "Fig", 1, 5, 5, 5),
+                  (6, "Grape", 1, 6, 6, 6), (7, "Honeydew", 1, 7, 7, 7),
+                  (8, "Iceberg", 1, 8, 8, 8), (9, "Jackfruit", 1, 9, 9, 9)
+                ),
+                StopStream
+              )
+            },
+            verifyResumedQuery = (inputData, checkpointDir, _) => {
+              val aggregated = getCompositeKeyStreamingAggregationQuery(inputData)
+              testStream(aggregated, OutputMode.Update)(
+                StartStream(checkpointLocation = checkpointDir),
+                AddData(inputData, 0 until 10: _*),
+                CheckLastBatch(
+                  (0, "Apple", 2, 0, 0, 0), (1, "Banana", 2, 2, 1, 1),
+                  (2, "Carrot", 2, 4, 2, 2), (3, "Date", 2, 6, 3, 3),
+                  (4, "Eggplant", 2, 8, 4, 4), (5, "Fig", 2, 10, 5, 5),
+                  (6, "Grape", 2, 12, 6, 6), (7, "Honeydew", 2, 14, 7, 7),
+                  (8, "Iceberg", 2, 16, 8, 8), (9, "Jackfruit", 2, 18, 9, 9)
+                )
+              )
+            }
+          )
+        }
+    }
   }
 
   // Test dedup operator repartitioning
@@ -333,6 +370,58 @@ class OfflineStateRepartitionOperatorSuite
         )
       },
       useManualClock = true
+    )
+  }
+
+  // Test dropDuplicatesWithinWatermark repartitioning
+  testWithAllRepartitionOperations("dropDuplicatesWithinWatermark") { newPartitions =>
+    testRepartitionWorkflow[(String, Int)](
+      newPartitions = newPartitions,
+      setupInitialState = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
+          CheckNewAnswer(("a", 1), ("b", 2), ("c", 3)),
+          AddData(inputData, ("a", 4), ("b", 5), ("d", 6)),
+          CheckNewAnswer(("d", 6)),
+          StopStream
+        )
+      },
+      verifyResumedQuery = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 7), ("e", 8)),
+          CheckNewAnswer(("e", 8))
+        )
+      }
+    )
+  }
+
+  // Test dropDuplicates with column specified repartitioning
+  testWithAllRepartitionOperations("dropDuplicates with column specified") { newPartitions =>
+    testRepartitionWorkflow[(String, Int)](
+      newPartitions = newPartitions,
+      setupInitialState = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
+          CheckAnswer(("a", 1), ("b", 2), ("c", 3)),
+          AddData(inputData, ("a", 10), ("d", 4)),
+          CheckNewAnswer(("d", 4)),
+          StopStream
+        )
+      },
+      verifyResumedQuery = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("b", 20), ("e", 5)),
+          CheckNewAnswer(("e", 5))
+        )
+      }
     )
   }
 }
