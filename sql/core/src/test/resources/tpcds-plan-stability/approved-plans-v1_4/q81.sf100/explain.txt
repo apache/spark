@@ -76,7 +76,7 @@ Condition : (isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3))
 Output [12]: [ca_address_sk#7, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [EqualTo(ca_state,GA), IsNotNull(ca_address_sk), IsNotNull(ca_state)]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_street_number:string,ca_street_name:string,ca_street_type:string,ca_suite_number:string,ca_city:string,ca_county:string,ca_state:string,ca_zip:string,ca_country:string,ca_gmt_offset:decimal(5,2),ca_location_type:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -84,7 +84,7 @@ Input [12]: [ca_address_sk#7, ca_street_number#8, ca_street_name#9, ca_street_ty
 
 (6) Filter [codegen id : 1]
 Input [12]: [ca_address_sk#7, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18]
-Condition : (((ca_state#14 = GA) AND isnotnull(ca_address_sk#7)) AND isnotnull(ca_state#14))
+Condition : ((isnotnull(ca_state#14) AND (ca_state#14 = GA)) AND isnotnull(ca_address_sk#7))
 
 (7) BroadcastExchange
 Input [12]: [ca_address_sk#7, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18]

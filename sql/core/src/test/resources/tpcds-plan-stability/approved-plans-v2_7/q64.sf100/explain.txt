@@ -737,7 +737,7 @@ Input [19]: [ss_item_sk#1, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#
 Output [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk), IsNotNull(i_current_price)]
+PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (118) ColumnarToRow [codegen id : 40]
@@ -745,7 +745,7 @@ Input [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
 
 (119) Filter [codegen id : 40]
 Input [4]: [i_item_sk#74, i_current_price#75, i_color#76, i_product_name#77]
-Condition : ((((((i_color#76 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              ) AND (i_current_price#75 >= 64.00)) AND (i_current_price#75 <= 74.00)) AND (i_current_price#75 >= 65.00)) AND (i_current_price#75 <= 79.00)) AND isnotnull(i_item_sk#74)) AND isnotnull(i_current_price#75))
+Condition : ((((((isnotnull(i_current_price#75) AND i_color#76 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              )) AND (i_current_price#75 >= 64.00)) AND (i_current_price#75 <= 74.00)) AND (i_current_price#75 >= 65.00)) AND (i_current_price#75 <= 79.00)) AND isnotnull(i_item_sk#74))
 
 (120) Project [codegen id : 40]
 Output [2]: [i_item_sk#74, i_product_name#77]
@@ -1159,7 +1159,7 @@ ObjectHashAggregate (216)
 Output [3]: [i_item_sk#74, i_current_price#75, i_color#76]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk), IsNotNull(i_current_price)]
+PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string>
 
 (211) ColumnarToRow [codegen id : 1]
@@ -1167,7 +1167,7 @@ Input [3]: [i_item_sk#74, i_current_price#75, i_color#76]
 
 (212) Filter [codegen id : 1]
 Input [3]: [i_item_sk#74, i_current_price#75, i_color#76]
-Condition : ((((((i_color#76 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              ) AND (i_current_price#75 >= 64.00)) AND (i_current_price#75 <= 74.00)) AND (i_current_price#75 >= 65.00)) AND (i_current_price#75 <= 79.00)) AND isnotnull(i_item_sk#74)) AND isnotnull(i_current_price#75))
+Condition : ((((((isnotnull(i_current_price#75) AND i_color#76 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              )) AND (i_current_price#75 >= 64.00)) AND (i_current_price#75 <= 74.00)) AND (i_current_price#75 >= 65.00)) AND (i_current_price#75 <= 79.00)) AND isnotnull(i_item_sk#74))
 
 (213) Project [codegen id : 1]
 Output [1]: [i_item_sk#74]
@@ -1176,7 +1176,7 @@ Input [3]: [i_item_sk#74, i_current_price#75, i_color#76]
 (214) ObjectHashAggregate
 Input [1]: [i_item_sk#74]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1254, 30209, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1250, 30121, 0, 0)]
 Aggregate Attributes [1]: [buf#175]
 Results [1]: [buf#176]
 
@@ -1187,9 +1187,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=33]
 (216) ObjectHashAggregate
 Input [1]: [buf#176]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1254, 30209, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1254, 30209, 0, 0)#177]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1254, 30209, 0, 0)#177 AS bloomFilter#178]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1250, 30121, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1250, 30121, 0, 0)#177]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#74, 42), 1250, 30121, 0, 0)#177 AS bloomFilter#178]
 
 Subquery:2 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#12 IN dynamicpruning#13
 BroadcastExchange (220)

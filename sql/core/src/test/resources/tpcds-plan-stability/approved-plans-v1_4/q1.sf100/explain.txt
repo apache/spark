@@ -180,7 +180,7 @@ Input [5]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12, (avg(ctr_t
 Output [2]: [s_store_sk#28, s_state#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [EqualTo(s_state,TN), IsNotNull(s_store_sk), IsNotNull(s_state)]
+PushedFilters: [IsNotNull(s_state), EqualTo(s_state,TN), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (28) ColumnarToRow [codegen id : 7]
@@ -188,7 +188,7 @@ Input [2]: [s_store_sk#28, s_state#29]
 
 (29) Filter [codegen id : 7]
 Input [2]: [s_store_sk#28, s_state#29]
-Condition : (((s_state#29 = TN) AND isnotnull(s_store_sk#28)) AND isnotnull(s_state#29))
+Condition : ((isnotnull(s_state#29) AND (s_state#29 = TN)) AND isnotnull(s_store_sk#28))
 
 (30) Project [codegen id : 7]
 Output [1]: [s_store_sk#28]

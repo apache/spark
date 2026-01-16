@@ -134,7 +134,7 @@ Join condition: None
 Output [2]: [ca_address_sk#17, ca_state#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [EqualTo(ca_state,IL), IsNotNull(ca_address_sk), IsNotNull(ca_state)]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (21) ColumnarToRow [codegen id : 8]
@@ -142,7 +142,7 @@ Input [2]: [ca_address_sk#17, ca_state#18]
 
 (22) Filter [codegen id : 8]
 Input [2]: [ca_address_sk#17, ca_state#18]
-Condition : (((ca_state#18 = IL) AND isnotnull(ca_address_sk#17)) AND isnotnull(ca_state#18))
+Condition : ((isnotnull(ca_state#18) AND (ca_state#18 = IL)) AND isnotnull(ca_address_sk#17))
 
 (23) Project [codegen id : 8]
 Output [1]: [ca_address_sk#17]
@@ -166,7 +166,7 @@ Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_num
 Output [2]: [web_site_sk#19, web_company_name#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
-PushedFilters: [EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk), IsNotNull(web_company_name)]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
 (28) ColumnarToRow [codegen id : 9]
@@ -174,7 +174,7 @@ Input [2]: [web_site_sk#19, web_company_name#20]
 
 (29) Filter [codegen id : 9]
 Input [2]: [web_site_sk#19, web_company_name#20]
-Condition : (((web_company_name#20 = pri                                               ) AND isnotnull(web_site_sk#19)) AND isnotnull(web_company_name#20))
+Condition : ((isnotnull(web_company_name#20) AND (web_company_name#20 = pri                                               )) AND isnotnull(web_site_sk#19))
 
 (30) Project [codegen id : 9]
 Output [1]: [web_site_sk#19]
@@ -198,7 +198,7 @@ Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_
 Output [2]: [d_date_sk#21, d_date#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (35) ColumnarToRow [codegen id : 10]
@@ -206,7 +206,7 @@ Input [2]: [d_date_sk#21, d_date#22]
 
 (36) Filter [codegen id : 10]
 Input [2]: [d_date_sk#21, d_date#22]
-Condition : ((((d_date#22 >= 1999-02-01) AND (d_date#22 <= 1999-04-02)) AND isnotnull(d_date#22)) AND isnotnull(d_date_sk#21))
+Condition : (((isnotnull(d_date#22) AND (d_date#22 >= 1999-02-01)) AND (d_date#22 <= 1999-04-02)) AND isnotnull(d_date_sk#21))
 
 (37) Project [codegen id : 10]
 Output [1]: [d_date_sk#21]
@@ -274,7 +274,7 @@ ObjectHashAggregate (52)
 Output [2]: [ca_address_sk#17, ca_state#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [EqualTo(ca_state,IL), IsNotNull(ca_address_sk), IsNotNull(ca_state)]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (47) ColumnarToRow [codegen id : 1]
@@ -282,7 +282,7 @@ Input [2]: [ca_address_sk#17, ca_state#18]
 
 (48) Filter [codegen id : 1]
 Input [2]: [ca_address_sk#17, ca_state#18]
-Condition : (((ca_state#18 = IL) AND isnotnull(ca_address_sk#17)) AND isnotnull(ca_state#18))
+Condition : ((isnotnull(ca_state#18) AND (ca_state#18 = IL)) AND isnotnull(ca_address_sk#17))
 
 (49) Project [codegen id : 1]
 Output [1]: [ca_address_sk#17]
@@ -291,7 +291,7 @@ Input [2]: [ca_address_sk#17, ca_state#18]
 (50) ObjectHashAggregate
 Input [1]: [ca_address_sk#17]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 18519, 342348, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 17961, 333176, 0, 0)]
 Aggregate Attributes [1]: [buf#32]
 Results [1]: [buf#33]
 
@@ -302,9 +302,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 (52) ObjectHashAggregate
 Input [1]: [buf#33]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 18519, 342348, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 18519, 342348, 0, 0)#34]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 18519, 342348, 0, 0)#34 AS bloomFilter#35]
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 17961, 333176, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 17961, 333176, 0, 0)#34]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#17, 42), 17961, 333176, 0, 0)#34 AS bloomFilter#35]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#10, [id=#2]
 ObjectHashAggregate (59)
@@ -320,7 +320,7 @@ ObjectHashAggregate (59)
 Output [2]: [web_site_sk#19, web_company_name#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
-PushedFilters: [EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk), IsNotNull(web_company_name)]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
 (54) ColumnarToRow [codegen id : 1]
@@ -328,7 +328,7 @@ Input [2]: [web_site_sk#19, web_company_name#20]
 
 (55) Filter [codegen id : 1]
 Input [2]: [web_site_sk#19, web_company_name#20]
-Condition : (((web_company_name#20 = pri                                               ) AND isnotnull(web_site_sk#19)) AND isnotnull(web_company_name#20))
+Condition : ((isnotnull(web_company_name#20) AND (web_company_name#20 = pri                                               )) AND isnotnull(web_site_sk#19))
 
 (56) Project [codegen id : 1]
 Output [1]: [web_site_sk#19]
@@ -366,7 +366,7 @@ ObjectHashAggregate (66)
 Output [2]: [d_date_sk#21, d_date#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (61) ColumnarToRow [codegen id : 1]
@@ -374,7 +374,7 @@ Input [2]: [d_date_sk#21, d_date#22]
 
 (62) Filter [codegen id : 1]
 Input [2]: [d_date_sk#21, d_date#22]
-Condition : ((((d_date#22 >= 1999-02-01) AND (d_date#22 <= 1999-04-02)) AND isnotnull(d_date#22)) AND isnotnull(d_date_sk#21))
+Condition : (((isnotnull(d_date#22) AND (d_date#22 >= 1999-02-01)) AND (d_date#22 <= 1999-04-02)) AND isnotnull(d_date_sk#21))
 
 (63) Project [codegen id : 1]
 Output [1]: [d_date_sk#21]

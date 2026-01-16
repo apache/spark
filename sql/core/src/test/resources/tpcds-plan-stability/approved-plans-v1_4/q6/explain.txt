@@ -128,7 +128,7 @@ Input [4]: [ca_state#2, ss_item_sk#5, ss_sold_date_sk#7, d_date_sk#9]
 Output [3]: [i_item_sk#10, i_current_price#11, i_category#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_item_sk), IsNotNull(i_category)]
+PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_category:string>
 
 (20) ColumnarToRow [codegen id : 6]
@@ -136,7 +136,7 @@ Input [3]: [i_item_sk#10, i_current_price#11, i_category#12]
 
 (21) Filter [codegen id : 6]
 Input [3]: [i_item_sk#10, i_current_price#11, i_category#12]
-Condition : ((isnotnull(i_current_price#11) AND isnotnull(i_item_sk#10)) AND isnotnull(i_category#12))
+Condition : ((isnotnull(i_current_price#11) AND isnotnull(i_category#12)) AND isnotnull(i_item_sk#10))
 
 (22) Scan parquet spark_catalog.default.item
 Output [2]: [i_current_price#13, i_category#14]

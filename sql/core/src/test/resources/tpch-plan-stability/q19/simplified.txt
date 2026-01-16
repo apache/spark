@@ -7,7 +7,7 @@ WholeStageCodegen (3)
             Project [l_extendedprice,l_discount]
               BroadcastHashJoin [l_partkey,p_partkey,p_brand,p_container,l_quantity,p_size]
                 Project [l_partkey,l_quantity,l_extendedprice,l_discount]
-                  Filter [l_shipmode,l_shipinstruct,l_partkey,l_quantity]
+                  Filter [l_shipinstruct,l_shipmode,l_partkey,l_quantity]
                     ColumnarToRow
                       InputAdapter
                         Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity,l_extendedprice,l_discount,l_shipinstruct,l_shipmode]

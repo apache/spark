@@ -31,7 +31,7 @@ WholeStageCodegen (14)
                                                             BroadcastExchange #4
                                                               WholeStageCodegen (1)
                                                                 Project [d_date_sk,d_moy]
-                                                                  Filter [d_year,d_date_sk,d_moy]
+                                                                  Filter [d_year,d_moy,d_date_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
@@ -78,7 +78,7 @@ WholeStageCodegen (14)
                                                             BroadcastExchange #9
                                                               WholeStageCodegen (1)
                                                                 Project [d_date_sk,d_moy]
-                                                                  Filter [d_year,d_date_sk,d_moy]
+                                                                  Filter [d_year,d_moy,d_date_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]

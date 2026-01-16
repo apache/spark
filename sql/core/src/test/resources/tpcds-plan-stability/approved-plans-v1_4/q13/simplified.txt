@@ -14,7 +14,7 @@ WholeStageCodegen (7)
                           BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
                             Project [ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,ss_sold_date_sk]
                               BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                Filter [ss_store_sk,ss_addr_sk,ss_hdemo_sk,ss_cdemo_sk,ss_net_profit,ss_sales_price]
+                                Filter [ss_store_sk,ss_addr_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet spark_catalog.default.store_sales [ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,ss_sold_date_sk]

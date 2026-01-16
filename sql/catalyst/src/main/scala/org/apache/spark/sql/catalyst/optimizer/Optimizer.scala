@@ -1767,13 +1767,21 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         case RightOuter =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newLeft = inferNewFilter(left, allConstraints)
-          join.copy(left = newLeft)
+          if (newLeft.ne(left) && newLeft.canonicalized != left.canonicalized) {
+            join.copy(left = newLeft)
+          } else {
+            join
+          }
 
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newRight = inferNewFilter(right, allConstraints)
-          join.copy(right = newRight)
+          if (newRight.ne(right) && newRight.canonicalized != right.canonicalized) {
+            join.copy(right = newRight)
+          } else {
+            join
+          }
 
         case _ => join
       }

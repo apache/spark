@@ -767,7 +767,7 @@ BroadcastExchange (135)
 Output [3]: [d_date_sk#36, d_year#137, d_moy#138]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [EqualTo(d_year,2001), EqualTo(d_moy,11), IsNotNull(d_date_sk), IsNotNull(d_year), IsNotNull(d_moy)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (132) ColumnarToRow [codegen id : 1]
@@ -775,7 +775,7 @@ Input [3]: [d_date_sk#36, d_year#137, d_moy#138]
 
 (133) Filter [codegen id : 1]
 Input [3]: [d_date_sk#36, d_year#137, d_moy#138]
-Condition : (((((d_year#137 = 2001) AND (d_moy#138 = 11)) AND isnotnull(d_date_sk#36)) AND isnotnull(d_year#137)) AND isnotnull(d_moy#138))
+Condition : ((((isnotnull(d_year#137) AND isnotnull(d_moy#138)) AND (d_year#137 = 2001)) AND (d_moy#138 = 11)) AND isnotnull(d_date_sk#36))
 
 (134) Project [codegen id : 1]
 Output [1]: [d_date_sk#36]

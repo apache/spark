@@ -57,7 +57,7 @@ Condition : (isnotnull(s_suppkey#1) AND isnotnull(s_nationkey#3))
 Output [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
-PushedFilters: [IsNotNull(l_suppkey), IsNotNull(l_receiptdate), IsNotNull(l_commitdate), IsNotNull(l_orderkey)]
+PushedFilters: [IsNotNull(l_receiptdate), IsNotNull(l_commitdate), IsNotNull(l_suppkey), IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_suppkey:bigint,l_commitdate:date,l_receiptdate:date>
 
 (5) ColumnarToRow [codegen id : 3]
@@ -65,7 +65,7 @@ Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 
 (6) Filter [codegen id : 3]
 Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
-Condition : (((((l_receiptdate#7 > l_commitdate#6) AND isnotnull(l_suppkey#5)) AND isnotnull(l_receiptdate#7)) AND isnotnull(l_commitdate#6)) AND isnotnull(l_orderkey#4))
+Condition : ((((isnotnull(l_receiptdate#7) AND isnotnull(l_commitdate#6)) AND (l_receiptdate#7 > l_commitdate#6)) AND isnotnull(l_suppkey#5)) AND isnotnull(l_orderkey#4))
 
 (7) Project [codegen id : 3]
 Output [2]: [l_orderkey#4, l_suppkey#5]
@@ -136,7 +136,7 @@ Input [5]: [s_suppkey#1, s_name#2, s_nationkey#3, l_orderkey#4, l_suppkey#5]
 Output [2]: [o_orderkey#14, o_orderstatus#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
-PushedFilters: [EqualTo(o_orderstatus,F), IsNotNull(o_orderkey), IsNotNull(o_orderstatus)]
+PushedFilters: [IsNotNull(o_orderstatus), EqualTo(o_orderstatus,F), IsNotNull(o_orderkey)]
 ReadSchema: struct<o_orderkey:bigint,o_orderstatus:string>
 
 (22) ColumnarToRow [codegen id : 4]
@@ -144,7 +144,7 @@ Input [2]: [o_orderkey#14, o_orderstatus#15]
 
 (23) Filter [codegen id : 4]
 Input [2]: [o_orderkey#14, o_orderstatus#15]
-Condition : (((o_orderstatus#15 = F) AND isnotnull(o_orderkey#14)) AND isnotnull(o_orderstatus#15))
+Condition : ((isnotnull(o_orderstatus#15) AND (o_orderstatus#15 = F)) AND isnotnull(o_orderkey#14))
 
 (24) Project [codegen id : 4]
 Output [1]: [o_orderkey#14]
@@ -168,7 +168,7 @@ Input [4]: [s_name#2, s_nationkey#3, l_orderkey#4, o_orderkey#14]
 Output [2]: [n_nationkey#16, n_name#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
-PushedFilters: [EqualTo(n_name,SAUDI ARABIA), IsNotNull(n_nationkey), IsNotNull(n_name)]
+PushedFilters: [IsNotNull(n_name), EqualTo(n_name,SAUDI ARABIA), IsNotNull(n_nationkey)]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (29) ColumnarToRow [codegen id : 5]
@@ -176,7 +176,7 @@ Input [2]: [n_nationkey#16, n_name#17]
 
 (30) Filter [codegen id : 5]
 Input [2]: [n_nationkey#16, n_name#17]
-Condition : (((n_name#17 = SAUDI ARABIA) AND isnotnull(n_nationkey#16)) AND isnotnull(n_name#17))
+Condition : ((isnotnull(n_name#17) AND (n_name#17 = SAUDI ARABIA)) AND isnotnull(n_nationkey#16))
 
 (31) Project [codegen id : 5]
 Output [1]: [n_nationkey#16]

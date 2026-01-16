@@ -130,7 +130,7 @@ Arguments: [ws_order_number#2 ASC NULLS FIRST, ws_item_sk#1 ASC NULLS FIRST], fa
 Output [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
-PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk), IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00)]
+PushedFilters: [IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (11) ColumnarToRow [codegen id : 4]
@@ -138,7 +138,7 @@ Input [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_a
 
 (12) Filter [codegen id : 4]
 Input [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
-Condition : (((isnotnull(wr_order_number#10) AND isnotnull(wr_item_sk#9)) AND isnotnull(wr_return_amt#12)) AND (wr_return_amt#12 > 10000.00))
+Condition : (((isnotnull(wr_return_amt#12) AND (wr_return_amt#12 > 10000.00)) AND isnotnull(wr_order_number#10)) AND isnotnull(wr_item_sk#9))
 
 (13) Project [codegen id : 4]
 Output [4]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12]
@@ -252,7 +252,7 @@ Arguments: [cs_order_number#37 ASC NULLS FIRST, cs_item_sk#36 ASC NULLS FIRST], 
 Output [5]: [cr_item_sk#43, cr_order_number#44, cr_return_quantity#45, cr_return_amount#46, cr_returned_date_sk#47]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk), IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00)]
+PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (38) ColumnarToRow [codegen id : 14]
@@ -260,7 +260,7 @@ Input [5]: [cr_item_sk#43, cr_order_number#44, cr_return_quantity#45, cr_return_
 
 (39) Filter [codegen id : 14]
 Input [5]: [cr_item_sk#43, cr_order_number#44, cr_return_quantity#45, cr_return_amount#46, cr_returned_date_sk#47]
-Condition : (((isnotnull(cr_order_number#44) AND isnotnull(cr_item_sk#43)) AND isnotnull(cr_return_amount#46)) AND (cr_return_amount#46 > 10000.00))
+Condition : (((isnotnull(cr_return_amount#46) AND (cr_return_amount#46 > 10000.00)) AND isnotnull(cr_order_number#44)) AND isnotnull(cr_item_sk#43))
 
 (40) Project [codegen id : 14]
 Output [4]: [cr_item_sk#43, cr_order_number#44, cr_return_quantity#45, cr_return_amount#46]
@@ -374,7 +374,7 @@ Arguments: [ss_ticket_number#71 ASC NULLS FIRST, ss_item_sk#70 ASC NULLS FIRST],
 Output [5]: [sr_item_sk#77, sr_ticket_number#78, sr_return_quantity#79, sr_return_amt#80, sr_returned_date_sk#81]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00)]
+PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (65) ColumnarToRow [codegen id : 24]
@@ -382,7 +382,7 @@ Input [5]: [sr_item_sk#77, sr_ticket_number#78, sr_return_quantity#79, sr_return
 
 (66) Filter [codegen id : 24]
 Input [5]: [sr_item_sk#77, sr_ticket_number#78, sr_return_quantity#79, sr_return_amt#80, sr_returned_date_sk#81]
-Condition : (((isnotnull(sr_ticket_number#78) AND isnotnull(sr_item_sk#77)) AND isnotnull(sr_return_amt#80)) AND (sr_return_amt#80 > 10000.00))
+Condition : (((isnotnull(sr_return_amt#80) AND (sr_return_amt#80 > 10000.00)) AND isnotnull(sr_ticket_number#78)) AND isnotnull(sr_item_sk#77))
 
 (67) Project [codegen id : 24]
 Output [4]: [sr_item_sk#77, sr_ticket_number#78, sr_return_quantity#79, sr_return_amt#80]
