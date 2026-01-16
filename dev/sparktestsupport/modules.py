@@ -649,7 +649,7 @@ pyspark_streaming = Module(
 
 pyspark_structured_streaming = Module(
     name="pyspark-structured-streaming",
-    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql],
+    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, sql_kafka],
     source_file_regexes=[
         "python/pyspark/sql/streaming",
         "python/pyspark/sql/pandas",
@@ -665,6 +665,7 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.streaming.test_streaming",
         "pyspark.sql.tests.streaming.test_streaming_foreach",
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
+        "pyspark.sql.tests.streaming.test_streaming_kafka_rtm",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
