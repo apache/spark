@@ -1036,10 +1036,10 @@ class RocksDB(
     updateMemoryUsageIfNeeded()
     // Prepare keys
     val finalKeys = if (useColumnFamilies) {
-        keys.map(encodeStateRowWithPrefix(_, cfName))
-      } else {
-        keys
-      }
+      keys.map(encodeStateRowWithPrefix(_, cfName))
+    } else {
+      keys
+    }
 
     val keysList = java.util.Arrays.asList(finalKeys: _*)
 
