@@ -59,8 +59,6 @@ class OfflineStateRepartitionOperatorSuite
 
   /**
    * Validates that state data after repartition matches state data before repartition.
-   * Compares key-value pairs, ignoring partition_id which changes during repartitioning.
-   * Also validates partition distribution.
    */
   private def validateStateDataAfterRepartition(
       checkpointDir: String,
@@ -95,7 +93,7 @@ class OfflineStateRepartitionOperatorSuite
 
   /**
    * Core helper function that encapsulates the complete repartition test workflow:
-   * 1. Run initial query to create state
+   * 1. Run query to create initial state
    * 2. Capture state before repartition
    * 3. Run repartition operation
    * 4. Verify repartition batch and state data
@@ -107,7 +105,7 @@ class OfflineStateRepartitionOperatorSuite
    * @param verifyResumedQuery Callback to verify resumed query
    *                           (receives inputStream, checkpointDir, clock)
    * @param useManualClock Whether this test requires a manual clock (for processing time)
-   * @tparam T The type of data in the MemoryStream (requires implicit Encoder)
+   * @tparam T The type of data in the input stream (requires implicit Encoder)
    */
   def testRepartitionWorkflow[T : Encoder](
       newPartitions: Int,
@@ -311,11 +309,9 @@ class OfflineStateRepartitionOperatorSuite
   }
 
   /**
-   * Helper function to test with both increase and decrease repartition operations.
-   * This reduces code duplication across different operator tests.
-   *
+   * Helper function to test FlatMapGroupsWithState Operator with different version
    * @param testNamePrefix The prefix for the test name (e.g., "aggregation state v2")
-   * @param testFun The test function that takes FLATMAPGROUPSWITHSTATE as parameter
+   * @param testFun The test function that takes in the number of partitions after repartition
    */
   def testFMGWOnAllPartitionOperation(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
@@ -420,6 +416,40 @@ class OfflineStateRepartitionOperatorSuite
           StartStream(checkpointLocation = checkpointDir),
           AddData(inputData, ("b", 20), ("e", 5)),
           CheckNewAnswer(("e", 5))
+        )
+      }
+    )
+  }
+
+  // Test combined dedup + aggregation repartitioning
+  testWithAllRepartitionOperations("multiple operators (dedup + aggregation)") { newPartitions =>
+    testRepartitionWorkflow[(String, Int)](
+      newPartitions = newPartitions,
+      setupInitialState = (inputData, checkpointDir, _) => {
+        val query = getDedupAndAggregationQuery(inputData)
+        testStream(query, OutputMode.Update)(
+          StartStream(checkpointLocation = checkpointDir),
+          // Batch 1: ("a",1), ("b",2), ("a",3) -> all unique after dedup
+          // Aggregation: "a" -> count=2, sum=4, max=3; "b" -> count=1, sum=2, max=2
+          AddData(inputData, ("a", 1), ("b", 2), ("a", 3)),
+          CheckNewAnswer(("a", 2, 4, 3), ("b", 1, 2, 2)),
+          // Batch 2: ("a",1) and ("a",3) are duplicates (filtered by dedup),
+          // ("b",4) and ("c",5) are new
+          // Aggregation: "b" -> count=2, sum=6, max=4; "c" -> count=1, sum=5, max=5
+          AddData(inputData, ("a", 1), ("a", 3), ("b", 4), ("c", 5)),
+          CheckNewAnswer(("b", 2, 6, 4), ("c", 1, 5, 5)),
+          StopStream
+        )
+      },
+      verifyResumedQuery = (inputData, checkpointDir, _) => {
+        val query = getDedupAndAggregationQuery(inputData)
+        testStream(query, OutputMode.Update)(
+          StartStream(checkpointLocation = checkpointDir),
+          // Batch 3 after repartition: ("a",5) is new, ("b",2) is duplicate,
+          // ("d",6) is new
+          // Aggregation: "a" -> count=3, sum=9, max=5; "d" -> count=1, sum=6, max=6
+          AddData(inputData, ("a", 5), ("b", 2), ("d", 6)),
+          CheckNewAnswer(("a", 3, 9, 5), ("d", 1, 6, 6))
         )
       }
     )
