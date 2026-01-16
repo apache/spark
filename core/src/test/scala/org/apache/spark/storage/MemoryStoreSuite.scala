@@ -38,7 +38,6 @@ case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstim
 class MemoryStoreSuite
   extends SparkFunSuite
   with PrivateMethodTester
-  with BeforeAndAfterEach
   with ResetSystemProperties {
 
   val conf: SparkConf = new SparkConf(false)

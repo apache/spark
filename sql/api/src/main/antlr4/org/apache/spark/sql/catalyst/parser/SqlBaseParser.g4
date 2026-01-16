@@ -431,10 +431,11 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? watermarkClause?
-      tableAlias                                                       #streamTableName
+    : STREAM multipartIdentifier optionsClause?
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? watermarkClause? tableAlias                       #streamTableName
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
     ;
 
 setResetStatement
@@ -567,9 +568,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
+    : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -1081,6 +1082,11 @@ optionsClause
     : WITH options=propertyList
     ;
 
+// Clause for naming streaming sources with IDENTIFIED BY
+identifiedByClause
+    : IDENTIFIED BY sourceName=errorCapturingIdentifier
+    ;
+
 // Unlike all other types of expression for relation, we do not support watermarkClause for
 // inlineTable.
 inlineTable
@@ -1414,8 +1420,8 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
@@ -1981,6 +1987,7 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -2375,6 +2382,7 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE

@@ -83,7 +83,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP FUNCTION myDoubleAvg
 -- !query analysis
-DropFunctionCommand spark_catalog.default.mydoubleavg, false, false
+DropFunctionCommand spark_catalog.default.myDoubleAvg, false, false
 
 
 -- !query

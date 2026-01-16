@@ -532,20 +532,45 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
       ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
-    case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
+    case d @ DropFunction(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
+      // Builtin or temp function - throw appropriate error
+      assert(ident.namespace().length == 1)
+      val namespace = ident.namespace().head
+      if (namespace == CatalogManager.BUILTIN_NAMESPACE) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(ident.name())
+      } else {
+        assert(namespace == CatalogManager.SESSION_NAMESPACE)
+        // Temp function - user should use DROP TEMPORARY FUNCTION
+        throw QueryCompilationErrors.expectPersistentFuncError(
+          ident.name(),
+          "DROP FUNCTION",
+          Some("Please use DROP TEMPORARY FUNCTION to drop a temporary function."),
+          d)
+      }
+
+    case DropFunction(ResolvedIdentifier(catalog, ident), ifExists) =>
       if (isSessionCatalog(catalog)) {
-        val funcIdentifier = catalogManager.v1SessionCatalog.qualifyIdentifier(
-          identifier.asFunctionIdentifier)
-        DropFunctionCommand(funcIdentifier, ifExists, false)
+        val funcIdentifier = ident.asFunctionIdentifier.copy(catalog = Some(catalog.name))
+        DropFunctionCommand(funcIdentifier, ifExists, isTemp = false)
       } else {
         throw QueryCompilationErrors.missingCatalogDropFunctionAbilityError(catalog)
       }
 
-    case RefreshFunction(ResolvedPersistentFunc(catalog, identifier, _)) =>
+    case RefreshFunction(r @ ResolvedIdentifier(FakeSystemCatalog, ident)) =>
+      // Builtin or temp function - throw appropriate error
+      assert(ident.namespace().length == 1)
+      val namespace = ident.namespace().head
+      if (namespace == CatalogManager.BUILTIN_NAMESPACE) {
+        throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(ident.name(), r)
+      } else {
+        assert(namespace == CatalogManager.SESSION_NAMESPACE)
+        throw QueryCompilationErrors.cannotRefreshTempFuncError(ident.name(), r)
+      }
+
+    case RefreshFunction(ResolvedIdentifier(catalog, ident)) =>
       if (isSessionCatalog(catalog)) {
-        val funcIdentifier = catalogManager.v1SessionCatalog.qualifyIdentifier(
-          identifier.asFunctionIdentifier)
-        RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+        val funcIdentifier = ident.asFunctionIdentifier.copy(catalog = Some(catalog.name))
+        RefreshFunctionCommand(funcIdentifier)
       } else {
         throw QueryCompilationErrors.missingCatalogRefreshFunctionAbilityError(catalog)
       }

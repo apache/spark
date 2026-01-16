@@ -657,12 +657,13 @@ jobs:
         name: PySpark
         verbose: true
     - name: Upload test results to Codecov
-      if: (!cancelled()) && fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
+      env: ${{ fromJSON(inputs.envs) }}
+      if: (!cancelled()) && github.repository == 'apache/spark'
       uses: codecov/codecov-action@v5
       with:
         report_type: 'test_results'
         files: '**/target/test-reports/*.xml'
-        flags: unittests
+        flags: ${{ env.PYTHON_TO_TEST }}-${{ inputs.branch }}
         name: PySpark-Test-Results
         token: ${{ secrets.codecov_token }}
     - name: Upload test results to report
@@ -1408,7 +1409,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24.11.0
+          node-version: 24.13.0
           cache: 'npm'
           cache-dependency-path: ui-test/package-lock.json
       - run: |

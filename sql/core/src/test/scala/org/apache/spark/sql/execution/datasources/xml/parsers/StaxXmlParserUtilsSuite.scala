@@ -21,12 +21,10 @@ import javax.xml.stream.{XMLInputFactory, XMLStreamConstants}
 
 import scala.jdk.CollectionConverters._
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParserUtils, XmlOptions}
 
-final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
+final class StaxXmlParserUtilsSuite extends SparkFunSuite {
 
   private val factory = StaxXmlParserUtils.factory
 
