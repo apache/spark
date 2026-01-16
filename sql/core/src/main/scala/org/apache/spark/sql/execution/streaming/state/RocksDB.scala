@@ -1035,8 +1035,7 @@ class RocksDB(
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]] = {
     updateMemoryUsageIfNeeded()
     // Prepare keys
-    val finalKeys =
-      if (useColumnFamilies) {
+    val finalKeys = if (useColumnFamilies) {
         keys.map(encodeStateRowWithPrefix(_, cfName))
       } else {
         keys
@@ -1049,13 +1048,11 @@ class RocksDB(
 
     // Decode and verify checksums if enabled, then return iterator
     if (conf.rowChecksumEnabled) {
-      valuesList.asScala.iterator.zipWithIndex.map { case (value, idx) =>
-        if (value != null) {
+      valuesList.asScala.iterator.zipWithIndex.map {
+        case (value, idx) if value != null =>
           KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
             readVerifier, finalKeys(idx), value)
-        } else {
-          null
-        }
+        case _ => null
       }
     } else {
       valuesList.asScala.iterator
