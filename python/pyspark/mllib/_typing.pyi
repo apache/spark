@@ -26,6 +26,7 @@ from pyspark.mllib.linalg import Vector
 
 try:
     from scipy.sparse import spmatrix, sparray
+
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], spmatrix, sparray, range]
 except ImportError:
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], range]

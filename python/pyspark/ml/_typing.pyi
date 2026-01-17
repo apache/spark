@@ -29,6 +29,7 @@ import pyspark.ml.wrapper
 
 try:
     from scipy.sparse import spmatrix, sparray
+
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], spmatrix, sparray, range]
 except ImportError:
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], range]
