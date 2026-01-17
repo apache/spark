@@ -24,7 +24,6 @@ import scala.util.Properties
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
 import org.scalatest.Assertions._
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
@@ -54,7 +53,6 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class HiveSparkSubmitSuite
   extends SparkSubmitTestUtils
   with Matchers
-  with BeforeAndAfterEach
   with ResetSystemProperties {
 
   override protected val defaultSparkSubmitTimeout: Span = 5.minutes

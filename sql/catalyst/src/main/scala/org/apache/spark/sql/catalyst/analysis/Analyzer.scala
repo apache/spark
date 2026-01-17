@@ -504,9 +504,9 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
-      Seq(ResolveUpdateEventTimeWatermarkColumn,
-        NameStreamingSources) ++
-      extendedResolutionRules : _*),
+      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      extendedResolutionRules ++
+      Seq(NameStreamingSources) : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
