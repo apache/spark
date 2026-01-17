@@ -730,7 +730,7 @@ private[spark] class BlockManager(
         shuffleManager.shuffleBlockResolver.getBlockData(blockId)
       } catch {
         case e: IOException =>
-          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+          if (FallbackStorage.isConfigured(conf)) {
             FallbackStorage.read(conf, blockId)
           } else {
             throw e
@@ -1822,8 +1822,7 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      if (cachedPeers.isEmpty &&
-          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+      if (cachedPeers.isEmpty && FallbackStorage.isConfigured(conf)) {
         Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
       } else {
         cachedPeers
