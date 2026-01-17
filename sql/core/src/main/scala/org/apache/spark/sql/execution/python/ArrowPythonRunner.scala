@@ -158,6 +158,9 @@ object ArrowPythonRunner {
     val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
       Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
     ).getOrElse(Seq.empty)
+    val arrowConcurrencyBatchSize = Seq(
+      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_BATCH_SIZE.key ->
+      conf.pythonUDFArrowConcurrencyBatchSize.toString)
     val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
       conf.arrowUseLargeVarTypes.toString)
     val legacyPandasConversion = Seq(
@@ -176,7 +179,7 @@ object ArrowPythonRunner {
       Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
     ).getOrElse(Seq.empty)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
-      arrowAyncParallelism ++ useLargeVarTypes ++
+      arrowAyncParallelism ++ arrowConcurrencyBatchSize ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
       legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler: _*)
   }
