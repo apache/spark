@@ -51,6 +51,15 @@ class GraphElementRegistry(ABC):
         :param file_path: The path to the file that the SQL txt came from.
         """
 
+    @abstractmethod
+    def register_signalled_query_functions(self) -> None:
+        """Open up a stream to receive query function execution signals from the server.
+        When a signal is received, execute the corresponding query function and register the
+        result with the server.
+
+        This method should be called after all the flows and datasets have been registered.
+        """
+
 
 _graph_element_registry_context_var: ContextVar[Optional[GraphElementRegistry]] = ContextVar(
     "graph_element_registry_context", default=None
