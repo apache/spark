@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1991,11 +1992,12 @@ object CodeGenerator extends Logging {
 
   @tailrec
   def javaClass(dt: DataType): Class[_] = dt match {
+    case _ if PhyTypeOps.supports(dt) => PhyTypeOps(dt).getJavaClass
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
