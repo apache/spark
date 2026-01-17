@@ -617,14 +617,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
-      // Checks if we need to decrement a bracketed comment level; the last character '/' of
-      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
-      // in the previous loop and we decrement the level here if needed.
-      if (leavingBracketedComment) {
-        bracketedCommentLevel -= 1
-        leavingBracketedComment = false
-      }
-
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -685,6 +677,14 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
 
       isStatement = statementInProgress(index)
+
+      // Checks if we need to decrement a bracketed comment level; the last character '/' of
+      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
+      // in the previous loop and we decrement the level here if needed.
+      if (leavingBracketedComment) {
+        bracketedCommentLevel -= 1
+        leavingBracketedComment = false
+      }
     }
     // Check the last char is end of nested bracketed comment.
     val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
