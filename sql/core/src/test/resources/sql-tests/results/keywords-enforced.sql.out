@@ -19,6 +19,7 @@ ARCHIVE	false
 ARRAY	false
 AS	true
 ASC	false
+ASENSITIVE	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
@@ -46,6 +47,7 @@ CHAR	false
 CHARACTER	false
 CHECK	true
 CLEAR	false
+CLOSE	false
 CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
@@ -74,6 +76,7 @@ CURRENT_DATE	true
 CURRENT_TIME	true
 CURRENT_TIMESTAMP	true
 CURRENT_USER	true
+CURSOR	false
 DATA	false
 DATABASE	false
 DATABASES	false
@@ -172,6 +175,7 @@ INNER	true
 INPATH	false
 INPUT	false
 INPUTFORMAT	false
+INSENSITIVE	false
 INSERT	false
 INT	false
 INTEGER	false
@@ -231,6 +235,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	true
+NEXT	false
 NO	false
 NONE	false
 NORELY	false
@@ -242,6 +247,7 @@ OF	false
 OFFSET	true
 ON	true
 ONLY	true
+OPEN	false
 OPTION	false
 OPTIONS	false
 OR	true
@@ -270,6 +276,7 @@ PURGE	false
 QUARTER	false
 QUERY	false
 RANGE	false
+READ	false
 READS	false
 REAL	false
 RECORDREADER	false

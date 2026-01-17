@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, Literal,
-  VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.v2.ParameterBindingUtils
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -101,12 +101,13 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context
     val result = withIsolatedLocalVariableContext {
       CurrentOrigin.withOrigin(executeImmediateOrigin) {
+        // Use shared parameterized query execution logic (same as OPEN CURSOR)
         val df = if (args.isEmpty) {
           // No parameters - execute directly
           sparkSession.sql(sqlString)
         } else {
-          // For parameterized queries, build parameter arrays
-          val (paramValues, paramNames) = buildUnifiedParameters(args)
+          // For parameterized queries, use shared parameter binding utility
+          val (paramValues, paramNames) = ParameterBindingUtils.buildUnifiedParameters(args)
 
           sparkSession.asInstanceOf[ClassicSparkSession]
             .sql(sqlString, paramValues, paramNames)
@@ -169,49 +170,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       case _ =>
         // Fallback to the SQL representation if origin information is not available
         queryExpr.sql
-    }
-  }
-
-  /**
-   * Builds parameter arrays for the sql() API.
-   */
-  private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
-    val values = scala.collection.mutable.ListBuffer[Any]()
-    val names = scala.collection.mutable.ListBuffer[String]()
-
-    args.foreach {
-      case alias: Alias =>
-        val paramValue = evaluateParameterExpression(alias.child)
-        values += paramValue
-        names += alias.name
-      case expr =>
-        // Positional parameter: just a value
-        val paramValue = evaluateParameterExpression(expr)
-        values += paramValue
-        names += "" // unnamed expression
-    }
-
-    (values.toArray, names.toArray)
-  }
-
-  /**
-   * Evaluates a parameter expression. Validation for unsupported constructs like subqueries
-   * is already done during analysis in ResolveExecuteImmediate.validateExpressions().
-   */
-  private def evaluateParameterExpression(expr: Expression): Any = {
-    expr match {
-      case varRef: VariableReference =>
-        // Variable references should be evaluated to their values and wrapped in Literal
-        // to preserve type information
-        Literal.create(varRef.eval(EmptyRow), varRef.dataType)
-      case foldable if foldable.foldable =>
-        // For foldable expressions, we need to preserve type information by returning
-        // the Literal object itself, not just its raw value. This ensures that
-        // DATE '2023-12-25' remains a DateType literal, not just an Int.
-        Literal.create(foldable.eval(EmptyRow), foldable.dataType)
-      case other =>
-        // Expression is not foldable - not supported for parameters
-        throw QueryCompilationErrors.unsupportedParameterExpression(other)
     }
   }
 
