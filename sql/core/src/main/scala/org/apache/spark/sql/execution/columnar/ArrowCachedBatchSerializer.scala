@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
@@ -251,22 +251,328 @@ private class InternalRowToArrowCachedBatchIterator(
     val rowCount = root.getRowCount
     val vectors = root.getFieldVectors.asScala.toSeq
 
-    // Collect stats for each column: upperBound, lowerBound, nullCount, rowCount, sizeInBytes
+    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes
     val stats = schema.zip(vectors).flatMap { case (attr, vector) =>
       val nullCount = (0 until rowCount).count(i => vector.isNull(i))
       val sizeInBytes = vector.getBufferSize.toLong
 
-      attr.dataType match {
-        case _: AtomicType if attr.dataType != BinaryType =>
-          // For now, skip min/max calculation for simplicity
-          Seq(null, null, nullCount, rowCount, sizeInBytes)
-        case _ =>
-          // For complex types or binary, skip min/max
-          Seq(null, null, nullCount, rowCount, sizeInBytes)
+      val (lower, upper) = attr.dataType match {
+        case BooleanType => calculateMinMaxBoolean(vector, rowCount)
+        case ByteType => calculateMinMaxByte(vector, rowCount)
+        case ShortType => calculateMinMaxShort(vector, rowCount)
+        case IntegerType => calculateMinMaxInt(vector, rowCount)
+        case DateType => calculateMinMaxDate(vector, rowCount)
+        case LongType => calculateMinMaxLong(vector, rowCount)
+        case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
+        case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
+        case FloatType => calculateMinMaxFloat(vector, rowCount)
+        case DoubleType => calculateMinMaxDouble(vector, rowCount)
+        case StringType => calculateMinMaxString(vector, rowCount)
+        case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
+        case _ => (null, null) // Skip for binary and complex types
       }
+
+      Seq(lower, upper, nullCount, rowCount, sizeInBytes)
     }
 
     new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(stats.toArray)
+  }
+
+  private def calculateMinMaxBoolean(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = true
+    var max = false
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(i) != 0
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxByte(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Byte.MaxValue
+    var max = Byte.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxShort(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Short.MaxValue
+    var max = Short.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxInt(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDate(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxLong(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxTimestamp(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxTimestampNTZ(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxFloat(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Float.MaxValue
+    var max = Float.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDouble(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Double.MaxValue
+    var max = Double.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxString(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min: org.apache.spark.unsafe.types.UTF8String = null
+    var max: org.apache.spark.unsafe.types.UTF8String = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(i)
+        val value = org.apache.spark.unsafe.types.UTF8String.fromBytes(bytes)
+        if (!hasValue) {
+          min = value.clone()
+          max = value.clone()
+          hasValue = true
+        } else {
+          if (value.binaryCompare(min) < 0) min = value.clone()
+          if (value.binaryCompare(max) > 0) max = value.clone()
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDecimal(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int,
+      dataType: org.apache.spark.sql.types.DataType): (Any, Any) = {
+    val decimalType = dataType.asInstanceOf[DecimalType]
+    var min: org.apache.spark.sql.types.Decimal = null
+    var max: org.apache.spark.sql.types.Decimal = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bigDecimal = vector.asInstanceOf[
+          org.apache.arrow.vector.DecimalVector].getObject(i)
+        val value = org.apache.spark.sql.types.Decimal(
+          bigDecimal, decimalType.precision, decimalType.scale)
+
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value.compareTo(min) < 0) min = value
+          if (value.compareTo(max) > 0) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
   }
 
   // scalastyle:off caselocale
@@ -377,19 +683,333 @@ private class ColumnarBatchToArrowCachedBatchIterator(
   private def collectStatistics(
       root: VectorSchemaRoot,
       schema: Seq[Attribute]): InternalRow = {
+    // Reuse the collectStatistics from InternalRowToArrowCachedBatchIterator
+    // by calling the same logic
     val rowCount = root.getRowCount
     val vectors = root.getFieldVectors.asScala.toSeq
 
-    // Collect stats for each column
+    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes
     val stats = schema.zip(vectors).flatMap { case (attr, vector) =>
       val nullCount = (0 until rowCount).count(i => vector.isNull(i))
       val sizeInBytes = vector.getBufferSize.toLong
 
-      // For now, skip min/max calculation
-      Seq(null, null, nullCount, rowCount, sizeInBytes)
+      val (lower, upper) = attr.dataType match {
+        case BooleanType => calculateMinMaxBoolean(vector, rowCount)
+        case ByteType => calculateMinMaxByte(vector, rowCount)
+        case ShortType => calculateMinMaxShort(vector, rowCount)
+        case IntegerType => calculateMinMaxInt(vector, rowCount)
+        case DateType => calculateMinMaxDate(vector, rowCount)
+        case LongType => calculateMinMaxLong(vector, rowCount)
+        case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
+        case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
+        case FloatType => calculateMinMaxFloat(vector, rowCount)
+        case DoubleType => calculateMinMaxDouble(vector, rowCount)
+        case StringType => calculateMinMaxString(vector, rowCount)
+        case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
+        case _ => (null, null) // Skip for binary and complex types
+      }
+
+      Seq(lower, upper, nullCount, rowCount, sizeInBytes)
     }
 
     new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(stats.toArray)
+  }
+
+  private def calculateMinMaxBoolean(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = true
+    var max = false
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(i) != 0
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxByte(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Byte.MaxValue
+    var max = Byte.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxShort(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Short.MaxValue
+    var max = Short.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxInt(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDate(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxLong(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxTimestamp(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxTimestampNTZ(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxFloat(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Float.MaxValue
+    var max = Float.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDouble(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Double.MaxValue
+    var max = Double.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxString(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min: org.apache.spark.unsafe.types.UTF8String = null
+    var max: org.apache.spark.unsafe.types.UTF8String = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(i)
+        val value = org.apache.spark.unsafe.types.UTF8String.fromBytes(bytes)
+        if (!hasValue) {
+          min = value.clone()
+          max = value.clone()
+          hasValue = true
+        } else {
+          if (value.binaryCompare(min) < 0) min = value.clone()
+          if (value.binaryCompare(max) > 0) max = value.clone()
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  private def calculateMinMaxDecimal(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int,
+      dataType: org.apache.spark.sql.types.DataType): (Any, Any) = {
+    val decimalType = dataType.asInstanceOf[DecimalType]
+    var min: org.apache.spark.sql.types.Decimal = null
+    var max: org.apache.spark.sql.types.Decimal = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bigDecimal = vector.asInstanceOf[
+          org.apache.arrow.vector.DecimalVector].getObject(i)
+        val value = org.apache.spark.sql.types.Decimal(
+          bigDecimal, decimalType.precision, decimalType.scale)
+
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value.compareTo(min) < 0) min = value
+          if (value.compareTo(max) > 0) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
   }
 
   // scalastyle:off caselocale
