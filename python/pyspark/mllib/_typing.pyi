@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import List, Tuple, TYPE_CHECKING, TypeVar, Union
+from typing import List, Tuple, TypeVar, Union
 
 from typing_extensions import Literal
 from numpy import ndarray  # noqa: F401
@@ -24,11 +24,12 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.mllib.linalg import Vector
 
-if TYPE_CHECKING:
+try:
     from scipy.sparse import spmatrix, sparray
-
-if TYPE_CHECKING:
     VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], spmatrix, sparray, range]
+except ImportError:
+    VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], range]
+
 C = TypeVar("C", bound=type)
 JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]
 
