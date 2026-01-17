@@ -635,11 +635,42 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     // Check if batch is already Arrow-based for zero-copy path
     val vectors = (0 until batch.numCols()).map(batch.column)
     if (vectors.forall(_.isInstanceOf[ArrowColumnVector])) {
-      // Fast path: convert via row iterator (simple path for now)
-      convertToArrowBatch(batch, rowCount, schema)
+      // Fast path: zero-copy extraction of Arrow RecordBatch
+      convertArrowBatchZeroCopy(batch, rowCount, schema, vectors)
     } else {
       // Slow path: convert to Arrow via rows
       convertToArrowBatch(batch, rowCount, schema)
+    }
+  }
+
+  private def convertArrowBatchZeroCopy(
+      batch: ColumnarBatch,
+      rowCount: Int,
+      schema: Seq[Attribute],
+      vectors: Seq[ColumnVector]): ArrowCachedBatch = {
+    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector
+    val arrowVectors = vectors.map(
+      _.asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[
+        org.apache.arrow.vector.FieldVector])
+
+    // Create a VectorSchemaRoot from the existing vectors
+    val root = new VectorSchemaRoot(arrowSchema, arrowVectors.asJava, rowCount)
+
+    Utils.tryWithSafeFinally {
+      // Use VectorUnloader to create compressed RecordBatch
+      val unloader = new VectorUnloader(root, true, compressionCodec, true)
+      val recordBatch = unloader.getRecordBatch()
+
+      Utils.tryWithSafeFinally {
+        val arrowData = serializeBatch(recordBatch)
+        val stats = collectStatistics(root, schema)
+        ArrowCachedBatch(rowCount, arrowData, stats)
+      } {
+        recordBatch.close()
+      }
+    } {
+      // Note: We don't close the root here because we don't own the vectors
+      // They are owned by the input ColumnarBatch
     }
   }
 
