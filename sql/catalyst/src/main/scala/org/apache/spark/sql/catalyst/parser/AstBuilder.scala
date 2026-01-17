@@ -6738,10 +6738,12 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.SET).map { _ =>
       visitOperatorPipeSet(ctx, left)
     }.getOrElse(Option(ctx.DROP).map { _ =>
-      val ids: Seq[String] = visitIdentifierSeq(ctx.identifierSeq())
+      val ids: Seq[Seq[String]] =
+        ctx.multipartIdentifierList().multipartIdentifier.asScala.toSeq.map(
+          _.parts.asScala.map(_.getText).toSeq)
       val projectList: Seq[NamedExpression] =
         Seq(UnresolvedStarExceptOrReplace(
-          target = None, excepts = ids.map(s => Seq(s)), replacements = None))
+          target = None, excepts = ids, replacements = None))
       Project(projectList, left)
     }.getOrElse(Option(ctx.AS).map { _ =>
       SubqueryAlias(getIdentifierText(ctx.errorCapturingIdentifier()), left)
