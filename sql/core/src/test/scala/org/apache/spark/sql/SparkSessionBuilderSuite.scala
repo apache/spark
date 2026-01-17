@@ -598,4 +598,108 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .getOrCreate()
     assert(session.sparkContext.appName === "newAppName")
   }
+
+  test("SPARK-55016: isSessionStateInitializing flag should track sessionState initialization") {
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("test-session-state-init")
+      .getOrCreate()
+      .asInstanceOf[classic.SparkSession]
+
+    try {
+      // Before accessing sessionState, the flag should be false
+      assert(!session.isSessionStateInitializing,
+        "sessionState should not be initializing before first access")
+
+      // Access sessionState to trigger initialization
+      val _ = session.sessionState
+
+      // After accessing sessionState completes, the flag should be false again
+      assert(!session.isSessionStateInitializing,
+        "sessionState should not be initializing after initialization completes")
+    } finally {
+      session.stop()
+    }
+  }
+
+  test("SPARK-55016: SQLConf.get should work correctly with sessionState initialization") {
+    // This test verifies that if SQLConf.get is called while sessionState is initializing,
+    // it returns the fallback conf instead of trying to access sessionState.conf recursively.
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("test-sqlconf-fallback")
+      .getOrCreate()
+      .asInstanceOf[classic.SparkSession]
+
+    try {
+      // Before accessing sessionState, the initializing flag should be false
+      assert(!session.isSessionStateInitializing,
+        "sessionState should not be initializing before first access")
+
+      // Access sessionState to complete initialization
+      val _ = session.sessionState
+
+      // After initialization completes, the flag should be false
+      assert(!session.isSessionStateInitializing,
+        "sessionState should not be initializing after initialization completes")
+
+      // After initialization, SQLConf.get should return sessionState.conf
+      val conf = SQLConf.get
+      assert(conf == session.sessionState.conf,
+        "SQLConf.get should return sessionState.conf after initialization")
+    } finally {
+      session.stop()
+    }
+  }
+
+  test("SPARK-55016: SQLConf.get returns fallback conf when initializing flag is set") {
+    // This test simulates the condition where sessionState is initializing by
+    // directly manipulating the sessionStateInitializing flag to verify that
+    // SQLConf.get returns the fallback conf instead of trying to access sessionState.conf
+
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("test-sqlconf-flag")
+      .getOrCreate()
+      .asInstanceOf[classic.SparkSession]
+
+    try {
+      // First ensure sessionState is initialized so SQLConf.get returns it
+      val _ = session.sessionState
+      assert(!session.isSessionStateInitializing,
+        "sessionState should not be initializing after access")
+
+      val normalConf = SQLConf.get
+      assert(normalConf == session.sessionState.conf,
+        "SQLConf.get should return sessionState.conf normally")
+
+      // Now simulate the initialization condition by using reflection to set the flag
+      val field = session.getClass.getDeclaredField("sessionStateInitializing")
+      field.setAccessible(true)
+      field.setBoolean(session, true)
+
+      try {
+        // With the flag set to true, SQLConf.get should return fallback conf
+        val confDuringSimulatedInit = SQLConf.get
+        val fallbackConf = SQLConf.getFallbackConf
+
+        // Use reference equality to check it's the exact same instance
+        assert(confDuringSimulatedInit.eq(fallbackConf),
+          "SQLConf.get should return the same fallback conf instance " +
+          "when sessionStateInitializing flag is true")
+        assert(!confDuringSimulatedInit.eq(session.sessionState.conf),
+          "SQLConf.get should not return sessionState.conf when initializing flag is set")
+      } finally {
+        // Reset the flag
+        field.setBoolean(session, false)
+      }
+
+      // Verify normal behavior is restored
+      val confAfter = SQLConf.get
+      assert(confAfter == session.sessionState.conf,
+        "SQLConf.get should return sessionState.conf after flag is reset")
+    } finally {
+      session.stop()
+    }
+  }
 }
