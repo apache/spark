@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, Dict, List, Optional, Union, cast, TYPE_CHECKING
+from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
+from pyspark.resource import ResourceInformation
 
-if TYPE_CHECKING:
-    from pyspark.resource import ResourceInformation
+
+T = TypeVar("T", bound="TaskContext")
 
 
 class TaskContext:
@@ -131,7 +132,7 @@ class TaskContext:
     _cpus: Optional[int] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
-    def __new__(cls: Type["TaskContext"]) -> "TaskContext":
+    def __new__(cls: Type["TaskContext"], **kwargs: Dict) -> "TaskContext":
         """
         Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
         """
@@ -140,6 +141,19 @@ class TaskContext:
             return taskContext
         cls._taskContext = taskContext = object.__new__(cls)
         return taskContext
+
+    def __init__(
+        self,
+        **kwargs: Dict,
+    ) -> None:
+        # Set attributes only if they are passed in and not None
+        # The kwargs are auto-mapped to the private attributes of TaskContext
+        # e.g., stageId -> _stageId
+        for key, val in kwargs.items():
+            if not hasattr(self, f"_{key}"):
+                raise TypeError(f"__init__() got an unexpected keyword argument '{key}'")
+            if val is not None:
+                setattr(self, f"_{key}", val)
 
     @classmethod
     def _getOrCreate(cls: Type["TaskContext"]) -> "TaskContext":
@@ -167,6 +181,24 @@ class TaskContext:
         Must be called on the worker, not the driver. Returns ``None`` if not initialized.
         """
         return cls._taskContext
+
+    @classmethod
+    def from_json(cls: Type[T], json: dict) -> T:
+        """
+        Create a TaskContext from a JSON dictionary.
+        """
+        return cls(
+            stageId=json["stageId"],
+            partitionId=json["partitionId"],
+            attemptNumber=json["attemptNumber"],
+            taskAttemptId=json["taskAttemptId"],
+            cpus=json["cpus"],
+            resources={
+                k: ResourceInformation(v["name"], v["addresses"])
+                for k, v in json["resources"].items()
+            },
+            localProperties=json["localProperties"],
+        )
 
     def stageId(self) -> int:
         """
@@ -374,6 +406,14 @@ class BarrierTaskContext(TaskContext):
         """
         cls._conn_info = conn_info
         cls._secret = secret
+
+    @classmethod
+    def from_json(cls: Type["BarrierTaskContext"], json: dict) -> "BarrierTaskContext":
+        """
+        Create a BarrierTaskContext from a JSON dictionary.
+        """
+        cls._initialize(json["connInfo"], json["secret"])
+        return super().from_json(json)
 
     def barrier(self) -> None:
         """
