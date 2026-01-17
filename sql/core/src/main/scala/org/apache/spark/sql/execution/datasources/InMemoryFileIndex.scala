@@ -156,6 +156,8 @@ object InMemoryFileIndex extends Logging {
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val ignoreMissingFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
+    val recursiveFileLookup = parameters
+      .get(FileIndexOptions.RECURSIVE_FILE_LOOKUP).map(_.toBoolean).getOrElse(true)
     val useListFiles = try {
       val scheme = paths.head.getFileSystem(hadoopConf).getScheme
       paths.size == 1 && fileSystemList.contains(scheme)
@@ -176,7 +178,8 @@ object InMemoryFileIndex extends Logging {
         ignoreMissingFiles = ignoreMissingFiles,
         ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
         parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
+        recursiveFileLookup = recursiveFileLookup)
     }
   }
 
