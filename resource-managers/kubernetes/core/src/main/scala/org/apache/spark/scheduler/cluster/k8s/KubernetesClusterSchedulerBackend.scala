@@ -119,6 +119,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
       setUpExecutorConfigMap(podAllocator.driverPod)
     }
+    podAllocator.metricsSources.foreach { source =>
+      sc.env.metricsSystem.registerSource(source)
+    }
   }
 
   override def stop(): Unit = {
@@ -335,6 +338,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private class KubernetesDriverEndpoint extends DriverEndpoint {
 
     protected val execIDRequester = new HashMap[RpcAddress, String]
+
+    override def onRegisterExecutorMsgReceived(executorId: String): Unit = {
+      podAllocator.onRegisterExecutorMsgReceived(executorId)
+    }
 
     private def generateExecID(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case x: GenerateExecID =>
