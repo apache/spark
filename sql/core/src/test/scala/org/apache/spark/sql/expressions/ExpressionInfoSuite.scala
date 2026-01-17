@@ -236,7 +236,13 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
-      classOf[AesEncrypt].getName)
+      classOf[AesEncrypt].getName,
+      // UTF-8 validation functions use invalid UTF-8 in examples, which cannot be executed
+      // with the new default (validateUtf8=true) as the cast would fail first (SPARK-54586)
+      "org.apache.spark.sql.catalyst.expressions.IsValidUTF8",
+      "org.apache.spark.sql.catalyst.expressions.MakeValidUTF8",
+      "org.apache.spark.sql.catalyst.expressions.ValidateUTF8",
+      "org.apache.spark.sql.catalyst.expressions.TryValidateUTF8")
 
     ThreadUtils.parmap(
       spark.sessionState.functionRegistry.listFunction(),
