@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -335,6 +336,9 @@ public final class Variant {
         break;
       case DATE:
         appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
+        break;
+      case TIME:
+        appendQuoted(sb, LocalTime.ofNanoOfDay(VariantUtil.getLong(value, pos)).toString());
         break;
       case TIMESTAMP:
         appendQuoted(sb, TIMESTAMP_FORMATTER.format(
