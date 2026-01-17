@@ -168,8 +168,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         InferFiltersFromGenerate,
         InferFiltersFromConstraints),
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet ++
-          Seq(InferFiltersFromGenerate, InferFiltersFromConstraints): _*),
+          operatorOptimizationRuleSet :+ InferFiltersFromConstraints: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates))
