@@ -478,7 +478,8 @@ private[spark] class SparkSubmit extends Logging {
           downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
-          downloadResourcesToCurrentDirectory(_, isArchive = true, avoidDownload = avoidArchiveDownload)
+          downloadResourcesToCurrentDirectory(_, isArchive = true,
+            avoidDownload = avoidArchiveDownload)
         }.orNull
         val pyLocalFiles = Option(args.pyFiles).map {
           downloadResourcesToCurrentDirectory(_)
