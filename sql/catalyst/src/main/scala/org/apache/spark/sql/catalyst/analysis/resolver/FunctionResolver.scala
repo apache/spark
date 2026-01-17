@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
@@ -38,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   TryEval
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s.
@@ -172,11 +171,36 @@ class FunctionResolver(
 
   /**
    * Method used to determine whether the given function should be replaced with another one.
+   * Only accepts unqualified or properly qualified builtin count function.
+   * Rejects catalog.db.count (persistent function) to avoid incorrect normalization.
    */
   private def isCount(unresolvedFunction: UnresolvedFunction): Boolean = {
-    !unresolvedFunction.isDistinct &&
-    unresolvedFunction.nameParts.length == 1 &&
-    unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT) == "count"
+    if (unresolvedFunction.isDistinct) {
+      return false
+    }
+
+    val nameParts = unresolvedFunction.nameParts
+
+    // Validate that this is actually the builtin count function, not a persistent one
+    val isBuiltinCount = nameParts.length match {
+      case 1 =>
+        // Unqualified: "count"
+        nameParts.head.equalsIgnoreCase("count")
+      case 2 =>
+        // Two parts: must be "builtin.count"
+        nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) &&
+        nameParts.last.equalsIgnoreCase("count")
+      case 3 =>
+        // Three parts: must be "system.builtin.count"
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) &&
+        nameParts.last.equalsIgnoreCase("count")
+      case _ =>
+        // More than 3 parts or other patterns are not builtin count
+        false
+    }
+
+    isBuiltinCount
   }
 
   /**
@@ -188,7 +212,6 @@ class FunctionResolver(
   private def normalizeCountExpression(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
     unresolvedFunction.copy(
-      nameParts = Seq("count"),
       arguments = Seq(Literal(1)),
       filter = unresolvedFunction.filter
     )

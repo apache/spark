@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
@@ -365,14 +366,28 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension functions are session-scoped temporaries, so qualify them with
+      // CatalogManager.SESSION_NAMESPACE to enable coexistence with builtin functions
+      val sessionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some(CatalogManager.SESSION_NAMESPACE))
+      } else {
+        name
+      }
+      functionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension table functions are session-scoped temporaries, so qualify them with
+      // CatalogManager.SESSION_NAMESPACE to enable coexistence with builtin functions
+      val sessionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some(CatalogManager.SESSION_NAMESPACE))
+      } else {
+        name
+      }
+      tableFunctionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
     }
     tableFunctionRegistry
   }

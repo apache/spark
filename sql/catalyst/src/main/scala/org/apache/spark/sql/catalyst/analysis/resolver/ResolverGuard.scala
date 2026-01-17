@@ -345,14 +345,42 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     createNamedStruct.children.forall(checkExpression)
   }
 
-  private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) =
-    unresolvedFunction.nameParts.size == 1 &&
-    !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(unresolvedFunction.nameParts.head) &&
-    // UDFs are not supported
-    FunctionRegistry.functionSet.contains(
-      FunctionIdentifier(unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT))
-    ) &&
-    unresolvedFunction.children.forall(checkExpression)
+  private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
+    val nameParts = unresolvedFunction.nameParts
+
+    // Only accept unqualified names or names explicitly qualified as builtin.
+    // Session/temporary functions are UDFs and not supported by single-pass analyzer.
+    // Persistent functions from external catalogs are also not supported.
+    val isBuiltinOrUnqualified = nameParts.length match {
+      case 1 =>
+        // Unqualified: "count" - check if it's a builtin
+        true
+      case 2 =>
+        // Two parts: must be "builtin.count"
+        nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case 3 =>
+        // Three parts: must be "system.builtin.count"
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case _ =>
+        // More than 3 parts is not valid
+        false
+    }
+
+    if (!isBuiltinOrUnqualified) {
+      // This is session.func, catalog.db.function, or invalid - not supported
+      false
+    } else {
+      // Extract the unqualified function name (last part) to check against builtin set
+      val functionName = nameParts.last
+      !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) &&
+      // UDFs are not supported - only built-in functions
+      FunctionRegistry.functionSet.contains(
+        FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
+      ) &&
+      unresolvedFunction.children.forall(checkExpression)
+    }
+  }
 
   private def checkLiteral(literal: Literal) = true
 

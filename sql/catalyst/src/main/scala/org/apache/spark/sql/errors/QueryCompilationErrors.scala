@@ -942,6 +942,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
+  def notAScalarFunctionError(
+      functionName: String,
+      u: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_SCALAR_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)),
+      origin = u.origin)
+  }
+
+  def notATableFunctionError(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_TABLE_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
+  }
+
   def wrongNumArgsError(
       name: String,
       validParametersCount: Seq[Any],
@@ -3056,6 +3071,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1255",
       messageParameters = Map("functionName" -> functionName))
+  }
+
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_TEMP_OBJ_QUALIFIER",
+      messageParameters = Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)))
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String, t: TreeNode[_]): Throwable = {
