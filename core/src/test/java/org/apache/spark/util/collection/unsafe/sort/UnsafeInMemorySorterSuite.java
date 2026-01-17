@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 
 import org.apache.spark.unsafe.array.LongArray;
 import org.junit.jupiter.api.Assertions;
@@ -189,6 +190,48 @@ public class UnsafeInMemorySorterSuite {
     Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
 
     assertEquals(0L, memoryManager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void testThreadSafety() throws InterruptedException {
+    final TestMemoryManager memoryManager =new TestMemoryManager(
+            new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
+    final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+    final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer,
+            taskMemoryManager,
+            mock(RecordComparator.class),
+            mock(PrefixComparator.class),
+            100,
+            shouldUseRadixSort());
+
+    int timeout = 10000;
+    long start = System.currentTimeMillis();
+    while (true) {
+      sorter.freeMemory();
+      CountDownLatch downLatch = new CountDownLatch(1);
+      Thread thread1 = new Thread(() -> {
+        sorter.expandPointerArray(consumer.allocateArray(2000));
+        downLatch.countDown();
+      });
+      Thread thread2 = new Thread(() -> {
+        sorter.freeMemory();
+        try {
+            downLatch.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        sorter.freeMemory();
+      });
+      thread1.start();
+      thread2.start();
+      thread1.join();
+      thread2.join();
+      Assertions.assertEquals(0, memoryManager.getExecutionMemoryUsageForTask(0));
+      if (System.currentTimeMillis() - start > timeout) {
+        break;
+      }
+    }
   }
 
 }
