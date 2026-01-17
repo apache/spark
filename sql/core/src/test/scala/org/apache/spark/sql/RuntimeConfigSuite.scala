@@ -67,6 +67,8 @@ class RuntimeConfigSuite extends SparkFunSuite {
     // SQL configs
     assert(!conf.isModifiable(GLOBAL_TEMP_DATABASE.key))
     assert(conf.isModifiable(CHECKPOINT_LOCATION.key))
+    // Proto-backed cluster config is not modifiable
+    assert(!conf.isModifiable("spark.sql.ui.retainedExecutions"))
     // Core configs
     assert(!conf.isModifiable(config.CPUS_PER_TASK.key))
     assert(!conf.isModifiable("spark.executor.cores"))
