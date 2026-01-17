@@ -1014,7 +1014,15 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     testStageDataSerDe(null, null, null)
   }
 
-  private def testStageDataSerDe(name: String, details: String, schedulingPool: String): Unit = {
+  test("Stage Data with empty parentIds") {
+    testStageDataSerDe("name", "test details", "test scheduling pool", parentIds = Seq.empty)
+  }
+
+  private def testStageDataSerDe(
+      name: String,
+      details: String,
+      schedulingPool: String,
+      parentIds: Seq[Int] = Seq(0, 1)): Unit = {
     val accumulatorUpdates = Seq(
       new AccumulableInfo(1L, "duration", Some("update"), "value1"),
       new AccumulableInfo(2L, "duration2", None, "value2")
@@ -1293,6 +1301,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       details = details,
       schedulingPool = schedulingPool,
       rddIds = Seq(1, 2, 3, 4, 5, 6),
+      parentIds = parentIds,
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
       executorSummary = executorSummary,
@@ -1387,6 +1396,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.schedulingPool == input.info.schedulingPool)
 
     assert(result.info.rddIds == input.info.rddIds)
+    assert(result.info.parentIds == input.info.parentIds)
     checkAnswer(result.info.accumulatorUpdates, input.info.accumulatorUpdates)
 
     assert(result.info.tasks.isDefined == input.info.tasks.isDefined)

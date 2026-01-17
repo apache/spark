@@ -612,6 +612,7 @@ message StageData {
   int64 shuffle_merged_remote_reqs_duration = 62;
   bool is_shuffle_push_enabled = 63;
   int32 shuffle_mergers_count = 64;
+  repeated int64 parent_ids = 65;
 }
 
 message TaskMetrics {
