@@ -239,6 +239,10 @@ object SQLExecution extends Logging {
               event.qe = queryExecution
               event.executionFailure = ex
               sc.listenerBus.post(event)
+
+              // Observation.tryComplete is called here to ensure the observation is completed,
+              // but it is not high priority, so it is fine to call it later.
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }
