@@ -1027,4 +1027,72 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
         k8sConf.resourceProfileId.toInt), Seq.empty)
   }
+
+  test("Pod creation retries with exponential backoff and succeeds on second attempt") {
+    val confWithRetries = conf.clone
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRIES.key, "3")
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_BASE.key, "10ms")
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_MAX.key, "100ms")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithRetries, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Make the first pod creation attempt fail, second attempt succeed
+    var createAttempts = 0
+    when(podResource.create()).thenAnswer((_: InvocationOnMock) => {
+      createAttempts += 1
+      if (createAttempts == 1) {
+        throw new KubernetesClientException("Simulated K8s failure")
+      } else {
+        // Return a pod on success
+        podWithAttachedContainerForId(1)
+      }
+    })
+
+    // Request 1 executor
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    // Verify pod creation was attempted twice (1 failure + 1 success)
+    verify(podResource, times(2)).create()
+    // Verify the executor was successfully created
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+  }
+
+  test("Pod creation fails after retries and hits failure threshold") {
+    val confWithRetries = conf.clone
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRIES.key, "0") // No retries for simplicity
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_BASE.key, "1ms")
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_MAX.key, "10ms")
+      .set(KUBERNETES_ALLOCATION_POD_CREATION_FAILURE_THRESHOLD_MULTIPLIER.key, "2")
+      .set(KUBERNETES_ALLOCATION_BATCH_SIZE.key, "2") // Request 2 pods per cycle
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithRetries, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Make all pod creation attempts fail
+    when(podResource.create()).thenThrow(new KubernetesClientException("Simulated failure"))
+
+    // Set target to 3 executors, with threshold multiplier of 2, threshold = 3 * 2 = 6
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+
+    // First allocation cycle: tries to create 2 pods, both fail = 2 failures
+    // Total failures: 2, threshold: 6, no exception yet
+
+    // Trigger second allocation cycle by notifying subscribers again
+    snapshotsStore.notifySubscribers()
+    // Second cycle: tries to create 2 more pods, both fail = 2 more failures
+    // Total failures: 4, threshold: 6, no exception yet
+
+    // Trigger third allocation cycle - this should hit the threshold and throw exception
+    val exception = intercept[SparkException] {
+      snapshotsStore.notifySubscribers()
+    }
+
+    // Verify the exception message mentions the threshold
+    assert(exception.getMessage.contains("exceeds the failure threshold"))
+    assert(exception.getMessage.contains("target executors: 3"))
+    assert(exception.getMessage.contains("multiplier: 2"))
+
+    verify(podResource, times(6)).create()
+  }
 }
