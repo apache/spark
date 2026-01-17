@@ -53,10 +53,12 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSeq)
 
     ids.foreach { case (shuffleId: Int, mapId: Long, reduceId: Int) =>
+      val mockBuffer = mock(classOf[ManagedBuffer])
+      when(mockBuffer.size()).thenReturn(100L)
       when(mockMigratableShuffleResolver.getMigrationBlocks(mc.any()))
         .thenReturn(List(
-          (ShuffleIndexBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer])),
-          (ShuffleDataBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer]))))
+          (ShuffleIndexBlockId(shuffleId, mapId, reduceId), mockBuffer),
+          (ShuffleDataBlockId(shuffleId, mapId, reduceId), mockBuffer)))
     }
   }
 
@@ -78,7 +80,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     try {
       bmDecomManager.start()
       eventually(timeout(100.second), interval(10.milliseconds)) {
-        val (currentTime, done) = bmDecomManager.lastMigrationInfo()
+        val MigrationInfo(currentTime, done, _) = bmDecomManager.lastMigrationInfo()
         assert(!assertDone || done)
         // Make sure the time stamp starts moving forward.
         if (!fail) {
@@ -100,7 +102,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       if (!fail) {
         // Wait 5 seconds and assert times keep moving forward.
         Thread.sleep(5000)
-        val (currentTime, done) = bmDecomManager.lastMigrationInfo()
+        val MigrationInfo(currentTime, done, _) = bmDecomManager.lastMigrationInfo()
         assert((!assertDone || done) && currentTime > previousTime.get)
       }
     } finally {
@@ -418,6 +420,57 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
           mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
         assert(bmDecomManager.rddBlocksLeft)
         assert(bmDecomManager.stoppedRDD)
+      }
+    } finally {
+      bmDecomManager.stop()
+    }
+  }
+
+  test("block decom manager updates shuffle migration stats correctly") {
+    val blockTransferService = mock(classOf[BlockTransferService])
+    val bm = mock(classOf[BlockManager])
+
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1), (2, 2L, 2), (3, 3L, 3)))
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+
+    val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
+
+    try {
+      bmDecomManager.start()
+      eventually(timeout(100.second), interval(10.milliseconds)) {
+        assert(bmDecomManager.numMigratedShuffles.get() === 3)
+        val stat = bmDecomManager.lastMigrationInfo().shuffleMigrationStat
+
+        // Verify block counts
+        assert(stat.numBlocksLeft === 0)
+        assert(stat.numMigratedBlock === 3)
+        assert(stat.totalBlocks === 3)
+        assert(stat.deletedBlocks === 0)
+
+        // Verify size calculations precisely
+        // Each shuffle block has 2 buffers (index + data), each 100 bytes = 200 bytes per block
+        // 3 blocks x 200 bytes = 600 bytes total
+        val expectedTotalSize = 3 * 2 * 100L
+        assert(stat.totalSize === expectedTotalSize,
+          s"Expected total size $expectedTotalSize but got ${stat.totalSize}")
+        assert(stat.totalMigratedSize === expectedTotalSize,
+          s"Expected migrated size $expectedTotalSize but got ${stat.totalMigratedSize}")
+
+        // Verify size relationships are logical
+        assert(stat.totalSize >= stat.totalMigratedSize,
+          s"Total size (${stat.totalSize}) should be >= migrated size (${stat.totalMigratedSize})")
+
+        // Since all blocks migrated successfully, remaining size should be 0
+        val remainingSize = stat.totalSize - stat.totalMigratedSize
+        assert(remainingSize === 0,
+          s"All blocks migrated, so remaining size should be 0 but got $remainingSize")
       }
     } finally {
       bmDecomManager.stop()
