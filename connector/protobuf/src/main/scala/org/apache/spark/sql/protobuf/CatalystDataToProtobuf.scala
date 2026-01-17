@@ -35,11 +35,16 @@ private[sql] case class CatalystDataToProtobuf(
 
   override def dataType: DataType = BinaryType
 
-  @transient private lazy val protoDescriptor =
+  @transient private lazy val descriptorWithExtensions =
     ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
+  @transient private lazy val protoDescriptor = descriptorWithExtensions.descriptor
+
+  @transient private lazy val fullNamesToExtensions =
+    descriptorWithExtensions.fullNamesToExtensions
+
   @transient private lazy val serializer =
-    new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable)
+    new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable, fullNamesToExtensions)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]

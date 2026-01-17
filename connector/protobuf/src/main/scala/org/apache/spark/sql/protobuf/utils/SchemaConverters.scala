@@ -42,20 +42,23 @@ object SchemaConverters extends Logging {
    */
   private[protobuf] def toSqlType(
       descriptor: Descriptor,
+      fullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty,
       protobufOptions: ProtobufOptions = ProtobufOptions(Map.empty)): SchemaType = {
-    toSqlTypeHelper(descriptor, protobufOptions)
-  }
+    val existingRecordNames = Map(descriptor.getFullName -> 1)
+    val regularFields = descriptor.getFields.asScala
+      .flatMap(structFieldFor(_, existingRecordNames, fullNamesToExtensions, protobufOptions))
+      .toSeq
+    val extensionFields = fullNamesToExtensions.getOrElse(descriptor.getFullName, Seq.empty)
+    val extStructFields = extensionFields.flatMap(
+      structFieldFor(_, existingRecordNames, fullNamesToExtensions, protobufOptions))
 
-  private[protobuf] def toSqlTypeHelper(
-      descriptor: Descriptor,
-      protobufOptions: ProtobufOptions): SchemaType = {
-    val fields = descriptor.getFields.asScala.flatMap(
-      structFieldFor(_,
-        Map(descriptor.getFullName -> 1),
-        protobufOptions: ProtobufOptions)).toSeq
-    if (fields.isEmpty && protobufOptions.retainEmptyMessage) {
+    val allFields = regularFields ++ extStructFields
+
+    if (allFields.isEmpty && protobufOptions.retainEmptyMessage) {
       SchemaType(convertEmptyProtoToStructWithDummyField(descriptor.getFullName), nullable = true)
-    } else SchemaType(StructType(fields), nullable = true)
+    } else {
+      SchemaType(StructType(allFields), nullable = true)
+    }
   }
 
   // existingRecordNames: Map[String, Int] used to track the depth of recursive fields and to
@@ -66,6 +69,7 @@ object SchemaConverters extends Logging {
   private def structFieldFor(
       fd: FieldDescriptor,
       existingRecordNames: Map[String, Int],
+      fullNamesToExtensions: Map[String, Seq[FieldDescriptor]],
       protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
@@ -150,16 +154,12 @@ object SchemaConverters extends Logging {
           field.getName match {
             case "key" =>
               keyType =
-                structFieldFor(
-                  field,
-                  existingRecordNames,
-                  protobufOptions).map(_.dataType)
+                structFieldFor(field, existingRecordNames, fullNamesToExtensions, protobufOptions)
+                  .map(_.dataType)
             case "value" =>
               valueType =
-                structFieldFor(
-                  field,
-                  existingRecordNames,
-                  protobufOptions).map(_.dataType)
+                structFieldFor(field, existingRecordNames, fullNamesToExtensions, protobufOptions)
+                  .map(_.dataType)
           }
         }
         (keyType, valueType) match {
@@ -206,10 +206,16 @@ object SchemaConverters extends Logging {
           None
         } else {
           val newRecordNames = existingRecordNames + (recordName -> (recursiveDepth + 1))
-          val fields = fd.getMessageType.getFields.asScala.flatMap(
-            structFieldFor(_, newRecordNames, protobufOptions)
-          ).toSeq
-          fields match {
+          // Get regular fields for the nested message
+          val regularFields = fd.getMessageType.getFields.asScala
+            .flatMap(structFieldFor(_, newRecordNames, fullNamesToExtensions, protobufOptions))
+            .toSeq
+          // Get extension fields for the nested message
+          val nestedExtensions = fullNamesToExtensions.getOrElse(recordName, Seq.empty)
+          val extFields = nestedExtensions.flatMap(
+            structFieldFor(_, newRecordNames, fullNamesToExtensions, protobufOptions))
+          val allFields = regularFields ++ extFields
+          allFields match {
             case Nil =>
               if (protobufOptions.retainEmptyMessage) {
                 Some(convertEmptyProtoToStructWithDummyField(fd.getFullName))
