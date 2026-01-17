@@ -171,3 +171,43 @@ select date_diff(YEAR, date'2022-02-25', date'2023-02-25');
 
 select date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
 select datediff('YEAR', date'2022-02-25', date'2023-02-25');
+
+-- timestamp_bucket: group timestamps into time buckets with default origin (epoch)
+-- hourly bucketing
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04 14:30:00');
+-- 6-hour bucketing
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2024-12-04 14:30:00');
+-- daily bucketing
+select timestamp_bucket(INTERVAL '1' DAY, timestamp'2024-12-04 14:30:00');
+-- weekly bucketing
+select timestamp_bucket(INTERVAL '7' DAY, timestamp'2024-12-04 14:30:00');
+-- 15-minute bucketing
+select timestamp_bucket(INTERVAL '15' MINUTE, timestamp'2024-12-04 14:47:00');
+
+-- timestamp_bucket with custom origin
+-- Monday-aligned weeks (1970-01-05 was Monday)
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04', timestamp'1970-01-05 00:00:00');
+-- Sunday-aligned weeks (1970-01-04 was Sunday)
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04', timestamp'1970-01-04 00:00:00');
+-- Custom time origin (6-hour buckets starting at 3 AM)
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2024-12-04 14:30:00', timestamp'2024-12-04 03:00:00');
+
+-- timestamp_bucket accepts date, timestamp, and timestamp_ntz inputs
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04');
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04 14:30:00');
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp_ntz'2024-12-04 14:30:00');
+
+-- timestamp_bucket with timestamps before origin (epoch)
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'1969-12-31 23:30:00');
+-- timestamp before custom origin
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2023-12-31 22:00:00', timestamp'2024-01-01 00:00:00');
+
+-- timestamp_bucket null handling
+select timestamp_bucket(INTERVAL '1' HOUR, CAST(NULL AS TIMESTAMP));
+select timestamp_bucket(CAST(NULL AS INTERVAL DAY), timestamp'2024-12-04 14:30:00');
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04', CAST(NULL AS TIMESTAMP));
+
+-- timestamp_bucket validation errors: zero interval
+select timestamp_bucket(INTERVAL '0' SECOND, timestamp'2024-12-04');
+-- timestamp_bucket validation errors: negative interval
+select timestamp_bucket(INTERVAL '-1' HOUR, timestamp'2024-12-04');
