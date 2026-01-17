@@ -1552,7 +1552,13 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
-    requireDbExists(db)
+    if (!databaseExists(db)) {
+      if (ignoreIfNotExists) {
+        return
+      } else {
+        throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
+      }
+    }
     if (functionExists(qualifiedIdent)) {
       if (functionRegistry.functionExists(qualifiedIdent)) {
         // If we have loaded this function into the FunctionRegistry,

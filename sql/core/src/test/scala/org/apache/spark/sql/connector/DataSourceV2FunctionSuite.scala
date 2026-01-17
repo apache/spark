@@ -208,6 +208,11 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     )
   }
 
+  test("DROP FUNCTION IF EXISTS in non-existing namespace should not fail") {
+    // This should not throw any exception - the namespace doesn't exist but IF EXISTS is specified
+    sql("DROP FUNCTION IF EXISTS non_existing_db.non_existing_func")
+  }
+
   test("CREATE FUNCTION: only support session catalog") {
     val e = intercept[AnalysisException] {
       sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
