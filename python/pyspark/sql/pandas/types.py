@@ -330,10 +330,19 @@ def from_arrow_type(
     at : :class:`pyarrow.DataType`
         pyarrow data type
     prefer_timestamp_ntz: bool, default True
-        When the input timezone is None, whether to convert it to timezone-aware TimestampType.
-        By default, the to_arrow_type convert timezone-naive TimestampNTZType to pa.timestamp
-        without timezone. So it only make sense to set it in case like creating dataframe
+        When the input timezone is None, whether to convert it to timezone-naive TimestampNTZType.
+        The to_arrow_type always convert timezone-naive TimestampNTZType to pa.timestamp
+        without timezone. The default value is True, so that
+        from_arrow_type(to_arrow_type(TimestampNTZType)) returns TimestampNTZType.
+        It only makes sense to explicitly set it in case like creating dataframe
         from arrow/pandas data according to config `spark.sql.timestampType`.
+
+    Notes
+    -----
+    Different from JVM side ArrowUtils.fromArrowType, the unit ('ns'/'us'/etc) in types
+    pa.timestamp/pa.duration/pa.time64 is ignored in this function.
+    That is because this function is also used in data type inference in creating dataframe
+    from arrow/pandas data, in which the input data may use a different unit.
     """
 
     import pyarrow.types as types
