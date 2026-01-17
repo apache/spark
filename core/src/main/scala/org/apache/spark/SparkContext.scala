@@ -432,6 +432,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementBlasOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3422,26 +3423,30 @@ object SparkContext extends Logging {
     }
   }
 
+  private def supplementJavaOpts(conf: SparkConf, key: String, javaOpts: String): Unit = {
+    conf.set(key, s"$javaOpts ${conf.get(key, "")}".trim())
+  }
+
   /**
    * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(key: String): Unit = {
-      val v = s"${JavaModuleOptions.defaultModuleOptions()} ${conf.get(key, "")}".trim()
-      conf.set(key, v)
-    }
-    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
-    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
+    val opts = JavaModuleOptions.defaultModuleOptions()
+    supplementJavaOpts(conf, SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS, opts)
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
-    def supplement(key: String): Unit = {
-      val v = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} ${conf.get(key, "")}".trim()
-      conf.set(key, v)
-    }
-    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
-    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
+    val opts = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
+    supplementJavaOpts(conf, SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS, opts)
+  }
+
+  private def supplementBlasOptions(conf: SparkConf): Unit = {
+    val opts = s"-Dnetlib.allowNativeBlas=${Utils.allowNativeBlas}"
+    supplementJavaOpts(conf, SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS, opts)
   }
 }
 
