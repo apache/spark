@@ -616,11 +616,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // the dataframe column 'df.id' will remain unresolved, and the analyzer
     // will try to resolve 'id' without plan id later.
     val filtered = resolved.filter { r =>
-      if (isMetadataAccess) {
-        r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
-      } else {
-        r._1.references.subsetOf(p.outputSet)
-      }
+      r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
     }
     (filtered, matched)
   }
