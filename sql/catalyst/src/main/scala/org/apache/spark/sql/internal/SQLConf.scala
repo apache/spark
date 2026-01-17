@@ -2953,6 +2953,19 @@ object SQLConf {
         "repartitioning to be complete before restarting the query.")
       .version("4.2.0")
       .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS =
+    buildConf("spark.sql.streaming.checkpoint.verifyMetadataExists.enabled")
+      .internal()
+      .doc("When true, validates that the checkpoint metadata file exists when offset " +
+        "or commit logs contain data. This prevents generating a new query ID when " +
+        "checkpoint data already exists, which would cause data duplication in " +
+        "exactly-once sinks like DeltaSink.")
+      .version("4.2.0")
+      .owner("streaming-engine")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
       .createWithDefault(true)
 
   val STATE_STORE_COMPRESSION_CODEC =
