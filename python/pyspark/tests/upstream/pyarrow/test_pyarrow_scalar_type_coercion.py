@@ -28,6 +28,8 @@ Test categories:
 4. String/Binary coercion - string, bytes, large_string, large_binary
 5. Temporal types - date, time, datetime, timedelta
 6. Nested types - list, struct with element/field coercion
+
+The helper method pattern is adapted from PR #53721 (pa.array type coercion tests).
 """
 
 import datetime
