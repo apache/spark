@@ -229,4 +229,28 @@ class ThreadUtilsSuite extends SparkFunSuite {
       assert(!t.isAlive)
     }
   }
+
+  test("file rename pool should recreate after shutdown") {
+    val pool1 = ThreadUtils.getOrCreateFileRenameThreadPool(2)
+    @volatile var ran1 = false
+    pool1.submit(new Runnable {
+      override def run(): Unit = { ran1 = true }
+    }).get(5, TimeUnit.SECONDS)
+    assert(ran1)
+
+    // Simulate usage that shuts down the global pool
+    pool1.shutdown()
+    pool1.awaitTermination(5, TimeUnit.SECONDS)
+    assert(pool1.isShutdown || pool1.isTerminated)
+
+    // getOrCreate should recreate a usable pool
+    val pool2 = ThreadUtils.getOrCreateFileRenameThreadPool(2)
+    @volatile var ran2 = false
+    pool2.submit(new Runnable {
+      override def run(): Unit = { ran2 = true }
+    }).get(5, TimeUnit.SECONDS)
+    assert(ran2)
+
+    // do not shutdown pool2 to avoid interfering other tests
+  }
 }
