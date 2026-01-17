@@ -1396,7 +1396,11 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _execute(self, req: pb2.ExecutePlanRequest) -> None:
+    def _execute(
+        self,
+        req: pb2.ExecutePlanRequest,
+        reattachable: Optional[bool] = None,
+    ) -> None:
         """
         Execute the passed request `req` and drop all results.
 
@@ -1404,6 +1408,9 @@ class SparkConnectClient(object):
         ----------
         req : pb2.ExecutePlanRequest
             Proto representation of the plan.
+        reattachable : bool, option
+            Whether to enable reattachable execution for this specific request.
+            If None, fallback to 'self._use_reattachable_execute'.
 
         """
         logger.debug("Execute")
@@ -1414,8 +1421,11 @@ class SparkConnectClient(object):
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
 
+        if reattachable is None:
+            reattachable = self._use_reattachable_execute
+
         try:
-            if self._use_reattachable_execute:
+            if reattachable:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
@@ -2125,26 +2135,22 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
-        # try best to delete the cache
-        try:
-            if len(cache_ids) > 0:
+    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> None:
+        if len(cache_ids) > 0:
+            try:
                 command = pb2.Command()
                 command.ml_command.delete.obj_refs.extend(
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
                 command.ml_command.delete.evict_only = evict_only
-                (_, properties, _) = self.execute_command(command)
 
-                assert properties is not None
+                # construct the request
+                req = self._execute_plan_request_with_metadata()
+                req.plan.command.CopyFrom(command)
 
-                if properties is not None and "ml_command_result" in properties:
-                    ml_command_result = properties["ml_command_result"]
-                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
-                    return cast(List[str], deleted)
-            return []
-        except Exception:
-            return []
+                self._execute(req, reattachable=False)
+            except Exception:
+                pass
 
     def _cleanup_ml_cache(self) -> None:
         try:
