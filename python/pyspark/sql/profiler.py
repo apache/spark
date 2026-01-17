@@ -16,9 +16,11 @@
 #
 from abc import ABC, abstractmethod
 from io import StringIO
+import cProfile
 import os
 import pstats
 from threading import RLock
+from types import TracebackType
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
 import warnings
 
@@ -73,6 +75,85 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
 
 
 ProfileResultsParam = _ProfileResultsParam()
+
+
+class WorkerPerfProfiler:
+    """
+    PerfProfiler is a profiler for performance profiling.
+    """
+
+    def __init__(self, accumulator: Accumulator["ProfileResults"], result_id: int) -> None:
+        self._accumulator = accumulator
+        self._profiler = cProfile.Profile()
+        self._result_id = result_id
+
+    def start(self) -> None:
+        self._profiler.enable()
+
+    def stop(self) -> None:
+        self._profiler.disable()
+
+    def save(self) -> None:
+        st = pstats.Stats(self._profiler, stream=None)
+        # make it picklable
+        st.stream = None  # type: ignore[attr-defined]
+        st.strip_dirs()
+        self._accumulator.add({self._result_id: (st, None)})
+
+    def __enter__(self) -> "WorkerPerfProfiler":
+        self.start()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        self.stop()
+        self.save()
+
+
+class WorkerMemoryProfiler:
+    """
+    MemoryProfiler is a profiler for memory profiling.
+    """
+
+    def __init__(
+        self, accumulator: Accumulator["ProfileResults"], result_id: int, func: Callable
+    ) -> None:
+        from pyspark.profiler import UDFLineProfilerV2
+
+        self._accumulator = accumulator
+        self._profiler = UDFLineProfilerV2()
+        self._profiler.add_function(func)
+        self._result_id = result_id
+
+    def start(self) -> None:
+        self._profiler.enable_by_count()
+
+    def stop(self) -> None:
+        self._profiler.disable_by_count()
+
+    def save(self) -> None:
+        codemap_dict = {
+            filename: list(line_iterator)
+            for filename, line_iterator in self._profiler.code_map.items()
+        }
+        self._accumulator.add({self._result_id: (None, codemap_dict)})
+
+    def __enter__(self) -> "WorkerMemoryProfiler":
+        self.start()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        self.stop()
+        self.save()
 
 
 class ProfilerCollector(ABC):
