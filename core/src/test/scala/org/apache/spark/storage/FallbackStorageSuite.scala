@@ -210,6 +210,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE, 0L) // migrate to fallback storage only
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
