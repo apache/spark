@@ -16,20 +16,17 @@
 #
 
 import os
-import sys
 import functools
 import pyarrow as pa
 from itertools import islice, chain
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
     write_int,
-    SpecialLengths,
 )
 from pyspark.sql import Row
 from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
@@ -46,20 +43,11 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
-    check_python_version,
     read_command,
     pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
     utf8_deserializer,
 )
 
@@ -271,8 +259,7 @@ def write_read_func_and_partitions(
         write_int(0, outfile)
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read.
 
@@ -292,123 +279,100 @@ def main(infile: IO, outfile: IO) -> None:
     The partition values and the Arrow Batch are then serialized and sent back to the JVM
     via the socket.
     """
-    try:
-        check_python_version(infile)
-
-        start_faulthandler_periodic_traceback()
-
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
-
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
-
-        _accumulatorRegistry.clear()
-
-        # Receive the data source instance.
-        data_source = read_command(pickleSer, infile)
-        if not isinstance(data_source, DataSource):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "a Python data source instance of type 'DataSource'",
-                    "actual": f"'{type(data_source).__name__}'",
-                },
-            )
-
-        # Receive the output schema from its child plan.
-        input_schema_json = utf8_deserializer.loads(infile)
-        input_schema = _parse_datatype_json_string(input_schema_json)
-        if not isinstance(input_schema, StructType):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "an input schema of type 'StructType'",
-                    "actual": f"'{type(input_schema).__name__}'",
-                },
-            )
-        assert len(input_schema) == 1 and isinstance(input_schema[0].dataType, BinaryType), (
-            "The input schema of Python data source read should contain only one column of type "
-            f"'BinaryType', but got '{input_schema}'"
+    # Receive the data source instance.
+    data_source = read_command(pickleSer, infile)
+    if not isinstance(data_source, DataSource):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "a Python data source instance of type 'DataSource'",
+                "actual": f"'{type(data_source).__name__}'",
+            },
         )
 
-        # Receive the data source output schema.
-        schema_json = utf8_deserializer.loads(infile)
-        schema = _parse_datatype_json_string(schema_json)
-        if not isinstance(schema, StructType):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "an output schema of type 'StructType'",
-                    "actual": f"'{type(schema).__name__}'",
-                },
-            )
-
-        # Receive the configuration values.
-        max_arrow_batch_size = read_int(infile)
-        assert max_arrow_batch_size > 0, (
-            "The maximum arrow batch size should be greater than 0, but got "
-            f"'{max_arrow_batch_size}'"
+    # Receive the output schema from its child plan.
+    input_schema_json = utf8_deserializer.loads(infile)
+    input_schema = _parse_datatype_json_string(input_schema_json)
+    if not isinstance(input_schema, StructType):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "an input schema of type 'StructType'",
+                "actual": f"'{type(input_schema).__name__}'",
+            },
         )
-        enable_pushdown = read_bool(infile)
+    assert len(input_schema) == 1 and isinstance(input_schema[0].dataType, BinaryType), (
+        "The input schema of Python data source read should contain only one column of type "
+        f"'BinaryType', but got '{input_schema}'"
+    )
 
-        is_streaming = read_bool(infile)
-        binary_as_bytes = read_bool(infile)
+    # Receive the data source output schema.
+    schema_json = utf8_deserializer.loads(infile)
+    schema = _parse_datatype_json_string(schema_json)
+    if not isinstance(schema, StructType):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "an output schema of type 'StructType'",
+                "actual": f"'{type(schema).__name__}'",
+            },
+        )
 
-        with capture_outputs():
-            # Instantiate data source reader.
-            if is_streaming:
-                reader: Union[DataSourceReader, DataSourceStreamReader] = _streamReader(
-                    data_source, schema
-                )
-            else:
-                reader = data_source.reader(schema=schema)
-                # Validate the reader.
-                if not isinstance(reader, DataSourceReader):
-                    raise PySparkAssertionError(
-                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                        messageParameters={
-                            "expected": "an instance of DataSourceReader",
-                            "actual": f"'{type(reader).__name__}'",
-                        },
-                    )
-                is_pushdown_implemented = (
-                    getattr(reader.pushFilters, "__func__", None)
-                    is not DataSourceReader.pushFilters
-                )
-                if is_pushdown_implemented and not enable_pushdown:
-                    # Do not silently ignore pushFilters when pushdown is disabled.
-                    # Raise an error to ask the user to enable pushdown.
-                    raise PySparkAssertionError(
-                        errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
-                        messageParameters={
-                            "type": type(reader).__name__,
-                            "conf": "spark.sql.python.filterPushdown.enabled",
-                        },
-                    )
+    # Receive the configuration values.
+    max_arrow_batch_size = read_int(infile)
+    assert max_arrow_batch_size > 0, (
+        "The maximum arrow batch size should be greater than 0, but got "
+        f"'{max_arrow_batch_size}'"
+    )
+    enable_pushdown = read_bool(infile)
 
-            # Send the read function and partitions to the JVM.
-            write_read_func_and_partitions(
-                outfile,
-                reader=reader,
-                data_source=data_source,
-                schema=schema,
-                max_arrow_batch_size=max_arrow_batch_size,
-                binary_as_bytes=binary_as_bytes,
+    is_streaming = read_bool(infile)
+    binary_as_bytes = read_bool(infile)
+
+    with capture_outputs():
+        # Instantiate data source reader.
+        if is_streaming:
+            reader: Union[DataSourceReader, DataSourceStreamReader] = _streamReader(
+                data_source, schema
             )
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
+        else:
+            reader = data_source.reader(schema=schema)
+            # Validate the reader.
+            if not isinstance(reader, DataSourceReader):
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "an instance of DataSourceReader",
+                        "actual": f"'{type(reader).__name__}'",
+                    },
+                )
+            is_pushdown_implemented = (
+                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
+            )
+            if is_pushdown_implemented and not enable_pushdown:
+                # Do not silently ignore pushFilters when pushdown is disabled.
+                # Raise an error to ask the user to enable pushdown.
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                    messageParameters={
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.filterPushdown.enabled",
+                    },
+                )
 
-    send_accumulator_updates(outfile)
+        # Send the read function and partitions to the JVM.
+        write_read_func_and_partitions(
+            outfile,
+            reader=reader,
+            data_source=data_source,
+            schema=schema,
+            max_arrow_batch_size=max_arrow_batch_size,
+            binary_as_bytes=binary_as_bytes,
+        )
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":
