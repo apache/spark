@@ -16,11 +16,25 @@
 #
 import ctypes
 import unittest
-import pyarrow as pa
-import pandas as pd
 import pyspark.pandas as ps
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
+
+if have_pandas:
+    import pandas as pd
+
+if have_pyarrow:
+    import pyarrow as pa
 
 
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,
+)
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer_arrow_consumer(self):
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
@@ -53,12 +67,6 @@ class TestSparkArrowCStreamer(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_c_stream import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        test_runner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        test_runner = None
-    unittest.main(testRunner=test_runner, verbosity=2)
+    main()

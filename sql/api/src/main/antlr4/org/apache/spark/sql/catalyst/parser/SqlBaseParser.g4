@@ -429,6 +429,9 @@ streamRelationPrimary
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
       optionsClause? identifiedByClause?
       watermarkClause? tableAlias                                      #streamTableName
+    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
+    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -1068,7 +1071,7 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
-    | functionTable                                         #tableValuedFunction
+    | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
     ;
 
 optionsClause
@@ -1118,13 +1121,19 @@ functionTableArgument
     | functionArgument
     ;
 
-// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
-// referred by other clause, please check wheter watermarkClause makes sense to the clause.
-// If not, consider separate this rule.
-functionTable
+// A table function call including opening and closing parentheses.
+tableFunctionCall
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN watermarkClause? tableAlias
+      RIGHT_PAREN
+    ;
+
+// A table function call with optional trailing clauses for streaming and aliasing.
+// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
+// the AST builder will reject it with an error. The clause must come before watermarkClause
+// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+tableFunctionCallWithTrailingClauses
+    : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
 
 tableAlias
