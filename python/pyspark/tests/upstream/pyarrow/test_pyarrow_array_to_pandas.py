@@ -437,30 +437,25 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
         self.assertEqual(len(series), 5)
 
     def test_union_types(self):
-        """Test conversion of union arrays to pandas."""
-        import pandas as pd
+        """Test that union arrays raise ArrowNotImplementedError when converting to pandas."""
         import pyarrow as pa
 
-        # Sparse union
+        # Sparse union - no pandas equivalent
         xs = pa.array([1, 2, 3], type=pa.int64())
         ys = pa.array(["a", "b", "c"], type=pa.string())
         types = pa.array([0, 1, 0], type=pa.int8())
         arr = pa.UnionArray.from_sparse(types, [xs, ys])
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertEqual(len(series), 3)
+        with self.assertRaises(pa.lib.ArrowNotImplementedError):
+            arr.to_pandas()
 
-        # Dense union
+        # Dense union - no pandas equivalent
         xs = pa.array([1, 2], type=pa.int64())
         ys = pa.array(["a"], type=pa.string())
         types = pa.array([0, 1, 0], type=pa.int8())
         offsets = pa.array([0, 0, 1], type=pa.int32())
         arr = pa.UnionArray.from_dense(types, offsets, [xs, ys])
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertEqual(len(series), 3)
+        with self.assertRaises(pa.lib.ArrowNotImplementedError):
+            arr.to_pandas()
 
 
 if __name__ == "__main__":
