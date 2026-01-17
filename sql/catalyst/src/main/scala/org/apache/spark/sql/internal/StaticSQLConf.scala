@@ -171,7 +171,10 @@ object StaticSQLConf {
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
       "translate SQL data into a format that can more efficiently be cached. The underlying " +
       "API is subject to change so use with caution. Multiple classes cannot be specified. " +
-      "The class must have a no-arg constructor.")
+      "The class must have a no-arg constructor. Available implementations include: " +
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer (default) and " +
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer (Arrow format with " +
+      "zero-copy columnar reads and better Arrow ecosystem interoperability).")
     .version("3.1.0")
     .stringConf
     .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
