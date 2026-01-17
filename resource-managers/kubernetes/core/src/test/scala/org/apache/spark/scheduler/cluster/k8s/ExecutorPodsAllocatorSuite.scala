@@ -1093,7 +1093,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(exception.getMessage.contains("target executors: 3"))
     assert(exception.getMessage.contains("multiplier: 2"))
 
-    // Verify we attempted to create 6 pods total (3 cycles × 2 pods per cycle)
     verify(podResource, times(6)).create()
   }
 }
