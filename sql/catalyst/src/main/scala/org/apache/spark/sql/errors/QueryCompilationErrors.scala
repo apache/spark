@@ -387,13 +387,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def trimCollationNotEnabledError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
-      messageParameters = Map.empty
-    )
-  }
-
   def trailingCommaInSelectError(origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "TRAILING_COMMA_IN_SELECT",
