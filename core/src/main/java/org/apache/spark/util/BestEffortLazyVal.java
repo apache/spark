@@ -14,9 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.util;
 
-import java.util.concurrent.atomic.AtomicReference
+import scala.Function0;
+import java.io.Serializable;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 
 /**
  * A lock-free implementation of a lazily-initialized variable.
@@ -38,24 +41,37 @@ import java.util.concurrent.atomic.AtomicReference
  *   href="https://docs.scala-lang.org/scala3/reference/changed-features/lazy-vals-init.html">Lazy
  *   Vals Initialization</a> for more details.
  */
-private[spark] class BestEffortLazyVal[T <: AnyRef](
-    @volatile private[this] var compute: () => T) extends Serializable {
+public class BestEffortLazyVal<T> implements Serializable {
+    private volatile Function0<T> compute;
+    protected volatile T cached;
 
-  private[this] val cached: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
-
-  def apply(): T = {
-    val value = cached.get()
-    if (value != null) {
-      value
-    } else {
-      val f = compute
-      if (f != null) {
-        val newValue = f()
-        assert(newValue != null, "compute function cannot return null.")
-        cached.compareAndSet(null.asInstanceOf[T], newValue)
-        compute = null  // allow closure to be GC'd
-      }
-      cached.get()
+    private static final VarHandle HANDLE;
+    static {
+        try {
+            HANDLE = MethodHandles.lookup()
+                .in(BestEffortLazyVal.class)
+                .findVarHandle(BestEffortLazyVal.class, "cached", Object.class);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to initialize VarHandle", e);
+        }
     }
-  }
+
+    public BestEffortLazyVal(Function0<T> compute) {
+        this.compute = compute;
+    }
+
+    public T apply() {
+        T value = cached;
+        if (value != null) {
+            return value;
+        }
+        Function0<T> f = compute;
+        if (f != null) {
+            T newValue = f.apply();
+            assert newValue != null: "compute function cannot return null.";
+            HANDLE.compareAndSet(this, null, newValue);
+            compute = null; // allow closure to be GC'd
+        }
+        return cached;
+    }
 }
