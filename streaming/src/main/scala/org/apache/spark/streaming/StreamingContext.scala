@@ -608,7 +608,8 @@ class StreamingContext private[streaming] (
         }
         logDebug("Adding shutdown hook") // force eager creation of logger
         shutdownHookRef = ShutdownHookManager.addShutdownHook(
-          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(() => stopOnShutdown())
+          StreamingContext.SHUTDOWN_HOOK_PRIORITY,
+          "StreamingContextShutdownHook")(() => stopOnShutdown())
         // Registering Streaming Metrics at the start of the StreamingContext
         assert(env.metricsSystem != null)
         env.metricsSystem.registerSource(streamingSource)
