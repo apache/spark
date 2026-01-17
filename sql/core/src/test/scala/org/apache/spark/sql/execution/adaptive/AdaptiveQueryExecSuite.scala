@@ -3372,6 +3372,57 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties in Physical Plan Tree") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("view1", "skewDataView2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 10 as key1")
+          .createOrReplaceTempView("view1")
+        spark
+          .range(0, 200, 1, 10)
+          .selectExpr("id % 1 as key2")
+          .createOrReplaceTempView("skewDataView2")
+
+        val df = spark.sql("SELECT key1 FROM view1 JOIN skewDataView2 ON key1 = key2")
+        df.collect()
+        val explainPlanString = df.queryExecution.explainString(ExplainMode.fromString("FORMATTED"))
+
+        assert(explainPlanString.contains(getExpectedPhysicalPlanSubstring()),
+          "Physical Plan should include expected Physical Plan Substring")
+      }
+    }
+  }
+
+  private def getExpectedPhysicalPlanSubstring(): String = {
+    """== Physical Plan ==
+      |AdaptiveSparkPlan (24)
+      |+- == Final Plan ==
+      |   ResultQueryStage (17)
+      |   +- * Project (16)
+      |      +- * SortMergeJoin(skew=true) Inner (15)
+      |         :- * Sort (7)
+      |         :  +- AQEShuffleRead (6), coalesced
+      |         :     +- ShuffleQueryStage (5), Statistics(sizeInBytes=15.6 KiB, rowCount=1.00E+3)
+      |         :        +- Exchange (4)
+      |         :           +- * Project (3)
+      |         :              +- * Filter (2)
+      |         :                 +- * Range (1)
+      |         +- * Sort (14)
+      |            +- AQEShuffleRead (13), coalesced and skewed
+      |               +- ShuffleQueryStage (12), Statistics(sizeInBytes=3.1 KiB, rowCount=200)
+      |                  +- Exchange (11)
+      |                     +- * Project (10)
+      |                        +- * Filter (9)
+      |                           +- * Range (8)
+      |""".stripMargin
+  }
+
   test("SPARK-52921: Specify outputPartitioning for UnionExec for same output partitoning") {
     def checkResultPartition(
         df: Dataset[Row],
