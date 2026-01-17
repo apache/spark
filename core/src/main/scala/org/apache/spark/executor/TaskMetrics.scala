@@ -55,6 +55,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _resultSerializationTime = new LongAccumulator
   private val _memoryBytesSpilled = new LongAccumulator
   private val _diskBytesSpilled = new LongAccumulator
+  private val _spillTime = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
   private val _peakOnHeapExecutionMemory = new LongAccumulator
   private val _peakOffHeapExecutionMemory = new LongAccumulator
@@ -105,6 +106,11 @@ class TaskMetrics private[spark] () extends Serializable {
    * The number of on-disk bytes spilled by this task.
    */
   def diskBytesSpilled: Long = _diskBytesSpilled.sum
+
+  /**
+   * The time of spill by this task.
+   */
+  def spillTime: Long = _spillTime.sum
 
   /**
    * Peak memory used by internal data structures created during shuffles, aggregations and
@@ -160,6 +166,7 @@ class TaskMetrics private[spark] () extends Serializable {
     _peakOffHeapExecutionMemory.setValue(v)
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
+  private[spark] def incSpillTime(v: Long): Unit = _spillTime.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
   private[spark] def incUpdatedBlockStatuses(v: (BlockId, BlockStatus)): Unit =
     _updatedBlockStatuses.add(v)
@@ -243,6 +250,7 @@ class TaskMetrics private[spark] () extends Serializable {
     RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
     MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
     DISK_BYTES_SPILLED -> _diskBytesSpilled,
+    SPILL_TIME -> _spillTime,
     PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
     PEAK_ON_HEAP_EXECUTION_MEMORY -> _peakOnHeapExecutionMemory,
     PEAK_OFF_HEAP_EXECUTION_MEMORY -> _peakOffHeapExecutionMemory,
