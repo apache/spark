@@ -308,7 +308,7 @@ object CommandUtils extends Logging {
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation),
-      shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
+      shuffleCleanupModeOpt = Some(RemoveShuffleFiles)).executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
@@ -345,7 +345,7 @@ object CommandUtils extends Logging {
       }
 
       val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation),
-        shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
+        shuffleCleanupModeOpt = Some(RemoveShuffleFiles)).executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)
         // When there is no non-null value, `percentiles` is null. In such case, there is no

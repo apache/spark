@@ -228,8 +228,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   private def runCommand(command: LogicalPlan): Unit = {
     val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
-      shuffleCleanupMode =
-        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
+      shuffleCleanupModeOpt =
+        Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
     qe.assertCommandExecuted()
   }
 

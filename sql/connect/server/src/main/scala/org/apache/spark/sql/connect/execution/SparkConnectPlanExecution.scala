@@ -95,7 +95,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               session,
               transformer(tracker),
               tracker,
-              shuffleCleanupMode = shuffleCleanupMode)
+              shuffleCleanupModeOpt = Some(shuffleCleanupMode))
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
