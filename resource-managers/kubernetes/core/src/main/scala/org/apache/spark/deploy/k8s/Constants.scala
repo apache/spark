@@ -87,6 +87,7 @@ object Constants {
   val SPARK_CONF_VOLUME_EXEC = "spark-conf-volume-exec"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
+  val SPARK_ENV_FILE_NAME = "spark-env.sh"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
