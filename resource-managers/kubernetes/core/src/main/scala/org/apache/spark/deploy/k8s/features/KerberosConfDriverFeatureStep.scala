@@ -20,7 +20,6 @@ import java.io.File
 import java.nio.file.Files
 import java.util.Base64
 
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model._
@@ -30,6 +29,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -230,14 +230,9 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     Seq[HasMetadata]() ++ {
       krb5File.map { path =>
         val file = new File(path)
-        new ConfigMapBuilder()
-          .withNewMetadata()
-            .withName(newConfigMapName)
-            .endMetadata()
-          .withImmutable(true)
-          .addToData(
-            Map(file.getName() -> Files.readString(file.toPath)).asJava)
-          .build()
+        KubernetesClientUtils.buildConfigMap(newConfigMapName,
+          Map(file.getName() -> Files.readString(file.toPath)),
+          kubernetesConf.sparkConf, Map(), inNameSpace = false)
       }
     } ++ {
       // If a submission-local keytab is provided, stash it in a secret.
