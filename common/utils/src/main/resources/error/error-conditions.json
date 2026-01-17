@@ -5988,6 +5988,16 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "DUPLICATE_SOURCE_NAMES" : {
+        "message" : [
+          "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
+        ]
+      },
+      "INVALID_SOURCE_NAME" : {
+        "message" : [
+          "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
+        ]
+      },
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
