@@ -24,13 +24,16 @@ from threading import RLock
 from types import TracebackType
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     Iterable,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
     Union,
     Set,
     cast,
@@ -136,7 +139,10 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-class classproperty(property):
+T = TypeVar("T")
+
+
+class classproperty(Generic[T]):
     """Same as Python's @property decorator, but for class attributes.
 
     Examples
@@ -161,12 +167,13 @@ class classproperty(property):
     True
     """
 
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+    def __init__(self, fget: Callable[[type], T]) -> None:
+        self.fget = fget
+
+    def __get__(self, instance: Any, owner: Optional[type]) -> T:
+        if owner is None:
+            owner = type(instance)
+        return self.fget(owner)
 
 
 class SparkSession(SparkConversionMixin):
@@ -603,12 +610,14 @@ class SparkSession(SparkConversionMixin):
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
-    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    @classproperty
+    def builder(cls: Type["SparkSession"]) -> "Builder":  # type: ignore[misc]
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-    """
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
