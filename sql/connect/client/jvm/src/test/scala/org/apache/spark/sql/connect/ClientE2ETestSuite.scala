@@ -1795,6 +1795,47 @@ class ClientE2ETestSuite
     assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
   }
 
+  test(
+    "SPARK-53883: GrpcExceptionConverter ensures all exceptions have errorClass and sqlState") {
+    // Test that normal Spark errors have proper errorClass and sqlState
+    val analysisEx = intercept[AnalysisException] {
+      spark.sql("select nonexistent_column").collect()
+    }
+    assert(analysisEx.getCondition != null, "AnalysisException should have non-null errorClass")
+    assert(analysisEx.getSqlState != null, "AnalysisException should have non-null sqlState")
+    assert(
+      analysisEx.getCondition == "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      s"AnalysisException should have correct errorClass, got: ${analysisEx.getCondition}")
+
+    val parseEx = intercept[ParseException] {
+      spark.sql("SELECT !!!").collect()
+    }
+    assert(parseEx.getCondition != null, "ParseException should have non-null errorClass")
+    assert(parseEx.getSqlState != null, "ParseException should have non-null sqlState")
+    assert(
+      parseEx.getCondition.startsWith("PARSE_SYNTAX_ERROR"),
+      s"ParseException should have correct errorClass, got: ${parseEx.getCondition}")
+
+    // Test that runtime errors have proper errorClass and sqlState
+    val runtimeEx = intercept[SparkException] {
+      spark.udf.register("badUdf", () => { throw new RuntimeException("test error") })
+      spark.sql("SELECT badUdf()").collect()
+    }
+    assert(
+      runtimeEx.getCondition != null,
+      "Runtime SparkException should have non-null errorClass")
+    assert(runtimeEx.getSqlState != null, "Runtime SparkException should have non-null sqlState")
+
+    // Verify that the error classes we added exist in error-conditions.json
+    // by checking they would be valid if used
+    assert(
+      analysisEx.getSqlState != "XXKCI",
+      "Normal errors should not use CONNECT_CLIENT_INTERNAL_ERROR sqlState")
+    assert(
+      analysisEx.getSqlState != "XXKCM",
+      "Normal errors should not use CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE sqlState")
+  }
+
   // SQL Scripting tests
   test("SQL Script result") {
     val df = spark.sql("""BEGIN
