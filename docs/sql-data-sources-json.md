@@ -186,7 +186,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>dateFormat</code></td>
     <td><code>yyyy-MM-dd</code></td>
-    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type.</td>
+    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type. During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option.</td>
     <td>read/write</td>
   </tr>
   <tr>

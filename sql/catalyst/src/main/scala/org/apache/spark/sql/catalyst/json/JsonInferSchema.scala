@@ -56,6 +56,22 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
     isParsing = true,
     forTimestampNTZ = true)
 
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+// Similar to tryParseDate in CSVInferSchema.scala
+  private def tryParseDate(field: String): DataType = {
+    if (options.dateFormatInRead.isDefined &&
+        (allCatch opt dateFormatter.parse(field)).isDefined) {
+      DateType
+    } else {
+      StringType
+    }
+  }
+
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
@@ -193,13 +209,13 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
             if (SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, false).isDefined) {
               TimestampType
             } else {
-              StringType
+              tryParseDate(field)
             }
           } else {
-            StringType
+            tryParseDate(field)
           }
         } else {
-          StringType
+          tryParseDate(field)
         }
 
       case START_OBJECT =>
