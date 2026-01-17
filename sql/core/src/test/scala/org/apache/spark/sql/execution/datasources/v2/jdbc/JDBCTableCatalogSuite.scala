@@ -22,6 +22,9 @@ import java.util.Properties
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.Level
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
+import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -788,5 +791,24 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val plan = sql("select * from t1").queryExecution.sparkPlan
       assert(plan.isInstanceOf[InMemoryTableScanExec])
     }
+  }
+
+  test("loadTable execute single query") {
+    val mockConn = mock(classOf[Connection])
+    val mockStatement = mock(classOf[java.sql.PreparedStatement])
+    val mockResultSet = mock(classOf[java.sql.ResultSet])
+    val mockMetaData = mock(classOf[java.sql.ResultSetMetaData])
+
+    when(mockConn.prepareStatement(any[String])).thenReturn(mockStatement)
+    when(mockStatement.executeQuery()).thenReturn(mockResultSet)
+    when(mockResultSet.getMetaData).thenReturn(mockMetaData)
+    when(mockMetaData.getColumnCount).thenReturn(0)
+
+    val ident = Identifier.of(Array("test"), "people")
+    tableCatalog.loadTable(ident, mockConn)
+
+    val invocations = Mockito.mockingDetails(mockStatement).getInvocations
+    val queryCount = invocations.asScala.count(_.getMethod.getName == "executeQuery")
+    assert(queryCount == 1, s"Expected exactly 1 query, but got $queryCount queries")
   }
 }
