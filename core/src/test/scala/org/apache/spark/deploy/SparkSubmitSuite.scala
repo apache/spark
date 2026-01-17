@@ -602,7 +602,7 @@ class SparkSubmitSuite
     }
   }
 
-  test("Avoid archives download if scheme matches " +
+  test("SPARK-55077: Avoid archives download if scheme matches " +
     "spark.kubernetes.archives.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
     val hadoopConf = new Configuration()

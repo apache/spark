@@ -1586,7 +1586,7 @@ package object config {
         "For use in cases when the archives are big and executor counts are high, " +
         "concurrent download causes network saturation and timeouts. " +
         "Wildcard '*' is denoted to not downloading archives for any the schemes.")
-      .version("4.0.0")
+      .version("4.2.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
