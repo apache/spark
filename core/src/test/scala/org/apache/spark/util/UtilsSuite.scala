@@ -134,10 +134,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     assert(Utils.byteStringAsBytes("1") === 1)
     assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ki") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KB") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KiB") === ByteUnit.KiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mi") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mb") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1MiB") === ByteUnit.MiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1g") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1GI") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1gb") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1giB") === ByteUnit.GiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ti") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1tb") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Tib") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pi") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pb") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pib") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
     // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
