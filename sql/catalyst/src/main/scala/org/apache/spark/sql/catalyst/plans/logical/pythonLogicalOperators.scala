@@ -447,3 +447,37 @@ object PythonWorkerLogs extends SQLConfHelper {
     TableFunctionName -> (info, funcBuilder)
   }
 }
+
+/**
+ * Aggregation using a Python Aggregator class with zero, reduce, merge, finish methods.
+ *
+ * This logical plan represents a user-defined aggregate function (UDAF) implemented in Python
+ * using the Aggregator pattern. The Aggregator is serialized and sent to Python workers.
+ *
+ * The execution pattern follows a three-phase aggregation:
+ * 1. Partial aggregation (MapInArrow): Each partition applies reduce() to local data
+ * 2. Intermediate merge (FlatMapGroupsInArrow): Merge partial results by random key
+ * 3. Final merge (FlatMapGroupsInArrow): Final merge by group keys + finish()
+ *
+ * @param groupingAttributes attributes used for grouping
+ * @param partialReduceUDF PythonUDF expression for partial aggregation (reduce phase)
+ * @param mergeUDF PythonUDF expression for intermediate merging
+ * @param finalMergeUDF PythonUDF expression for final merge + finish
+ * @param resultAttribute the output attribute with the aggregation result
+ * @param child the child logical plan
+ */
+case class PythonAggregatorUDAF(
+    groupingAttributes: Seq[Attribute],
+    partialReduceUDF: Expression,
+    mergeUDF: Expression,
+    finalMergeUDF: Expression,
+    resultAttribute: Attribute,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = groupingAttributes :+ resultAttribute
+
+  override val producedAttributes: AttributeSet = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PythonAggregatorUDAF =
+    copy(child = newChild)
+}
