@@ -501,8 +501,8 @@ class SparkSqlAstBuilder extends AstBuilder {
           }.toMap
         val optionsWithLocation =
           location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
-        CreateTempViewUsing(table, schema, replace = false, global = false, provider,
-          optionsWithLocation)
+        CreateTempViewUsing(table, schema, ignoreIfExists = false, replace = false,
+          global = false, provider, optionsWithLocation)
       })
     }
   }
@@ -515,6 +515,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     CreateTempViewUsing(
       tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
+      ignoreIfExists = ctx.EXISTS != null,
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
       provider = ctx.tableProvider.multipartIdentifier.getText,
@@ -695,12 +696,6 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.REPLACE != null,
         finalSchemaBinding)
     } else {
-      // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with
-      // 'CREATE TEMPORARY TABLE'
-      if (ctx.EXISTS != null) {
-        throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
-      }
-
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val tableIdentifier = ident.asTableIdentifier
         if (tableIdentifier.database.isDefined) {
