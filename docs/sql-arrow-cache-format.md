@@ -82,18 +82,14 @@ When enabled, cached data is read as columnar batches instead of rows, which can
 
 ## Performance Characteristics
 
-### When Arrow Cache Performs Best
+### Performance Characteristics
 
-1. **Filter-Heavy Workloads**: Queries with selective filters benefit from min/max statistics
-2. **Columnar Operations**: Aggregations, projections on cached data
-3. **Arrow-based Data Sources**: When input is already ArrowColumnVector (Python sources, Arrow-based formats)
-4. **Large Datasets**: Off-heap memory management scales better
+Based on benchmarks, Arrow cache consistently outperforms default cache across various workloads:
 
-### When Default Cache May Perform Better
-
-1. **Row-based Operations**: Queries that access many columns per row
-2. **Small Datasets**: Overhead of Arrow format may not be worth it
-3. **Parquet/ORC Sources**: No zero-copy benefit since they use internal column vectors
+1. **Filter-Heavy Workloads**: Queries with selective filters benefit from min/max statistics (1.4X faster)
+2. **Columnar Operations**: Aggregations, projections on cached data benefit from efficient Arrow format (2.1X faster)
+3. **Parquet/ORC Caching**: Despite no zero-copy benefit, Arrow's efficient batch processing provides 1.6X speedup
+4. **Re-caching with Column Projection**: Best performance (2.2X faster) when dropping columns from Arrow-cached data preserves ArrowColumnVector format
 
 ### Benchmark Results
 
