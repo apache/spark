@@ -64,12 +64,20 @@ message Proto2ExtensionTest {
   extensions 100 to 200;
 }
 
+// Identical to Proto2ExtensionTest but without any extensions.
+// Used for schema evolution testing.
+message Proto2ExtensionTestBase {
+  optional string name = 1;
+  optional int32 id = 2;
+}
+
 // File-level extensions for Proto2ExtensionTest
 extend Proto2ExtensionTest {
   optional string extension_string = 100;
   optional int32 extension_int = 101;
   optional NestedExtensionMessage extension_message = 102;
   repeated int32 extension_repeated_int = 103;
+  optional Proto2AllTypes.NestedEnum extension_enum = 104;
 }
 
 // Nested message type used in an extension field
@@ -104,4 +112,15 @@ message ExtendableNestedMessage {
 extend ExtendableNestedMessage {
   optional string nested_ext_field = 100;
   optional int32 nested_ext_int = 101;
+}
+
+// Message for testing extension field name collision
+message Proto2ExtensionCollisionTest {
+  optional string name = 1;
+  extensions 100 to 200;
+}
+
+// Extension that collides with "name" field (case-insensitive)
+extend Proto2ExtensionCollisionTest {
+  optional string NAME = 100;
 }

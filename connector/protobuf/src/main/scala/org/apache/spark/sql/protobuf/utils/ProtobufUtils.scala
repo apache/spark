@@ -269,7 +269,7 @@ private[sql] object ProtobufUtils extends Logging {
     val fileDescriptorList: List[Descriptors.FileDescriptor] =
       fileDescriptorSet.getFileList.asScala.map { fileDescriptorProto =>
         buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex, builtDescriptors)
-      }.toList
+      }.distinctBy(_.getFullName).toList
     fileDescriptorList
   }
 

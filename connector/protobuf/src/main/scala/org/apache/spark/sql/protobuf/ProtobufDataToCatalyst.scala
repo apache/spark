@@ -99,7 +99,7 @@ private[sql] case class ProtobufDataToCatalyst(
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
     try {
-      result = DynamicMessage.parseFrom(messageDescriptor, binary)
+      result = DynamicMessage.parseFrom(messageDescriptor, binary, extensionRegistry)
       // If the Java class is available, it is likely more efficient to parse with it than using
       // DynamicMessage. Can consider it in the future if parsing overhead is noticeable.
 
