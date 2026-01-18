@@ -242,12 +242,12 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast path
-spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")  // Leverage zero-copy
+spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast compression/decompression
+spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Standard batch size
 spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 ```
 
-**Why**: Zero-copy path maximizes performance; fast codec keeps it fast.
+**Why**: Parquet/ORC use internal column vectors (not Arrow), so no zero-copy benefit. Fast codec and vectorized reads provide best performance.
 
 ## Advanced Tuning Techniques
 

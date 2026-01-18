@@ -143,12 +143,18 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
 
-      // Write parquet file (columnar format) using the default spark session
-      spark.range(numRows).selectExpr(
-        "id as int_col",
-        "id * 2L as long_col",
-        "cast(id as double) as double_col"
-      ).write.parquet(path)
+      // Write parquet file using a temporary session
+      val tempSpark = createSession(
+        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+      try {
+        tempSpark.range(numRows).selectExpr(
+          "id as int_col",
+          "id * 2L as long_col",
+          "cast(id as double) as double_col"
+        ).write.parquet(path)
+      } finally {
+        tempSpark.stop()
+      }
 
       runBenchmark("Cache columnar input (Parquet)") {
         val benchmark = new Benchmark("Cache 2M rows from Parquet", numRows, output = output)

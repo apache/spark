@@ -8,11 +8,13 @@ Apache Spark supports using Apache Arrow as an alternative cache format for in-m
 
 The Arrow cache format offers several advantages over the default cache format:
 
-- **Zero-copy reads** from columnar sources (Parquet, ORC)
+- **Zero-copy reads** when input is already in Arrow format (e.g., Arrow-based data sources, re-caching Arrow cached data)
 - **Better filter pushdown** with min/max statistics for partition pruning
 - **Off-heap memory management** via Arrow allocators
 - **Efficient compression** with zstd and lz4 codecs
 - **Arrow ecosystem interoperability** for data sharing
+
+**Note**: Spark's built-in Parquet/ORC readers use internal column vectors (`OnHeapColumnVector`/`OffHeapColumnVector`), not Arrow format, so they don't benefit from zero-copy optimization.
 
 ## Configuration
 
@@ -82,26 +84,34 @@ When enabled, cached data is read as columnar batches instead of rows, which can
 
 ### When Arrow Cache Performs Best
 
-1. **Columnar Data Sources**: Reading from Parquet, ORC, or other columnar formats
-2. **Filter-Heavy Workloads**: Queries with selective filters benefit from statistics
-3. **Columnar Operations**: Aggregations, projections on cached data
+1. **Filter-Heavy Workloads**: Queries with selective filters benefit from min/max statistics
+2. **Columnar Operations**: Aggregations, projections on cached data
+3. **Arrow-based Data Sources**: When input is already ArrowColumnVector (Python sources, Arrow-based formats)
 4. **Large Datasets**: Off-heap memory management scales better
 
 ### When Default Cache May Perform Better
 
 1. **Row-based Operations**: Queries that access many columns per row
 2. **Small Datasets**: Overhead of Arrow format may not be worth it
-3. **Frequent Cache/Uncache**: Arrow has slightly higher serialization cost
+3. **Parquet/ORC Sources**: No zero-copy benefit since they use internal column vectors
 
 ### Benchmark Results
 
-Based on benchmarks on Apple M4 Max with 5M rows:
+Based on benchmarks on Apple M4 Max (OpenJDK 21.0.8):
 
 | Workload | Default Cache | Arrow Cache | Improvement |
 |----------|--------------|-------------|-------------|
-| Write + Read | 602ms | 584ms | **3% faster** |
-| Filter (with stats) | 13ms | 12ms | **13% faster** |
-| Columnar Input | N/A | **Zero-copy** | Significant improvement |
+| Write + Read (5M rows, 3 primitive columns) | 611ms (122.2 ns/row) | 591ms (118.1 ns/row) | **3% faster** |
+| Filter with stats (5M rows) | 13ms (2.6 ns/row) | 11ms (2.2 ns/row) | **15% faster** |
+| Columnar input from Parquet (2M rows, 3 primitive columns) | 293ms (146.7 ns/row) | 293ms (146.6 ns/row) | **Same** |
+
+**Notes**:
+- **Filter improvement** comes from min/max statistics enabling batch skipping
+- **Parquet caching** shows no improvement because:
+  - Spark's Parquet reader produces `OnHeapColumnVector`/`OffHeapColumnVector`, not `ArrowColumnVector`
+  - Zero-copy path does NOT trigger for Parquet/ORC sources
+  - Both cache formats must convert from Spark's internal vectors to their respective formats
+- **Zero-copy benefits** only apply when input is already `ArrowColumnVector` (e.g., Python Arrow sources, re-caching Arrow cached data)
 
 ## Supported Data Types
 

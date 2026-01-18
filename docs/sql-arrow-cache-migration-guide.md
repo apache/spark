@@ -301,7 +301,7 @@ val lookupData = spark.read.parquet("lookup.parquet").cache()
 spark.readStream
   .format("kafka")
   .load()
-  .join(lookupData, "id")  // Arrow cache with zero-copy reads
+  .join(lookupData, "id")  // Arrow cache with statistics for filter pushdown
   .writeStream
   .start()
 ```
