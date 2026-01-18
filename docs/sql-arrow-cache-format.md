@@ -99,19 +99,19 @@ When enabled, cached data is read as columnar batches instead of rows, which can
 
 Based on benchmarks on Apple M4 Max (OpenJDK 21.0.8):
 
-| Workload | Default Cache | Arrow Cache | Improvement |
-|----------|--------------|-------------|-------------|
-| Write + Read (5M rows, 3 primitive columns) | 611ms (122.2 ns/row) | 591ms (118.1 ns/row) | **3% faster** |
-| Filter with stats (5M rows) | 13ms (2.6 ns/row) | 11ms (2.2 ns/row) | **15% faster** |
-| Columnar input from Parquet (2M rows, 3 primitive columns) | 293ms (146.7 ns/row) | 293ms (146.6 ns/row) | **Same** |
+| Workload | Default Cache | Arrow Cache | Speedup |
+|----------|--------------|-------------|---------|
+| Write + Read (5M rows, 3 primitive columns) | 152.6 ns/row | 71.5 ns/row | **2.1X faster** |
+| Filter with stats (5M rows) | 102.7 ns/row | 73.0 ns/row | **1.4X faster** |
+| Columnar input from Parquet (2M rows, 3 primitive columns) | 193.0 ns/row | 120.8 ns/row | **1.6X faster** |
+| Re-cache with zero-copy (2M rows, 2 columns) | 273.3 ns/row | 123.9 ns/row | **2.2X faster** |
 
 **Notes**:
-- **Filter improvement** comes from min/max statistics enabling batch skipping
-- **Parquet caching** shows no improvement because:
-  - Spark's Parquet reader produces `OnHeapColumnVector`/`OffHeapColumnVector`, not `ArrowColumnVector`
-  - Zero-copy path does NOT trigger for Parquet/ORC sources
-  - Both cache formats must convert from Spark's internal vectors to their respective formats
-- **Zero-copy benefits** only apply when input is already `ArrowColumnVector` (e.g., Python Arrow sources, re-caching Arrow cached data)
+- **Write + Read**: Significant improvement from efficient Arrow serialization and vectorized operations
+- **Filter improvement**: Comes from min/max statistics enabling batch skipping during partition pruning
+- **Parquet caching**: Shows improvement despite Spark's Parquet reader producing `OnHeapColumnVector`/`OffHeapColumnVector` rather than `ArrowColumnVector`, due to Arrow's efficient batch processing
+- **Re-cache with zero-copy**: When caching a subset of columns from Arrow-cached data (e.g., `df.drop("column")`), the remaining columns preserve their `ArrowColumnVector` format, enabling true zero-copy extraction and achieving the best performance
+- **Zero-copy benefits** only apply when input is already `ArrowColumnVector` (e.g., Python Arrow sources, re-caching Arrow cached data with column projection)
 
 ## Supported Data Types
 
@@ -157,7 +157,17 @@ df.filter("id > 5000000").count()
 
 ## Memory Management
 
-Arrow cache uses off-heap memory managed by Apache Arrow allocators. Memory is automatically cleaned up when:
+Arrow cache uses off-heap memory managed by Apache Arrow allocators. This is a fundamental design choice in Apache Arrow and is not configurable for on-heap memory.
+
+**Memory Efficiency**:
+- Despite requiring off-heap memory, Arrow cache is often **more memory-efficient** than default cache:
+  - Efficient compression with zstd/lz4 codecs
+  - Compact columnar format without Java object overhead
+  - Better compression ratios, especially for strings and complex types
+- If you have limited off-heap memory, increase `spark.executor.memoryOverhead` to allocate more off-heap memory
+
+**Memory Cleanup**:
+Arrow memory is automatically cleaned up when:
 - Tasks complete
 - DataFrames are unpersisted
 - SparkSession is stopped
