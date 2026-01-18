@@ -62,9 +62,8 @@ import org.apache.spark.util.Utils
 class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 
   override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = {
-    // For now, support columnar input for all types
-    // TODO: Add proper type checking based on Arrow support
-    true
+    // Check if all data types in the schema are supported by Arrow
+    schema.forall(attr => ArrowUtils.isSupportedByArrow(attr.dataType))
   }
 
   override def convertInternalRowToCachedBatch(

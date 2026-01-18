@@ -369,4 +369,94 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       checkAnswer(cached, (1 to 100).map(i => Row(i, i * 2, s"str$i")))
     }
   }
+
+  test("supportsColumnarInput with supported types") {
+    import org.apache.spark.sql.catalyst.expressions.AttributeReference
+    import org.apache.spark.sql.types._
+
+    val serializer = new ArrowCachedBatchSerializer()
+
+    // All primitive types should be supported
+    val primitiveSchema = Seq(
+      AttributeReference("bool", BooleanType)(),
+      AttributeReference("byte", ByteType)(),
+      AttributeReference("short", ShortType)(),
+      AttributeReference("int", IntegerType)(),
+      AttributeReference("long", LongType)(),
+      AttributeReference("float", FloatType)(),
+      AttributeReference("double", DoubleType)(),
+      AttributeReference("string", StringType)(),
+      AttributeReference("binary", BinaryType)()
+    )
+    assert(serializer.supportsColumnarInput(primitiveSchema))
+
+    // Temporal types should be supported
+    val temporalSchema = Seq(
+      AttributeReference("date", DateType)(),
+      AttributeReference("timestamp", TimestampType)(),
+      AttributeReference("timestampNtz", TimestampNTZType)()
+    )
+    assert(serializer.supportsColumnarInput(temporalSchema))
+
+    // Decimal should be supported
+    val decimalSchema = Seq(
+      AttributeReference("decimal", DecimalType(10, 2))()
+    )
+    assert(serializer.supportsColumnarInput(decimalSchema))
+
+    // Complex types should be supported
+    val complexSchema = Seq(
+      AttributeReference("array", ArrayType(IntegerType))(),
+      AttributeReference("struct", StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType)
+      )))(),
+      AttributeReference("map", MapType(StringType, IntegerType))()
+    )
+    assert(serializer.supportsColumnarInput(complexSchema))
+
+    // Nested complex types should be supported
+    val nestedSchema = Seq(
+      AttributeReference("nested", ArrayType(StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", ArrayType(StringType))
+      ))))()
+    )
+    assert(serializer.supportsColumnarInput(nestedSchema))
+  }
+
+  test("supportsColumnarInput correctly validates all types") {
+    import org.apache.spark.sql.types._
+    import org.apache.spark.sql.util.ArrowUtils
+
+    // Verify that isSupportedByArrow handles all standard Spark SQL types
+    assert(ArrowUtils.isSupportedByArrow(BooleanType))
+    assert(ArrowUtils.isSupportedByArrow(ByteType))
+    assert(ArrowUtils.isSupportedByArrow(ShortType))
+    assert(ArrowUtils.isSupportedByArrow(IntegerType))
+    assert(ArrowUtils.isSupportedByArrow(LongType))
+    assert(ArrowUtils.isSupportedByArrow(FloatType))
+    assert(ArrowUtils.isSupportedByArrow(DoubleType))
+    assert(ArrowUtils.isSupportedByArrow(StringType))
+    assert(ArrowUtils.isSupportedByArrow(BinaryType))
+    assert(ArrowUtils.isSupportedByArrow(DateType))
+    assert(ArrowUtils.isSupportedByArrow(TimestampType))
+    assert(ArrowUtils.isSupportedByArrow(TimestampNTZType))
+    assert(ArrowUtils.isSupportedByArrow(DecimalType(10, 2)))
+    assert(ArrowUtils.isSupportedByArrow(NullType))
+    assert(ArrowUtils.isSupportedByArrow(CalendarIntervalType))
+
+    // Complex types
+    assert(ArrowUtils.isSupportedByArrow(ArrayType(IntegerType)))
+    assert(ArrowUtils.isSupportedByArrow(StructType(Seq(StructField("x", IntegerType)))))
+    assert(ArrowUtils.isSupportedByArrow(MapType(StringType, IntegerType)))
+
+    // Nested complex types
+    assert(ArrowUtils.isSupportedByArrow(
+      ArrayType(StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", ArrayType(StringType))
+      )))
+    ))
+  }
 }

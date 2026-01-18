@@ -38,6 +38,42 @@ private[sql] object ArrowUtils {
 
   // todo: support more types.
 
+  /**
+   * Check if a Spark DataType is supported by Arrow.
+   * This recursively checks complex types (Array, Struct, Map).
+   */
+  def isSupportedByArrow(dt: DataType): Boolean = {
+    dt match {
+      // Primitive types
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+           FloatType | DoubleType | _: StringType | BinaryType | NullType => true
+
+      // Decimal
+      case _: DecimalType => true
+
+      // Temporal types
+      case DateType | TimestampType | TimestampNTZType | _: TimeType => true
+
+      // Interval types
+      case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType => true
+
+      // Complex types - recursively check element types
+      case ArrayType(elementType, _) => isSupportedByArrow(elementType)
+      case StructType(fields) => fields.forall(f => isSupportedByArrow(f.dataType))
+      case MapType(keyType, valueType, _) =>
+        isSupportedByArrow(keyType) && isSupportedByArrow(valueType)
+
+      // Special types
+      case _: UserDefinedType[_] => true  // UDTs are converted to their sqlType
+      case _: GeometryType => true
+      case _: GeographyType => true
+      case _: VariantType => true
+
+      // Unsupported types
+      case _ => false
+    }
+  }
+
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
     TypeApiOps(dt)
