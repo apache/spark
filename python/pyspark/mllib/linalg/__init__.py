@@ -61,7 +61,6 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike, NormType
-    from scipy.sparse import spmatrix
     from numpy.typing import ArrayLike
 
 
