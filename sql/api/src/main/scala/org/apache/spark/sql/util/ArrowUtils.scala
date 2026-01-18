@@ -41,6 +41,12 @@ private[sql] object ArrowUtils {
   /**
    * Check if a Spark DataType is supported by Arrow.
    * This recursively checks complex types (Array, Struct, Map).
+   *
+   * Note: This checks compatibility with toArrowField(), not toArrowType().
+   * Types like GeometryType, GeographyType, and VariantType are not supported by toArrowType()
+   * (which only handles primitive Arrow types), but ARE supported by toArrowField() which
+   * converts them to Arrow Struct representations with metadata. Since Arrow cache uses
+   * toArrowField() via toArrowSchema() to create the schema, these types are supported.
    */
   def isSupportedByArrow(dt: DataType): Boolean = {
     dt match {
@@ -64,10 +70,11 @@ private[sql] object ArrowUtils {
         isSupportedByArrow(keyType) && isSupportedByArrow(valueType)
 
       // Special types
+      // Note: These are not in toArrowType(), but are handled by toArrowField()
       case _: UserDefinedType[_] => true  // UDTs are converted to their sqlType
-      case _: GeometryType => true
-      case _: GeographyType => true
-      case _: VariantType => true
+      case _: GeometryType => true        // Converted to Struct with srid + wkb fields
+      case _: GeographyType => true       // Converted to Struct with srid + wkb fields
+      case _: VariantType => true         // Converted to Struct with value + metadata fields
 
       // Unsupported types
       case _ => false
