@@ -880,12 +880,14 @@ class ArrowTimestampeConversion:
         Differences from _create_converter_to_pandas + _check_series_convert_timestamps_local_tz:
         1, respect the timezone field in pyarrow timestamp type;
         2, do not use local time at any time;
-        3, handle nested types in a consistent way;
+        3, handle nested types in a consistent way. (_create_converter_to_pandas handles
+        simple timestamp series with session timezone, but handles nested series with
+        datetime.timezone.utc)
 
         Differences from _check_arrow_array_timestamps_localize:
-        1, respect the timezone field in pyarrow timestamp type,
+        1, respect the timezone field in pyarrow timestamp type;
         2, do not handle timezone-naive timestamp;
-        3, do not support unit coercion which won't happen in UDF execution;
+        3, do not support unit coercion which won't happen in UDF execution.
 
         Parameters
         ----------
