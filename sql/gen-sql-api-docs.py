@@ -248,7 +248,7 @@ def _list_grouped_function_infos(jvm):
         sorted(infos, key=lambda x: (x.group or "", x.name)),
         key=lambda x: x.group
     )
-    return [(k, sorted(list(g), key=lambda x: x.name)) for k, g in grouped]
+    return [(k, list(g)) for k, g in grouped]
 
 
 def _make_pretty_usage(usage):
@@ -452,29 +452,32 @@ def generate_sql_api_markdown(jvm, docs_dir):
     with open(index_path, 'w') as mdfile:
         mdfile.write("# Built-in Functions\n\n")
         # Inline CSS for responsive grid layout
-        mdfile.write("<style>\n")
-        mdfile.write(".func-grid {\n")
-        mdfile.write("  display: grid;\n")
-        mdfile.write("  grid-template-columns: repeat(4, 1fr);\n")
-        mdfile.write("  gap: 0.5rem;\n")
-        mdfile.write("  margin-bottom: 1.5rem;\n")
-        mdfile.write("}\n")
-        mdfile.write(".func-grid a {\n")
-        mdfile.write("  padding: 0.25rem 0;\n")
-        mdfile.write("  white-space: nowrap;\n")
-        mdfile.write("  overflow: hidden;\n")
-        mdfile.write("  text-overflow: ellipsis;\n")
-        mdfile.write("}\n")
-        mdfile.write("@media (max-width: 1200px) {\n")
-        mdfile.write("  .func-grid { grid-template-columns: repeat(3, 1fr); }\n")
-        mdfile.write("}\n")
-        mdfile.write("@media (max-width: 768px) {\n")
-        mdfile.write("  .func-grid { grid-template-columns: repeat(2, 1fr); }\n")
-        mdfile.write("}\n")
-        mdfile.write("@media (max-width: 480px) {\n")
-        mdfile.write("  .func-grid { grid-template-columns: 1fr; }\n")
-        mdfile.write("}\n")
-        mdfile.write("</style>\n\n")
+        css = """<style>
+.func-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.func-grid a {
+  padding: 0.25rem 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 1200px) {
+  .func-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+  .func-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .func-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+"""
+        mdfile.write(css)
         mdfile.write("Spark SQL provides a comprehensive set of built-in functions for data ")
         mdfile.write("manipulation and analysis. Functions are organized into the following ")
         mdfile.write("categories:\n\n")
@@ -482,14 +485,14 @@ def generate_sql_api_markdown(jvm, docs_dir):
         # Sort categories by display name for consistent ordering
         sorted_categories = sorted(categories_with_functions, key=lambda x: x[1])
 
+        # Create dictionary for efficient lookup
+        grouped_dict = {k: infos for k, infos in grouped_infos}
+
         # Generate detailed TOC for each category with all function names
         for group_key, display_name, file_name, count in sorted_categories:
             mdfile.write("## %s (%d)\n\n" % (display_name, count))
             # Get the functions for this category
-            category_infos = next(
-                (infos for gk, infos in grouped_infos if gk == group_key),
-                []
-            )
+            category_infos = grouped_dict.get(group_key, [])
             # Write function links in a responsive grid layout
             mdfile.write('<div class="func-grid">\n')
             for info in category_infos:
