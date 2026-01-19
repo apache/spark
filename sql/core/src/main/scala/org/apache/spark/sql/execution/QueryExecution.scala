@@ -484,7 +484,11 @@ class QueryExecution(
     if (rootExecutionIdStr != null) {
       val rootExecutionId = rootExecutionIdStr.toLong
       val rootExecution = SQLExecution.getQueryExecution(rootExecutionId)
-      rootExecution.shuffleCleanupModeOpt
+      if (rootExecution != null) {
+        rootExecution.shuffleCleanupModeOpt
+      } else {
+        None
+      }
     } else {
       None
     }
