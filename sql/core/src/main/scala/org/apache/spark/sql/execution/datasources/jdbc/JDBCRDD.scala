@@ -73,6 +73,10 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
+      // distinguish between the case where the table does not exist and other SQL syntax errors.
+      // This order is important because when a table does not exist, the exception raised can
+      // also match the criteria for isSyntaxErrorBestEffort.
       case e: SQLException if ident.isDefined &&
         dialect.isObjectNotFoundException(e) =>
         throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
