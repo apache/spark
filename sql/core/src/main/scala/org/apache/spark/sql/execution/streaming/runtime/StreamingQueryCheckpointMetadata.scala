@@ -21,8 +21,8 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.StreamingErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
 import org.apache.spark.sql.internal.SQLConf
 
 /**

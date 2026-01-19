@@ -22,13 +22,14 @@ import java.util.UUID
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 
 class StreamingQueryCheckpointMetadataSuite extends StreamTest {
+  import testImplicits._
 
   test("valid case: new checkpoint with no metadata and no logs") {
     withTempDir { dir =>
@@ -84,12 +85,12 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
       // Try to create a new checkpoint metadata - should throw error
       val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkException] {
+      val exception = intercept[SparkRuntimeException] {
         checkpointMetadata2.streamMetadata
       }
       checkError(
         exception = exception,
-        condition = "STREAMING_CHECKPOINT_METADATA_ERROR.MISSING_METADATA_FILE",
+        condition = "MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -114,12 +115,12 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
       // Try to create a new checkpoint metadata - should throw error
       val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkException] {
+      val exception = intercept[SparkRuntimeException] {
         checkpointMetadata2.streamMetadata
       }
       checkError(
         exception = exception,
-        condition = "STREAMING_CHECKPOINT_METADATA_ERROR.MISSING_METADATA_FILE",
+        condition = "MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -148,12 +149,12 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
       // Try to create a new checkpoint metadata - should throw error
       val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkException] {
+      val exception = intercept[SparkRuntimeException] {
         checkpointMetadata2.streamMetadata
       }
       checkError(
         exception = exception,
-        condition = "STREAMING_CHECKPOINT_METADATA_ERROR.MISSING_METADATA_FILE",
+        condition = "MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -199,12 +200,12 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
       // Should throw error because validation is enabled
       val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkException] {
+      val exception = intercept[SparkRuntimeException] {
         checkpointMetadata2.streamMetadata
       }
       checkError(
         exception = exception,
-        condition = "STREAMING_CHECKPOINT_METADATA_ERROR.MISSING_METADATA_FILE",
+        condition = "MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -271,7 +272,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
           assert(!fs.exists(metadataPath), "Metadata file should be deleted")
 
           // Attempt to restart the query - should fail with validation error
-          val exception = intercept[SparkException] {
+          val exception = intercept[SparkRuntimeException] {
             inputData.toDF()
               .writeStream
               .format("parquet")
@@ -284,7 +285,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
           val qualifiedPath = fs.makeQualified(new Path(checkpointDir.getAbsolutePath))
           checkError(
             exception = exception,
-            condition = "STREAMING_CHECKPOINT_METADATA_ERROR.MISSING_METADATA_FILE",
+            condition = "MISSING_METADATA_FILE",
             parameters = Map("checkpointLocation" -> qualifiedPath.toString)
           )
         } finally {
