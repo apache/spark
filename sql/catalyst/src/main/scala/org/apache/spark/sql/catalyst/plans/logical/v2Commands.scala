@@ -226,7 +226,7 @@ case class ReplaceData(
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
@@ -304,7 +304,7 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
