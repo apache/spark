@@ -53,28 +53,28 @@ public class TransientBestEffortLazyVal<T> implements Serializable {
 
   private static final VarHandle HANDLE;
   static {
-      try {
-          HANDLE = MethodHandles.lookup()
-              .in(TransientBestEffortLazyVal.class)
-              .findVarHandle(TransientBestEffortLazyVal.class, "cached", Object.class);
-      } catch (ReflectiveOperationException e) {
-          throw new IllegalStateException("Failed to initialize VarHandle", e);
-      }
+    try {
+      HANDLE = MethodHandles.lookup()
+        .in(TransientBestEffortLazyVal.class)
+        .findVarHandle(TransientBestEffortLazyVal.class, "cached", Object.class);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to initialize VarHandle", e);
+    }
   }
 
   public TransientBestEffortLazyVal(Function0<T> compute) {
-      this.compute = compute;
+    this.compute = compute;
   }
 
   public T apply() {
-      T value = cached;
-      if (value != null) {
-          return value;
-      }
-      T newValue = compute.apply();
-      assert newValue != null: "compute function cannot return null.";
-      HANDLE.compareAndSet(this, null, newValue);
-      return cached;
+    T value = cached;
+    if (value != null) {
+      return value;
+    }
+    T newValue = compute.apply();
+    assert newValue != null: "compute function cannot return null.";
+    HANDLE.compareAndSet(this, null, newValue);
+    return cached;
   }
 
   private void readObject(ObjectInputStream ois) throws IOException, ClassNotFoundException {

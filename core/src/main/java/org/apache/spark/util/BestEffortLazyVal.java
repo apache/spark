@@ -42,36 +42,36 @@ import java.lang.invoke.VarHandle;
  *   Vals Initialization</a> for more details.
  */
 public class BestEffortLazyVal<T> implements Serializable {
-    private volatile Function0<T> compute;
-    protected volatile T cached;
+  private volatile Function0<T> compute;
+  protected volatile T cached;
 
-    private static final VarHandle HANDLE;
-    static {
-        try {
-            HANDLE = MethodHandles.lookup()
-                .in(BestEffortLazyVal.class)
-                .findVarHandle(BestEffortLazyVal.class, "cached", Object.class);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to initialize VarHandle", e);
-        }
+  private static final VarHandle HANDLE;
+  static {
+    try {
+      HANDLE = MethodHandles.lookup()
+        .in(BestEffortLazyVal.class)
+        .findVarHandle(BestEffortLazyVal.class, "cached", Object.class);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to initialize VarHandle", e);
     }
+  }
 
-    public BestEffortLazyVal(Function0<T> compute) {
-        this.compute = compute;
-    }
+  public BestEffortLazyVal(Function0<T> compute) {
+    this.compute = compute;
+  }
 
-    public T apply() {
-        T value = cached;
-        if (value != null) {
-            return value;
-        }
-        Function0<T> f = compute;
-        if (f != null) {
-            T newValue = f.apply();
-            assert newValue != null: "compute function cannot return null.";
-            HANDLE.compareAndSet(this, null, newValue);
-            compute = null; // allow closure to be GC'd
-        }
-        return cached;
+  public T apply() {
+    T value = cached;
+    if (value != null) {
+      return value;
     }
+    Function0<T> f = compute;
+    if (f != null) {
+      T newValue = f.apply();
+      assert newValue != null: "compute function cannot return null.";
+      HANDLE.compareAndSet(this, null, newValue);
+      compute = null; // allow closure to be GC'd
+    }
+    return cached;
+  }
 }
