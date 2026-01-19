@@ -5942,6 +5942,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -6055,12 +6061,6 @@
       "Stateful operators in current batch: [<OpsInCurBatchSeq>].",
       "This typically occurs when state files have been deleted or the streaming query was previously run without stateful operators but restarted with stateful operators.",
       "Please remove the stateful operators, use a new checkpoint location, or restore the missing state files."
-    ],
-    "sqlState" : "42K03"
-  },
-  "MISSING_METADATA_FILE" : {
-    "message" : [
-      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
     ],
     "sqlState" : "42K03"
   },

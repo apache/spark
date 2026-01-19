@@ -90,7 +90,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
       }
       checkError(
         exception = exception,
-        condition = "MISSING_METADATA_FILE",
+        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -120,7 +120,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
       }
       checkError(
         exception = exception,
-        condition = "MISSING_METADATA_FILE",
+        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -154,7 +154,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
       }
       checkError(
         exception = exception,
-        condition = "MISSING_METADATA_FILE",
+        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -205,7 +205,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
       }
       checkError(
         exception = exception,
-        condition = "MISSING_METADATA_FILE",
+        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
         parameters = Map("checkpointLocation" -> checkpointRoot)
       )
     }
@@ -285,7 +285,7 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
           val qualifiedPath = fs.makeQualified(new Path(checkpointDir.getAbsolutePath))
           checkError(
             exception = exception,
-            condition = "MISSING_METADATA_FILE",
+            condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
             parameters = Map("checkpointLocation" -> qualifiedPath.toString)
           )
         } finally {

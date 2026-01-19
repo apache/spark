@@ -55,7 +55,7 @@ object StreamingErrors {
 
   def missingMetadataFile(checkpointLocation: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "MISSING_METADATA_FILE",
+      errorClass = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
       messageParameters = Map("checkpointLocation" -> checkpointLocation)
     )
   }
