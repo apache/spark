@@ -1567,13 +1567,10 @@ private[spark] class DAGScheduler(
         if (sms.isStaticallyIndeterminate &&
             !sms.shuffleDep.checksumMismatchFullRetryEnabled &&
             sms.getNextAttemptId > 0) {
-          // For indeterminate stages being retried, we need to prepare both this stage and its
-          // succeeding stages for a fresh start. The `rollbackCurrentStage = true` parameter
-          // ensures this stage is included in the cleanup process to:
-          // 1. Clear its shuffle outputs from previous attempts
-          // 2. Mark old task results to be ignored
-          // 3. Create a new shuffle merge state
-          // This ensures a full retry.
+          // The `rollbackCurrentStage = true` parameter ensures the current submitting stage
+          // is included in the cleanup for a fresh start: clearing its shuffle outputs, marking
+          // old task results to be ignored, and creating a new shuffle merge state for the
+          // upcoming retry.
           rollbackSucceedingStages(sms, rollbackCurrentStage = true)
           if (!stageIdToStage.contains(stage.id)) {
             logInfo(log"All jobs depending on the indeterminate stage " +
