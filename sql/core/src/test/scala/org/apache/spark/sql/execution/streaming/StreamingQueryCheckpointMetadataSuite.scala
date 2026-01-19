@@ -24,12 +24,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, OffsetSeq, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.{AlsoTestWithPipelinedExecution, StreamingQueryCheckpointMetadata}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.streaming.StreamTest
 
-class StreamingQueryCheckpointMetadataSuite extends StreamTest
-  with AlsoTestWithPipelinedExecution {
+class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
   test("valid case: new checkpoint with no metadata and no logs") {
     withTempDir { dir =>
@@ -240,8 +239,6 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest
   }
 
   test("e2e: streaming query fails to restart when checkpoint metadata is corrupted") {
-    import testImplicits._
-
     withTempDir { checkpointDir =>
       withTempDir { outputDir =>
         val inputData = MemoryStream[Int]
@@ -300,8 +297,6 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest
   }
 
   test("e2e: streaming query restarts successfully when flag is disabled") {
-    import testImplicits._
-
     withSQLConf(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS.key -> "false") {
       withTempDir { checkpointDir =>
         withTempDir { outputDir =>
