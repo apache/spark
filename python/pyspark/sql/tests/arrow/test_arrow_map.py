@@ -140,6 +140,21 @@ class MapInArrowTestsMixin(object):
 
         self.assertEqual(self.spark.range(10).mapInArrow(empty_rows, "a double").count(), 0)
 
+    def test_passing_metadata(self):
+        def extract_metadata(iterator):
+            for batch in iterator:
+                assert isinstance(batch, pa.RecordBatch)
+                if batch.num_rows > 0:
+                    m = batch.schema.field("id").metadata[b"SPARK::metadata::json"]
+                    yield pa.RecordBatch.from_arrays(
+                        [pa.array([str(m)] * batch.num_rows)], names=["metadata"]
+                    )
+
+        df = self.spark.range(1).withMetadata("id", {"x": 1})
+
+        row = df.mapInArrow(extract_metadata, "metadata string").first()
+        self.assertEqual(row.metadata, """b'{"x":1}'""")
+
     def test_chain_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:
