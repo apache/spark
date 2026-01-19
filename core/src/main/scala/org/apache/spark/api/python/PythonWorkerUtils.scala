@@ -154,6 +154,17 @@ private[spark] object PythonWorkerUtils extends Logging {
   }
 
   /**
+   * Write configuration in the form of key-value pairs.
+   */
+  def writeConf(conf: Map[String, String], dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(conf.size)
+    for ((k, v) <- conf) {
+      writeUTF(k, dataOut)
+      writeUTF(v, dataOut)
+    }
+  }
+
+  /**
    * Read a string in UTF-8 charset.
    */
   def readUTF(dataIn: DataInputStream): String = {
