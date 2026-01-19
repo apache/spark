@@ -22,8 +22,9 @@ pandas instances during the type conversion.
 import datetime
 import itertools
 import functools
+import json
 from decimal import Decimal
-from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.sql.types import (
@@ -67,6 +68,24 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+
+
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
+metadata_key = b"SPARK::metadata::json"
+
+
+def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
+    if metadata is not None and len(metadata) > 0:
+        return {metadata_key: json.dumps(metadata).encode("utf-8")}
+    else:
+        return None
+
+
+def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict[str, Any]]:
+    if metadata is not None and metadata_key in metadata:
+        return json.loads(metadata[metadata_key].decode("utf-8"))
+    else:
+        return None
 
 
 def to_arrow_type(
@@ -177,6 +196,7 @@ def to_arrow_type(
                     prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
+                metadata=to_arrow_metadata(field.metadata),
             )
             for field in dt
         ]
@@ -264,6 +284,7 @@ def to_arrow_schema(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
+            metadata=to_arrow_metadata(field.metadata),
         )
         for field in schema
     ]
@@ -427,6 +448,7 @@ def from_arrow_type(
                     field.name,
                     from_arrow_type(field.type, prefer_timestamp_ntz),
                     nullable=field.nullable,
+                    metadata=from_arrow_metadata(field.metadata),
                 )
                 for field in at
             ]
@@ -454,6 +476,7 @@ def from_arrow_schema(
                 field.name,
                 from_arrow_type(field.type, prefer_timestamp_ntz),
                 nullable=field.nullable,
+                metadata=from_arrow_metadata(field.metadata),
             )
             for field in arrow_schema
         ]
