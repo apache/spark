@@ -152,7 +152,7 @@ class JDBCTableCatalog extends TableCatalog
     }
   }
 
-  def loadTable(ident: Identifier, conn: Connection): Table = {
+  override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
       val optionsWithTableName = new JDBCOptions(
         options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
