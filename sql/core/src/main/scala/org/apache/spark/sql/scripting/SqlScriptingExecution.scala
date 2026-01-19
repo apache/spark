@@ -112,82 +112,6 @@ class SqlScriptingExecution(
     }
   }
 
-  /**
-   * Helper method to set the returnCurrentWithoutAdvancing flag on CompoundBodyExec.
-   * After a CONTINUE handler, the next statement to execute is already in curr,
-   * so we shouldn't advance the iterator.
-   * @param executionPlan Execution plan.
-   */
-  private def setReturnCurrentWithoutAdvancing(executionPlan: NonLeafStatementExec): Unit = {
-    // We need to find the innermost CompoundBodyExec that's currently executing
-    // Navigate through the execution plan following curr pointers
-    var currExecPlan: NonLeafStatementExec = executionPlan
-
-    // Keep going deeper while we have non-leaf statements
-    var foundTarget = false
-    while (!foundTarget && currExecPlan.curr.isDefined) {
-      currExecPlan.curr.get match {
-        case compound: CompoundBodyExec =>
-          // Found a CompoundBodyExec - set the flag and try to go deeper
-          compound.returnCurrentWithoutAdvancing = true
-          foundTarget = true
-          currExecPlan = compound
-
-        case loop: RepeatStatementExec =>
-          // For REPEAT, navigate to its body
-          loop.curr match {
-            case Some(body: CompoundBodyExec) =>
-              body.returnCurrentWithoutAdvancing = true
-              foundTarget = true
-            case _ => foundTarget = true // Stop if no body
-          }
-
-        case loop: WhileStatementExec =>
-          // For WHILE, navigate to its body
-          loop.curr match {
-            case Some(body: CompoundBodyExec) =>
-              body.returnCurrentWithoutAdvancing = true
-              foundTarget = true
-            case _ => foundTarget = true
-          }
-
-        case loop: ForStatementExec =>
-          // For FOR, the body is in the statements list
-          // Set flag on all CompoundBodyExec children
-          loop.curr match {
-            case Some(body: CompoundBodyExec) =>
-              body.returnCurrentWithoutAdvancing = true
-              foundTarget = true
-            case _ => foundTarget = true
-          }
-
-        case ifElse: IfElseStatementExec =>
-          // For IF, navigate to current branch being executed
-          ifElse.curr match {
-            case Some(body: CompoundBodyExec) =>
-              body.returnCurrentWithoutAdvancing = true
-              foundTarget = true
-            case _ => foundTarget = true
-          }
-
-        case other: NonLeafStatementExec =>
-          // Other non-leaf, try to go deeper
-          currExecPlan = other
-
-        case _ =>
-          // Leaf statement, stop here
-          foundTarget = true
-      }
-    }
-
-    // Also set on the top-level if it's a CompoundBodyExec
-    executionPlan match {
-      case compound: CompoundBodyExec =>
-        compound.returnCurrentWithoutAdvancing = true
-      case _ => // pass
-    }
-  }
-
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
     // Remove frames that are already executed.
@@ -229,15 +153,10 @@ class SqlScriptingExecution(
 
         // Interrupt conditional statements
         interruptConditionalStatements(context.frames.last.executionPlan)
-
-        // Set flag to prevent advancing past the statement that threw the exception.
-        // After a CONTINUE handler, execution should resume with the statement following
-        // the one that threw the exception, which is already in curr.
-        setReturnCurrentWithoutAdvancing(context.frames.last.executionPlan)
       }
     }
     // If there are still frames available, get the next statement.
-    if (context.frames.nonEmpty && context.frames.last.hasNext) {
+    if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
     None
