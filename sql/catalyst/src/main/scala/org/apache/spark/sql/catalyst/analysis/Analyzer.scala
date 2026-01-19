@@ -2069,38 +2069,49 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          val CatalogAndIdentifier(catalog, ident) =
-            relationResolution.expandIdentifier(nameParts)
-          val fullName = normalizeFuncName(
-            (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+          // Lookup function type FIRST to determine if it exists and where it's located.
+          // This avoids calling CatalogAndIdentifier for builtin/temp functions which
+          // would fail for qualified names like system.builtin.abs.
+          val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
 
-          if (externalFunctionNameSet.contains(fullName)) {
-            f
-          } else {
-            // Lookup function type to determine if it exists and where it's located.
-            // Only cache persistent functions to avoid repeated external catalog lookups.
-            val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+          functionType match {
+            case FunctionType.Builtin | FunctionType.Temporary =>
+              // Builtin or temp function - no need to check catalog
+              f
 
-            functionType match {
-              case FunctionType.Builtin | FunctionType.Temporary | FunctionType.Persistent =>
-                // Function exists and can be used in scalar context
-                if (functionType == FunctionType.Persistent) {
-                  externalFunctionNameSet.add(fullName)
-                }
-                f
+            case FunctionType.Persistent =>
+              // Persistent function - check if we've already validated it
+              val CatalogAndIdentifier(catalog, ident) =
+                relationResolution.expandIdentifier(nameParts)
+              val fullName = normalizeFuncName(
+                (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
 
-              case FunctionType.TableOnly =>
-                // Function exists ONLY in table registry - cannot be used in scalar context
-                throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+              if (!externalFunctionNameSet.contains(fullName)) {
+                externalFunctionNameSet.add(fullName)
+              }
+              f
 
-              case FunctionType.NotFound =>
-                // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
-                val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
-                throw QueryCompilationErrors.unresolvedRoutineError(
-                  nameParts,
-                  Seq("system.builtin", "system.session", catalogPath),
-                  f.origin)
-            }
+            case FunctionType.TableOnly =>
+              // Function exists ONLY in table registry - cannot be used in scalar context
+              throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+            case FunctionType.NotFound =>
+              // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
+              // For error reporting, try to determine the catalog path
+              val catalogPath = try {
+                val CatalogAndIdentifier(catalog, _) =
+                  relationResolution.expandIdentifier(nameParts)
+                (catalog.name +: catalogManager.currentNamespace).mkString(".")
+              } catch {
+                case _: Exception =>
+                  val currentCat = catalogManager.currentCatalog.name
+                  val currentNs = catalogManager.currentNamespace
+                  (currentCat +: currentNs).mkString(".")
+              }
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                Seq("system.builtin", "system.session", catalogPath),
+                f.origin)
           }
       }
     }
