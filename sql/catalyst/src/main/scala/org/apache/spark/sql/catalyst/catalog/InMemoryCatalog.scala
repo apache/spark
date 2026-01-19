@@ -369,6 +369,7 @@ class InMemoryCatalog(
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
+    requireDbExists(db)
     requireTableExists(db, table)
     catalog(db).tables(table).table
   }
