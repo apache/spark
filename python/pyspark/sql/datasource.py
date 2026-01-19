@@ -909,6 +909,61 @@ class SimpleDataSourceStreamReader(ABC):
         ...
 
 
+class ReadLimit(ABC):
+    pass
+
+
+class ReadAllAvailable(ReadLimit):
+    def __init__(self):
+        pass
+
+
+class SupportsAdmissionControl(ABC):
+    @abstractmethod
+    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
+        """
+        FIXME: docstring needed
+
+      /**
+       * Returns the most recent offset available given a read limit. The start offset can be used
+       * to figure out how much new data should be read given the limit. Users should implement this
+       * method instead of latestOffset for a MicroBatchStream or getOffset for Source.
+       * <p>
+       * When this method is called on a `Source`, the source can return `null` if there is no
+       * data to process. In addition, for the very first micro-batch, the `startOffset` will be
+       * null as well.
+       * <p>
+       * When this method is called on a MicroBatchStream, the `startOffset` will be `initialOffset`
+       * for the very first micro-batch. The source can return `null` if there is no data to process.
+       */
+        """
+        pass
+
+
+class SupportsTriggerAvailableNow(ABC):
+    @abstractmethod
+    def prepareForTriggerAvailableNow(self) -> None:
+        """
+        FIXME: docstring needed
+
+        /**
+         * This will be called at the beginning of streaming queries with Trigger.AvailableNow, to let the
+         * source record the offset for the current latest data at the time (a.k.a the target offset for
+         * the query). The source will behave as if there is no new data coming in after the target
+         * offset, i.e., the source will not return an offset higher than the target offset when
+         * {@link #latestOffset(Offset, ReadLimit) latestOffset} is called.
+         * <p>
+         * Note that there is an exception on the first uncommitted batch after a restart, where the end
+         * offset is not derived from the current latest offset. Sources need to take special
+         * considerations if wanting to assert such relation. One possible way is to have an internal
+         * flag in the source to indicate whether it is Trigger.AvailableNow, set the flag in this method,
+         * and record the target offset in the first call of
+         * {@link #latestOffset(Offset, ReadLimit) latestOffset}.
+         */
+        """
+        pass
+
+
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving

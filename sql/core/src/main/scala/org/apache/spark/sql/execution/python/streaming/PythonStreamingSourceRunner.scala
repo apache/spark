@@ -33,6 +33,7 @@ import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.streaming.{Offset, ReadAllAvailable, ReadLimit}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -46,11 +47,16 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  val CHECK_SUPPORTED_FEATURES_ID = 888
+  val PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID = 889
+  val LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID = 890
   // Status code for JVM to decide how to receive prefetched record batches
   // for simple stream reader.
   val PREFETCHED_RECORDS_NOT_FOUND = 0
   val NON_EMPTY_PYARROW_RECORD_BATCHES = 1
   val EMPTY_PYARROW_RECORD_BATCHES = 2
+
+  case class SupportedFeatures(admissionControl: Boolean, triggerAvailableNow: Boolean)
 }
 
 /**
@@ -130,11 +136,63 @@ class PythonStreamingSourceRunner(
     }
   }
 
+  def checkSupportedFeatures(): SupportedFeatures = {
+    dataOut.writeInt(CHECK_SUPPORTED_FEATURES_ID)
+    dataOut.flush()
+
+    val featureBits = dataIn.readInt()
+    if (featureBits == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "checkSupportedFeatures", msg)
+    }
+    val admissionControl = (featureBits | (1 << 0)) == 1
+    val availableNow = (featureBits | (1 << 1)) == (1 << 1)
+
+    SupportedFeatures(admissionControl, availableNow)
+  }
+
+  def prepareForTriggerAvailableNow(): Unit = {
+    dataOut.writeInt(PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID)
+    dataOut.flush()
+    val status = dataIn.readInt()
+    // FIXME: code for not supported?
+    if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "prepareForTriggerAvailableNow", msg)
+    }
+  }
+
   /**
    * Invokes latestOffset() function of the stream reader and receive the return value.
    */
   def latestOffset(): String = {
     dataOut.writeInt(LATEST_OFFSET_FUNC_ID)
+    dataOut.flush()
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset", msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  def latestOffset(startOffset: Offset, limit: ReadLimit): String = {
+    dataOut.writeInt(LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID)
+    PythonWorkerUtils.writeUTF(startOffset.json, dataOut)
+    limit match {
+      case _: ReadAllAvailable =>
+        dataOut.writeInt(0)
+        dataOut.flush()
+
+      case _ =>
+        // FIXME: Add support for other ReadLimit types
+        // throw QueryExecutionErrors.unsupportedReadLimitTypeError(limit.getClass.getName)
+        throw new UnsupportedOperationException("Unsupported ReadLimit type: " +
+          s"${limit.getClass.getName}")
+    }
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {

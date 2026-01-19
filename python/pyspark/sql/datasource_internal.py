@@ -25,7 +25,10 @@ from pyspark.sql.datasource import (
     DataSource,
     DataSourceStreamReader,
     InputPartition,
+    ReadAllAvailable,
+    ReadLimit,
     SimpleDataSourceStreamReader,
+    SupportsAdmissionControl,
 )
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
@@ -56,7 +59,7 @@ class PrefetchedCacheEntry:
         self.iterator = iterator
 
 
-class _SimpleStreamReaderWrapper(DataSourceStreamReader):
+class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionControl):
     """
     A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
@@ -92,6 +95,22 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
+        (iter, end) = self.simple_reader.read(self.current_offset)
+        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
+        self.current_offset = end
+        return end
+
+    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
+        if self.current_offset is None:
+            assert start != None, "start offset should not be None"
+            self.current_offset = start
+        else:
+            assert self.current_offset == start, ("start offset does not match current offset. "
+                   f"current: {self.current_offset}, start: {start}")
+
+        assert isinstance(readLimit, ReadAllAvailable), ("simple stream reader does not "
+                                                         "support read limit")
+
         (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
         self.current_offset = end

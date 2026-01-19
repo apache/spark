@@ -24,7 +24,8 @@ import scala.concurrent.duration._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
-import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.connector.read.streaming.ReadLimit
+import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonMicroBatchStreamWithAdmissionControl, PythonStreamingSourceOffset}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
@@ -249,12 +250,18 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     pythonDs.setShortName("ErrorDataSource")
 
     def testMicroBatchStreamError(action: String, msg: String)(
-        func: PythonMicroBatchStream => Unit): Unit = {
-      val stream = new PythonMicroBatchStream(
+        func: PythonMicroBatchStreamWithAdmissionControl => Unit): Unit = {
+      val options = CaseInsensitiveStringMap.empty()
+      val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+        pythonDs, errorDataSourceName, inputSchema, options)
+      runner.init()
+
+      val stream = new PythonMicroBatchStreamWithAdmissionControl(
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty()
+        options,
+        runner
       )
       val err = intercept[SparkException] {
         func(stream)
@@ -276,16 +283,6 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       "[NOT_IMPLEMENTED] initialOffset is not implemented") {
       stream =>
         stream.initialOffset()
-    }
-
-    // User don't need to implement latestOffset for SimpleDataSourceStreamReader.
-    // The latestOffset method of simple stream reader invokes initialOffset() and read()
-    // So the not implemented method is initialOffset.
-    testMicroBatchStreamError(
-      "latestOffset",
-      "[NOT_IMPLEMENTED] initialOffset is not implemented") {
-      stream =>
-        stream.latestOffset()
     }
   }
 
@@ -314,12 +311,18 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     pythonDs.setShortName("ErrorDataSource")
 
     def testMicroBatchStreamError(action: String, msg: String)(
-        func: PythonMicroBatchStream => Unit): Unit = {
-      val stream = new PythonMicroBatchStream(
+        func: PythonMicroBatchStreamWithAdmissionControl => Unit): Unit = {
+      val options = CaseInsensitiveStringMap.empty()
+      val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+        pythonDs, errorDataSourceName, inputSchema, options)
+      runner.init()
+
+      val stream = new PythonMicroBatchStreamWithAdmissionControl(
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty()
+        options,
+        runner
       )
       val err = intercept[SparkException] {
         func(stream)
@@ -337,7 +340,59 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     }
 
     testMicroBatchStreamError("latestOffset", "Exception: error reading available data") { stream =>
-      stream.latestOffset()
+      stream.latestOffset(PythonStreamingSourceOffset("""{"partition": 0}"""),
+        ReadLimit.allAvailable())
+    }
+  }
+
+  test("SimpleDataSourceStreamReader with Trigger.AvailableNow") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |from pyspark.sql.datasource import SimpleDataSourceStreamReader, SupportsTriggerAvailableNow
+         |
+         |class SimpleDataStreamReader(SimpleDataSourceStreamReader, SupportsTriggerAvailableNow):
+         |    def initialOffset(self):
+         |        return {"partition-1": 0}
+         |    def read(self, start: dict):
+         |        start_idx = start["partition-1"]
+         |        end_offset = min(start_idx + 2, self.desired_end_offset)
+         |        it = iter([(i, ) for i in range(start_idx, end_offset)])
+         |        return (it, {"partition-1": end_offset})
+         |    def readBetweenOffsets(self, start: dict, end: dict):
+         |        start_idx = start["partition-1"]
+         |        end_idx = end["partition-1"]
+         |        return iter([(i, ) for i in range(start_idx, end_idx)])
+         |    def prepareForTriggerAvailableNow(self):
+         |        self.desired_end_offset = 10
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def simpleStreamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val outputDir = new File(path, "output")
+      val df = spark.readStream.format(dataSourceName).load()
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .format("json")
+        .trigger(Trigger.AvailableNow())
+        .start(outputDir.getAbsolutePath)
+      q.awaitTermination(waitTimeout.toMillis)
+      val rowCount = spark.read.format("json").load(outputDir.getAbsolutePath).count()
+      assert(rowCount === 10)
+      checkAnswer(
+        spark.read.format("json").load(outputDir.getAbsolutePath),
+        (0 until rowCount.toInt).map(Row(_))
+      )
     }
   }
 
@@ -459,11 +514,18 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("SimpleDataSource")
+
+    val options = CaseInsensitiveStringMap.empty()
+    val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+      pythonDs, dataSourceName, inputSchema, options)
+    runner.init()
+
     val stream = new PythonMicroBatchStream(
       pythonDs,
       dataSourceName,
       inputSchema,
-      CaseInsensitiveStringMap.empty()
+      options,
+      runner
     )
 
     var startOffset = stream.initialOffset()
@@ -706,11 +768,17 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
     def testMicroBatchStreamError(action: String, msg: String)(
         func: PythonMicroBatchStream => Unit): Unit = {
+      val options = CaseInsensitiveStringMap.empty()
+      val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+        pythonDs, dataSourceName, inputSchema, options)
+      runner.init()
+
       val stream = new PythonMicroBatchStream(
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty()
+        options,
+        runner
       )
       val err = intercept[SparkException] {
         func(stream)
@@ -767,11 +835,17 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
     def testMicroBatchStreamError(action: String, msg: String)(
         func: PythonMicroBatchStream => Unit): Unit = {
+      val options = CaseInsensitiveStringMap.empty()
+      val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+        pythonDs, dataSourceName, inputSchema, options)
+      runner.init()
+
       val stream = new PythonMicroBatchStream(
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty()
+        options,
+        runner
       )
       val err = intercept[SparkException] {
         func(stream)

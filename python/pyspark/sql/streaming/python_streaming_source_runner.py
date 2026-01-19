@@ -28,7 +28,13 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceStreamReader,
+    ReadAllAvailable,
+    SupportsAdmissionControl,
+    SupportsTriggerAvailableNow
+)
 from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
@@ -51,10 +57,16 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
+CHECK_SUPPORTED_FEATURES_ID = 888
+PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID = 889
+LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID = 890
 
 PREFETCHED_RECORDS_NOT_FOUND = 0
 NON_EMPTY_PYARROW_RECORD_BATCHES = 1
 EMPTY_PYARROW_RECORD_BATCHES = 2
+
+SUPPORTS_ADMISSION_CONTROL = 1
+SUPPORTS_TRIGGER_AVAILABLE_NOW = 1 << 1
 
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
@@ -114,6 +126,56 @@ def send_batch_func(
         serializer.dump_stream(batches, outfile)
     else:
         write_int(EMPTY_PYARROW_RECORD_BATCHES, outfile)
+
+
+def check_support_func(reader, outfile):
+    support_flags = 0
+    if isinstance(reader, _SimpleStreamReaderWrapper):
+        # We consider the method of `read` in simple_reader to already have admission control
+        # into it.
+        support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
+        if isinstance(reader.simple_reader, SupportsTriggerAvailableNow):
+            support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
+    else:
+        if isinstance(reader, SupportsAdmissionControl):
+            support_flags |= SUPPORTS_ADMISSION_CONTROL
+        if isinstance(reader, SupportsTriggerAvailableNow):
+            support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
+    write_int(support_flags, outfile)
+
+
+def prepare_for_trigger_available_now_func(reader, outfile):
+    if isinstance(reader, _SimpleStreamReaderWrapper):
+        if isinstance(reader.simple_reader, SupportsTriggerAvailableNow):
+            reader.simple_reader.prepareForTriggerAvailableNow()
+        else:
+            # FIXME: code for not supported? or should it be assertion?
+            raise Exception("prepareForTriggerAvailableNow is not supported by the "
+                            "underlying simple reader.")
+    else:
+        if isinstance(reader, SupportsTriggerAvailableNow):
+            reader.prepareForTriggerAvailableNow()
+        else:
+            # FIXME: code for not supported? or should it be assertion?
+            raise Exception("prepareForTriggerAvailableNow is not supported by the "
+                            "stream reader.")
+    write_int(0, outfile)
+
+
+def latest_offset_admission_control_func(reader, infile, outfile):
+    start_offset_dict = json.loads(utf8_deserializer.loads(infile))
+
+    limit_type = read_int(infile)
+    if limit_type == 0:
+        # ReadAllAvailable
+        limit = ReadAllAvailable()
+    else:
+        # FIXME: raise error
+        # FIXME: code for not supported?
+        raise Exception("Only ReadAllAvailable is supported for latestOffsetAdmissionControl.")
+
+    offset = reader.latestOffset(start_offset_dict, limit)
+    write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -176,6 +238,12 @@ def main(infile: IO, outfile: IO) -> None:
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
+                elif func_id == CHECK_SUPPORTED_FEATURES_ID:
+                    check_support_func(reader, outfile)
+                elif func_id == PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID:
+                    prepare_for_trigger_available_now_func(reader, outfile)
+                elif func_id == LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID:
+                    latest_offset_admission_control_func(reader, infile, outfile)
                 else:
                     raise IllegalArgumentException(
                         errorClass="UNSUPPORTED_OPERATION",
