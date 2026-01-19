@@ -586,7 +586,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val table = qualifiedIdent.table
-    // Let externalCatalog.getTable handle error reporting to save RPC calls.
+    // Let the external catalog handle all error cases (db not exists, table not exists)
     attachCatalogName(externalCatalog.getTable(db, table))
   }
 
