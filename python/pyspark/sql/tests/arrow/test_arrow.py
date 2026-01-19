@@ -49,6 +49,12 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     VariantType,
 )
+from pyspark.sql.pandas.types import (
+    from_arrow_type,
+    to_arrow_type,
+    from_arrow_schema,
+    to_arrow_schema,
+)
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -754,8 +760,6 @@ class ArrowTestsMixin:
         self.assertTrue(t_out.equals(expected))
 
     def test_schema_conversion_roundtrip(self):
-        from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
-
         arrow_schema = to_arrow_schema(self.schema, timezone="UTC", prefers_large_types=False)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
@@ -765,8 +769,6 @@ class ArrowTestsMixin:
         self.assertEqual(self.schema, schema_rt)
 
     def test_type_conversion_round_trip(self):
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
-
         for t in [
             NullType(),
             BinaryType(),
@@ -795,24 +797,32 @@ class ArrowTestsMixin:
             VariantType(),
             StructType(
                 [
-                    StructField("1_str_t", StringType(), True),
+                    StructField(
+                        "1_str_t", StringType(), True, {"is_int": False, "is_float": "false"}
+                    ),
                     StructField("2_int_t", IntegerType(), True),
                     StructField("3_long_t", LongType(), True),
                     StructField("4_float_t", FloatType(), True),
-                    StructField("5_double_t", DoubleType(), True),
+                    StructField(
+                        "5_double_t", DoubleType(), True, {"is_int": False, "is_float": "true"}
+                    ),
                     StructField("6_decimal_t", DecimalType(38, 18), True),
                     StructField("7_date_t", DateType(), True),
-                    StructField("8_timestamp_t", TimestampType(), True),
+                    StructField(
+                        "8_timestamp_t", TimestampType(), True, {"is_ts": True, "ntz": "false"}
+                    ),
                     StructField("9_binary_t", BinaryType(), True),
-                    StructField("10_var", VariantType(), True),
+                    StructField("10_var", VariantType(), True, {"is_ts": False, "is_var": "true"}),
                     StructField("11_arr", ArrayType(ArrayType(StringType(), True), False), True),
                     StructField("12_map", MapType(StringType(), IntegerType(), True), True),
                     StructField(
                         "13_struct",
                         StructType(
                             [
-                                StructField("13_1_str_t", StringType(), True),
-                                StructField("13_2_int_t", IntegerType(), True),
+                                StructField(
+                                    "13_1_str_t", StringType(), True, {"in_nested": "true"}
+                                ),
+                                StructField("13_2_int_t", IntegerType(), True, {"in_nested": None}),
                                 StructField("13_3_long_t", LongType(), True),
                             ]
                         ),
@@ -829,6 +839,15 @@ class ArrowTestsMixin:
                 at2 = to_arrow_type(t, timezone="UTC", prefers_large_types=True)
                 t3 = from_arrow_type(at2)
                 self.assertEqual(t, t3)
+
+                if isinstance(t, StructType):
+                    pa_schema = to_arrow_schema(t, timezone="UTC")
+                    schema2 = from_arrow_schema(pa_schema)
+                    self.assertEqual(t, schema2)
+
+                    pa_schema2 = to_arrow_schema(t, timezone="UTC", prefers_large_types=True)
+                    schema3 = from_arrow_schema(pa_schema2)
+                    self.assertEqual(t, schema3)
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
