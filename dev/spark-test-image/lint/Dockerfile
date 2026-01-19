@@ -99,6 +99,8 @@ RUN python3.11 -m pip install \
     'pyarrow>=22.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
+    'scipy>=1.8.0' \
+    'scipy-stubs' \
     && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && python3.11 -m pip install torcheval \
     && python3.11 -m pip cache purge

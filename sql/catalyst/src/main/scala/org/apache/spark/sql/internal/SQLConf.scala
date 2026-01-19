@@ -6248,6 +6248,16 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(1024 * 1024)
 
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The local relation size in bytes must be positive")
+      .createWithDefault(3L * 1024 * 1024 * 1024)
+
   val LOCAL_RELATION_CHUNK_SIZE_ROWS =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
       .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
@@ -6280,15 +6290,6 @@ object SQLConf {
       .version("4.1.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2000MB")
-
-  val LOCAL_RELATION_SIZE_LIMIT =
-    buildConf("spark.sql.session.localRelationSizeLimit")
-      .internal()
-      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
-        "If the limit is exceeded, an exception is thrown.")
-      .version("4.1.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("3GB")
 
   val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)

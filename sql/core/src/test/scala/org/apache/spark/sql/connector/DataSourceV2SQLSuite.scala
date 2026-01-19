@@ -3241,13 +3241,16 @@ class DataSourceV2SQLSuiteV1Filter
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val ts1InSeconds = MICROSECONDS.toSeconds(ts1).toString
     val ts2InSeconds = MICROSECONDS.toSeconds(ts2).toString
+
+    val t = "testcat.t"
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
-
-    withTable(t3, t4) {
+    withTable(t, t3, t4) {
+      sql(s"CREATE TABLE $t (ts STRING) USING foo")
       sql(s"CREATE TABLE $t3 (id int) USING foo")
       sql(s"CREATE TABLE $t4 (id int) USING foo")
 
+      sql(s"INSERT INTO $t VALUES ('2019-01-29 00:37:58')")
       sql(s"INSERT INTO $t3 VALUES (5)")
       sql(s"INSERT INTO $t3 VALUES (6)")
       sql(s"INSERT INTO $t4 VALUES (7)")
@@ -3282,6 +3285,9 @@ class DataSourceV2SQLSuiteV1Filter
       val res10 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))")
         .collect()
       assert(res10 === Array(Row(7), Row(8)))
+      // Subquery with table reference
+      val res11 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT MIN(ts) FROM t)").collect()
+      assert(res11 === Array(Row(5), Row(6)))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -3306,6 +3312,11 @@ class DataSourceV2SQLSuiteV1Filter
         exception = analysisException("SELECT * FROM t TIMESTAMP AS OF 'abc'"),
         condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
         parameters = Map("expr" -> "\"abc\""))
+
+      checkError(
+        exception = analysisException(s"SELECT * FROM $t TIMESTAMP AS OF NULL"),
+        condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+        parameters = Map("expr" -> "\"NULL\""))
 
       checkError(
         exception = intercept[AnalysisException] {

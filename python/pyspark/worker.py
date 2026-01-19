@@ -1335,10 +1335,7 @@ def _is_iter_based(eval_type: int) -> bool:
 
 
 def wrap_perf_profiler(f, eval_type, result_id):
-    import cProfile
-    import pstats
-
-    from pyspark.sql.profiler import ProfileResultsParam
+    from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
@@ -1348,40 +1345,26 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
         def profiling_func(*args, **kwargs):
             iterator = iter(f(*args, **kwargs))
-            pr = cProfile.Profile()
             while True:
                 try:
-                    with pr:
+                    with WorkerPerfProfiler(accumulator, result_id):
                         item = next(iterator)
                     yield item
                 except StopIteration:
                     break
 
-            st = pstats.Stats(pr)
-            st.stream = None  # make it picklable
-            st.strip_dirs()
-
-            accumulator.add({result_id: (st, None)})
-
     else:
 
         def profiling_func(*args, **kwargs):
-            with cProfile.Profile() as pr:
+            with WorkerPerfProfiler(accumulator, result_id):
                 ret = f(*args, **kwargs)
-            st = pstats.Stats(pr)
-            st.stream = None  # make it picklable
-            st.strip_dirs()
-
-            accumulator.add({result_id: (st, None)})
-
             return ret
 
     return profiling_func
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam
-    from pyspark.profiler import UDFLineProfilerV2
+    from pyspark.sql.profiler import ProfileResultsParam, WorkerMemoryProfiler
 
     if not has_memory_profiler:
         return f
@@ -1393,39 +1376,21 @@ def wrap_memory_profiler(f, eval_type, result_id):
     if _is_iter_based(eval_type):
 
         def profiling_func(*args, **kwargs):
-            profiler = UDFLineProfilerV2()
-            profiler.add_function(f)
-
             iterator = iter(f(*args, **kwargs))
 
             while True:
                 try:
-                    with profiler:
+                    with WorkerMemoryProfiler(accumulator, result_id, f):
                         item = next(iterator)
                     yield item
                 except StopIteration:
                     break
 
-            codemap_dict = {
-                filename: list(line_iterator)
-                for filename, line_iterator in profiler.code_map.items()
-            }
-            accumulator.add({result_id: (None, codemap_dict)})
-
     else:
 
         def profiling_func(*args, **kwargs):
-            profiler = UDFLineProfilerV2()
-            profiler.add_function(f)
-
-            with profiler:
+            with WorkerMemoryProfiler(accumulator, result_id, f):
                 ret = f(*args, **kwargs)
-
-            codemap_dict = {
-                filename: list(line_iterator)
-                for filename, line_iterator in profiler.code_map.items()
-            }
-            accumulator.add({result_id: (None, codemap_dict)})
             return ret
 
     return profiling_func
