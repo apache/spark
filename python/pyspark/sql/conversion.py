@@ -876,18 +876,16 @@ class ArrowTimestampeConversion:
         Convert Arrow timezone-aware timestamps to timezone-naive in the specified timezone.
         This function works on Arrow Arrays, and it recurses to convert nested types.
         This function is dedicated for Pandas UDF execution.
-        Arrow UDF (@arrow_udf/mapInArrow/etc) doesn't need this conversion and preserve
-        the original timezone.
 
         Differences from _create_converter_to_pandas + _check_series_convert_timestamps_local_tz:
-        1, respect the timezone field in pyarrow timestamp type, pa.timestamp("us", tz="Asia/Tokyo");
+        1, respect the timezone field in pyarrow timestamp type;
         2, do not use local time at any time;
-        3, support nested types;
+        3, handle nested types in a consistent way;
 
         Differences from _check_arrow_array_timestamps_localize:
-        1, do not handle timezone-naive timestamp;
-        2, do not support unit coercion which won't happen in UDF execution;
-        3, respect the timezone field in pyarrow timestamp type, pa.timestamp("us", tz="Asia/Tokyo");
+        1, respect the timezone field in pyarrow timestamp type,
+        2, do not handle timezone-naive timestamp;
+        3, do not support unit coercion which won't happen in UDF execution;
 
         Parameters
         ----------
@@ -896,6 +894,11 @@ class ArrowTimestampeConversion:
         Returns
         -------
         :class:`pyarrow.Array`
+
+        Notes
+        -----
+        Arrow UDF (@arrow_udf/mapInArrow/etc) always preserve the original timezone, and thus
+        doesn't need this conversion.
         """
         import pyarrow as pa
         import pyarrow.types as types
