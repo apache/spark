@@ -60,6 +60,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case SubqueryAlias(identifier, project: Project)
             if readSideCharPaddingAfterSubqueryAlias && project.getTagValue(
               ApplyCharTypePaddingHelper.READ_SIDE_PADDING_PROJECT_TAG).isDefined =>
+          // Move the padding projection to after the subquery alias to still allow metadata
+          // columns to be accessed.
           project.copy(child = SubqueryAlias(identifier, project.child)) -> Nil
       }
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
