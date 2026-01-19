@@ -364,9 +364,12 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         sql(s"CREATE TABLE $tbl (id bigint, data char(1)) PARTITIONED BY (bucket(4, id), id)")
         sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
         val sqlQuery = sql(s"SELECT id, data, index, _partition FROM $tbl")
+        val sqlQueryWithAlias = sql(s"SELECT t.id, t.data, t.index, t._partition FROM $tbl t")
         val dfQuery = spark.table(tbl).select("id", "data", "index", "_partition")
+        val dfQueryWithAlias = spark.table(tbl).as("t")
+          .select("t.id", "t.data", "t.index", "t._partition")
 
-        Seq(sqlQuery, dfQuery).foreach { query =>
+        Seq(sqlQuery, sqlQueryWithAlias, dfQuery, dfQueryWithAlias).foreach { query =>
           checkAnswer(
             query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
         }
