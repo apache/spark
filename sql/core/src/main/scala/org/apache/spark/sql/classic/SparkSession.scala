@@ -183,7 +183,7 @@ class SparkSession private(
    * initialization when SQLConf.get is called.
    */
   @transient
-  lazy val sqlConf: SQLConf = {
+  private[sql] lazy val sqlConf: SQLConf = {
     parentSessionState.map { s =>
       val cloned = s.conf.clone()
       if (sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
