@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def readSideCharPaddingAfterSubqueryAlias =
-    conf.getConf(SQLConf.READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS) =
+    conf.getConf(SQLConf.READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS)
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.charVarcharAsString) {
