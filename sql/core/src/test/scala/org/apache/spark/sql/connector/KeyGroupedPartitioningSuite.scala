@@ -1580,7 +1580,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                 case (true, false, false) => assert(scannedPartitions == Seq(4, 4))
 
                 // No SPJ
-                case _ => assert(scannedPartitions == Seq(5, 4))
+                case _ => assert(scannedPartitions == Seq(7, 7))
               }
 
               checkAnswer(df, Seq(
@@ -2234,7 +2234,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               // SPJ and not partially-clustered
               case (true, false) => assert(scans == Seq(3, 3))
               // No SPJ
-              case _ => assert(scans == Seq(4, 4))
+              case _ => assert(scans == Seq(5, 5))
             }
 
             checkAnswer(df,
@@ -2821,6 +2821,35 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       assert(shuffles.size == 1, "only shuffle one side not report partitioning")
 
       checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+    }
+  }
+
+  test("SPARK-55092: Don't group partitions when not needed") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    val purchases_partitions = Array(years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = createJoinTestDF(Seq("id" -> "item_id"), extraColumns = Seq("year(p.time)"))
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans(0).inputRDD.partitions.length === 2, "items scan should group")
+      assert(scans(1).inputRDD.partitions.length === 2, "purchases scan should not group")
+
+      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
     }
   }
 }
