@@ -152,31 +152,27 @@ class JDBCTableCatalog extends TableCatalog
     }
   }
 
-  override def loadTable(ident: Identifier): Table = {
-    JdbcUtils.withConnection(options) { conn =>
-      loadTable(ident, conn)
-    }
-  }
-
   def loadTable(ident: Identifier, conn: Connection): Table = {
-    val optionsWithTableName = new JDBCOptions(
-      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(
-      condition = "FAILED_JDBC.LOAD_TABLE",
-      messageParameters = Map(
-        "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
-      dialect,
-      description = s"Failed to load table: $ident",
-      isRuntime = false
-    ) {
-      val remoteSchemaFetchMetric = JdbcUtils
-        .createSchemaFetchMetric(SparkSession.active.sparkContext)
-      val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
-        JDBCRDD.resolveTable(optionsWithTableName, conn, Some(ident), Some(name()))
+    JdbcUtils.withConnection(options) { conn =>
+      val optionsWithTableName = new JDBCOptions(
+        options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.LOAD_TABLE",
+        messageParameters = Map(
+          "url" -> options.getRedactUrl(),
+          "tableName" -> toSQLId(ident)),
+        dialect,
+        description = s"Failed to load table: $ident",
+        isRuntime = false
+      ) {
+        val remoteSchemaFetchMetric = JdbcUtils
+          .createSchemaFetchMetric(SparkSession.active.sparkContext)
+        val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+          JDBCRDD.resolveTable(optionsWithTableName, conn, Some(ident), Some(name()))
+        }
+        JDBCTable(ident, schema, optionsWithTableName,
+          Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
       }
-      JDBCTable(ident, schema, optionsWithTableName,
-        Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
     }
   }
 
