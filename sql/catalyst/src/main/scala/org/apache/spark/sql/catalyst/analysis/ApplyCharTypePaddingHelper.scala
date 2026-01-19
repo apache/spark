@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
@@ -40,7 +39,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * package in order to make the methods accessible to single-pass [[Resolver]].
  */
 object ApplyCharTypePaddingHelper {
-  val READ_SIDE_PADDING_PROJECT_TAG = TreeNodeTag[Unit]("read_side_padding_project")
 
   object AttrOrOuterRef {
     def unapply(e: Expression): Option[Attribute] = e match {
@@ -63,7 +61,6 @@ object ApplyCharTypePaddingHelper {
       relation -> Nil
     } else {
       val newPlan = Project(projectList, cleanedRelation())
-      newPlan.setTagValue(ApplyCharTypePaddingHelper.READ_SIDE_PADDING_PROJECT_TAG, ())
       newPlan -> relation.output.zip(newPlan.output)
     }
   }
