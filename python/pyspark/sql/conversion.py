@@ -847,9 +847,9 @@ class ArrowTableToRowsConversion:
                 return [_create_row(fields, tuple())] * table.num_rows
 
 
-class ArrowTimestampeConversion:
-    @staticmethod
-    def _need_localization(at: "pa.DataType") -> bool:
+class ArrowTimestampConversion:
+    @classmethod
+    def _need_localization(cls, at: "pa.DataType") -> bool:
         import pyarrow.types as types
 
         if types.is_timestamp(at) and at.tz is not None:
@@ -860,19 +860,16 @@ class ArrowTimestampeConversion:
             or types.is_fixed_size_list(at)
             or types.is_dictionary(at)
         ):
-            return ArrowTimestampeConversion._need_localization(at.value_type)
+            return cls._need_localization(at.value_type)
         elif types.is_map(at):
-            return any(
-                ArrowTimestampeConversion._need_localization(dt)
-                for dt in [at.key_type, at.item_type]
-            )
+            return any(cls._need_localization(dt) for dt in [at.key_type, at.item_type])
         elif types.is_struct(at):
-            return any(ArrowTimestampeConversion._need_localization(field.type) for field in at)
+            return any(cls._need_localization(field.type) for field in at)
         else:
             return False
 
     @staticmethod
-    def localize_tz(a: "pa.Array") -> "pa.Array":
+    def localize_tz(arr: "pa.Array") -> "pa.Array":
         """
         Convert Arrow timezone-aware timestamps to timezone-naive in the specified timezone.
         This function works on Arrow Arrays, and it recurses to convert nested types.
@@ -892,7 +889,7 @@ class ArrowTimestampeConversion:
 
         Parameters
         ----------
-        a : :class:`pyarrow.Array`
+        arr : :class:`pyarrow.Array`
 
         Returns
         -------
@@ -907,12 +904,11 @@ class ArrowTimestampeConversion:
         import pyarrow.types as types
         import pyarrow.compute as pc
 
-        at = a.type
+        pa_type = arr.type
+        if not ArrowTimestampConversion._need_localization(pa_type):
+            return arr
 
-        if not ArrowTimestampeConversion._need_localization(at):
-            return a
-
-        if types.is_timestamp(at) and at.tz is not None:
+        if types.is_timestamp(pa_type) and pa_type.tz is not None:
             # import datetime
             # from zoneinfo import ZoneInfo
             # ts = datetime.datetime(2022, 1, 5, 15, 0, 1, tzinfo=ZoneInfo('Asia/Singapore'))
@@ -923,39 +919,38 @@ class ArrowTimestampeConversion:
             # arr[0]
             # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000'>
 
-            return pc.local_timestamp(a)
-        elif types.is_list(a.type):
+            return pc.local_timestamp(arr)
+        elif types.is_list(pa_type):
             return pa.ListArray.from_arrays(
-                offsets=a.offsets,
-                values=ArrowTimestampeConversion.localize_tz(a.values),
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
             )
-        elif types.is_large_list(a.type):
+        elif types.is_large_list(pa_type):
             return pa.LargeListType.from_arrays(
-                offsets=a.offsets,
-                values=ArrowTimestampeConversion.localize_tz(a.values),
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
             )
-        elif types.is_fixed_size_list(at):
+        elif types.is_fixed_size_list(pa_type):
             return pa.FixedSizeListArray.from_arrays(
-                values=ArrowTimestampeConversion.localize_tz(a.values),
+                values=ArrowTimestampConversion.localize_tz(arr.values),
             )
-        elif types.is_dictionary(a.type):
+        elif types.is_dictionary(pa_type):
             return pa.DictionaryArray.from_arrays(
-                indices=a.indices,
-                dictionary=ArrowTimestampeConversion.localize_tz(a.dictionary),
+                indices=arr.indices,
+                dictionary=ArrowTimestampConversion.localize_tz(arr.dictionary),
             )
-        elif types.is_map(at):
+        elif types.is_map(pa_type):
             return pa.MapArray.from_arrays(
-                offsets=a.offsets,
-                keys=ArrowTimestampeConversion.localize_tz(a.keys),
-                items=ArrowTimestampeConversion.localize_tz(a.items),
+                offsets=arr.offsets,
+                keys=ArrowTimestampConversion.localize_tz(arr.keys),
+                items=ArrowTimestampConversion.localize_tz(arr.items),
             )
-        elif types.is_struct(a.type):
+        elif types.is_struct(pa_type):
             return pa.StructArray.from_arrays(
                 arrays=[
-                    ArrowTimestampeConversion.localize_tz(a.field(i)) for i in range(len(a.type))
+                    ArrowTimestampConversion.localize_tz(arr.field(i)) for i in range(len(arr.type))
                 ],
-                names=a.type.names,
+                names=arr.type.names,
             )
-
         else:  # pragma: no cover
-            assert False, f"Need converter for {at} but failed to find one."
+            assert False, f"Need converter for {pa_type} but failed to find one."

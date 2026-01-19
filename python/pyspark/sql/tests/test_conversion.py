@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import datetime
+import unittest
 from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowTimestampeConversion,
+    ArrowTimestampConversion,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -224,7 +224,7 @@ class ConversionTests(unittest.TestCase):
             pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["x", "y"])], names=["a", "b"]),
             pa.array([{1: None, 2: "x"}], type=pa.map_(pa.int32(), pa.string())),
         ]:
-            output = ArrowTimestampeConversion.localize_tz(arr)
+            output = ArrowTimestampConversion.localize_tz(arr)
             self.assertTrue(output is arr, f"MUST not generate a new array {output.tolist()}")
 
         # timestampe types
@@ -292,7 +292,7 @@ class ConversionTests(unittest.TestCase):
                 ),
             ),  # map<int, array<ts-ltz>>
         ]:
-            output = ArrowTimestampeConversion.localize_tz(arr)
+            output = ArrowTimestampConversion.localize_tz(arr)
             self.assertEqual(output, expected, f"{output.tolist()} != {expected.tolist()}")
 
 
