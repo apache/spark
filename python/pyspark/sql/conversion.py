@@ -862,9 +862,10 @@ class ArrowTimestampeConversion:
         ):
             return ArrowTimestampeConversion._need_localization(at.value_type)
         elif types.is_map(at):
-            return ArrowTimestampeConversion._need_localization(
-                at.key_type
-            ) or ArrowTimestampeConversion._need_localization(at.item_type)
+            return any(
+                ArrowTimestampeConversion._need_localization(dt)
+                for dt in [at.key_type, at.item_type]
+            )
         elif types.is_struct(at):
             return any(ArrowTimestampeConversion._need_localization(field.type) for field in at)
         else:
