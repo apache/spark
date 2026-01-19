@@ -1832,5 +1832,73 @@ END;""")
       Row(999)))
   }
 
+  test("Test 88: Triple nested EXIT handlers with cursors - scope resolution") {
+    // Based on "local variable - handlers - triple chained handlers" test
+    // This verifies that cursors can be resolved across multiple levels of EXIT handlers
+    val result = sql("""BEGIN
+  -- Outer script block: declare cursor cur1
+  DECLARE cur1 CURSOR FOR SELECT 1 AS val1;
+
+  l1: BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      -- Inside first handler: declare cursor cur2 and use cur1
+      DECLARE x1 INT;
+      DECLARE x2 INT;
+      DECLARE cur2 CURSOR FOR SELECT 2 AS val2;
+
+      -- Should be able to access cur1 from outer scope
+      OPEN cur1;
+      FETCH cur1 INTO x1;
+
+      -- Should be able to use cur2 declared in this scope
+      OPEN cur2;
+      FETCH cur2 INTO x2;
+      CLOSE cur2;
+      CLOSE cur1;
+
+      l2: BEGIN
+        DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        BEGIN
+          -- Inside second handler: declare cursor cur3 and use cur1, cur2
+          DECLARE y1 INT;
+          DECLARE y2 INT;
+          DECLARE y3 INT;
+          DECLARE cur3 CURSOR FOR SELECT 3 AS val3;
+
+          -- Should be able to access cur1 from outermost scope
+          OPEN cur1;
+          FETCH cur1 INTO y1;
+
+          -- Should be able to access cur2 from parent handler scope
+          OPEN cur2;
+          FETCH cur2 INTO y2;
+
+          -- Should be able to use cur3 declared in this scope
+          OPEN cur3;
+          FETCH cur3 INTO y3;
+          CLOSE cur3;
+          CLOSE cur2;
+          CLOSE cur1;
+        END;
+
+        SELECT 5;
+        SELECT 1/0; -- Trigger second handler
+        SELECT 6;
+      END;
+    END;
+
+    SELECT 7;
+    SELECT 1/0; -- Trigger first handler
+    SELECT 8;
+  END;
+
+  VALUES ('Done');
+END;""")
+    // EXIT handlers execute and exit - no intermediate results are returned
+    // The test succeeds if all cursor operations complete without errors
+    checkAnswer(result, Seq(Row("Done")))
+  }
+
 }
 // scalastyle:on line.size.limit

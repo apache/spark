@@ -58,66 +58,135 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
    * Find a cursor by its normalized name in the current scope and parent scopes.
    * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
-   * This ensures cursors declared in handlers shadow cursors with the same name in the script.
+   * Searches through all frames in reverse order (current to oldest), respecting scope
+   * visibility rules. This matches the behavior of variable resolution to ensure consistency.
+   * Cursors declared in handlers shadow cursors with the same name in outer scopes.
    */
   override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
     if (frames.isEmpty) {
-      None
-    } else {
-      // Search in current frame first (respects shadowing), then script frame (cross-frame access)
-      if (frames.size > 1) {
-        // Handler frame: search current frame first, then script frame
-        currentFrame.findCursorByName(normalizedName)
-          .orElse(frames.head.findCursorByName(normalizedName))
-      } else {
-        // Script frame only: just search in it
-        frames.head.findCursorByName(normalizedName)
+      return None
+    }
+
+    // First search for cursor in entire current frame
+    val resCurrentFrame = currentFrame.findCursorByName(normalizedName)
+    if (resCurrentFrame.isDefined) {
+      return resCurrentFrame
+    }
+
+    // When searching in previous frames, for each frame we have to check only scopes
+    // before and including the scope where the previously checked exception handler
+    // frame is defined. Exception handler frames should not have access to cursors
+    // from scopes which are nested below the scope where the handler is defined.
+    var previousFrameDefinitionLabel = currentFrame.scopeLabel
+
+    // dropRight(1) removes the current frame, which we already checked above
+    frames.dropRight(1).reverseIterator.foreach { frame =>
+      // Get scopes from this frame up to and including where the previous handler
+      // frame was defined. If it was not defined in this scope, candidateScopes
+      // will be empty.
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label))
+
+      val cursor = candidateScopes.flatMap(_.cursors.get(normalizedName)).headOption
+      if (cursor.isDefined) {
+        return cursor
+      }
+
+      // If candidateScopes is nonEmpty that means we found the previous frame
+      // definition in this frame. If we still have not found the cursor, we now
+      // have to find the definition of this new frame, so we reassign the frame
+      // definition label to search for.
+      if (candidateScopes.nonEmpty) {
+        previousFrameDefinitionLabel = frame.scopeLabel
       }
     }
+
+    None
   }
 
   /**
    * Find a cursor in a specific labeled scope.
    * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
+   * Searches through all frames in reverse order, respecting scope visibility rules.
+   * For qualified cursor references (label.cursor), this finds the cursor in the
+   * specific labeled scope across all accessible frames.
    */
   override def findCursorInScope(
       normalizedScopeLabel: String,
       normalizedName: String): Option[CursorDefinition] = {
     if (frames.isEmpty) {
-      None
-    } else {
-      // Search in current frame first (respects shadowing), then script frame
-      if (frames.size > 1) {
-        currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
-          .orElse(frames.head.findCursorInScope(normalizedScopeLabel, normalizedName))
-      } else {
-        frames.head.findCursorInScope(normalizedScopeLabel, normalizedName)
+      return None
+    }
+
+    // First search for cursor in current frame
+    val resCurrentFrame = currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+    if (resCurrentFrame.isDefined) {
+      return resCurrentFrame
+    }
+
+    // Search through previous frames respecting scope boundaries
+    var previousFrameDefinitionLabel = currentFrame.scopeLabel
+
+    frames.dropRight(1).reverseIterator.foreach { frame =>
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label))
+
+      val cursor = candidateScopes
+        .find(_.label == normalizedScopeLabel)
+        .flatMap(_.cursors.get(normalizedName))
+      if (cursor.isDefined) {
+        return cursor
+      }
+
+      if (candidateScopes.nonEmpty) {
+        previousFrameDefinitionLabel = frame.scopeLabel
       }
     }
+
+    None
   }
 
   /**
    * Get cursor state across all frames.
-   * Searches script frame first to support handlers accessing cursors from main script.
+   * Searches through all frames in reverse order, respecting scope visibility rules.
+   * This matches the cursor definition lookup behavior.
    */
   def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
     if (frames.isEmpty) {
-      None
-    } else {
-      // Try script frame first (frames.head)
-      val scriptFrameState = frames.head.getCursorState(normalizedName, scopeLabel)
-      if (scriptFrameState.isDefined) {
-        scriptFrameState
-      } else if (frames.size > 1) {
-        // Try current frame (handler frame)
-        currentFrame.getCursorState(normalizedName, scopeLabel)
-      } else {
-        None
+      return None
+    }
+
+    // First search for cursor state in current frame
+    val resCurrentFrame = currentFrame.getCursorState(normalizedName, scopeLabel)
+    if (resCurrentFrame.isDefined) {
+      return resCurrentFrame
+    }
+
+    // Search through previous frames respecting scope boundaries
+    var previousFrameDefinitionLabel = currentFrame.scopeLabel
+
+    frames.dropRight(1).reverseIterator.foreach { frame =>
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label))
+
+      val state = scopeLabel match {
+        case Some(label) =>
+          candidateScopes.find(_.label == label).flatMap(_.cursorStates.get(normalizedName))
+        case None =>
+          candidateScopes.flatMap(_.cursorStates.get(normalizedName)).headOption
+      }
+
+      if (state.isDefined) {
+        return state
+      }
+
+      if (candidateScopes.nonEmpty) {
+        previousFrameDefinitionLabel = frame.scopeLabel
       }
     }
+
+    None
   }
 
   /**
@@ -131,7 +200,8 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
 
   /**
    * Update cursor state across all frames.
-   * Updates in the frame where the cursor is actually defined.
+   * Searches through all frames to find where the cursor is defined,
+   * then updates the state in that frame. Respects scope visibility rules.
    */
   def updateCursorState(
       normalizedName: String,
@@ -141,19 +211,42 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
       throw SparkException.internalError("Cannot update cursor state: no frames.")
     }
 
-    // Try to update in script frame first
-    val scriptFrameHasCursor = frames.head.findCursorByName(normalizedName).isDefined ||
-      (scopeLabel.isDefined &&
-        frames.head.findCursorInScope(scopeLabel.get, normalizedName).isDefined)
-
-    if (scriptFrameHasCursor) {
-      frames.head.updateCursorState(normalizedName, scopeLabel, newState)
-    } else if (frames.size > 1) {
-      // Update in current frame (handler frame)
-      currentFrame.updateCursorState(normalizedName, scopeLabel, newState)
-    } else {
-      throw SparkException.internalError(s"Cursor $normalizedName not found in any frame")
+    // First try to update in current frame
+    val cursorInCurrentFrame = scopeLabel match {
+      case Some(label) => currentFrame.findCursorInScope(label, normalizedName)
+      case None => currentFrame.findCursorByName(normalizedName)
     }
+
+    if (cursorInCurrentFrame.isDefined) {
+      currentFrame.updateCursorState(normalizedName, scopeLabel, newState)
+      return
+    }
+
+    // Search through previous frames respecting scope boundaries
+    var previousFrameDefinitionLabel = currentFrame.scopeLabel
+
+    frames.dropRight(1).reverseIterator.foreach { frame =>
+      val candidateScopes = frame.scopes.reverse.dropWhile(
+        scope => !previousFrameDefinitionLabel.contains(scope.label))
+
+      val cursorInFrame = scopeLabel match {
+        case Some(label) =>
+          candidateScopes.find(_.label == label).flatMap(_.cursors.get(normalizedName))
+        case None =>
+          candidateScopes.flatMap(_.cursors.get(normalizedName)).headOption
+      }
+
+      if (cursorInFrame.isDefined) {
+        frame.updateCursorState(normalizedName, scopeLabel, newState)
+        return
+      }
+
+      if (candidateScopes.nonEmpty) {
+        previousFrameDefinitionLabel = frame.scopeLabel
+      }
+    }
+
+    throw SparkException.internalError(s"Cursor $normalizedName not found in any frame")
   }
 
   def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
