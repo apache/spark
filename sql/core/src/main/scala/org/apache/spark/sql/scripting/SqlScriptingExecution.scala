@@ -206,22 +206,9 @@ class SqlScriptingExecution(
     }
   }
 
-  /**
-   * Handles exceptions raised during script execution according to SQL Standard:
-   * - If a handler is found, execute it
-   * - If no handler is found:
-   *   - For completion conditions (SQLSTATE '02xxx'), continue execution
-   *   - For true exceptions (other SQLSTATE), propagate the exception
-   *
-   * Completion conditions (SQLSTATE class '02') represent "no data" situations
-   * (e.g., CURSOR_NO_MORE_ROWS) which are not errors - they allow script continuation.
-   *
-   * @param e The exception to handle
-   */
   private def handleException(e: SparkThrowable): Unit = {
     context.findHandler(e.getCondition, e.getSqlState) match {
       case Some(handler) =>
-        // Handler found - execute it regardless of completion condition status
         val handlerFrame = new SqlScriptingExecutionFrame(
           handler.body,
           if (handler.handlerType == ExceptionHandlerType.CONTINUE) {
@@ -236,30 +223,9 @@ class SqlScriptingExecution(
         )
         handler.reset()
         handlerFrame.executionPlan.enterScope()
-
-      case None if isCompletionCondition(e) =>
-        // No handler found, but this is a completion condition (SQLSTATE '02xxx')
-        // Per SQL Standard: completion conditions allow execution to continue
-        // without a handler (they're like warnings, not errors)
-        ()
-
       case None =>
-        // No handler found and this is a true exception - propagate it
         throw e.asInstanceOf[Throwable]
     }
-  }
-
-  /**
-   * Determines if an exception is a completion condition according to SQL Standard.
-   * Completion conditions have SQLSTATE class '02' (no data / not found).
-   * These conditions allow script execution to continue even without a handler.
-   *
-   * @param e The exception to check
-   * @return true if this is a completion condition, false otherwise
-   */
-  private def isCompletionCondition(e: SparkThrowable): Boolean = {
-    val sqlState = e.getSqlState
-    sqlState != null && sqlState.startsWith("02")
   }
 
   def withErrorHandling(f: => Unit): Unit = {
