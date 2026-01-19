@@ -71,19 +71,19 @@ if TYPE_CHECKING:
 
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
-metadataKey = b"SPARK::metadata::json"
+metadata_key = b"SPARK::metadata::json"
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
     if metadata is not None and len(metadata) > 0:
-        return {metadataKey: json.dumps(metadata).encode("utf-8")}
+        return {metadata_key: json.dumps(metadata).encode("utf-8")}
     else:
         return None
 
 
 def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict[str, Any]]:
-    if metadata is not None and metadataKey in metadata:
-        return json.loads(metadata[metadataKey].decode("utf-8"))
+    if metadata is not None and metadata_key in metadata:
+        return json.loads(metadata[metadata_key].decode("utf-8"))
     else:
         return None
 
