@@ -26,6 +26,7 @@ from pyspark.sql.datasource import (
     DataSourceStreamWriter,
     DataSourceStreamArrowWriter,
     SimpleDataSourceStreamReader,
+    SupportsTriggerAvailableNow,
     WriterCommitMessage,
 )
 from pyspark.sql.streaming import StreamingQueryException
@@ -250,6 +251,50 @@ class BasePythonStreamingDataSourceTestsMixin:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination()
+        self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+    def test_simple_stream_reader_trigger_available_now(self):
+        class SimpleStreamReader(SimpleDataSourceStreamReader, SupportsTriggerAvailableNow):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                start_idx = start["offset"]
+                end_offset = min(start_idx + 2, self.desired_end_offset["offset"])
+                it = iter([(i, ) for i in range(start_idx, end_offset)])
+                return (it, {"offset": end_offset})
+
+            def commit(self, end):
+                pass
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                start_idx = start["offset"]
+                end_idx = end["offset"]
+                return iter([(i,) for i in range(start_idx, end_idx)])
+
+            def prepareForTriggerAvailableNow(self) -> None:
+                self.desired_end_offset = {"offset": 10}
+
+        class SimpleDataSource(DataSource):
+            def schema(self):
+                return "id INT"
+
+            def simpleStreamReader(self, schema):
+                return SimpleStreamReader()
+
+        self.spark.dataSource.register(SimpleDataSource)
+        df = self.spark.readStream.format("SimpleDataSource").load()
+
+        def check_batch(df, batch_id):
+            # the last offset for the data is 9 since the desired end offset is 10
+            # the batch isn't triggered with no data, so either we have one data or two data in each batch
+            if batch_id * 2 + 1 > 9:
+                assertDataFrameEqual(df, [Row(batch_id * 2)])
+            else:
+                assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
+
+        q = df.writeStream.foreachBatch(check_batch).trigger(availableNow=True).start()
+        q.awaitTermination(timeout=30)
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
     def test_stream_writer(self):
