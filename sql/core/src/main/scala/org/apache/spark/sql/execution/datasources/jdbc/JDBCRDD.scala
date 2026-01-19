@@ -27,7 +27,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -49,12 +51,19 @@ object JDBCRDD extends Logging {
    * schema.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @param conn - JDBC connection to use for fetching the schema.
+   * @param ident - Optional table identifier used for error reporting.
+   * @param catalogName - Optional catalog name used for error reporting.
    *
    * @return A StructType giving the table's Catalyst schema.
    * @throws java.sql.SQLException if the table specification is garbage.
    * @throws java.sql.SQLException if the table contains an unsupported type.
    */
-  def resolveTable(options: JDBCOptions, conn: Connection): StructType = {
+  def resolveTable(
+      options: JDBCOptions,
+      conn: Connection,
+      ident: Option[Identifier] = None,
+      catalogName: Option[String] = None): StructType = {
     val url = options.url
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
@@ -64,6 +73,13 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
+      // distinguish between the case where the table does not exist and other SQL syntax errors.
+      // This order is important because when a table does not exist, the exception raised can
+      // also match the criteria for isSyntaxErrorBestEffort.
+      case e: SQLException if ident.isDefined &&
+        dialect.isObjectNotFoundException(e) =>
+        throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",

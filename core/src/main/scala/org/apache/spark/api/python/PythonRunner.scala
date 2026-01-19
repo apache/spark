@@ -408,17 +408,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected def writeCommand(dataOut: DataOutputStream): Unit
 
     /**
-     * Writes worker configuration to the stream connected to the Python worker.
-     */
-    protected def writeRunnerConf(dataOut: DataOutputStream): Unit = {
-      dataOut.writeInt(runnerConf.size)
-      for ((k, v) <- runnerConf) {
-        PythonWorkerUtils.writeUTF(k, dataOut)
-        PythonWorkerUtils.writeUTF(v, dataOut)
-      }
-    }
-
-    /**
      * Writes input data to the stream connected to the Python worker.
      * Returns true if any data was written to the stream, false if the input is exhausted.
      */
@@ -526,7 +515,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
-        writeRunnerConf(dataOut)
+        PythonWorkerUtils.writeConf(runnerConf, dataOut)
         writeCommand(dataOut)
 
         dataOut.flush()

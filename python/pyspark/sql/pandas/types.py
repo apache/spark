@@ -22,8 +22,9 @@ pandas instances during the type conversion.
 import datetime
 import itertools
 import functools
+import json
 from decimal import Decimal
-from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.sql.types import (
@@ -67,6 +68,24 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+
+
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
+metadata_key = b"SPARK::metadata::json"
+
+
+def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
+    if metadata is not None and len(metadata) > 0:
+        return {metadata_key: json.dumps(metadata).encode("utf-8")}
+    else:
+        return None
+
+
+def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict[str, Any]]:
+    if metadata is not None and metadata_key in metadata:
+        return json.loads(metadata[metadata_key].decode("utf-8"))
+    else:
+        return None
 
 
 def to_arrow_type(
@@ -177,6 +196,7 @@ def to_arrow_type(
                     prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
+                metadata=to_arrow_metadata(field.metadata),
             )
             for field in dt
         ]
@@ -264,6 +284,7 @@ def to_arrow_schema(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
+            metadata=to_arrow_metadata(field.metadata),
         )
         for field in schema
     ]
@@ -330,10 +351,19 @@ def from_arrow_type(
     at : :class:`pyarrow.DataType`
         pyarrow data type
     prefer_timestamp_ntz: bool, default True
-        When the input timezone is None, whether to convert it to timezone-aware TimestampType.
-        By default, the to_arrow_type convert timezone-naive TimestampNTZType to pa.timestamp
-        without timezone. So it only make sense to set it in case like creating dataframe
+        When the input timezone is None, whether to convert it to timezone-naive TimestampNTZType.
+        The to_arrow_type always convert timezone-naive TimestampNTZType to pa.timestamp
+        without timezone. The default value is True, so that
+        from_arrow_type(to_arrow_type(TimestampNTZType)) returns TimestampNTZType.
+        It only makes sense to explicitly set it in case like creating dataframe
         from arrow/pandas data according to config `spark.sql.timestampType`.
+
+    Notes
+    -----
+    Different from JVM side ArrowUtils.fromArrowType, the unit ('ns'/'us'/etc) in types
+    pa.timestamp/pa.duration/pa.time64 is ignored in this function.
+    That is because this function is also used in data type inference in creating dataframe
+    from arrow/pandas data, in which the input data may use a different unit.
     """
 
     import pyarrow.types as types
@@ -418,6 +448,7 @@ def from_arrow_type(
                     field.name,
                     from_arrow_type(field.type, prefer_timestamp_ntz),
                     nullable=field.nullable,
+                    metadata=from_arrow_metadata(field.metadata),
                 )
                 for field in at
             ]
@@ -445,6 +476,7 @@ def from_arrow_schema(
                 field.name,
                 from_arrow_type(field.type, prefer_timestamp_ntz),
                 nullable=field.nullable,
+                metadata=from_arrow_metadata(field.metadata),
             )
             for field in arrow_schema
         ]

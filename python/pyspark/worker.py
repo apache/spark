@@ -196,6 +196,10 @@ class RunnerConf:
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
+    @property
+    def profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.udf.profiler", None)
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -1330,10 +1334,7 @@ def _is_iter_based(eval_type: int) -> bool:
 
 
 def wrap_perf_profiler(f, eval_type, result_id):
-    import cProfile
-    import pstats
-
-    from pyspark.sql.profiler import ProfileResultsParam
+    from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
@@ -1343,40 +1344,26 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
         def profiling_func(*args, **kwargs):
             iterator = iter(f(*args, **kwargs))
-            pr = cProfile.Profile()
             while True:
                 try:
-                    with pr:
+                    with WorkerPerfProfiler(accumulator, result_id):
                         item = next(iterator)
                     yield item
                 except StopIteration:
                     break
 
-            st = pstats.Stats(pr)
-            st.stream = None  # make it picklable
-            st.strip_dirs()
-
-            accumulator.add({result_id: (st, None)})
-
     else:
 
         def profiling_func(*args, **kwargs):
-            with cProfile.Profile() as pr:
+            with WorkerPerfProfiler(accumulator, result_id):
                 ret = f(*args, **kwargs)
-            st = pstats.Stats(pr)
-            st.stream = None  # make it picklable
-            st.strip_dirs()
-
-            accumulator.add({result_id: (st, None)})
-
             return ret
 
     return profiling_func
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam
-    from pyspark.profiler import UDFLineProfilerV2
+    from pyspark.sql.profiler import ProfileResultsParam, WorkerMemoryProfiler
 
     if not has_memory_profiler:
         return f
@@ -1388,45 +1375,27 @@ def wrap_memory_profiler(f, eval_type, result_id):
     if _is_iter_based(eval_type):
 
         def profiling_func(*args, **kwargs):
-            profiler = UDFLineProfilerV2()
-            profiler.add_function(f)
-
             iterator = iter(f(*args, **kwargs))
 
             while True:
                 try:
-                    with profiler:
+                    with WorkerMemoryProfiler(accumulator, result_id, f):
                         item = next(iterator)
                     yield item
                 except StopIteration:
                     break
 
-            codemap_dict = {
-                filename: list(line_iterator)
-                for filename, line_iterator in profiler.code_map.items()
-            }
-            accumulator.add({result_id: (None, codemap_dict)})
-
     else:
 
         def profiling_func(*args, **kwargs):
-            profiler = UDFLineProfilerV2()
-            profiler.add_function(f)
-
-            with profiler:
+            with WorkerMemoryProfiler(accumulator, result_id, f):
                 ret = f(*args, **kwargs)
-
-            codemap_dict = {
-                filename: list(line_iterator)
-                for filename, line_iterator in profiler.code_map.items()
-            }
-            accumulator.add({result_id: (None, codemap_dict)})
             return ret
 
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
 
     args_offsets = []
@@ -1449,6 +1418,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
 
     result_id = read_long(infile)
 
+    profiler = runner_conf.profiler
     if profiler == "perf":
         profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
     elif profiler == "memory":
@@ -2904,16 +2874,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
-    is_profiling = read_bool(infile)
-    if is_profiling:
-        profiler = utf8_deserializer.loads(infile)
-    else:
-        profiler = None
-
     # Read all UDFs
     num_udfs = read_int(infile)
     udfs = [
-        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler)
+        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i)
         for i in range(num_udfs)
     ]
 
