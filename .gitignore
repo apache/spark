@@ -58,6 +58,7 @@ docs/_site/
 docs/api
 docs/.local_ruby_bundle
 sql/docs
+sql/mkdocs.yml
 sql/site
 lib_managed/
 lint-r-report.log
