@@ -2963,8 +2963,6 @@ object SQLConf {
         "checkpoint data already exists, which would cause data duplication in " +
         "exactly-once sinks like DeltaSink.")
       .version("4.2.0")
-      .owner("streaming-engine")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
