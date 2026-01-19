@@ -286,7 +286,7 @@ case class ReplaceDataExec(
     projections: ReplaceDataProjections,
     write: Write) extends V2ExistingTableWriteExec {
 
-  override val stringArgs: Iterator[Any] = Iterator(query, write)
+  override def stringArgs: Iterator[Any] = Iterator(query, write)
 
   override def writingTask: WritingSparkTask[_] = {
     projections match {
@@ -311,7 +311,7 @@ case class WriteDeltaExec(
     projections: WriteDeltaProjections,
     write: DeltaWrite) extends V2ExistingTableWriteExec {
 
-  override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
+  override def stringArgs: Iterator[Any] = Iterator(query, write)
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
