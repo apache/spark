@@ -35,6 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  * right-pad the shorter one to the longer length.
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
+  private def readSideCharPaddingAfterSubqueryAlias =
+    conf.getConf(SQLConf.READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS) =
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.charVarcharAsString) {
@@ -56,7 +58,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
         case SubqueryAlias(identifier, project: Project)
-            if conf.readSideCharPaddingAfterAlias && project.getTagValue(
+            if readSideCharPaddingAfterSubqueryAlias && project.getTagValue(
               ApplyCharTypePaddingHelper.READ_SIDE_PADDING_PROJECT_TAG).isDefined =>
           project.copy(child = SubqueryAlias(identifier, project.child)) -> Nil
       }

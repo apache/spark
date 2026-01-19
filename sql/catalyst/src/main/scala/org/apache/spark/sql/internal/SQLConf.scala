@@ -7903,9 +7903,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
-  def readSideCharPaddingAfterAlias: Boolean =
-    getConf(SQLConf.READ_SIDE_CHAR_PADDING_AFTER_SUBQUERY_ALIAS)
-
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
