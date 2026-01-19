@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.StructType
 
 
@@ -95,7 +96,8 @@ private[hive] trait HiveClient {
 
   /** Returns the specified table, or throws `NoSuchTableException`. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
-    getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
+    getTableOption(dbName, tableName).getOrElse(
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName)))
   }
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
@@ -103,8 +105,8 @@ private[hive] trait HiveClient {
 
   /** Returns the specified catalog and Hive table, or throws `NoSuchTableException`. */
   final def getRawHiveTable(dbName: String, tableName: String): RawHiveTable = {
-    getRawHiveTableOption(dbName, tableName)
-      .getOrElse(throw new NoSuchTableException(dbName, tableName))
+    getRawHiveTableOption(dbName, tableName).getOrElse(
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName)))
   }
 
   /** Returns the metadata for the specified catalog and Hive table or None if it doesn't exist. */

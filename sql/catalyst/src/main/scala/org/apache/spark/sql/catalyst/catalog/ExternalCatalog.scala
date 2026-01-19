@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -45,7 +46,7 @@ trait ExternalCatalog {
 
   protected def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
-      throw new NoSuchTableException(db = db, table = table)
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
     }
   }
 
@@ -94,6 +95,17 @@ trait ExternalCatalog {
 
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
+  /**
+   * Drop a table from the specified database.
+   *
+   * @param db database name
+   * @param table table name
+   * @param ignoreIfNotExists if true, do not throw an error if the table or database
+   *                          does not exist
+   * @param purge if true, completely remove the table data (skip trash)
+   * @throws NoSuchTableException if the table or database does not exist and
+   *                              ignoreIfNotExists is false
+   */
   def dropTable(
       db: String,
       table: String,
