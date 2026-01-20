@@ -661,47 +661,55 @@ class ExecutorSuite extends SparkFunSuite
     val conf = new SparkConf
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
-
-    // Create an invalid serialized task that will cause TaskRunner construction to fail
-    // when it tries to deserialize the task
-    val invalidSerializedTask = ByteBuffer.wrap("invalid task data".getBytes)
-
-    // Create a TaskDescription with invalid serialized task
-    val taskDescription = new TaskDescription(
-      taskId = 0,
-      attemptNumber = 0,
-      executorId = "",
-      name = "test-task",
-      index = 0,
-      partitionId = 0,
-      artifacts = JobArtifactSet.emptyJobArtifactSet,
-      properties = new Properties(),
-      cpus = 1,
-      resources = immutable.Map[String, immutable.Map[String, Long]](),
-      serializedTask = invalidSerializedTask
-    )
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
 
     val mockExecutorBackend = mock[ExecutorBackend]
     val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
 
     withExecutor("id", "localhost", env) { executor =>
-      // Launch the task - TaskRunner construction should fail when deserializing the task
-      executor.launchTask(mockExecutorBackend, taskDescription)
+      // Use reflection to make createTaskRunner throw an exception by replacing runningTasks
+      // with a mock that throws when put is called. This simulates a failure after TaskRunner
+      // construction but tests the same cleanup logic.
+      val executorClass = classOf[Executor]
+      val runningTasksField = executorClass.getDeclaredField("runningTasks")
+      runningTasksField.setAccessible(true)
+      val originalRunningTasks = runningTasksField.get(executor)
 
-      // Verify that statusUpdate was called with FAILED state
-      verify(mockExecutorBackend).statusUpdate(
-        meq(taskDescription.taskId),
-        meq(TaskState.FAILED),
-        statusCaptor.capture()
-      )
+      // Create a mock ConcurrentHashMap that throws when put is called
+      val testException = new RuntimeException("TaskRunner construction failed")
+      type TaskRunnerType = executor.TaskRunner
+      val mockRunningTasks =
+        mock[java.util.concurrent.ConcurrentHashMap[Long, TaskRunnerType]]
+      when(mockRunningTasks.put(any[Long], any[TaskRunnerType]))
+        .thenThrow(testException)
+      runningTasksField.set(executor, mockRunningTasks)
 
-      // Verify that the exception was correctly serialized
-      val failureData = statusCaptor.getValue
-      val failReason = serializer
-        .newInstance()
-        .deserialize[ExceptionFailure](failureData)
-      assert(failReason.exception.isDefined)
-      // The exception will be related to deserialization failure
+      try {
+        // Launch the task - this should catch the exception and send statusUpdate
+        executor.launchTask(mockExecutorBackend, taskDescription)
+
+        // Verify that statusUpdate was called with FAILED state
+        verify(mockExecutorBackend).statusUpdate(
+          meq(taskDescription.taskId),
+          meq(TaskState.FAILED),
+          statusCaptor.capture()
+        )
+
+        // Verify that the exception was correctly serialized
+        val failureData = statusCaptor.getValue
+        val failReason = serializer
+          .newInstance()
+          .deserialize[ExceptionFailure](failureData)
+        assert(failReason.exception.isDefined)
+        assert(failReason.exception.get.isInstanceOf[RuntimeException])
+        assert(
+          failReason.exception.get.getMessage === "TaskRunner construction failed"
+        )
+      } finally {
+        // Restore the original runningTasks
+        runningTasksField.set(executor, originalRunningTasks)
+      }
     }
   }
 
