@@ -22,11 +22,12 @@ import java.net.URI
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, FunctionRegistry, TableFunctionRegistry, TestRelations, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, FunctionRegistry, NamedStreamingRelation, TableFunctionRegistry, TestRelations, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
+import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.test.SharedSparkSession
@@ -88,10 +89,13 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
             name = "t",
             qualifier = Seq.empty
           ),
-          child = UnresolvedRelation(
-            multipartIdentifier = Seq("table1"),
-            isStreaming = true,
-            options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)
+          child = NamedStreamingRelation(
+            child = UnresolvedRelation(
+              multipartIdentifier = Seq("table1"),
+              isStreaming = true,
+              options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava)
+            ),
+            sourceIdentifyingName = Unassigned
           )
         )
       )
@@ -126,6 +130,9 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     val catalogTable = spark.sessionState.catalog.getTableMetadata(
       TableIdentifier("t")
     )
+    // During streaming resolution, the CatalogTable gets streamingSourceIdentifyingName set
+    val catalogTableWithSourceName = catalogTable.copy(
+      streamingSourceIdentifyingName = Some(Unassigned))
     val idAttr = AttributeReference(name = "id", dataType = IntegerType)()
 
     val expectedAnalyzedPlan = Project(
@@ -141,7 +148,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
               "path" -> catalogTable.location.toString
             ),
             userSpecifiedSchema = Option(catalogTable.schema),
-            catalogTable = Option(catalogTable)
+            catalogTable = Option(catalogTableWithSourceName)
           ),
           sourceName = s"FileSource[${catalogTable.location.toString}]",
           output = Seq(idAttr)

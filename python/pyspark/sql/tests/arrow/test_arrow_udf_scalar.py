@@ -379,10 +379,10 @@ class ScalarArrowUDFTestsMixin:
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
                     tzinfo=ZoneInfo(tz),
-                ).astimezone(datetime.timezone.utc)
+                )
                 for i in range(len(y))
             ]
-            return pa.array(dates, pa.timestamp("us", "UTC"))
+            return pa.array(dates)
 
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(

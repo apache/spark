@@ -254,7 +254,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -314,6 +314,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           msg = s"Hint not found: ${toSQLId(u.name)}",
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
+
+      case r: V2TableReference =>
+        throw SparkException.internalError(
+          s"V2TableReference should be resolved during analysis: ${r.name}")
 
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)

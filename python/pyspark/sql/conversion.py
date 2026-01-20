@@ -845,3 +845,112 @@ class ArrowTableToRowsConversion:
                 return [tuple()] * table.num_rows
             else:
                 return [_create_row(fields, tuple())] * table.num_rows
+
+
+class ArrowTimestampConversion:
+    @classmethod
+    def _need_localization(cls, at: "pa.DataType") -> bool:
+        import pyarrow.types as types
+
+        if types.is_timestamp(at) and at.tz is not None:
+            return True
+        elif (
+            types.is_list(at)
+            or types.is_large_list(at)
+            or types.is_fixed_size_list(at)
+            or types.is_dictionary(at)
+        ):
+            return cls._need_localization(at.value_type)
+        elif types.is_map(at):
+            return any(cls._need_localization(dt) for dt in [at.key_type, at.item_type])
+        elif types.is_struct(at):
+            return any(cls._need_localization(field.type) for field in at)
+        else:
+            return False
+
+    @staticmethod
+    def localize_tz(arr: "pa.Array") -> "pa.Array":
+        """
+        Convert Arrow timezone-aware timestamps to timezone-naive in the specified timezone.
+        This function works on Arrow Arrays, and it recurses to convert nested types.
+        This function is dedicated for Pandas UDF execution.
+
+        Differences from _create_converter_to_pandas + _check_series_convert_timestamps_local_tz:
+        1, respect the timezone field in pyarrow timestamp type;
+        2, do not use local time at any time;
+        3, handle nested types in a consistent way. (_create_converter_to_pandas handles
+        simple timestamp series with session timezone, but handles nested series with
+        datetime.timezone.utc)
+
+        Differences from _check_arrow_array_timestamps_localize:
+        1, respect the timezone field in pyarrow timestamp type;
+        2, do not handle timezone-naive timestamp;
+        3, do not support unit coercion which won't happen in UDF execution.
+
+        Parameters
+        ----------
+        arr : :class:`pyarrow.Array`
+
+        Returns
+        -------
+        :class:`pyarrow.Array`
+
+        Notes
+        -----
+        Arrow UDF (@arrow_udf/mapInArrow/etc) always preserve the original timezone, and thus
+        doesn't need this conversion.
+        """
+        import pyarrow as pa
+        import pyarrow.types as types
+        import pyarrow.compute as pc
+
+        pa_type = arr.type
+        if not ArrowTimestampConversion._need_localization(pa_type):
+            return arr
+
+        if types.is_timestamp(pa_type) and pa_type.tz is not None:
+            # import datetime
+            # from zoneinfo import ZoneInfo
+            # ts = datetime.datetime(2022, 1, 5, 15, 0, 1, tzinfo=ZoneInfo('Asia/Singapore'))
+            # arr = pa.array([ts])
+            # arr[0]
+            # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000+0800'>
+            # arr = pc.local_timestamp(arr)
+            # arr[0]
+            # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000'>
+
+            return pc.local_timestamp(arr)
+        elif types.is_list(pa_type):
+            return pa.ListArray.from_arrays(
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_large_list(pa_type):
+            return pa.LargeListType.from_arrays(
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_fixed_size_list(pa_type):
+            return pa.FixedSizeListArray.from_arrays(
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_dictionary(pa_type):
+            return pa.DictionaryArray.from_arrays(
+                indices=arr.indices,
+                dictionary=ArrowTimestampConversion.localize_tz(arr.dictionary),
+            )
+        elif types.is_map(pa_type):
+            return pa.MapArray.from_arrays(
+                offsets=arr.offsets,
+                keys=ArrowTimestampConversion.localize_tz(arr.keys),
+                items=ArrowTimestampConversion.localize_tz(arr.items),
+            )
+        elif types.is_struct(pa_type):
+            return pa.StructArray.from_arrays(
+                arrays=[
+                    ArrowTimestampConversion.localize_tz(arr.field(i)) for i in range(len(arr.type))
+                ],
+                names=arr.type.names,
+            )
+        else:  # pragma: no cover
+            assert False, f"Need converter for {pa_type} but failed to find one."
