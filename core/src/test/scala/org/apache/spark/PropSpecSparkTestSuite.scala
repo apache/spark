@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.propspec.AnyPropSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class PropSpecSparkTestSuite
   extends AnyPropSpec
     with SparkTestSuite

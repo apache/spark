@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.wordspec.AnyWordSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class WordSpecSparkTestSuite
   extends AnyWordSpec
     with SparkTestSuite

@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.flatspec.AnyFlatSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class FlatSpecSparkTestSuite
   extends AnyFlatSpec
     with SparkTestSuite

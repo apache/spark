@@ -49,7 +49,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
  * to false and manually calling the audit methods, if desired. For example:
  *
- * class MyTestSuite extends SparkTestSuite {
+ * class MyTestSuite extends AnyFunSuite with SparkTestSuite {
  *
  *   override val enableAutoThreadAudit = false
  *

@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.freespec.AnyFreeSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class FreeSpecSparkTestSuite
   extends AnyFreeSpec
     with SparkTestSuite

@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.refspec.RefSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class RefSpecSparkTestSuite
   extends RefSpec
     with SparkTestSuite

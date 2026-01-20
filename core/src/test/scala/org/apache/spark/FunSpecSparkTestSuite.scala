@@ -19,6 +19,10 @@ package org.apache.spark
 
 import org.scalatest.funspec.AnyFunSpec
 
+/**
+ * This test is just for demonstration purpose.
+ * Real test suites in Spark codebase should use SparkFunSuite.
+ */
 class FunSpecSparkTestSuite
   extends AnyFunSpec
     with SparkTestSuite
