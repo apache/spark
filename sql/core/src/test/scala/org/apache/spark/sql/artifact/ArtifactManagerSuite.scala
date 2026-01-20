@@ -51,17 +51,17 @@ class ArtifactManagerSuite extends SharedSparkSession {
     super.afterEach()
   }
 
-  def isBlockRegistered(id: CacheId): Boolean = {
-      sparkContext.env.blockManager.getStatus(id).isDefined
-    }
+  private def isBlockRegistered(id: CacheId): Boolean = {
+    sparkContext.env.blockManager.getStatus(id).isDefined
+  }
 
-    def addCachedArtifact(session: SparkSession, name: String, data: String): CacheId = {
-      val bytes = new Artifact.InMemory(data.getBytes(StandardCharsets.UTF_8))
-      session.artifactManager.addLocalArtifacts(Artifact.newCacheArtifact(name, bytes) :: Nil)
-      val id = CacheId(session.sessionUUID, name)
-      assert(isBlockRegistered(id))
-      id
-    }
+  private def addCachedArtifact(session: SparkSession, name: String, data: String): CacheId = {
+    val bytes = new Artifact.InMemory(data.getBytes(StandardCharsets.UTF_8))
+    session.artifactManager.addLocalArtifacts(Artifact.newCacheArtifact(name, bytes) :: Nil)
+    val id = CacheId(session.sessionUUID, name)
+    assert(isBlockRegistered(id))
+    id
+  }
 
   test("Class artifacts are added to the correct directory.") {
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)

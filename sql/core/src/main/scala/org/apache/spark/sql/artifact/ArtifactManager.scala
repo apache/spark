@@ -202,15 +202,15 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
             blockSize = tmpFile.length(),
             tellMaster = false)
           updater.save()
-          val oldBlock = hashToCachedIdMap.put(blockId.hash, new RefCountedCacheId(blockId))
-          if (oldBlock != null) {
+          hashToCachedIdMap.put(blockId.hash, new RefCountedCacheId(blockId))
+          if (existingBlock != null) {
             // Release the old block - this is a legitimate replacement (different CacheId,
             // e.g., after session clone). The old block will be removed when its ref count
             // reaches zero.
-            oldBlock.release(blockManager)
+            existingBlock.release(blockManager)
           }
         } else {
-          logDebug(s"Cache artifact with hash $hash already exists in this session, skipping.")
+          logWarning(s"Cache artifact with hash $hash already exists in this session, skipping.")
         }
       }(finallyBlock = { tmpFile.delete() })
     } else if (normalizedRemoteRelativePath.startsWith(s"classes${File.separator}")) {
