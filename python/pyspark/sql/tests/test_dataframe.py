@@ -159,6 +159,13 @@ class DataFrameTestsMixin:
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
         self.assertTrue(df3.count() == 20)
 
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", lit(1))
+        df2 = self.spark.range(10).withColumn("v2", lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
+
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
             (col("id") + lit(1)).alias("x"), (col("x") + lit(1)).alias("y")

@@ -315,6 +315,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
+      case r: V2TableReference =>
+        throw SparkException.internalError(
+          s"V2TableReference should be resolved during analysis: ${r.name}")
+
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 

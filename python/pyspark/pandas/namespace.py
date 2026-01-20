@@ -3886,7 +3886,7 @@ def _test() -> None:
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
         # `legacy="1.25"` only available in `nump>=2`
-        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
