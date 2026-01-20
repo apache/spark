@@ -26,7 +26,7 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
+import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH, TASK_ID}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -234,7 +234,8 @@ class FileScanRDD(
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()
-          logInfo(log"Reading File ${MDC(CURRENT_FILE, currentFile)}")
+          logInfo(log"Task (TID ${MDC(TASK_ID, context.taskAttemptId())}) reading File " +
+            log"${MDC(CURRENT_FILE, currentFile)}")
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder
             .set(currentFile.urlEncodedPath, currentFile.start, currentFile.length)
