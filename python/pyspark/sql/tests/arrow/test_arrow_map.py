@@ -55,6 +55,16 @@ class MapInArrowTestsMixin(object):
         expected = df.collect()
         self.assertEqual(actual, expected)
 
+    def test_map_in_arrow_with_limit(self):
+        def get_size(iterator):
+            for batch in iterator:
+                assert isinstance(batch, pa.RecordBatch)
+                if batch.num_rows > 0:
+                    yield pa.RecordBatch.from_arrays([pa.array([batch.num_rows])], names=["size"])
+
+        df = self.spark.range(100)
+        df.mapInArrow(get_size, "size long").limit(1).collect()
+
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
