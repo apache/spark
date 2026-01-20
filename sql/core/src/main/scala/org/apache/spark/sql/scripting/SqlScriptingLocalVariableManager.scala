@@ -76,39 +76,13 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
         throw SparkException.internalError("ScriptingVariableManager expects 1 or 2 nameParts.")
     }
 
-    // First search for variable in entire current frame.
-    val resCurrentFrame = context.currentFrame.scopes
-      .findLast(scope => isScopeOfVar(nameParts, scope))
-    if (resCurrentFrame.isDefined) {
-      return resCurrentFrame
-    }
-
-    // When searching in previous frames, for each frame we have to check only scopes before and
-    // including the scope where the previously checked exception handler frame is defined.
-    // Exception handler frames should not have access to variables from scopes
-    // which are nested below the scope where the handler is defined.
-    var previousFrameDefinitionLabel = context.currentFrame.scopeLabel
-
-    // dropRight(1) removes the current frame, which we already checked above.
-    context.frames.dropRight(1).reverseIterator.foreach(frame => {
-      // Drop scopes until we encounter the scope in which the previously checked
-      // frame was defined. If it was not defined in this scope candidateScopes will be
-      // empty.
-      val candidateScopes = frame.scopes.reverse.dropWhile(
-        scope => !previousFrameDefinitionLabel.contains(scope.label))
-
-      val scope = candidateScopes.findLast(scope => isScopeOfVar(nameParts, scope))
-      if (scope.isDefined) {
-        return scope
-      }
-      // If candidateScopes is nonEmpty that means that we found the previous frame definition
-      // in this frame. If we still have not found the variable, we now have to find the definition
-      // of this new frame, so we reassign the frame definition label to search for.
-      if (candidateScopes.nonEmpty) {
-        previousFrameDefinitionLabel = frame.scopeLabel
-      }
-    })
-    None
+    // Use the shared searchAcrossFrames helper to maintain consistent logic with cursors
+    context.searchAcrossFrames(
+      searchInCurrentFrame = frame =>
+        frame.scopes.findLast(scope => isScopeOfVar(nameParts, scope)),
+      searchInScopes = scopes =>
+        scopes.findLast(scope => isScopeOfVar(nameParts, scope))
+    )
   }
 
   override def qualify(name: String): ResolvedIdentifier =
