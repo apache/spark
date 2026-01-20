@@ -32,6 +32,7 @@ from typing import (
     IO,
     Iterable,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -46,14 +47,14 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pandas.core.accessor import CachedAccessor
-from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.api.types import (
     is_list_like,
     is_hashable,
     CategoricalDtype,
 )
-from pandas.tseries.frequencies import DateOffset
+from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
 from pyspark.sql import (
     functions as F,
@@ -513,9 +514,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
-        "spark", SparkSeriesMethods
-    )
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)
 
     @property
     def dtypes(self) -> Dtype:
@@ -7160,8 +7159,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def resample(
         self,
         rule: str_type,
-        closed: Optional[str_type] = None,
-        label: Optional[str_type] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         on: Optional["Series"] = None,
     ) -> "SeriesResampler":
         """
@@ -7363,7 +7362,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         )
                     )
                 return rest + footer
-        return pser.to_string(name=self.name, dtype=self.dtype)
+        return pser.to_string(name=self.name, dtype=self.dtype)  # type: ignore[call-overload]
 
     def __dir__(self) -> Iterable[str_type]:
         if not isinstance(self.spark.data_type, StructType):

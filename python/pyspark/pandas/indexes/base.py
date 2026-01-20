@@ -32,7 +32,7 @@ import warnings
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     is_list_like,
     is_bool_dtype,
     is_integer_dtype,
@@ -40,9 +40,9 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_numeric_dtype,
     is_object_dtype,
 )
-from pandas.core.accessor import CachedAccessor
-from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
 from pyspark.sql.column import Column
@@ -255,9 +255,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
-        "spark", SparkIndexMethods
-    )
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkIndexMethods)
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
@@ -2241,7 +2239,7 @@ class Index(IndexOpsMixin):
             raise ValueError("index must be monotonic increasing or decreasing")
 
         result = sdf.toPandas().iloc[0, 0]
-        return result if result is not None else np.nan
+        return result if result is not None else np.nan  # type: ignore[return-value]
 
     def _index_fields_for_union_like(
         self: "Index", other: "Index", func_name: str

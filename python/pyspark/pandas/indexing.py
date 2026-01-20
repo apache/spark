@@ -24,7 +24,7 @@ from functools import reduce
 from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 import numpy as np
 
 from pyspark.sql import functions as F, Column as PySparkColumn
@@ -174,7 +174,7 @@ class AtIndexer(IndexerLike):
 
         values = pdf.iloc[:, 0].values
         return (
-            values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]
+            values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]  # type: ignore[return-value]
         )
 
 
@@ -575,7 +575,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if length == 0:
                 raise KeyError(name_like_string(key))
             elif length == 1:
-                return pdf_or_pser.iloc[0]
+                return pdf_or_pser.iloc[0]  # type: ignore[return-value]
             else:
                 return psdf_or_psser
         else:
