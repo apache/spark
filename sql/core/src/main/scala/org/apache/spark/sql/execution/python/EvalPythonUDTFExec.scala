@@ -56,7 +56,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
     // flatten all the arguments
     // Do this outside `mapPartitions()` so we don't serialize and send all of
-    // `this` to the executor. 
+    // `this` to the executor.
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
     val argMetas = udtf.children.zip(
