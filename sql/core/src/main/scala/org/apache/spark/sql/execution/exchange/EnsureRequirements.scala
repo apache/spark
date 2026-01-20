@@ -861,9 +861,14 @@ case class EnsureRequirements(
       } else {
         REPARTITION_BY_COL
       }
+      val groupingDisabledPlan = if (requiredDistribution.get == UnspecifiedDistribution) {
+        disableKeyGroupingIfNotNeeded(newPlan)
+      } else {
+        newPlan
+      }
       val finalPlan = ensureDistributionAndOrdering(
         None,
-        newPlan :: Nil,
+        groupingDisabledPlan :: Nil,
         requiredDistribution.get :: Nil,
         Seq(Nil),
         shuffleOrigin)
