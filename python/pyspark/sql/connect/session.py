@@ -98,6 +98,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
+    AnalysisException,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -536,6 +537,7 @@ class SparkSession:
             "spark.sql.timestampType",
             "spark.sql.session.timeZone",
             "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationSizeLimit",
             "spark.sql.session.localRelationChunkSizeRows",
             "spark.sql.session.localRelationChunkSizeBytes",
             "spark.sql.session.localRelationBatchOfChunksSizeBytes",
@@ -770,6 +772,9 @@ class SparkSession:
         cache_threshold = int(
             configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
         )
+        local_relation_size_limit = int(
+            configs["spark.sql.session.localRelationSizeLimit"]  # type: ignore[arg-type]
+        )
         max_chunk_size_rows = int(
             configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
         )
@@ -783,6 +788,7 @@ class SparkSession:
         if cache_threshold <= _table.nbytes:
             plan = self._cache_local_relation(
                 local_relation,
+                local_relation_size_limit,
                 max_chunk_size_rows,
                 max_chunk_size_bytes,
                 max_batch_of_chunks_size_bytes,
@@ -1062,6 +1068,7 @@ class SparkSession:
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,
+        local_relation_size_limit: int,
         max_chunk_size_rows: int,
         max_chunk_size_bytes: int,
         max_batch_of_chunks_size_bytes: int,
@@ -1088,10 +1095,12 @@ class SparkSession:
         hashes = []
         current_batch = []
         current_batch_size = 0
+        total_size = 0
         if has_schema:
             schema_chunk = local_relation._serialize_schema()
             current_batch.append(schema_chunk)
             current_batch_size += len(schema_chunk)
+            total_size += len(schema_chunk)
 
         data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
             max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
@@ -1099,6 +1108,17 @@ class SparkSession:
 
         for chunk in data_chunks:
             chunk_size = len(chunk)
+            total_size += chunk_size
+
+            # Check if total size exceeds the limit
+            if total_size > local_relation_size_limit:
+                raise AnalysisException(
+                    errorClass="LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+                    messageParameters={
+                        "actualSize": str(total_size),
+                        "sizeLimit": str(local_relation_size_limit),
+                    },
+                )
 
             # Check if adding this chunk would exceed batch size
             if (

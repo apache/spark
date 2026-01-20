@@ -274,8 +274,7 @@ class RelationResolution(
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
     val table = ref.catalog.loadTable(ref.identifier)
     V2TableReferenceUtils.validateLoadedTable(table, ref)
-    val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
-    SubqueryAlias(tableName, ref.toRelation(table))
+    ref.toRelation(table)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {

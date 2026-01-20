@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.test
 
 import java.nio.file.Path
 
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
@@ -27,7 +28,10 @@ import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 /**
  * The basic testsuite the client tests should extend from.
  */
-trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+trait ConnectFunSuite
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 
   // Borrowed from SparkFunSuite
   protected def getWorkspaceFilePath(first: String, more: String*): Path = {

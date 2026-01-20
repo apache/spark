@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -37,7 +36,7 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class SparkConnectClientSuite extends ConnectFunSuite {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _

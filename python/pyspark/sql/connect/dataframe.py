@@ -1731,7 +1731,7 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -2262,13 +2262,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":

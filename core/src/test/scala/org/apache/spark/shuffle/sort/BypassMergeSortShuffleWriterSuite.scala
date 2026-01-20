@@ -28,7 +28,6 @@ import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
@@ -44,7 +43,6 @@ import org.apache.spark.util.Utils
 
 class BypassMergeSortShuffleWriterSuite
   extends SparkFunSuite
-    with BeforeAndAfterEach
     with ShuffleChecksumTestHelper {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _

@@ -95,12 +95,12 @@ class OfflineStateRepartitionRunner(
           transformFunc = Some(stateRepartitionFunc),
           writeCheckpointMetadata = Some(checkpointMetadata)
         )
-        rewriter.run()
+        val operatorToCkptIds = rewriter.run()
 
         updateNumPartitionsInOperatorMetadata(newBatchId, readBatchId = lastCommittedBatchId)
 
         // Commit the repartition batch
-        commitBatch(newBatchId, lastCommittedBatchId)
+        commitBatch(newBatchId, lastCommittedBatchId, operatorToCkptIds)
         newBatchId
       }
 
@@ -289,12 +289,14 @@ class OfflineStateRepartitionRunner(
     }
   }
 
-  private def commitBatch(newBatchId: Long, lastCommittedBatchId: Long): Unit = {
+  private def commitBatch(
+      newBatchId: Long,
+      lastCommittedBatchId: Long,
+      opIdToStateStoreCkptInfo: Option[Map[Long, Array[Array[String]]]]): Unit = {
     val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
+    val commitMetadata = latestCommit.copy(stateUniqueIds = opIdToStateStoreCkptInfo)
 
-    // todo: For checkpoint v2, we need to update the stateUniqueIds based on the
-    //  newly created state commit. Will be done in subsequent PR.
-    if (!checkpointMetadata.commitLog.add(newBatchId, latestCommit)) {
+    if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
     }
   }
