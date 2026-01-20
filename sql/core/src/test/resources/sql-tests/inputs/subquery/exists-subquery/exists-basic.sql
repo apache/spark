@@ -1,4 +1,4 @@
--- Tests EXISTS subquery support. Tests basic form 
+-- Tests EXISTS subquery support. Tests basic form
 -- of EXISTS subquery (both EXISTS and NOT EXISTS)
 --ONLY_IF spark
 
@@ -34,75 +34,75 @@ CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
   ("emp 6 - no dept", 500.00D)
 AS BONUS(emp_name, bonus_amt);
 
--- uncorrelated exist query 
+-- uncorrelated exist query
 -- TC.01.01
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT 1 
-               FROM   dept 
-               WHERE  dept.dept_id > 10 
-                      AND dept.dept_id < 30); 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT 1
+               FROM   dept
+               WHERE  dept.dept_id > 10
+                      AND dept.dept_id < 30);
 
 -- simple correlated predicate in exist subquery
 -- TC.01.02
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id); 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id);
 
 -- correlated outer isnull predicate
 -- TC.01.03
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id
                        OR emp.dept_id IS NULL);
 
 -- Simple correlation with a local predicate in outer query
 -- TC.01.04
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
-       AND emp.id > 200; 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
+       AND emp.id > 200;
 
 -- Outer references (emp.id) should not be pruned from outer plan
 -- TC.01.05
-SELECT emp.emp_name 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.state 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
+SELECT emp.emp_name
+FROM   emp
+WHERE  EXISTS (SELECT dept.state
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
        AND emp.id > 200;
 
 -- not exists with correlated predicate
 -- TC.01.06
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
                    WHERE  emp.dept_id = dept.dept_id);
 
 -- not exists with correlated predicate + local predicate
 -- TC.01.07
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
-                   WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
+                   WHERE  emp.dept_id = dept.dept_id
                            OR state = 'NJ');
 
 -- not exist both equal and greaterthan predicate
 -- TC.01.08
-SELECT * 
-FROM   bonus 
-WHERE  NOT EXISTS (SELECT * 
-                   FROM   emp 
-                   WHERE  emp.emp_name = emp_name 
-                          AND bonus_amt > emp.salary); 
+SELECT *
+FROM   bonus
+WHERE  NOT EXISTS (SELECT *
+                   FROM   emp
+                   WHERE  emp.emp_name = emp_name
+                          AND bonus_amt > emp.salary);
 
 -- select employees who have not received any bonus
 -- TC 01.09
@@ -114,13 +114,13 @@ WHERE  NOT EXISTS (SELECT NULL
 
 -- Nested exists
 -- TC.01.10
-SELECT * 
-FROM   bonus 
-WHERE  EXISTS (SELECT emp_name 
-               FROM   emp 
-               WHERE  bonus.emp_name = emp.emp_name 
-                      AND EXISTS (SELECT state 
-                                  FROM   dept 
+SELECT *
+FROM   bonus
+WHERE  EXISTS (SELECT emp_name
+               FROM   emp
+               WHERE  bonus.emp_name = emp.emp_name
+                      AND EXISTS (SELECT state
+                                  FROM   dept
                                   WHERE  dept.dept_id = emp.dept_id));
 
 -- Correlated VALUES in EXISTS subquery
