@@ -296,20 +296,13 @@ FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2172",
   "messageParameters" : {
-    "expr" : "`t`.`id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 38,
-    "fragment" : "VALUES(id)"
-  } ]
+    "batchName" : "Pullup Correlated Expressions",
+    "plan" : "!Project [scalar-subquery#x [] AS scalarsubquery()#x AS scalarsubquery(id)#x]   Project [id#x AS foo#x AS scalarsubquery()#x AS scalarsubquery(id)#x]\n!:  +- Project [foo#x]                                                              +- Project [cast(id#x as int) AS id#x]\n!:     +- Project [col1#x AS foo#x]                                                  +- LocalRelation [id#x]\n!:        +- Project [outer(id#x) AS col1#x]                                      \n!:           +- OneRowRelation                                                        \n!+- Project [cast(id#x as int) AS id#x]                                           \n!   +- LocalRelation [id#x]                                                         "
+  }
 }
 
 

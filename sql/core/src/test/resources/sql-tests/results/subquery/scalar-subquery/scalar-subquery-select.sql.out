@@ -607,3 +607,49 @@ struct<c1:int,c2:int,scalarsubquery(c1):bigint>
 -- !query output
 0	1	NULL
 1	2	NULL
+
+
+-- !query
+SELECT id, (SELECT * FROM VALUES(t.id)) AS scalar
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id
+-- !query schema
+struct<id:int,scalar:int>
+-- !query output
+1	1
+2	2
+3	3
+
+
+-- !query
+SELECT id, (SELECT * FROM VALUES(t.id * 2)) AS doubled
+FROM (VALUES (1), (2), (3)) AS t(id)
+ORDER BY id
+-- !query schema
+struct<id:int,doubled:int>
+-- !query output
+1	2
+2	4
+3	6
+
+
+-- !query
+SELECT a, b, (SELECT col1 FROM VALUES(t.a + t.b) AS v(col1)) AS sum_val
+FROM (VALUES (1, 2), (3, 4)) AS t(a, b)
+ORDER BY a
+-- !query schema
+struct<a:int,b:int,sum_val:int>
+-- !query output
+1	2	3
+3	4	7
+
+
+-- !query
+SELECT id, (SELECT count(*) FROM VALUES(t.id, rand())) AS cnt
+FROM (VALUES (1), (2)) AS t(id)
+ORDER BY id
+-- !query schema
+struct<id:int,cnt:bigint>
+-- !query output
+1	1
+2	1

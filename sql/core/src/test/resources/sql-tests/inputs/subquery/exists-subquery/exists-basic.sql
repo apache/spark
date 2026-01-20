@@ -121,4 +121,22 @@ WHERE  EXISTS (SELECT emp_name
                WHERE  bonus.emp_name = emp.emp_name 
                       AND EXISTS (SELECT state 
                                   FROM   dept 
-                                  WHERE  dept.dept_id = emp.dept_id)); 
+                                  WHERE  dept.dept_id = emp.dept_id));
+
+-- Correlated VALUES in EXISTS subquery
+SELECT *
+FROM emp
+WHERE EXISTS (SELECT * FROM VALUES(emp.dept_id))
+ORDER BY id;
+
+-- Correlated VALUES in NOT EXISTS subquery
+SELECT *
+FROM emp
+WHERE NOT EXISTS (SELECT * FROM VALUES(emp.dept_id) WHERE col1 > 50)
+ORDER BY id;
+
+-- Correlated VALUES in EXISTS with expression
+SELECT *
+FROM emp
+WHERE EXISTS (SELECT * FROM VALUES(emp.dept_id * 2) AS v(doubled) WHERE doubled > 20)
+ORDER BY id;

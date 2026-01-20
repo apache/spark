@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, OuterReference, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubExprUtils}
 import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -120,28 +120,12 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
-        if (e.containsPattern(CURRENT_LIKE)) {
-          // CURRENT_LIKE expressions are always allowed
-        } else if (!e.resolved) {
+        // Only reject truly unresolved expressions that are NOT unresolved attributes
+        // (unresolved attributes might resolve to OuterReference in correlated contexts)
+        if (!e.resolved && !e.isInstanceOf[UnresolvedAttribute]) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))
-        } else if (conf.legacyValuesOnlyFoldableExpressions &&
-                   !trimAliases(prepareForEval(e)).foldable) {
-          // Legacy mode: only foldable (constant) expressions allowed
-          // For OuterReference, show the column name instead of outer(...)
-          val errorExpr = e match {
-            case OuterReference(ref) =>
-              if (ref.qualifier.nonEmpty) {
-                toSQLId(ref.qualifier :+ ref.name)
-              } else {
-                toSQLId(ref.name)
-              }
-            case _ => toSQLExpr(e)
-          }
-          e.failAnalysis(
-            errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-            messageParameters = Map("expr" -> errorExpr))
         }
       }
     }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.ResolvedInlineTable
-import org.apache.spark.sql.catalyst.expressions.{Alias, LateralSubquery, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -31,6 +31,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *
  * The transformation converts each row into a [[Project]] over [[OneRowRelation]], then unions
  * them together. This structure allows [[PullupCorrelatedPredicates]] to handle the correlation.
+ *
+ * This rule applies to all correlated subquery contexts: scalar subqueries, EXISTS, IN, and
+ * LATERAL subqueries.
  *
  * Example:
  * {{{
@@ -52,7 +55,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object RewriteCorrelatedInlineTable extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    // Transform both plan nodes and expressions containing plans (e.g., LateralSubquery)
+    // Transform both plan nodes and expressions containing plans (e.g., SubqueryExpression)
     plan.transformUpWithPruning(
       _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL)) {
       case table: ResolvedInlineTable
@@ -60,13 +63,13 @@ object RewriteCorrelatedInlineTable extends Rule[LogicalPlan] {
         rewriteTable(table)
     }.transformAllExpressionsWithPruning(
       _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL)) {
-      case ls: LateralSubquery =>
-        val newPlan = ls.plan.transformUp {
+      case subquery: SubqueryExpression =>
+        val newPlan = subquery.plan.transformUp {
           case table: ResolvedInlineTable
               if table.rows.flatten.exists(SubExprUtils.containsOuter) =>
             rewriteTable(table)
         }
-        ls.withNewPlan(newPlan)
+        subquery.withNewPlan(newPlan)
     }
   }
 

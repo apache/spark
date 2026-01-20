@@ -397,21 +397,23 @@ SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 38,
-    "fragment" : "VALUES(id)"
-  } ]
-}
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [col1#x AS foo#x]
+:     :        +- ResolvedInlineTable [[outer(id#x)]], [col1#x]
+:     +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:        :  +- Project [foo#x]
+:        :     +- SubqueryAlias cte
+:        :        +- CTERelationRef xxxx, true, [foo#x], false, false
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- View (`t`, [id#x])
+      +- Project [cast(id#x as int) AS id#x]
+         +- Project [id#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x]
 
 
 -- !query

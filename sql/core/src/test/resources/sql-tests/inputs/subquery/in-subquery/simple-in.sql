@@ -138,3 +138,21 @@ WHERE  a1 NOT IN (SELECT b.b1
                   WHERE  a.a2 = b.b2
                   AND    b.b3 > 1)
 ;
+
+-- Correlated VALUES in IN subquery
+SELECT *
+FROM a
+WHERE a1 IN (SELECT * FROM VALUES(a.a1))
+ORDER BY a1;
+
+-- Correlated VALUES in NOT IN subquery
+SELECT *
+FROM a
+WHERE a1 NOT IN (SELECT * FROM VALUES(a.a1 + 100))
+ORDER BY a1;
+
+-- Correlated VALUES in IN with expression
+SELECT *
+FROM a
+WHERE a2 IN (SELECT * FROM VALUES(a.a1 * 2) AS v(doubled))
+ORDER BY a1;
