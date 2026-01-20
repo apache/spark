@@ -159,10 +159,7 @@ class RemoteModelRef:
             self._ref_count -= 1
             if self._ref_count == 0:
                 # Delete the model if possible
-                # SPARK-55020:
-                # We can't send gRPC command in __del__ or we'll deadlock
-                # del_remote_cache(self.ref_id)
-                pass
+                del_remote_cache(self.ref_id)
 
     def __str__(self) -> str:
         return self.ref_id

@@ -19,6 +19,7 @@
 import copy
 import functools
 import faulthandler
+import gc
 import itertools
 import os
 import platform
@@ -31,7 +32,7 @@ import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, TypeVar, Union, cast
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
@@ -95,6 +96,8 @@ JVM_INT_MIN: int = -(1 << 31)
 JVM_INT_MAX: int = (1 << 31) - 1
 JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def print_exec(stream: TextIO) -> None:
@@ -855,6 +858,23 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
             errorClass="UNEXPECTED_RESPONSE_FROM_SERVER",
             messageParameters={},
         )
+
+
+def disable_gc(f: FuncT) -> FuncT:
+    """Mark the function that should disable gc during execution"""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        gc_enabled_originally = gc.isenabled()
+        if gc_enabled_originally:
+            gc.disable()
+        try:
+            return f(*args, **kwargs)
+        finally:
+            if gc_enabled_originally:
+                gc.enable()
+
+    return cast(FuncT, wrapped)
 
 
 _is_remote_only = None
