@@ -238,7 +238,18 @@ object SQLExecution extends Logging {
               event.duration = endTime - startTime
               event.qe = queryExecution
               event.executionFailure = ex
+              if (Utils.isTesting) {
+                event.jobIds = sc.dagScheduler
+                  .activeQueryToJobs
+                  .get(executionId)
+                  .getOrElse(Set.empty)
+                  .map(_.jobId)
+                  .toSet
+              }
               sc.listenerBus.post(event)
+
+              // Clean up jobs tracked by DAGScheduler for this query execution.
+              sc.dagScheduler.cleanupQueryJobs(executionId)
             }
           }
         }
