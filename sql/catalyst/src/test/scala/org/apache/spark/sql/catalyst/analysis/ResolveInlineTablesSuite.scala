@@ -245,7 +245,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
       checkError(
         exception = exception,
         condition = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-        parameters = Map("expr" -> "`c1`")  // Shows column name, not outer(c1)
+        parameters = Map("expr" -> "\"outer(c1)\"")  // Shows OuterReference representation
       )
     }
   }

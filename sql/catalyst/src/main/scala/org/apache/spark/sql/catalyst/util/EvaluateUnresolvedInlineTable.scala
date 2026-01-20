@@ -126,6 +126,14 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))
+        } else if (conf.legacyValuesOnlyFoldableExpressions &&
+                   e.resolved &&
+                   !trimAliases(prepareForEval(e)).foldable) {
+          // In legacy mode, reject non-foldable expressions (including non-deterministic and
+          // outer references)
+          e.failAnalysis(
+            errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         }
       }
     }
