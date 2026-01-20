@@ -253,6 +253,7 @@ abstract class BaseSliceArrowOutputProcessor(
       prevVectors.foreach(_.close())
       prevRoot.close()
     }
+    super.close()
   }
 }
 
