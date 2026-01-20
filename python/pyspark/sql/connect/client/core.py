@@ -1642,6 +1642,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+
     def _execute_and_fetch(
         self,
         req: pb2.ExecutePlanRequest,
