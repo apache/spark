@@ -474,7 +474,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ApplyDefaultCollationToStringType ::
+      ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -504,7 +504,8 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
-      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      Seq(ResolveUpdateEventTimeWatermarkColumn,
+        NameStreamingSources) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
@@ -678,75 +679,6 @@ class Analyzer(
     }
 
     /*
-     * Create new alias for all group by expressions for `Expand` operator.
-     */
-    private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
-      groupByExprs.map {
-        case e: NamedExpression => Alias(e, e.name)(qualifier = e.qualifier)
-        case other => Alias(other, toPrettySQL(other))()
-      }
-    }
-
-    /*
-     * Construct [[Expand]] operator with grouping sets.
-     */
-    private def constructExpand(
-        selectedGroupByExprs: Seq[Seq[Expression]],
-        child: LogicalPlan,
-        groupByAliases: Seq[Alias],
-        gid: Attribute): LogicalPlan = {
-      // Change the nullability of group by aliases if necessary. For example, if we have
-      // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullability of b to be TRUE.
-      // TODO: For Cube/Rollup just set nullability to be `true`.
-      val expandedAttributes = groupByAliases.map { alias =>
-        if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
-          alias.toAttribute.withNullability(true)
-        } else {
-          alias.toAttribute
-        }
-      }
-
-      val groupingSetsAttributes = selectedGroupByExprs.map { groupingSetExprs =>
-        groupingSetExprs.map { expr =>
-          val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
-            throw QueryCompilationErrors.selectExprNotInGroupByError(expr, groupByAliases))
-          // Map alias to expanded attribute.
-          expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
-            alias.toAttribute)
-        }
-      }
-
-      Expand(groupingSetsAttributes, groupByAliases, expandedAttributes, gid, child)
-    }
-
-    /*
-     * Construct new aggregate expressions by replacing grouping functions.
-     */
-    private def constructAggregateExprs(
-        groupByExprs: Seq[Expression],
-        aggregations: Seq[NamedExpression],
-        groupByAliases: Seq[Alias],
-        groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = {
-      def replaceExprs(e: Expression): Expression = e match {
-        case e: AggregateExpression => e
-        case e =>
-          // Replace expression by expand output attribute.
-          val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
-          if (index == -1) {
-            e.mapChildren(replaceExprs)
-          } else {
-            groupingAttrs(index)
-          }
-      }
-      aggregations
-        .map(replaceGroupingFunc(_, groupByExprs, gid))
-        .map(replaceExprs)
-        .map(_.asInstanceOf[NamedExpression])
-    }
-
-    /*
      * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
      */
     private def constructAggregate(
@@ -755,6 +687,7 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+      val aggregationExprsNoAlias = aggregationExprs.map(trimNonTopLevelAliases)
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -764,20 +697,15 @@ class Analyzer(
         throw QueryCompilationErrors.generatorOutsideSelectError(operator)
       }
 
-      // Expand works by setting grouping expressions to null as determined by the
-      // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
-      // instead of the original value we need to create new aliases for all group by expressions
-      // that will only be used for the intended purpose.
-      val groupByAliases = constructGroupByAlias(groupByExprs)
-
-      val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
-      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
-      val groupingAttrs = expand.output.drop(child.output.length)
-
-      val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
-
-      Aggregate(groupingAttrs, aggregations, expand)
+      GroupingAnalyticsTransformer(
+        newAlias = (child, name, qualifier) =>
+          Alias(child, name.get)(qualifier = qualifier),
+        childOutput = child.output,
+        groupByExpressions = groupByExprs,
+        selectedGroupByExpressions = selectedGroupByExprs,
+        child = child,
+        aggregationExpressions = aggregationExprsNoAlias
+      )
     }
 
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
@@ -1095,7 +1023,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
@@ -1230,7 +1158,7 @@ class Analyzer(
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _)
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _)
           if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1248,27 +1176,50 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
+        val schemaEvolutionWriteOption: Map[String, String] =
+          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
+
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
 
         if (!i.overwrite) {
           if (isByName) {
-            AppendData.byName(r, query)
+            AppendData.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            AppendData.byPosition(r, query)
+            AppendData.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
-            OverwritePartitionsDynamic.byName(r, query)
+            OverwritePartitionsDynamic.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwritePartitionsDynamic.byPosition(r, query)
+            OverwritePartitionsDynamic.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else {
           if (isByName) {
-            OverwriteByExpression.byName(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byName(
+              table = r,
+              df = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byPosition(
+              table = r,
+              query = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           }
         }
     }
@@ -2094,16 +2045,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
-      // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
+      case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
           .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          if (requirePersistentFunc) {
-            throw QueryCompilationErrors.expectPersistentFuncError(
-              nameParts.head, cmd, mismatchHint, u)
-          } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-          }
+          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =
             relationResolution.expandIdentifier(nameParts)
@@ -2284,10 +2230,10 @@ class Analyzer(
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args, execute) =>
+      case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
         val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
-        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args, execute)
+        ResolvedProcedure(procedureCatalog, ident, procedure)
     }
 
     private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {

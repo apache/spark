@@ -63,14 +63,15 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
         val reconstructedEvent = JsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
         if (newExecutionStartEvent) {
+          // queryId should be None when parsing legacy event logs
           val expectedEvent = if (newExecutionStartJson) {
             SparkListenerSQLExecutionStart(0, Some(1), "test desc", "test detail",
               "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
-              Map("k1" -> "v1"))
+              Map("k1" -> "v1"), queryId = None)
           } else {
             SparkListenerSQLExecutionStart(0, None, "test desc", "test detail",
               "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
-              Map("k1" -> "v1"))
+              Map("k1" -> "v1"), queryId = None)
           }
           assert(reconstructedEvent == expectedEvent)
         } else {
@@ -101,7 +102,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
         |  "time" : 10,
-        |  "errorMessage" : $errorMessageJson
+        |  "errorMessage" : $errorMessageJson,
+        |  "queryId" : null
         |}
       """.stripMargin))
     // scalastyle:on
@@ -124,7 +126,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |}
       """.stripMargin
     val readBack = JsonProtocol.sparkEventFromJson(executionEnd)
-    assert(readBack == SparkListenerSQLExecutionEnd(1, 10))
+    // queryId should be None when parsing legacy event logs
+    assert(readBack == SparkListenerSQLExecutionEnd(1, 10, queryId = None))
 
     // parse new event using old SparkListenerSQLExecutionEnd
     // scalastyle:off line.size.limit

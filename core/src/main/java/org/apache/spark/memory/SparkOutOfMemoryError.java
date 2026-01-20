@@ -31,11 +31,18 @@ import java.util.Map;
 public final class SparkOutOfMemoryError extends OutOfMemoryError implements SparkThrowable {
     String errorClass;
     Map<String, String> messageParameters;
+    String sqlState;
 
     public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters) {
+        this(errorClass, messageParameters, null);
+    }
+
+    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters,
+        String sqlState) {
         super(SparkThrowableHelper.getMessage(errorClass, messageParameters));
         this.errorClass = errorClass;
         this.messageParameters = messageParameters;
+        this.sqlState = sqlState;
     }
 
     @Override
@@ -46,5 +53,10 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     @Override
     public String getCondition() {
         return errorClass;
+    }
+
+    @Override
+    public String getSqlState() {
+        return sqlState != null ? sqlState : SparkThrowable.super.getSqlState();
     }
 }

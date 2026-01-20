@@ -384,6 +384,7 @@ class ClusteringTestsMixin:
             model2 = LocalLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    @unittest.skip("SPARK-55020: Test triggers frequent deadlock in CI")
     def test_distributed_lda(self):
         spark = self.spark
         df = (
@@ -515,12 +516,6 @@ class ClusteringTests(ClusteringTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_clustering import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

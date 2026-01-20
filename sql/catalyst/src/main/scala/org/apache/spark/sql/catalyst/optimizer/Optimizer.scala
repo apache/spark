@@ -265,6 +265,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CheckCartesianProducts),
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
+      NullPropagation,
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,

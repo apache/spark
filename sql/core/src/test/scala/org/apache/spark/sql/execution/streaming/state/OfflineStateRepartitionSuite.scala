@@ -17,18 +17,28 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import scala.util.Try
+
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Test for offline state repartitioning. This tests that repartition behaves as expected
  * for different scenarios.
  */
-class OfflineStateRepartitionSuite extends StreamTest {
+class OfflineStateRepartitionSuite extends StreamTest
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
   import OfflineStateRepartitionUtils._
+  import OfflineStateRepartitionTestUtils._
 
   test("Fail if empty checkpoint directory") {
     withTempDir { dir =>
@@ -98,127 +108,171 @@ class OfflineStateRepartitionSuite extends StreamTest {
     )
   }
 
-  test("Repartition: success, failure, retry") {
-    withTempDir { dir =>
-      val originalPartitions = 3
-      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath)
-      val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
-      // Shouldn't be seen as a repartition batch
-      assert(!isRepartitionBatch(batchId, checkpointMetadata.offsetLog, dir.getAbsolutePath))
-
-      // Trying to repartition to the same number should fail
-      val ex = intercept[StateRepartitionShufflePartitionsAlreadyMatchError] {
-        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions)
+  Seq(1, 2).foreach { ckptVersion =>
+    def testWithCheckpointId(testName: String)(testFun: => Unit): Unit = {
+      test(s"$testName (enableCkptId = ${ckptVersion >= 2})") {
+        withSQLConf(
+          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
+          testFun
+        }
       }
-      checkError(
-        ex,
-        condition = "STATE_REPARTITION_INVALID_CHECKPOINT.SHUFFLE_PARTITIONS_ALREADY_MATCH",
-        parameters = Map(
-          "checkpointLocation" -> dir.getAbsolutePath,
-          "batchId" -> batchId.toString,
-          "numPartitions" -> originalPartitions.toString
-        )
-      )
-
-      // Trying to repartition to a different number should succeed
-      val newPartitions = originalPartitions + 1
-      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions)
-      val repartitionBatchId = batchId + 1
-      verifyRepartitionBatch(
-        repartitionBatchId, checkpointMetadata, dir.getAbsolutePath, newPartitions)
-
-      // Now delete the repartition commit to simulate a failed repartition attempt.
-      // This will delete all the commits after the batchId.
-      checkpointMetadata.commitLog.purgeAfter(batchId)
-
-      // Try to repartition with a different numPartitions should fail,
-      // since it will see an uncommitted repartition batch with a different numPartitions.
-      val ex2 = intercept[StateRepartitionLastBatchAbandonedRepartitionError] {
-        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions + 1)
-      }
-      checkError(
-        ex2,
-        condition = "STATE_REPARTITION_INVALID_CHECKPOINT.LAST_BATCH_ABANDONED_REPARTITION",
-        parameters = Map(
-          "checkpointLocation" -> dir.getAbsolutePath,
-          "lastBatchId" -> repartitionBatchId.toString,
-          "lastBatchShufflePartitions" -> newPartitions.toString,
-          "numPartitions" -> (newPartitions + 1).toString
-        )
-      )
-
-      // Retrying with the same numPartitions should work
-      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions)
-      verifyRepartitionBatch(
-        repartitionBatchId, checkpointMetadata, dir.getAbsolutePath, newPartitions)
     }
-  }
 
-  test("Query last batch failed before repartitioning") {
-    withTempDir { dir =>
-      val originalPartitions = 3
-      val input = MemoryStream[Int]
-      // Run 3 batches
-      val firstBatchId = 0
-      val lastBatchId = firstBatchId + 2
-      (firstBatchId to lastBatchId).foreach { _ =>
-        runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+    testWithCheckpointId("Repartition: success, failure, retry") {
+      withTempDir { dir =>
+        val originalPartitions = 3
+        val input = MemoryStream[Int]
+        val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+        val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
+        // Shouldn't be seen as a repartition batch
+        assert(!isRepartitionBatch(batchId, checkpointMetadata.offsetLog, dir.getAbsolutePath))
+
+        // Trying to repartition to the same number should fail
+        val ex = intercept[StateRepartitionShufflePartitionsAlreadyMatchError] {
+          spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions)
+        }
+        checkError(
+          ex,
+          condition = "STATE_REPARTITION_INVALID_CHECKPOINT.SHUFFLE_PARTITIONS_ALREADY_MATCH",
+          parameters = Map(
+            "checkpointLocation" -> dir.getAbsolutePath,
+            "batchId" -> batchId.toString,
+            "numPartitions" -> originalPartitions.toString
+          )
+        )
+
+        // Trying to repartition to a different number should succeed
+        val newPartitions = originalPartitions + 1
+        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions)
+        val repartitionBatchId = batchId + 1
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        verifyRepartitionBatch(
+          repartitionBatchId,
+          checkpointMetadata,
+          hadoopConf,
+          dir.getAbsolutePath,
+          newPartitions,
+          spark)
+
+        // Now delete the repartition commit to simulate a failed repartition attempt.
+        // This will delete all the commits after the batchId.
+        checkpointMetadata.commitLog.purgeAfter(batchId)
+
+        // Try to repartition with a different numPartitions should fail,
+        // since it will see an uncommitted repartition batch with a different numPartitions.
+        val ex2 = intercept[StateRepartitionLastBatchAbandonedRepartitionError] {
+          spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions + 1)
+        }
+        checkError(
+          ex2,
+          condition = "STATE_REPARTITION_INVALID_CHECKPOINT.LAST_BATCH_ABANDONED_REPARTITION",
+          parameters = Map(
+            "checkpointLocation" -> dir.getAbsolutePath,
+            "lastBatchId" -> repartitionBatchId.toString,
+            "lastBatchShufflePartitions" -> newPartitions.toString,
+            "numPartitions" -> (newPartitions + 1).toString
+          )
+        )
+
+        // Retrying with the same numPartitions should work
+        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, newPartitions)
+        verifyRepartitionBatch(
+          repartitionBatchId,
+          checkpointMetadata,
+          hadoopConf,
+          dir.getAbsolutePath,
+          newPartitions,
+          spark)
+
+        // Repartition with way more partitions, to verify that empty partitions are properly
+        // created
+        val morePartitions = newPartitions * 3
+        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, morePartitions)
+        verifyRepartitionBatch(
+          repartitionBatchId + 1, checkpointMetadata, hadoopConf,
+          dir.getAbsolutePath, morePartitions, spark)
+        // Restart the query to make sure it can start after repartitioning
+        runSimpleStreamQuery(morePartitions, dir.getAbsolutePath, input)
       }
-      val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
+    }
 
-      // Lets keep only the first commit to simulate multiple failed batches
-      checkpointMetadata.commitLog.purgeAfter(firstBatchId)
+    testWithCheckpointId("Query last batch failed before repartitioning") {
+      withTempDir { dir =>
+        val originalPartitions = 3
+        val input = MemoryStream[Int]
+        // Run 3 batches
+        val firstBatchId = 0
+        val lastBatchId = firstBatchId + 2
+        (firstBatchId to lastBatchId).foreach { _ =>
+          runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+        }
+        val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
 
-      // Now repartitioning should fail
-      val ex = intercept[StateRepartitionLastBatchFailedError] {
+        // Lets keep only the first commit to simulate multiple failed batches
+        checkpointMetadata.commitLog.purgeAfter(firstBatchId)
+
+        // Now repartitioning should fail
+        val ex = intercept[StateRepartitionLastBatchFailedError] {
+          spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions + 1)
+        }
+        checkError(
+          ex,
+          condition = "STATE_REPARTITION_INVALID_CHECKPOINT.LAST_BATCH_FAILED",
+          parameters = Map(
+            "checkpointLocation" -> dir.getAbsolutePath,
+            "lastBatchId" -> lastBatchId.toString
+          )
+        )
+
+        // Setting enforceExactlyOnceSink to false should allow repartitioning
+        spark.streamingCheckpointManager.repartition(
+          dir.getAbsolutePath, originalPartitions + 1, enforceExactlyOnceSink = false)
+        verifyRepartitionBatch(
+          lastBatchId + 1,
+          checkpointMetadata,
+          spark.sessionState.newHadoopConf(),
+          dir.getAbsolutePath,
+          originalPartitions + 1,
+          spark,
+          // Repartition should be based on the first batch, since we skipped the others
+          baseBatchId = Some(firstBatchId))
+      }
+    }
+
+    testWithCheckpointId("Consecutive repartition") {
+      withTempDir { dir =>
+        val originalPartitions = 5
+        val input = MemoryStream[Int]
+        val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+
+        val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
+        val hadoopConf = spark.sessionState.newHadoopConf()
+
+        // decrease
+        spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions - 3)
+        verifyRepartitionBatch(
+          batchId + 1,
+          checkpointMetadata,
+          hadoopConf,
+          dir.getAbsolutePath,
+          originalPartitions - 3,
+          spark
+        )
+
+        // increase
         spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions + 1)
-      }
-      checkError(
-        ex,
-        condition = "STATE_REPARTITION_INVALID_CHECKPOINT.LAST_BATCH_FAILED",
-        parameters = Map(
-          "checkpointLocation" -> dir.getAbsolutePath,
-          "lastBatchId" -> lastBatchId.toString
+        verifyRepartitionBatch(
+          batchId + 2,
+          checkpointMetadata,
+          hadoopConf,
+          dir.getAbsolutePath,
+          originalPartitions + 1,
+          spark
         )
-      )
 
-      // Setting enforceExactlyOnceSink to false should allow repartitioning
-      spark.streamingCheckpointManager.repartition(
-        dir.getAbsolutePath, originalPartitions + 1, enforceExactlyOnceSink = false)
-      verifyRepartitionBatch(
-        lastBatchId + 1,
-        checkpointMetadata,
-        dir.getAbsolutePath,
-        originalPartitions + 1,
-        // Repartition should be based on the first batch, since we skipped the others
-        baseBatchId = Some(firstBatchId))
-    }
-  }
-
-  test("Consecutive repartition") {
-    withTempDir { dir =>
-      val originalPartitions = 3
-      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath)
-
-      val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
-
-      // decrease
-      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions - 1)
-      verifyRepartitionBatch(
-        batchId + 1,
-        checkpointMetadata,
-        dir.getAbsolutePath,
-        originalPartitions - 1
-      )
-
-      // increase
-      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions + 1)
-      verifyRepartitionBatch(
-        batchId + 2,
-        checkpointMetadata,
-        dir.getAbsolutePath,
-        originalPartitions + 1
-      )
+        // Restart the query to make sure it can start after repartitioning
+        runSimpleStreamQuery(originalPartitions + 1, dir.getAbsolutePath, input)
+      }
     }
   }
 
@@ -231,31 +285,70 @@ class OfflineStateRepartitionSuite extends StreamTest {
       SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString)
 
     var committedBatchId: Long = -1
-    testStream(input.toDF().groupBy().count(), outputMode = OutputMode.Update)(
-      StartStream(checkpointLocation = checkpointLocation, additionalConfs = conf),
-      AddData(input, 1, 2, 3),
-      ProcessAllAvailable(),
-      Execute { query =>
-        committedBatchId = Option(query.lastProgress).map(_.batchId).getOrElse(-1)
-      }
-    )
+    // Set the confs before starting the stream
+    withSQLConf(conf.toSeq: _*) {
+      testStream(input.toDF().groupBy("value").count(), outputMode = OutputMode.Update)(
+        StartStream(checkpointLocation = checkpointLocation),
+        AddData(input, 1, 2, 3),
+        ProcessAllAvailable(),
+        Execute { query =>
+          committedBatchId = Option(query.lastProgress).map(_.batchId).getOrElse(-1)
+        }
+      )
+    }
 
     assert(committedBatchId >= 0, "No batch was committed in the streaming query")
     committedBatchId
   }
+}
 
-  private def verifyRepartitionBatch(
+object OfflineStateRepartitionTestUtils {
+  import OfflineStateRepartitionUtils._
+
+  def verifyRepartitionBatch(
       batchId: Long,
       checkpointMetadata: StreamingQueryCheckpointMetadata,
+      hadoopConf: Configuration,
       checkpointLocation: String,
       expectedShufflePartitions: Int,
+      spark: SparkSession,
       baseBatchId: Option[Long] = None): Unit = {
     // Should be seen as a repartition batch
     assert(isRepartitionBatch(batchId, checkpointMetadata.offsetLog, checkpointLocation))
 
+    // When failed batches are skipped, then repartition can be based
+    // on an older batch and not batchId - 1.
+    val previousBatchId = baseBatchId.getOrElse(batchId - 1)
+
+    verifyOffsetAndCommitLog(
+      batchId, previousBatchId, expectedShufflePartitions, checkpointMetadata)
+    verifyPartitionDirs(checkpointLocation, expectedShufflePartitions)
+
+    val serializableConf = new SerializableConfiguration(hadoopConf)
+    val baseOperatorsMetadata = getOperatorMetadata(
+      checkpointLocation, serializableConf, previousBatchId)
+    val repartitionOperatorsMetadata = getOperatorMetadata(
+      checkpointLocation, serializableConf, batchId)
+    verifyOperatorMetadata(
+      baseOperatorsMetadata, repartitionOperatorsMetadata, expectedShufflePartitions)
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(spark.sessionState.conf)) {
+      verifyCheckpointIds(
+        batchId,
+        checkpointMetadata,
+        expectedShufflePartitions,
+        baseOperatorsMetadata)
+    }
+  }
+
+  private def verifyOffsetAndCommitLog(
+      repartitionBatchId: Long,
+      previousBatchId: Long,
+      expectedShufflePartitions: Int,
+      checkpointMetadata: StreamingQueryCheckpointMetadata): Unit = {
     // Verify the repartition batch
     val lastBatchId = checkpointMetadata.offsetLog.getLatestBatchId().get
-    assert(lastBatchId == batchId)
+    assert(lastBatchId == repartitionBatchId,
+      "The latest batch in offset log should be the repartition batch")
 
     val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
     val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadataOpt.get).get
@@ -263,18 +356,16 @@ class OfflineStateRepartitionSuite extends StreamTest {
 
     // Verify the commit log
     val lastCommitId = checkpointMetadata.commitLog.getLatestBatchId().get
-    assert(lastCommitId == batchId)
+    assert(lastCommitId == repartitionBatchId,
+      "The latest batch in commit log should be the repartition batch")
 
     // verify that the offset seq is the same between repartition batch and
     // the batch the repartition is based on except for the shuffle partitions.
-    // When failed batches are skipped, then repartition can be based
-    // on an older batch and not batchId - 1.
-    val previousBatchId = baseBatchId.getOrElse(batchId - 1)
     val previousBatch = checkpointMetadata.offsetLog.get(previousBatchId).get
 
     // Verify offsets are identical
     assert(lastBatch.offsets == previousBatch.offsets,
-      s"Offsets should be identical between batch $previousBatchId and $batchId")
+      s"Offsets should be identical between batch $previousBatchId and $repartitionBatchId")
 
     // Verify metadata is the same except for shuffle partitions config
     (lastBatch.metadataOpt, previousBatch.metadataOpt) match {
@@ -298,7 +389,146 @@ class OfflineStateRepartitionSuite extends StreamTest {
           getShufflePartitions(lastMetadata).get != getShufflePartitions(previousMetadata).get,
           "Shuffle partitions should be different between batches")
       case _ =>
-        fail("Both batches should have metadata")
+        assert(false, "Both batches should have metadata")
+    }
+  }
+
+  // verify number of partition dirs in state dir
+  private def verifyPartitionDirs(
+      checkpointLocation: String,
+      expectedShufflePartitions: Int): Unit = {
+    val stateDir = new java.io.File(checkpointLocation, "state")
+
+    def numDirs(file: java.io.File): Int = {
+      file.listFiles()
+        .filter(d => d.isDirectory && Try(d.getName.toInt).isSuccess)
+        .length
+    }
+
+    val numOperators = numDirs(stateDir)
+    for (op <- 0 until numOperators) {
+      val partitionsDir = new java.io.File(stateDir, s"$op")
+      val numPartitions = numDirs(partitionsDir)
+      // Doing <= in case of reduced number of partitions
+      assert(expectedShufflePartitions <= numPartitions,
+        s"Expected atleast $expectedShufflePartitions partition dirs for operator $op," +
+          s" but found $numPartitions")
+    }
+  }
+
+  private def getOperatorMetadata(
+      checkpointLocation: String,
+      serializableConf: SerializableConfiguration,
+      batchId: Long
+    ): Array[OperatorStateMetadata] = {
+    val metadataPartitionReader = new StateMetadataPartitionReader(
+      checkpointLocation, serializableConf, batchId)
+    metadataPartitionReader.allOperatorStateMetadata
+  }
+
+  private def verifyOperatorMetadata(
+      baseOperatorsMetadata: Array[OperatorStateMetadata],
+      repartitionOperatorsMetadata: Array[OperatorStateMetadata],
+      expectedShufflePartitions: Int): Unit = {
+    assert(baseOperatorsMetadata.nonEmpty, "Base batch should have operator metadata")
+    assert(repartitionOperatorsMetadata.nonEmpty, "Repartition batch should have operator metadata")
+    assert(baseOperatorsMetadata.length == repartitionOperatorsMetadata.length,
+      "Both batches should have the same number of operators")
+
+    // Verify each operator's metadata
+    baseOperatorsMetadata.zip(repartitionOperatorsMetadata).foreach {
+      case (baseOp, repartitionOp) =>
+        // Verify both are of the same type
+        assert(baseOp.getClass == repartitionOp.getClass,
+          s"Metadata types should match: base=${baseOp.getClass.getSimpleName}, " +
+            s"repartition=${repartitionOp.getClass.getSimpleName}")
+
+        (baseOp, repartitionOp) match {
+          case (baseV2: OperatorStateMetadataV2, repartitionV2: OperatorStateMetadataV2) =>
+            // Verify operator info is the same
+            assert(baseV2.operatorInfo == repartitionV2.operatorInfo,
+              s"Operator info should match: base=${baseV2.operatorInfo}, " +
+                s"repartition=${repartitionV2.operatorInfo}")
+
+            // Verify operator properties JSON is the same
+            assert(baseV2.operatorPropertiesJson == repartitionV2.operatorPropertiesJson,
+              "Operator properties JSON should match")
+
+            // Verify state store info (except numPartitions)
+            assert(baseV2.stateStoreInfo.length == repartitionV2.stateStoreInfo.length,
+              "Should have same number of state stores")
+
+            baseV2.stateStoreInfo.zip(repartitionV2.stateStoreInfo).foreach {
+              case (baseStore, repartitionStore) =>
+                assert(baseStore.storeName == repartitionStore.storeName,
+                  s"Store name should match: ${baseStore.storeName} " +
+                    s"vs ${repartitionStore.storeName}")
+                assert(baseStore.numColsPrefixKey == repartitionStore.numColsPrefixKey,
+                  "numColsPrefixKey should match")
+                // Schema file paths should be the same (they reference the same schema files)
+                assert(baseStore.stateSchemaFilePaths == repartitionStore.stateSchemaFilePaths,
+                  "State schema file paths should match")
+                assert(baseStore.numPartitions != repartitionStore.numPartitions,
+                  "numPartitions shouldn't be the same")
+                // Verify numPartitions is updated to expectedShufflePartitions
+                assert(repartitionStore.numPartitions == expectedShufflePartitions,
+                  s"Repartition batch numPartitions should be $expectedShufflePartitions, " +
+                    s"but found ${repartitionStore.numPartitions}")
+            }
+
+          case (baseV1: OperatorStateMetadataV1, repartitionV1: OperatorStateMetadataV1) =>
+            // For v1, since we didn't update it, then it should be the same.
+            // Can't use == directly because Array uses reference equality
+            assert(baseV1.operatorInfo == repartitionV1.operatorInfo,
+              "V1 operator info should be the same")
+            assert(baseV1.stateStoreInfo.sameElements(repartitionV1.stateStoreInfo),
+              "V1 state store info should be the same")
+
+          case _ =>
+            assert(false,
+              s"Unexpected metadata types: base=${baseOp.getClass.getSimpleName}, " +
+                s"repartition=${repartitionOp.getClass.getSimpleName}")
+        }
+    }
+  }
+
+  private def verifyCheckpointIds(
+      repartitionBatchId: Long,
+      checkpointMetadata: StreamingQueryCheckpointMetadata,
+      expectedShufflePartitions: Int,
+      baseOperatorsMetadata: Array[OperatorStateMetadata]): Unit = {
+    val expectedStoreCnts: Map[Long, Int] = baseOperatorsMetadata.map {
+      case metadataV2: OperatorStateMetadataV2 =>
+        metadataV2.operatorInfo.operatorId -> metadataV2.stateStoreInfo.length
+      case metadataV1: OperatorStateMetadataV1 =>
+        metadataV1.operatorInfo.operatorId -> metadataV1.stateStoreInfo.length
+    }.toMap
+    // Verify commit log has the repartition batch with checkpoint IDs
+    val commitOpt = checkpointMetadata.commitLog.get(repartitionBatchId)
+    assert(commitOpt.isDefined, s"Commit for batch $repartitionBatchId should exist")
+
+    val commitMetadata = commitOpt.get
+
+    // Verify stateUniqueIds is present for checkpoint V2
+    assert(commitMetadata.stateUniqueIds.isDefined,
+      "stateUniqueIds should be present in commit metadata when checkpoint version >= 2")
+
+    val operatorIdToCkptInfos = commitMetadata.stateUniqueIds.get
+    assert(operatorIdToCkptInfos.nonEmpty,
+      "operatorIdToCkptInfos should not be empty")
+
+    // Verify structure for each operator
+    operatorIdToCkptInfos.foreach { case (operatorId, partitionToCkptIds) =>
+      // Should have checkpoint IDs for all partitions
+      assert(partitionToCkptIds.length == expectedShufflePartitions,
+        s"Operator $operatorId: Expected $expectedShufflePartitions partition checkpoint IDs, " +
+          s"but found ${partitionToCkptIds.length}")
+      // Each partition should have checkpoint IDs (at least one per store)
+      partitionToCkptIds.zipWithIndex.foreach { case (ckptIds, partitionId) =>
+        assert(ckptIds.length == expectedStoreCnts(operatorId),
+            s"Operator $operatorId, partition $partitionId should" +
+            s"has ${expectedStoreCnts(operatorId)} checkpoint Ids")
+      }
     }
   }
 }

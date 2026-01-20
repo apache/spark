@@ -3488,7 +3488,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId1 = shuffleDep1.shuffleId
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
@@ -3496,7 +3496,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep2 = new ShuffleDependency(
       shuffleMapRdd2,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
@@ -3528,7 +3528,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep = new ShuffleDependency(
       mapRdd,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId = shuffleDep.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
@@ -3627,7 +3627,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId1 = shuffleDep1.shuffleId
 
@@ -3636,7 +3636,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep2 = new ShuffleDependency(
       shuffleMapRdd2,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId2 = shuffleDep2.shuffleId
 
@@ -3645,7 +3645,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep3 = new ShuffleDependency(
       shuffleMapRdd3,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId3 = shuffleDep3.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep3), tracker = mapOutputTracker)
@@ -3859,21 +3859,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true)
+      _checksumMismatchFullRetryEnabled = true)
     val shuffleId1 = shuffleDep1.shuffleId
 
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
     val shuffleDep2 = new ShuffleDependency(
       shuffleMapRdd2,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true)
+      _checksumMismatchFullRetryEnabled = true)
     val shuffleId2 = shuffleDep2.shuffleId
 
     val shuffleMapRdd3 = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
     val shuffleDep3 = new ShuffleDependency(
       shuffleMapRdd3,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true)
+      _checksumMismatchFullRetryEnabled = true)
     val shuffleId3 = shuffleDep3.shuffleId
 
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep1, shuffleDep3), tracker = mapOutputTracker)
@@ -3923,7 +3923,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      checksumMismatchFullRetryEnabled = true)
+      _checksumMismatchFullRetryEnabled = true)
     val shuffleId1 = shuffleDep1.shuffleId
 
     // Submit a job depending on shuffleDep1

@@ -907,7 +907,7 @@ object SQLConf {
         "retry all tasks of the consumer stages to avoid correctness issues.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
     buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
@@ -915,7 +915,7 @@ object SQLConf {
         "with its producer stages.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
@@ -2148,6 +2148,13 @@ object SQLConf {
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
+  val DROP_TABLE_VIEW_ENABLED =
+    buildConf("spark.sql.dropTableOnView.enabled")
+      .doc("When true, DROP TABLE command will work on VIEW as well.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -2927,6 +2934,16 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ENABLE_STREAMING_SOURCE_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
+      .internal()
+      .doc("When true, enforces that all streaming sources must be explicitly named via " +
+        "the .name() API. This enables streaming source evolution, allowing sources to be " +
+        "added, removed, or reordered without losing state.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -6207,7 +6224,9 @@ object SQLConf {
 
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
-      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "message and query context. Stack traces are only shown for internal errors " +
+      "(SQLSTATE XX***). When DEBUG, the output is the same as PRETTY but stack traces are " +
+      "always included. The MINIMAL and STANDARD formats are pretty JSON formats where " +
       "STANDARD includes an additional JSON field `message`. This configuration property " +
       "influences on error messages of Thrift Server and SQL CLI while running queries.")
     .version("3.4.0")
@@ -7210,6 +7229,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingStateSchemaFilesThreshold: Int =
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
+  def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
@@ -7526,6 +7547,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())
 
   def dataframeCacheLogLevel: Level = getConf(DATAFRAME_CACHE_LOG_LEVEL)
+
+  def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
