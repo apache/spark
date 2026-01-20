@@ -284,7 +284,7 @@ object SQLConf {
   val SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.subqueryAliasAlwaysPropagateMetadataColumns")
       .internal()
-      .version("4.1.0")
+      .version("4.2.0")
       .doc(
         "When true, SubqueryAlias always propagates metadata columns from its child. " +
         "When false, SubqueryAlias only propagates metadata columns if the child is a " +
