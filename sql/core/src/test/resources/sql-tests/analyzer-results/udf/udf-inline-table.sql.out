@@ -172,9 +172,21 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query analysis
-Project [cast(udf(cast(a#x as string)) as string) AS udf(a)#x, cast(udf(cast(b#xL as string)) as bigint) AS udf(b)#xL]
-+- SubqueryAlias data
-   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"count(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 77,
+    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
+  } ]
+}
 
 
 -- !query

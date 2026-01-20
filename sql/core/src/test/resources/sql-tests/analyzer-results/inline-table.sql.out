@@ -186,9 +186,21 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query analysis
-Project [a#x, b#xL]
-+- SubqueryAlias data
-   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"count(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 64,
+    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
+  } ]
+}
 
 
 -- !query
@@ -271,41 +283,25 @@ select count(*) from values (1 + rand(5)), (2 + rand(5)) as data(a)
 -- !query
 select * from values (1) as t(c1), lateral (values (t.c1)) as s(c2)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 45,
-    "stopIndex" : 57,
-    "fragment" : "values (t.c1)"
-  } ]
-}
+Project [c1#x, c2#x]
++- LateralJoin lateral-subquery#x [c1#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c2#x]
+   :        +- ResolvedInlineTable [[outer(c1#x)]], [col1#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x]
 
 
 -- !query
 select * from values (1, 2) as t(c1, c2), lateral (values (t.c1, t.c2)) as s(c3, c4)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 52,
-    "stopIndex" : 70,
-    "fragment" : "values (t.c1, t.c2)"
-  } ]
-}
+Project [c1#x, c2#x, c3#x, c4#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c3#x, col2#x AS c4#x]
+   :        +- ResolvedInlineTable [[outer(c1#x), outer(c2#x)]], [col1#x, col2#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x]
 
 
 -- !query
@@ -336,83 +332,47 @@ Sort [c1#x ASC NULLS FIRST], true
 -- !query
 select * from values (1, 2) as t(c1, c2), lateral (values (t.c1), (t.c2)) as s(c3) order by c3
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 52,
-    "stopIndex" : 72,
-    "fragment" : "values (t.c1), (t.c2)"
-  } ]
-}
+Sort [c3#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x, c3#x]
+   +- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+      :  +- SubqueryAlias s
+      :     +- Project [col1#x AS c3#x]
+      :        +- ResolvedInlineTable [[outer(c1#x)], [outer(c2#x)]], [col1#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x, c2#x]
 
 
 -- !query
 select * from values (1), (2) as t(c1), lateral (values (t.c1), (t.c1 + 10)) as s(c2) order by c1, c2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1), (t.c1 + 10)"
-  } ]
-}
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
+      :  +- SubqueryAlias s
+      :     +- Project [col1#x AS c2#x]
+      :        +- ResolvedInlineTable [[outer(c1#x)], [(outer(c1#x) + 10)]], [col1#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
 
 
 -- !query
 select * from values (1, 2) as t(c1, c2),
   lateral (values (t.c1, t.c2, t.c1 + t.c2)) as s(c3, c4, c5)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 54,
-    "stopIndex" : 85,
-    "fragment" : "values (t.c1, t.c2, t.c1 + t.c2)"
-  } ]
-}
+Project [c1#x, c2#x, c3#x, c4#x, c5#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c1#x && c2#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c3#x, col2#x AS c4#x, col3#x AS c5#x]
+   :        +- ResolvedInlineTable [[outer(c1#x), outer(c2#x), (outer(c1#x) + outer(c2#x))]], [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x]
 
 
 -- !query
 select t.c1, s.c2 from values (1) as t(c1),
   lateral (values (t.c1, rand())) as s(c2, c3) order by c1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 56,
-    "stopIndex" : 76,
-    "fragment" : "values (t.c1, rand())"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -421,17 +381,17 @@ select t.c1 from values (1), (2) as t(c1),
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "`t`.`c1`"
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x], Inner\n:  +- SubqueryAlias s\n:     +- Project [col1#x AS c2#x, col2#x AS c3#x]\n:        +- ResolvedInlineTable [[outer(c1#x), rand(number)]], [col1#x, col2#x]\n+- SubqueryAlias t\n   +- LocalRelation [c1#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 55,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1, rand())"
+    "startIndex" : 13,
+    "stopIndex" : 89,
+    "fragment" : "from values (1), (2) as t(c1),\n  lateral (values (t.c1, rand())) as s(c2, c3)"
   } ]
 }
 
@@ -440,84 +400,41 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 select t.c1 from values (1) as t(c1),
   lateral (values (t.c1, rand()), (t.c1 + 1, rand())) as s(c2, c3) order by c2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 90,
-    "fragment" : "values (t.c1, rand()), (t.c1 + 1, rand())"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select * from values (1) as t(c1),
   lateral (values (t.c1, current_date)) as s(c2, c3)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 73,
-    "fragment" : "values (t.c1, current_date)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select * from values (1) as t(c1),
   lateral (values (t.c1, 2.0), (t.c1 + 1, 3.0)) as s(c2, c3) order by c2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 81,
-    "fragment" : "values (t.c1, 2.0), (t.c1 + 1, 3.0)"
-  } ]
-}
+Sort [c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x, c3#x]
+   +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
+      :  +- SubqueryAlias s
+      :     +- Project [col1#x AS c2#x, col2#x AS c3#x]
+      :        +- ResolvedInlineTable [[outer(c1#x), 2.0], [(outer(c1#x) + 1), 3.0]], [col1#x, col2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
 
 
 -- !query
 select * from values (1, null) as t(c1, c2),
   lateral (values (t.c1, t.c2)) as s(c3, c4)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 57,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1, t.c2)"
-  } ]
-}
+Project [c1#x, c2#x, c3#x, c4#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c3#x, col2#x AS c4#x]
+   :        +- ResolvedInlineTable [[outer(c1#x), outer(c2#x)]], [col1#x, col2#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x]
 
 
 -- !query

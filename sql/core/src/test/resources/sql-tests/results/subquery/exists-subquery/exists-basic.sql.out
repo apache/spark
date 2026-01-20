@@ -50,11 +50,11 @@ struct<>
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT 1 
-               FROM   dept 
-               WHERE  dept.dept_id > 10 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT 1
+               FROM   dept
+               WHERE  dept.dept_id > 10
                       AND dept.dept_id < 30)
 -- !query schema
 struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
@@ -71,10 +71,10 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
                WHERE  emp.dept_id = dept.dept_id)
 -- !query schema
 struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
@@ -88,11 +88,11 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id
                        OR emp.dept_id IS NULL)
 -- !query schema
 struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
@@ -107,11 +107,11 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
        AND emp.id > 200
 -- !query schema
 struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
@@ -122,11 +122,11 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT emp.emp_name 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.state 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
+SELECT emp.emp_name
+FROM   emp
+WHERE  EXISTS (SELECT dept.state
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
        AND emp.id > 200
 -- !query schema
 struct<emp_name:string>
@@ -137,10 +137,10 @@ emp 8
 
 
 -- !query
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
                    WHERE  emp.dept_id = dept.dept_id)
 -- !query schema
 struct<dept_id:int,dept_name:string,state:string>
@@ -150,11 +150,11 @@ struct<dept_id:int,dept_name:string,state:string>
 
 
 -- !query
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
-                   WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
+                   WHERE  emp.dept_id = dept.dept_id
                            OR state = 'NJ')
 -- !query schema
 struct<dept_id:int,dept_name:string,state:string>
@@ -163,11 +163,11 @@ struct<dept_id:int,dept_name:string,state:string>
 
 
 -- !query
-SELECT * 
-FROM   bonus 
-WHERE  NOT EXISTS (SELECT * 
-                   FROM   emp 
-                   WHERE  emp.emp_name = emp_name 
+SELECT *
+FROM   bonus
+WHERE  NOT EXISTS (SELECT *
+                   FROM   emp
+                   WHERE  emp.emp_name = emp_name
                           AND bonus_amt > emp.salary)
 -- !query schema
 struct<emp_name:string,bonus_amt:double>
@@ -192,13 +192,13 @@ struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 
 
 -- !query
-SELECT * 
-FROM   bonus 
-WHERE  EXISTS (SELECT emp_name 
-               FROM   emp 
-               WHERE  bonus.emp_name = emp.emp_name 
-                      AND EXISTS (SELECT state 
-                                  FROM   dept 
+SELECT *
+FROM   bonus
+WHERE  EXISTS (SELECT emp_name
+               FROM   emp
+               WHERE  bonus.emp_name = emp.emp_name
+                      AND EXISTS (SELECT state
+                                  FROM   dept
                                   WHERE  dept.dept_id = emp.dept_id))
 -- !query schema
 struct<emp_name:string,bonus_amt:double>

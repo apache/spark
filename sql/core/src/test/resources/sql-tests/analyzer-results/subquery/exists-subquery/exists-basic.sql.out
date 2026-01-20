@@ -79,11 +79,11 @@ AS BONUS(emp_name, bonus_amt), false, false, LocalTempView, UNSUPPORTED, true
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT 1 
-               FROM   dept 
-               WHERE  dept.dept_id > 10 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT 1
+               FROM   dept
+               WHERE  dept.dept_id > 10
                       AND dept.dept_id < 30)
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -105,10 +105,10 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
                WHERE  emp.dept_id = dept.dept_id)
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -130,11 +130,11 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id
                        OR emp.dept_id IS NULL)
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -156,11 +156,11 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.dept_name 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
        AND emp.id > 200
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -182,11 +182,11 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
-SELECT emp.emp_name 
-FROM   emp 
-WHERE  EXISTS (SELECT dept.state 
-               FROM   dept 
-               WHERE  emp.dept_id = dept.dept_id) 
+SELECT emp.emp_name
+FROM   emp
+WHERE  EXISTS (SELECT dept.state
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id)
        AND emp.id > 200
 -- !query analysis
 Project [emp_name#x]
@@ -208,10 +208,10 @@ Project [emp_name#x]
 
 
 -- !query
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
                    WHERE  emp.dept_id = dept.dept_id)
 -- !query analysis
 Project [dept_id#x, dept_name#x, state#x]
@@ -233,11 +233,11 @@ Project [dept_id#x, dept_name#x, state#x]
 
 
 -- !query
-SELECT * 
-FROM   dept 
-WHERE  NOT EXISTS (SELECT emp_name 
-                   FROM   emp 
-                   WHERE  emp.dept_id = dept.dept_id 
+SELECT *
+FROM   dept
+WHERE  NOT EXISTS (SELECT emp_name
+                   FROM   emp
+                   WHERE  emp.dept_id = dept.dept_id
                            OR state = 'NJ')
 -- !query analysis
 Project [dept_id#x, dept_name#x, state#x]
@@ -259,11 +259,11 @@ Project [dept_id#x, dept_name#x, state#x]
 
 
 -- !query
-SELECT * 
-FROM   bonus 
-WHERE  NOT EXISTS (SELECT * 
-                   FROM   emp 
-                   WHERE  emp.emp_name = emp_name 
+SELECT *
+FROM   bonus
+WHERE  NOT EXISTS (SELECT *
+                   FROM   emp
+                   WHERE  emp.emp_name = emp_name
                           AND bonus_amt > emp.salary)
 -- !query analysis
 Project [emp_name#x, bonus_amt#x]
@@ -310,13 +310,13 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
-SELECT * 
-FROM   bonus 
-WHERE  EXISTS (SELECT emp_name 
-               FROM   emp 
-               WHERE  bonus.emp_name = emp.emp_name 
-                      AND EXISTS (SELECT state 
-                                  FROM   dept 
+SELECT *
+FROM   bonus
+WHERE  EXISTS (SELECT emp_name
+               FROM   emp
+               WHERE  bonus.emp_name = emp.emp_name
+                      AND EXISTS (SELECT state
+                                  FROM   dept
                                   WHERE  dept.dept_id = emp.dept_id))
 -- !query analysis
 Project [emp_name#x, bonus_amt#x]

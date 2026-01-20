@@ -211,14 +211,20 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_EXECUTOR",
-  "sqlState" : "XXKD0",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "reason" : "Special expressions are placed in the wrong plan: Project [a#x, b#xL]\n+- SubqueryAlias data\n   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]\n\nPrevious schema:a#x, b#xL\nPrevious plan: Project [a#x, b#xL]\n+- SubqueryAlias data\n   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]\n",
-    "ruleExecutor" : "org.apache.spark.sql.internal.BaseSessionStateBuilder$$anon$2"
-  }
+    "invalidExprSqls" : "\"count(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 64,
+    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
+  } ]
 }
 
 
@@ -337,45 +343,17 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from values (1) as t(c1), lateral (values (t.c1)) as s(c2)
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 45,
-    "stopIndex" : 57,
-    "fragment" : "values (t.c1)"
-  } ]
-}
+1	1
 
 
 -- !query
 select * from values (1, 2) as t(c1, c2), lateral (values (t.c1, t.c2)) as s(c3, c4)
 -- !query schema
-struct<>
+struct<c1:int,c2:int,c3:int,c4:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 52,
-    "stopIndex" : 70,
-    "fragment" : "values (t.c1, t.c2)"
-  } ]
-}
+1	2	1	2
 
 
 -- !query
@@ -399,91 +377,39 @@ struct<c1:int,c2:int>
 -- !query
 select * from values (1, 2) as t(c1, c2), lateral (values (t.c1), (t.c2)) as s(c3) order by c3
 -- !query schema
-struct<>
+struct<c1:int,c2:int,c3:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 52,
-    "stopIndex" : 72,
-    "fragment" : "values (t.c1), (t.c2)"
-  } ]
-}
+1	2	1
+1	2	2
 
 
 -- !query
 select * from values (1), (2) as t(c1), lateral (values (t.c1), (t.c1 + 10)) as s(c2) order by c1, c2
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1), (t.c1 + 10)"
-  } ]
-}
+1	1
+1	11
+2	2
+2	12
 
 
 -- !query
 select * from values (1, 2) as t(c1, c2),
   lateral (values (t.c1, t.c2, t.c1 + t.c2)) as s(c3, c4, c5)
 -- !query schema
-struct<>
+struct<c1:int,c2:int,c3:int,c4:int,c5:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 54,
-    "stopIndex" : 85,
-    "fragment" : "values (t.c1, t.c2, t.c1 + t.c2)"
-  } ]
-}
+1	2	1	2	3
 
 
 -- !query
 select t.c1, s.c2 from values (1) as t(c1),
   lateral (values (t.c1, rand())) as s(c2, c3) order by c1
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 56,
-    "stopIndex" : 76,
-    "fragment" : "values (t.c1, rand())"
-  } ]
-}
+1	1
 
 
 -- !query
@@ -494,17 +420,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "expr" : "`t`.`c1`"
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x], Inner\n:  +- SubqueryAlias s\n:     +- Project [col1#x AS c2#x, col2#x AS c3#x]\n:        +- ResolvedInlineTable [[outer(c1#x), rand(number)]], [col1#x, col2#x]\n+- SubqueryAlias t\n   +- LocalRelation [c1#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 55,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1, rand())"
+    "startIndex" : 13,
+    "stopIndex" : 89,
+    "fragment" : "from values (1), (2) as t(c1),\n  lateral (values (t.c1, rand())) as s(c2, c3)"
   } ]
 }
 
@@ -513,92 +439,38 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 select t.c1 from values (1) as t(c1),
   lateral (values (t.c1, rand()), (t.c1 + 1, rand())) as s(c2, c3) order by c2
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 90,
-    "fragment" : "values (t.c1, rand()), (t.c1 + 1, rand())"
-  } ]
-}
+1
+1
 
 
 -- !query
 select * from values (1) as t(c1),
   lateral (values (t.c1, current_date)) as s(c2, c3)
 -- !query schema
-struct<>
+struct<c1:int,c2:int,c3:date>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 73,
-    "fragment" : "values (t.c1, current_date)"
-  } ]
-}
+1	1	2026-01-20
 
 
 -- !query
 select * from values (1) as t(c1),
   lateral (values (t.c1, 2.0), (t.c1 + 1, 3.0)) as s(c2, c3) order by c2
 -- !query schema
-struct<>
+struct<c1:int,c2:int,c3:decimal(2,1)>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 81,
-    "fragment" : "values (t.c1, 2.0), (t.c1 + 1, 3.0)"
-  } ]
-}
+1	1	2.0
+1	2	3.0
 
 
 -- !query
 select * from values (1, null) as t(c1, c2),
   lateral (values (t.c1, t.c2)) as s(c3, c4)
 -- !query schema
-struct<>
+struct<c1:int,c2:void,c3:int,c4:void>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "`t`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 57,
-    "stopIndex" : 75,
-    "fragment" : "values (t.c1, t.c2)"
-  } ]
-}
+
 
 
 -- !query
