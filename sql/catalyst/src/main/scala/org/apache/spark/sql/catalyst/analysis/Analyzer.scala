@@ -2069,49 +2069,56 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          // Lookup function type FIRST to determine if it exists and where it's located.
-          // This avoids calling CatalogAndIdentifier for builtin/temp functions which
-          // would fail for qualified names like system.builtin.abs.
-          val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+          // For builtin/temp functions, we can do a quick check without catalog lookup
+          val quickCheck = if (nameParts.size == 1) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts) ||
+                     FunctionResolution.maybeTempFunctionName(nameParts)) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else {
+            None
+          }
 
-          functionType match {
-            case FunctionType.Builtin | FunctionType.Temporary =>
-              // Builtin or temp function - no need to check catalog
+          if (quickCheck.isDefined) {
+            // It's a builtin or temp function - no need for catalog lookup or caching
+            f
+          } else {
+            // Might be a persistent function - compute full name and check cache first
+            val CatalogAndIdentifier(catalog, ident) =
+              relationResolution.expandIdentifier(nameParts)
+            val fullName = normalizeFuncName(
+              (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
+            if (externalFunctionNameSet.contains(fullName)) {
+              // Already validated this function exists - skip lookup
               f
+            } else {
+              // Not in cache - do full lookup to determine type
+              val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
 
-            case FunctionType.Persistent =>
-              // Persistent function - check if we've already validated it
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(nameParts)
-              val fullName = normalizeFuncName(
-                (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+              functionType match {
+                case FunctionType.Builtin | FunctionType.Temporary =>
+                  // This shouldn't happen since we checked above, but handle it
+                  f
 
-              if (!externalFunctionNameSet.contains(fullName)) {
-                externalFunctionNameSet.add(fullName)
+                case FunctionType.Persistent =>
+                  // Cache it to avoid repeated external catalog lookups
+                  externalFunctionNameSet.add(fullName)
+                  f
+
+                case FunctionType.TableOnly =>
+                  // Function exists ONLY in table registry - cannot be used in scalar context
+                  throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+                case FunctionType.NotFound =>
+                  // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
+                  val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    Seq("system.builtin", "system.session", catalogPath),
+                    f.origin)
               }
-              f
-
-            case FunctionType.TableOnly =>
-              // Function exists ONLY in table registry - cannot be used in scalar context
-              throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
-
-            case FunctionType.NotFound =>
-              // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
-              // For error reporting, try to determine the catalog path
-              val catalogPath = try {
-                val CatalogAndIdentifier(catalog, _) =
-                  relationResolution.expandIdentifier(nameParts)
-                (catalog.name +: catalogManager.currentNamespace).mkString(".")
-              } catch {
-                case _: Exception =>
-                  val currentCat = catalogManager.currentCatalog.name
-                  val currentNs = catalogManager.currentNamespace
-                  (currentCat +: currentNs).mkString(".")
-              }
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                Seq("system.builtin", "system.session", catalogPath),
-                f.origin)
+            }
           }
       }
     }
