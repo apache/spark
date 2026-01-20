@@ -384,7 +384,6 @@ class ClusteringTestsMixin:
             model2 = LocalLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
-    @unittest.skip("SPARK-55020: Test triggers frequent deadlock in CI")
     def test_distributed_lda(self):
         spark = self.spark
         df = (
