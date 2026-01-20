@@ -2852,4 +2852,18 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
     }
   }
+
+  test("SPARK-55092: Main query output maintains partition grouping despite it is not needed") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$items")
+    val scans = collectScans(df.queryExecution.executedPlan)
+    assert(scans(0).inputRDD.partitions.length === 2, "items scan should not group")
+  }
 }
