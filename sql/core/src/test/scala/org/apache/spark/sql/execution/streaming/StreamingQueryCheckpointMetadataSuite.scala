@@ -24,40 +24,152 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, OffsetSeq, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata, StreamMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 
 class StreamingQueryCheckpointMetadataSuite extends StreamTest {
   import testImplicits._
 
+  /**
+   * Creates checkpoint metadata with optional offset and commit log data.
+   * Returns the initialized metadata and checkpoint root path.
+   */
+  private def createCheckpointWithLogs(
+      dir: File,
+      addOffsets: Boolean = false,
+      addCommits: Boolean = false): (StreamingQueryCheckpointMetadata, String) = {
+    val checkpointRoot = dir.getAbsolutePath
+    val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
+    checkpointMetadata.streamMetadata // Initialize metadata
+
+    if (addOffsets) {
+      checkpointMetadata.offsetLog.add(0, OffsetSeq.fill(None))
+      checkpointMetadata.offsetLog.add(1, OffsetSeq.fill(None))
+    }
+
+    if (addCommits) {
+      checkpointMetadata.commitLog.add(0, CommitMetadata())
+      checkpointMetadata.commitLog.add(1, CommitMetadata())
+    }
+
+    (checkpointMetadata, checkpointRoot)
+  }
+
+  /**
+   * Deletes the metadata file from a checkpoint directory.
+   */
+  private def deleteMetadataFile(checkpointRoot: String): Unit = {
+    val metadataPath = new Path(new Path(checkpointRoot), "metadata")
+    val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.delete(metadataPath, false)
+  }
+
+  /**
+   * Validates that accessing streamMetadata throws the expected missing metadata error.
+   */
+  private def assertMissingMetadataError(checkpointRoot: String): Unit = {
+    val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
+    val exception = intercept[SparkRuntimeException] {
+      checkpointMetadata.streamMetadata
+    }
+    checkError(
+      exception = exception,
+      condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
+      parameters = Map("checkpointLocation" -> checkpointRoot)
+    )
+  }
+
+  /**
+   * Creates new checkpoint metadata and validates it has a valid UUID.
+   */
+  private def assertNewMetadataCreated(checkpointRoot: String): StreamMetadata = {
+    val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
+    val metadata = checkpointMetadata.streamMetadata
+    assert(metadata != null)
+    assert(metadata.id != null)
+    assert(UUID.fromString(metadata.id) != null) // Should be a valid UUID
+    metadata
+  }
+
+  /**
+   * Runs e2e test for streaming query with corrupted checkpoint.
+   * @param validationEnabled if true, expects restart to fail and if false, expects success
+   */
+  private def testE2ECorruptedCheckpoint(validationEnabled: Boolean): Unit = {
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val inputData = MemoryStream[Int]
+        var query = inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .outputMode(OutputMode.Append())
+          .start(outputDir.getAbsolutePath)
+
+        try {
+          // Add data and process batches
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+
+          // Stop the query
+          query.stop()
+          query = null
+
+          // Simulate corrupted checkpoint by deleting only the metadata file
+          deleteMetadataFile(checkpointDir.getAbsolutePath)
+
+          if (validationEnabled) {
+            // Should fail with validation error
+            val metadataPath = new Path(new Path(checkpointDir.getAbsolutePath), "metadata")
+            val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
+            val exception = intercept[SparkRuntimeException] {
+              inputData.toDF()
+                .writeStream
+                .format("parquet")
+                .option("checkpointLocation", checkpointDir.getAbsolutePath)
+                .outputMode(OutputMode.Append())
+                .start(outputDir.getAbsolutePath)
+            }
+            val qualifiedPath = fs.makeQualified(new Path(checkpointDir.getAbsolutePath))
+            checkError(
+              exception = exception,
+              condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
+              parameters = Map("checkpointLocation" -> qualifiedPath.toString)
+            )
+          } else {
+            // Should succeed - validation is disabled
+            query = inputData.toDF()
+              .writeStream
+              .format("parquet")
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .outputMode(OutputMode.Append())
+              .start(outputDir.getAbsolutePath)
+
+            assert(query.isActive, "Query should be active after restart")
+            inputData.addData(7, 8, 9)
+            query.processAllAvailable()
+          }
+        } finally {
+          if (query != null && query.isActive) {
+            query.stop()
+          }
+        }
+      }
+    }
+  }
+
   test("valid case: new checkpoint with no metadata and no logs") {
     withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-      val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-
-      // Accessing streamMetadata should succeed and create a new UUID
-      val metadata = checkpointMetadata.streamMetadata
-      assert(metadata != null)
-      assert(metadata.id != null)
-      assert(UUID.fromString(metadata.id) != null) // Should be a valid UUID
+      assertNewMetadataCreated(dir.getAbsolutePath)
     }
   }
 
   test("valid case: existing checkpoint with metadata and logs") {
     withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-
-      // Create metadata file first
-      val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val metadata1 = checkpointMetadata1.streamMetadata
-      val originalId = metadata1.id
-
-      // Add some offset data
-      checkpointMetadata1.offsetLog.add(0, OffsetSeq.fill(None))
-
-      // Add some commit data
-      checkpointMetadata1.commitLog.add(0, CommitMetadata())
+      val (checkpointMetadata1, checkpointRoot) =
+        createCheckpointWithLogs(dir, addOffsets = true, addCommits = true)
+      val originalId = checkpointMetadata1.streamMetadata.id
 
       // Re-read checkpoint - should succeed and return the same ID
       val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
@@ -68,95 +180,25 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
 
   test("invalid case: missing metadata with non-empty offset log") {
     withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-
-      // Create checkpoint with metadata first
-      val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      checkpointMetadata1.streamMetadata // Initialize metadata
-
-      // Add offset data
-      checkpointMetadata1.offsetLog.add(0, OffsetSeq.fill(None))
-      checkpointMetadata1.offsetLog.add(1, OffsetSeq.fill(None))
-
-      // Delete the metadata file
-      val metadataPath = new Path(new Path(checkpointRoot), "metadata")
-      val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(metadataPath, false)
-
-      // Try to create a new checkpoint metadata - should throw error
-      val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkRuntimeException] {
-        checkpointMetadata2.streamMetadata
-      }
-      checkError(
-        exception = exception,
-        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-        parameters = Map("checkpointLocation" -> checkpointRoot)
-      )
+      val (_, checkpointRoot) = createCheckpointWithLogs(dir, addOffsets = true)
+      deleteMetadataFile(checkpointRoot)
+      assertMissingMetadataError(checkpointRoot)
     }
   }
 
   test("invalid case: missing metadata with non-empty commit log") {
     withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-
-      // Create checkpoint with metadata first
-      val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      checkpointMetadata1.streamMetadata // Initialize metadata
-
-      // Add commit data
-      checkpointMetadata1.commitLog.add(0, CommitMetadata())
-      checkpointMetadata1.commitLog.add(1, CommitMetadata())
-
-      // Delete the metadata file
-      val metadataPath = new Path(new Path(checkpointRoot), "metadata")
-      val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(metadataPath, false)
-
-      // Try to create a new checkpoint metadata - should throw error
-      val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkRuntimeException] {
-        checkpointMetadata2.streamMetadata
-      }
-      checkError(
-        exception = exception,
-        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-        parameters = Map("checkpointLocation" -> checkpointRoot)
-      )
+      val (_, checkpointRoot) = createCheckpointWithLogs(dir, addCommits = true)
+      deleteMetadataFile(checkpointRoot)
+      assertMissingMetadataError(checkpointRoot)
     }
   }
 
   test("invalid case: missing metadata with both offset and commit logs non-empty") {
     withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-
-      // Create checkpoint with metadata first
-      val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      checkpointMetadata1.streamMetadata // Initialize metadata
-
-      // Add offset data
-      checkpointMetadata1.offsetLog.add(0, OffsetSeq.fill(None))
-      checkpointMetadata1.offsetLog.add(1, OffsetSeq.fill(None))
-
-      // Add commit data
-      checkpointMetadata1.commitLog.add(0, CommitMetadata())
-      checkpointMetadata1.commitLog.add(1, CommitMetadata())
-
-      // Delete the metadata file
-      val metadataPath = new Path(new Path(checkpointRoot), "metadata")
-      val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(metadataPath, false)
-
-      // Try to create a new checkpoint metadata - should throw error
-      val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkRuntimeException] {
-        checkpointMetadata2.streamMetadata
-      }
-      checkError(
-        exception = exception,
-        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-        parameters = Map("checkpointLocation" -> checkpointRoot)
-      )
+      val (_, checkpointRoot) = createCheckpointWithLogs(dir, addOffsets = true, addCommits = true)
+      deleteMetadataFile(checkpointRoot)
+      assertMissingMetadataError(checkpointRoot)
     }
   }
 
@@ -173,176 +215,32 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
       assert(commitLog.getLatestBatchId().isEmpty)
 
       // Try to create checkpoint metadata - should succeed
-      val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val metadata = checkpointMetadata.streamMetadata
-      assert(metadata != null)
-      assert(metadata.id != null)
-      assert(UUID.fromString(metadata.id) != null) // Should be a valid UUID
+      assertNewMetadataCreated(checkpointRoot)
     }
   }
 
-  test("feature flag: validation is performed when flag is enabled (default)") {
-    // Verify flag is enabled by default
-    assert(spark.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS) === true)
-
-    withTempDir { dir =>
-      val checkpointRoot = dir.getAbsolutePath
-
-      // Create checkpoint with metadata and logs
-      val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      checkpointMetadata1.streamMetadata
-      checkpointMetadata1.offsetLog.add(0, OffsetSeq.fill(None))
-
-      // Delete metadata file
-      val metadataPath = new Path(new Path(checkpointRoot), "metadata")
-      val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(metadataPath, false)
-
-      // Should throw error because validation is enabled
-      val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-      val exception = intercept[SparkRuntimeException] {
-        checkpointMetadata2.streamMetadata
-      }
-      checkError(
-        exception = exception,
-        condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-        parameters = Map("checkpointLocation" -> checkpointRoot)
-      )
-    }
-  }
-
-  test("feature flag: validation is skipped when flag is disabled") {
+  test("sparkConf: validation is skipped when flag is disabled") {
     withSQLConf(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS.key -> "false") {
       // Verify flag is disabled
-      assert(spark.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS) === false)
+      assert(!spark.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS))
 
       withTempDir { dir =>
-        val checkpointRoot = dir.getAbsolutePath
-
-        // Create checkpoint with metadata and logs
-        val checkpointMetadata1 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-        checkpointMetadata1.streamMetadata
-        checkpointMetadata1.offsetLog.add(0, OffsetSeq.fill(None))
-
-        // Delete metadata file
-        val metadataPath = new Path(new Path(checkpointRoot), "metadata")
-        val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-        fs.delete(metadataPath, false)
+        val (_, checkpointRoot) = createCheckpointWithLogs(dir, addOffsets = true)
+        deleteMetadataFile(checkpointRoot)
 
         // Should succeed and create new metadata with new UUID (validation is skipped)
-        val checkpointMetadata2 = new StreamingQueryCheckpointMetadata(spark, checkpointRoot)
-        val metadata = checkpointMetadata2.streamMetadata
-        assert(metadata != null)
-        assert(metadata.id != null)
-        assert(UUID.fromString(metadata.id) != null)
+        assertNewMetadataCreated(checkpointRoot)
       }
     }
   }
 
   test("e2e: streaming query fails to restart when checkpoint metadata is corrupted") {
-    withTempDir { checkpointDir =>
-      withTempDir { outputDir =>
-        val inputData = MemoryStream[Int]
-        var query = inputData.toDF()
-          .writeStream
-          .format("parquet")
-          .option("checkpointLocation", checkpointDir.getAbsolutePath)
-          .outputMode(OutputMode.Append())
-          .start(outputDir.getAbsolutePath)
-
-        try {
-          // Add data and process batches
-          inputData.addData(1, 2, 3)
-          query.processAllAvailable()
-
-          inputData.addData(4, 5, 6)
-          query.processAllAvailable()
-
-          // Verify checkpoint files exist
-          val metadataPath = new Path(new Path(checkpointDir.getAbsolutePath), "metadata")
-          val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(fs.exists(metadataPath), "Metadata file should exist")
-
-          // Stop the query
-          query.stop()
-          query = null
-
-          // Simulate corrupted checkpoint by deleting only the metadata file
-          fs.delete(metadataPath, false)
-          assert(!fs.exists(metadataPath), "Metadata file should be deleted")
-
-          // Attempt to restart the query - should fail with validation error
-          val exception = intercept[SparkRuntimeException] {
-            inputData.toDF()
-              .writeStream
-              .format("parquet")
-              .option("checkpointLocation", checkpointDir.getAbsolutePath)
-              .outputMode(OutputMode.Append())
-              .start(outputDir.getAbsolutePath)
-          }
-
-          // Verify the error is our checkpoint consistency error
-          val qualifiedPath = fs.makeQualified(new Path(checkpointDir.getAbsolutePath))
-          checkError(
-            exception = exception,
-            condition = "STREAMING_CHECKPOINT_MISSING_METADATA_FILE",
-            parameters = Map("checkpointLocation" -> qualifiedPath.toString)
-          )
-        } finally {
-          if (query != null && query.isActive) {
-            query.stop()
-          }
-        }
-      }
-    }
+    testE2ECorruptedCheckpoint(validationEnabled = true)
   }
 
   test("e2e: streaming query restarts successfully when flag is disabled") {
     withSQLConf(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS.key -> "false") {
-      withTempDir { checkpointDir =>
-        withTempDir { outputDir =>
-          val inputData = MemoryStream[Int]
-          var query = inputData.toDF()
-            .writeStream
-            .format("parquet")
-            .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .outputMode(OutputMode.Append())
-            .start(outputDir.getAbsolutePath)
-
-          try {
-            // Add data and process batches
-            inputData.addData(1, 2, 3)
-            query.processAllAvailable()
-
-            // Stop the query
-            query.stop()
-            query = null
-
-            // Simulate corrupted checkpoint by deleting only the metadata file
-            val metadataPath = new Path(new Path(checkpointDir.getAbsolutePath), "metadata")
-            val fs = metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
-            fs.delete(metadataPath, false)
-
-            // Restart the query - should succeed because validation is disabled
-            query = inputData.toDF()
-              .writeStream
-              .format("parquet")
-              .option("checkpointLocation", checkpointDir.getAbsolutePath)
-              .outputMode(OutputMode.Append())
-              .start(outputDir.getAbsolutePath)
-
-            // Query should be active and can process more data
-            assert(query.isActive, "Query should be active after restart")
-
-            inputData.addData(7, 8, 9)
-            query.processAllAvailable()
-          } finally {
-            if (query != null && query.isActive) {
-              query.stop()
-            }
-          }
-        }
-      }
+      testE2ECorruptedCheckpoint(validationEnabled = false)
     }
   }
 }
