@@ -50,6 +50,7 @@ class DataStreamReader(OptionUtils):
         self._schema = ""
         self._client = client
         self._options: Dict[str, str] = {}
+        self._source_name: Optional[str] = None
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
@@ -89,6 +90,42 @@ class DataStreamReader(OptionUtils):
 
     options.__doc__ = PySparkDataStreamReader.options.__doc__
 
+    def name(self, source_name: str) -> "DataStreamReader":
+        """Specifies a name for the streaming source.
+
+        This name is used to identify the source in checkpoint metadata and enables
+        stable checkpoint locations for source evolution.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        source_name : str
+            the name to assign to this streaming source. Must contain only ASCII letters,
+            digits, and underscores.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
+        <...streaming.readwriter.DataStreamReader object ...>
+        """
+        if not source_name or not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "source_name", "arg_type": type(source_name).__name__},
+            )
+        # Validation will be done on the server side
+        self._source_name = source_name
+        return self
+
     def load(
         self,
         path: Optional[str] = None,
@@ -113,6 +150,7 @@ class DataStreamReader(OptionUtils):
             options=self._options,
             paths=[path] if path else None,
             is_streaming=True,
+            source_name=self._source_name,
         )
 
         return self._df(plan)

@@ -1697,6 +1697,9 @@ class SparkConnectPlanner(
         if (streamSource.getSchema.nonEmpty) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
+        if (streamSource.hasSourceName) {
+          reader.name(streamSource.getSourceName)
+        }
         val streamDF = streamSource.getPathsCount match {
           case 0 => reader.load()
           case 1 => reader.load(streamSource.getPaths(0))

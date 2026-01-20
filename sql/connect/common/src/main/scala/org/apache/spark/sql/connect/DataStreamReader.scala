@@ -18,13 +18,39 @@
 package org.apache.spark.sql.connect
 
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.connect.proto.Read.DataSource
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
+
+/**
+ * Companion object for DataStreamReader with validation utilities.
+ */
+private[sql] object DataStreamReader {
+  /**
+   * Pattern for valid source names.
+   * Names must only contain ASCII letters, digits, and underscores.
+   */
+  private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
+
+  /**
+   * Validates that a streaming source name only contains alphanumeric characters and underscores.
+   *
+   * @param sourceName the source name to validate
+   * @throws IllegalArgumentException if the source name contains invalid characters
+   */
+  def validateSourceName(sourceName: String): Unit = {
+    if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
+      throw new IllegalArgumentException(
+        s"Invalid streaming source name: '$sourceName'. " +
+        "Source names must contain only ASCII letters, digits, and underscores.")
+    }
+  }
+}
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -72,6 +98,20 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   /** @inheritdoc */
   override def options(options: java.util.Map[String, String]): this.type = {
     sourceBuilder.putAllOptions(options)
+    this
+  }
+
+  /**
+   * Specifies a name for the streaming source. This name is used to identify the source
+   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
+   *
+   * @param sourceName the name to assign to this streaming source
+   * @since 4.2.0
+   */
+  @Experimental
+  private[sql] def name(sourceName: String): this.type = {
+    DataStreamReader.validateSourceName(sourceName)
+    sourceBuilder.setSourceName(sourceName)
     this
   }
 
