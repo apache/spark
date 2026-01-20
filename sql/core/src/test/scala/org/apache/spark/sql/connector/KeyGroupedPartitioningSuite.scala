@@ -2846,8 +2846,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       assert(shuffles.size == 1, "only shuffle one side not report partitioning")
 
       val scans = collectScans(df.queryExecution.executedPlan)
-      assert(scans(0).inputRDD.partitions.length === 2, "items scan should group")
-      assert(scans(1).inputRDD.partitions.length === 2, "purchases scan should not group")
+      assert(scans(0).inputRDD.partitions.length === 2,
+        "items scan should group as it is the driver of SPJ")
+      assert(scans(1).inputRDD.partitions.length === 2,
+        "purchases scan should not group as SPJ can't leverage it")
 
       checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
     }
@@ -2864,6 +2866,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     val df = sql(s"SELECT * FROM testcat.ns.$items")
     val scans = collectScans(df.queryExecution.executedPlan)
-    assert(scans(0).inputRDD.partitions.length === 2, "items scan should not group")
+    assert(scans(0).inputRDD.partitions.length === 2,
+      "items scan should group to maintain query output partitioning semantics")
   }
 }
