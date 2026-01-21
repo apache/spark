@@ -75,20 +75,46 @@ class PyArrowNumericalCastTests(unittest.TestCase):
     # Source types (all scalar types)
     SOURCE_TYPES = [
         # Numerical
-        "int8", "int16", "int32", "int64",
-        "uint8", "uint16", "uint32", "uint64",
-        "float16", "float32", "float64",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float16",
+        "float32",
+        "float64",
         # Non-numerical
         "bool",
-        "string", "large_string",
-        "binary", "large_binary", "fixed_size_binary_16",
-        "decimal128", "decimal256",
-        "date32", "date64",
-        "timestamp_s", "timestamp_ms", "timestamp_us", "timestamp_ns",
-        "timestamp_s_tz", "timestamp_ms_tz", "timestamp_us_tz", "timestamp_ns_tz",
-        "timestamp_s_tz_ny", "timestamp_s_tz_shanghai",
-        "duration_s", "duration_ms", "duration_us", "duration_ns",
-        "time32_s", "time32_ms", "time64_us", "time64_ns",
+        "string",
+        "large_string",
+        "binary",
+        "large_binary",
+        "fixed_size_binary_16",
+        "decimal128",
+        "decimal256",
+        "date32",
+        "date64",
+        "timestamp_s",
+        "timestamp_ms",
+        "timestamp_us",
+        "timestamp_ns",
+        "timestamp_s_tz",
+        "timestamp_ms_tz",
+        "timestamp_us_tz",
+        "timestamp_ns_tz",
+        "timestamp_s_tz_ny",
+        "timestamp_s_tz_shanghai",
+        "duration_s",
+        "duration_ms",
+        "duration_us",
+        "duration_ns",
+        "time32_s",
+        "time32_ms",
+        "time64_us",
+        "time64_ns",
     ]
 
     # Class-level storage for test results
@@ -2507,26 +2533,45 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([True, False, None], pa.bool_()), pa.lib.ArrowNotImplementedError),
             ],
             "float32": [
-                (pa.array([True, False, None], pa.bool_()), pa.array([1.0, 0.0, None], pa.float32())),
+                (
+                    pa.array([True, False, None], pa.bool_()),
+                    pa.array([1.0, 0.0, None], pa.float32()),
+                ),
             ],
             "float64": [
-                (pa.array([True, False, None], pa.bool_()), pa.array([1.0, 0.0, None], pa.float64())),
+                (
+                    pa.array([True, False, None], pa.bool_()),
+                    pa.array([1.0, 0.0, None], pa.float64()),
+                ),
             ],
             # bool -> bool (identity)
             "bool": [
-                (pa.array([True, False, None], pa.bool_()), pa.array([True, False, None], pa.bool_())),
+                (
+                    pa.array([True, False, None], pa.bool_()),
+                    pa.array([True, False, None], pa.bool_()),
+                ),
             ],
             # bool -> string
             "string": [
-                (pa.array([True, False, None], pa.bool_()), pa.array(["true", "false", None], pa.string())),
+                (
+                    pa.array([True, False, None], pa.bool_()),
+                    pa.array(["true", "false", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([True, False, None], pa.bool_()), pa.array(["true", "false", None], pa.large_string())),
+                (
+                    pa.array([True, False, None], pa.bool_()),
+                    pa.array(["true", "false", None], pa.large_string()),
+                ),
             ],
             # bool -> binary (not supported)
             "binary": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
             # bool -> decimal (not supported)
             "decimal128": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
@@ -2534,15 +2579,33 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "date32": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
             "date64": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
             "timestamp_s": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)
+            ],
             "duration_s": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
             "duration_us": [(pa.array([True, False], pa.bool_()), pa.lib.ArrowNotImplementedError)],
@@ -2566,23 +2629,38 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         casts = {
             # string -> integers (parse string to int)
             "int8": [
-                (pa.array(["0", "1", "-1", "127", "-128", None], pa.string()), pa.array([0, 1, -1, 127, -128, None], pa.int8())),
+                (
+                    pa.array(["0", "1", "-1", "127", "-128", None], pa.string()),
+                    pa.array([0, 1, -1, 127, -128, None], pa.int8()),
+                ),
                 (pa.array(["128", "abc"], pa.string()), pa.lib.ArrowInvalid),  # overflow/invalid
             ],
             "int16": [
-                (pa.array(["0", "1", "-1", None], pa.string()), pa.array([0, 1, -1, None], pa.int16())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.string()),
+                    pa.array([0, 1, -1, None], pa.int16()),
+                ),
                 (pa.array(["abc"], pa.string()), pa.lib.ArrowInvalid),
             ],
             "int32": [
-                (pa.array(["0", "1", "-1", None], pa.string()), pa.array([0, 1, -1, None], pa.int32())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.string()),
+                    pa.array([0, 1, -1, None], pa.int32()),
+                ),
                 (pa.array(["abc"], pa.string()), pa.lib.ArrowInvalid),
             ],
             "int64": [
-                (pa.array(["0", "1", "-1", None], pa.string()), pa.array([0, 1, -1, None], pa.int64())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.string()),
+                    pa.array([0, 1, -1, None], pa.int64()),
+                ),
                 (pa.array(["abc"], pa.string()), pa.lib.ArrowInvalid),
             ],
             "uint8": [
-                (pa.array(["0", "1", "255", None], pa.string()), pa.array([0, 1, 255, None], pa.uint8())),
+                (
+                    pa.array(["0", "1", "255", None], pa.string()),
+                    pa.array([0, 1, 255, None], pa.uint8()),
+                ),
                 (pa.array(["-1", "256"], pa.string()), pa.lib.ArrowInvalid),
             ],
             "uint16": [
@@ -2596,93 +2674,174 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             ],
             # string -> floats
             "float16": [
-                (pa.array(["0", "1.5", "-1.5", None], pa.string()), pa.array([0.0, 1.5, -1.5, None], pa.float16())),
+                (
+                    pa.array(["0", "1.5", "-1.5", None], pa.string()),
+                    pa.array([0.0, 1.5, -1.5, None], pa.float16()),
+                ),
             ],
             "float32": [
-                (pa.array(["0", "1.5", "-1.5", None], pa.string()), pa.array([0.0, 1.5, -1.5, None], pa.float32())),
-                (pa.array(["nan", "inf", "-inf"], pa.string()), pa.array([float("nan"), float("inf"), float("-inf")], pa.float32())),
+                (
+                    pa.array(["0", "1.5", "-1.5", None], pa.string()),
+                    pa.array([0.0, 1.5, -1.5, None], pa.float32()),
+                ),
+                (
+                    pa.array(["nan", "inf", "-inf"], pa.string()),
+                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float32()),
+                ),
             ],
             "float64": [
-                (pa.array(["0", "1.5", "-1.5", None], pa.string()), pa.array([0.0, 1.5, -1.5, None], pa.float64())),
+                (
+                    pa.array(["0", "1.5", "-1.5", None], pa.string()),
+                    pa.array([0.0, 1.5, -1.5, None], pa.float64()),
+                ),
             ],
             # string -> bool
             "bool": [
-                (pa.array(["true", "false", None], pa.string()), pa.array([True, False, None], pa.bool_())),
+                (
+                    pa.array(["true", "false", None], pa.string()),
+                    pa.array([True, False, None], pa.bool_()),
+                ),
                 (pa.array(["1", "0"], pa.string()), pa.array([True, False], pa.bool_())),
                 (pa.array(["yes", "abc"], pa.string()), pa.lib.ArrowInvalid),
             ],
             # string -> string (identity)
             "string": [
-                (pa.array(["hello", "world", None], pa.string()), pa.array(["hello", "world", None], pa.string())),
+                (
+                    pa.array(["hello", "world", None], pa.string()),
+                    pa.array(["hello", "world", None], pa.string()),
+                ),
                 # Empty string
                 (pa.array(["", None], pa.string()), pa.array(["", None], pa.string())),
                 # Unicode: CJK characters (Chinese, Japanese, Korean)
-                (pa.array(["你好", "世界", None], pa.string()), pa.array(["你好", "世界", None], pa.string())),
+                (
+                    pa.array(["你好", "世界", None], pa.string()),
+                    pa.array(["你好", "世界", None], pa.string()),
+                ),
                 (pa.array(["こんにちは", "日本語"], pa.string()), pa.array(["こんにちは", "日本語"], pa.string())),
                 (pa.array(["안녕하세요", "한국어"], pa.string()), pa.array(["안녕하세요", "한국어"], pa.string())),
                 # Unicode: Emoji (including multi-codepoint emoji)
-                (pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string()), pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string())),
+                (
+                    pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string()),
+                    pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string()),
+                ),
                 # Unicode: RTL languages (Arabic, Hebrew)
-                (pa.array(["مرحبا", "שלום"], pa.string()), pa.array(["مرحبا", "שלום"], pa.string())),
+                (
+                    pa.array(["مرحبا", "שלום"], pa.string()),
+                    pa.array(["مرحبا", "שלום"], pa.string()),
+                ),
                 # Unicode: Mixed scripts
-                (pa.array(["Hello世界🌍", "Привет мир"], pa.string()), pa.array(["Hello世界🌍", "Привет мир"], pa.string())),
+                (
+                    pa.array(["Hello世界🌍", "Привет мир"], pa.string()),
+                    pa.array(["Hello世界🌍", "Привет мир"], pa.string()),
+                ),
                 # Special characters (whitespace, control chars)
-                (pa.array(["a\tb\nc", "  spaces  "], pa.string()), pa.array(["a\tb\nc", "  spaces  "], pa.string())),
+                (
+                    pa.array(["a\tb\nc", "  spaces  "], pa.string()),
+                    pa.array(["a\tb\nc", "  spaces  "], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array(["hello", "world", None], pa.string()), pa.array(["hello", "world", None], pa.large_string())),
+                (
+                    pa.array(["hello", "world", None], pa.string()),
+                    pa.array(["hello", "world", None], pa.large_string()),
+                ),
                 # Unicode preserved in large_string
-                (pa.array(["你好", "😀", None], pa.string()), pa.array(["你好", "😀", None], pa.large_string())),
+                (
+                    pa.array(["你好", "😀", None], pa.string()),
+                    pa.array(["你好", "😀", None], pa.large_string()),
+                ),
             ],
             # string -> binary
             "binary": [
-                (pa.array(["hello", "world", None], pa.string()), pa.array([b"hello", b"world", None], pa.binary())),
+                (
+                    pa.array(["hello", "world", None], pa.string()),
+                    pa.array([b"hello", b"world", None], pa.binary()),
+                ),
                 # Empty string -> empty binary
                 (pa.array(["", None], pa.string()), pa.array([b"", None], pa.binary())),
                 # Unicode strings -> UTF-8 encoded binary
-                (pa.array(["你好", None], pa.string()), pa.array(["你好".encode("utf-8"), None], pa.binary())),
+                (
+                    pa.array(["你好", None], pa.string()),
+                    pa.array(["你好".encode("utf-8"), None], pa.binary()),
+                ),
                 (pa.array(["😀"], pa.string()), pa.array(["😀".encode("utf-8")], pa.binary())),
             ],
             "large_binary": [
-                (pa.array(["hello", "world", None], pa.string()), pa.array([b"hello", b"world", None], pa.large_binary())),
+                (
+                    pa.array(["hello", "world", None], pa.string()),
+                    pa.array([b"hello", b"world", None], pa.large_binary()),
+                ),
                 # Unicode to large_binary
-                (pa.array(["世界", None], pa.string()), pa.array(["世界".encode("utf-8"), None], pa.large_binary())),
+                (
+                    pa.array(["世界", None], pa.string()),
+                    pa.array(["世界".encode("utf-8"), None], pa.large_binary()),
+                ),
             ],
             "fixed_size_binary_16": [
                 (pa.array(["hello"], pa.string()), pa.lib.ArrowInvalid),  # wrong size
             ],
             # string -> decimal
             "decimal128": [
-                (pa.array(["0", "1.5", "-1.5", None], pa.string()), pa.array([Decimal("0"), Decimal("1.5"), Decimal("-1.5"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array(["0", "1.5", "-1.5", None], pa.string()),
+                    pa.array(
+                        [Decimal("0"), Decimal("1.5"), Decimal("-1.5"), None], pa.decimal128(38, 10)
+                    ),
+                ),
             ],
             "decimal256": [
-                (pa.array(["0", "1.5", None], pa.string()), pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array(["0", "1.5", None], pa.string()),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # string -> temporal
             "date32": [
-                (pa.array(["2022-01-01", None], pa.string()), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array(["2022-01-01", None], pa.string()),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array(["2022-01-01", None], pa.string()), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array(["2022-01-01", None], pa.string()),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             "timestamp_s": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.string()), pa.array([1640995200, None], pa.timestamp("s"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.string()),
+                    pa.array([1640995200, None], pa.timestamp("s")),
+                ),
             ],
             "timestamp_ms": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.string()), pa.array([1640995200000, None], pa.timestamp("ms"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.string()),
+                    pa.array([1640995200000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.string()), pa.array([1640995200000000, None], pa.timestamp("us"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.string()),
+                    pa.array([1640995200000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.string()), pa.array([1640995200000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.string()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns")),
+                ),
             ],
-            "timestamp_s_tz": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],  # needs zone offset
+            "timestamp_s_tz": [
+                (pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)
+            ],  # needs zone offset
             "timestamp_ms_tz": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],
             "timestamp_us_tz": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],
             "timestamp_ns_tz": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],
             "timestamp_s_tz_ny": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],
-            "timestamp_s_tz_shanghai": [(pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)],
+            "timestamp_s_tz_shanghai": [
+                (pa.array(["2022-01-01"], pa.string()), pa.lib.ArrowInvalid)
+            ],
             "duration_s": [(pa.array(["1"], pa.string()), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array(["1"], pa.string()), pa.lib.ArrowNotImplementedError)],
             "duration_us": [(pa.array(["1"], pa.string()), pa.lib.ArrowNotImplementedError)],
@@ -2703,98 +2862,179 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         casts = {
             # large_string -> integers
             "int8": [
-                (pa.array(["0", "1", "-1", None], pa.large_string()), pa.array([0, 1, -1, None], pa.int8())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.large_string()),
+                    pa.array([0, 1, -1, None], pa.int8()),
+                ),
             ],
             "int16": [
-                (pa.array(["0", "1", "-1", None], pa.large_string()), pa.array([0, 1, -1, None], pa.int16())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.large_string()),
+                    pa.array([0, 1, -1, None], pa.int16()),
+                ),
             ],
             "int32": [
-                (pa.array(["0", "1", "-1", None], pa.large_string()), pa.array([0, 1, -1, None], pa.int32())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.large_string()),
+                    pa.array([0, 1, -1, None], pa.int32()),
+                ),
             ],
             "int64": [
-                (pa.array(["0", "1", "-1", None], pa.large_string()), pa.array([0, 1, -1, None], pa.int64())),
+                (
+                    pa.array(["0", "1", "-1", None], pa.large_string()),
+                    pa.array([0, 1, -1, None], pa.int64()),
+                ),
             ],
             "uint8": [
                 (pa.array(["0", "1", None], pa.large_string()), pa.array([0, 1, None], pa.uint8())),
             ],
             "uint16": [
-                (pa.array(["0", "1", None], pa.large_string()), pa.array([0, 1, None], pa.uint16())),
+                (
+                    pa.array(["0", "1", None], pa.large_string()),
+                    pa.array([0, 1, None], pa.uint16()),
+                ),
             ],
             "uint32": [
-                (pa.array(["0", "1", None], pa.large_string()), pa.array([0, 1, None], pa.uint32())),
+                (
+                    pa.array(["0", "1", None], pa.large_string()),
+                    pa.array([0, 1, None], pa.uint32()),
+                ),
             ],
             "uint64": [
-                (pa.array(["0", "1", None], pa.large_string()), pa.array([0, 1, None], pa.uint64())),
+                (
+                    pa.array(["0", "1", None], pa.large_string()),
+                    pa.array([0, 1, None], pa.uint64()),
+                ),
             ],
             # large_string -> floats
             "float16": [
-                (pa.array(["0", "1.5", None], pa.large_string()), pa.array([0.0, 1.5, None], pa.float16())),
+                (
+                    pa.array(["0", "1.5", None], pa.large_string()),
+                    pa.array([0.0, 1.5, None], pa.float16()),
+                ),
             ],
             "float32": [
-                (pa.array(["0", "1.5", None], pa.large_string()), pa.array([0.0, 1.5, None], pa.float32())),
+                (
+                    pa.array(["0", "1.5", None], pa.large_string()),
+                    pa.array([0.0, 1.5, None], pa.float32()),
+                ),
             ],
             "float64": [
-                (pa.array(["0", "1.5", None], pa.large_string()), pa.array([0.0, 1.5, None], pa.float64())),
+                (
+                    pa.array(["0", "1.5", None], pa.large_string()),
+                    pa.array([0.0, 1.5, None], pa.float64()),
+                ),
             ],
             # large_string -> bool
             "bool": [
-                (pa.array(["true", "false", None], pa.large_string()), pa.array([True, False, None], pa.bool_())),
+                (
+                    pa.array(["true", "false", None], pa.large_string()),
+                    pa.array([True, False, None], pa.bool_()),
+                ),
             ],
             # large_string -> string
             "string": [
-                (pa.array(["hello", None], pa.large_string()), pa.array(["hello", None], pa.string())),
+                (
+                    pa.array(["hello", None], pa.large_string()),
+                    pa.array(["hello", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array(["hello", None], pa.large_string()), pa.array(["hello", None], pa.large_string())),
+                (
+                    pa.array(["hello", None], pa.large_string()),
+                    pa.array(["hello", None], pa.large_string()),
+                ),
             ],
             # large_string -> binary
             "binary": [
-                (pa.array(["hello", None], pa.large_string()), pa.array([b"hello", None], pa.binary())),
+                (
+                    pa.array(["hello", None], pa.large_string()),
+                    pa.array([b"hello", None], pa.binary()),
+                ),
             ],
             "large_binary": [
-                (pa.array(["hello", None], pa.large_string()), pa.array([b"hello", None], pa.large_binary())),
+                (
+                    pa.array(["hello", None], pa.large_string()),
+                    pa.array([b"hello", None], pa.large_binary()),
+                ),
             ],
             "fixed_size_binary_16": [(pa.array(["hello"], pa.large_string()), pa.lib.ArrowInvalid)],
             # large_string -> decimal
             "decimal128": [
-                (pa.array(["0", "1.5", None], pa.large_string()), pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array(["0", "1.5", None], pa.large_string()),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                ),
             ],
             "decimal256": [
-                (pa.array(["0", "1.5", None], pa.large_string()), pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array(["0", "1.5", None], pa.large_string()),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # large_string -> temporal
             "date32": [
-                (pa.array(["2022-01-01", None], pa.large_string()), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array(["2022-01-01", None], pa.large_string()),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array(["2022-01-01", None], pa.large_string()), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array(["2022-01-01", None], pa.large_string()),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             "timestamp_s": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.large_string()), pa.array([1640995200, None], pa.timestamp("s"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.large_string()),
+                    pa.array([1640995200, None], pa.timestamp("s")),
+                ),
             ],
             "timestamp_ms": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.large_string()), pa.array([1640995200000, None], pa.timestamp("ms"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.large_string()),
+                    pa.array([1640995200000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.large_string()), pa.array([1640995200000000, None], pa.timestamp("us"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.large_string()),
+                    pa.array([1640995200000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array(["2022-01-01 00:00:00", None], pa.large_string()), pa.array([1640995200000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array(["2022-01-01 00:00:00", None], pa.large_string()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns")),
+                ),
             ],
             "timestamp_s_tz": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
             "timestamp_ms_tz": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
             "timestamp_us_tz": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
             "timestamp_ns_tz": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
-            "timestamp_s_tz_ny": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
-            "timestamp_s_tz_shanghai": [(pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)],
+            "timestamp_s_tz_ny": [
+                (pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array(["2022-01-01"], pa.large_string()), pa.lib.ArrowInvalid)
+            ],
             "duration_s": [(pa.array(["1"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array(["1"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
             "duration_us": [(pa.array(["1"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
             "duration_ns": [(pa.array(["1"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
-            "time32_s": [(pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
-            "time32_ms": [(pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
-            "time64_us": [(pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
-            "time64_ns": [(pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)],
+            "time32_s": [
+                (pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)
+            ],
+            "time32_ms": [
+                (pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_us": [
+                (pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_ns": [
+                (pa.array(["12:00:00"], pa.large_string()), pa.lib.ArrowNotImplementedError)
+            ],
         }
         self._run_cast_tests(casts, "large_string")
 
@@ -2824,20 +3064,32 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowInvalid)],
             # binary -> string
             "string": [
-                (pa.array([b"hello", b"world", None], pa.binary()), pa.array(["hello", "world", None], pa.string())),
+                (
+                    pa.array([b"hello", b"world", None], pa.binary()),
+                    pa.array(["hello", "world", None], pa.string()),
+                ),
                 # Empty binary -> empty string
                 (pa.array([b"", None], pa.binary()), pa.array(["", None], pa.string())),
                 # UTF-8 encoded Unicode in binary -> string (valid UTF-8)
-                (pa.array(["你好".encode("utf-8"), None], pa.binary()), pa.array(["你好", None], pa.string())),
+                (
+                    pa.array(["你好".encode("utf-8"), None], pa.binary()),
+                    pa.array(["你好", None], pa.string()),
+                ),
                 (pa.array(["😀".encode("utf-8")], pa.binary()), pa.array(["😀"], pa.string())),
                 # Invalid UTF-8 sequences -> ArrowInvalid
                 (pa.array([b"\xff\xfe"], pa.binary()), pa.lib.ArrowInvalid),
                 (pa.array([b"\x80\x81\x82"], pa.binary()), pa.lib.ArrowInvalid),
             ],
             "large_string": [
-                (pa.array([b"hello", None], pa.binary()), pa.array(["hello", None], pa.large_string())),
+                (
+                    pa.array([b"hello", None], pa.binary()),
+                    pa.array(["hello", None], pa.large_string()),
+                ),
                 # UTF-8 encoded Unicode
-                (pa.array(["世界".encode("utf-8"), None], pa.binary()), pa.array(["世界", None], pa.large_string())),
+                (
+                    pa.array(["世界".encode("utf-8"), None], pa.binary()),
+                    pa.array(["世界", None], pa.large_string()),
+                ),
             ],
             # binary -> binary
             "binary": [
@@ -2845,20 +3097,32 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # Empty binary
                 (pa.array([b"", None], pa.binary()), pa.array([b"", None], pa.binary())),
                 # Binary with null bytes (preserved)
-                (pa.array([b"\x00\x01\x02", None], pa.binary()), pa.array([b"\x00\x01\x02", None], pa.binary())),
+                (
+                    pa.array([b"\x00\x01\x02", None], pa.binary()),
+                    pa.array([b"\x00\x01\x02", None], pa.binary()),
+                ),
             ],
             "large_binary": [
-                (pa.array([b"hello", None], pa.binary()), pa.array([b"hello", None], pa.large_binary())),
+                (
+                    pa.array([b"hello", None], pa.binary()),
+                    pa.array([b"hello", None], pa.large_binary()),
+                ),
             ],
             "fixed_size_binary_16": [
                 (pa.array([b"hello"], pa.binary()), pa.lib.ArrowInvalid),  # wrong size
             ],
             # binary -> decimal (parses as string)
             "decimal128": [
-                (pa.array([b"0", b"1.5", None], pa.binary()), pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array([b"0", b"1.5", None], pa.binary()),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                ),
             ],
             "decimal256": [
-                (pa.array([b"0", None], pa.binary()), pa.array([Decimal("0"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array([b"0", None], pa.binary()),
+                    pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # binary -> temporal (not supported)
             "date32": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
@@ -2868,11 +3132,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_us": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
             "timestamp_s_tz": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms_tz": [
+                (pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)
+            ],
             "duration_s": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
             "duration_us": [(pa.array([b"\x00"], pa.binary()), pa.lib.ArrowNotImplementedError)],
@@ -2907,47 +3181,101 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowInvalid)],
             # large_binary -> string
             "string": [
-                (pa.array([b"hello", None], pa.large_binary()), pa.array(["hello", None], pa.string())),
+                (
+                    pa.array([b"hello", None], pa.large_binary()),
+                    pa.array(["hello", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([b"hello", None], pa.large_binary()), pa.array(["hello", None], pa.large_string())),
+                (
+                    pa.array([b"hello", None], pa.large_binary()),
+                    pa.array(["hello", None], pa.large_string()),
+                ),
             ],
             # large_binary -> binary
             "binary": [
-                (pa.array([b"hello", None], pa.large_binary()), pa.array([b"hello", None], pa.binary())),
+                (
+                    pa.array([b"hello", None], pa.large_binary()),
+                    pa.array([b"hello", None], pa.binary()),
+                ),
             ],
             "large_binary": [
-                (pa.array([b"hello", None], pa.large_binary()), pa.array([b"hello", None], pa.large_binary())),
+                (
+                    pa.array([b"hello", None], pa.large_binary()),
+                    pa.array([b"hello", None], pa.large_binary()),
+                ),
             ],
-            "fixed_size_binary_16": [(pa.array([b"hello"], pa.large_binary()), pa.lib.ArrowInvalid)],
+            "fixed_size_binary_16": [
+                (pa.array([b"hello"], pa.large_binary()), pa.lib.ArrowInvalid)
+            ],
             # large_binary -> decimal (parses as string)
             "decimal128": [
-                (pa.array([b"0", None], pa.large_binary()), pa.array([Decimal("0"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array([b"0", None], pa.large_binary()),
+                    pa.array([Decimal("0"), None], pa.decimal128(38, 10)),
+                ),
             ],
             "decimal256": [
-                (pa.array([b"0", None], pa.large_binary()), pa.array([Decimal("0"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array([b"0", None], pa.large_binary()),
+                    pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # large_binary -> temporal (not supported)
             "date32": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
             "date64": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "duration_s": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_s": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
             "time32_s": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "time32_ms": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "time64_us": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
-            "time64_ns": [(pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)],
+            "time32_ms": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_us": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_ns": [
+                (pa.array([b"\x00"], pa.large_binary()), pa.lib.ArrowNotImplementedError)
+            ],
         }
         self._run_cast_tests(casts, "large_binary")
 
@@ -2977,17 +3305,26 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
             # fixed_size_binary -> string
             "string": [
-                (pa.array([val16, None], pa.binary(16)), pa.array([val16.decode(), None], pa.string())),
+                (
+                    pa.array([val16, None], pa.binary(16)),
+                    pa.array([val16.decode(), None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([val16, None], pa.binary(16)), pa.array([val16.decode(), None], pa.large_string())),
+                (
+                    pa.array([val16, None], pa.binary(16)),
+                    pa.array([val16.decode(), None], pa.large_string()),
+                ),
             ],
             # fixed_size_binary -> binary
             "binary": [
                 (pa.array([val16, None], pa.binary(16)), pa.array([val16, None], pa.binary())),
             ],
             "large_binary": [
-                (pa.array([val16, None], pa.binary(16)), pa.array([val16, None], pa.large_binary())),
+                (
+                    pa.array([val16, None], pa.binary(16)),
+                    pa.array([val16, None], pa.large_binary()),
+                ),
             ],
             "fixed_size_binary_16": [
                 (pa.array([val16, None], pa.binary(16)), pa.array([val16, None], pa.binary(16))),
@@ -3003,11 +3340,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_us": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
             "timestamp_s_tz": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms_tz": [
+                (pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)
+            ],
             "duration_s": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
             "duration_us": [(pa.array([val16], pa.binary(16)), pa.lib.ArrowNotImplementedError)],
@@ -3030,103 +3377,193 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         casts = {
             # decimal128 -> integers
             "int8": [
-                (pa.array([Decimal("0"), Decimal("1"), Decimal("-1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, -1, None], pa.int8())),
-                (pa.array([Decimal("1.5")], pa.decimal128(38, 10)), pa.lib.ArrowInvalid),  # fractional
+                (
+                    pa.array(
+                        [Decimal("0"), Decimal("1"), Decimal("-1"), None], pa.decimal128(38, 10)
+                    ),
+                    pa.array([0, 1, -1, None], pa.int8()),
+                ),
+                (
+                    pa.array([Decimal("1.5")], pa.decimal128(38, 10)),
+                    pa.lib.ArrowInvalid,
+                ),  # fractional
                 # Boundary: int8 max/min
-                (pa.array([Decimal("127"), Decimal("-128")], pa.decimal128(38, 10)),
-                 pa.array([127, -128], pa.int8())),
+                (
+                    pa.array([Decimal("127"), Decimal("-128")], pa.decimal128(38, 10)),
+                    pa.array([127, -128], pa.int8()),
+                ),
                 # Overflow: beyond int8 range
                 (pa.array([Decimal("128")], pa.decimal128(38, 10)), pa.lib.ArrowInvalid),
             ],
             "int16": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.int16())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.int16()),
+                ),
             ],
             "int32": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.int32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.int32()),
+                ),
             ],
             "int64": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.int64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.int64()),
+                ),
                 # Large decimal values
-                (pa.array([Decimal("9223372036854775807")], pa.decimal128(38, 0)),
-                 pa.array([9223372036854775807], pa.int64())),  # int64 max
+                (
+                    pa.array([Decimal("9223372036854775807")], pa.decimal128(38, 0)),
+                    pa.array([9223372036854775807], pa.int64()),
+                ),  # int64 max
                 # Overflow: int64 max + 1
-                (pa.array([Decimal("9223372036854775808")], pa.decimal128(38, 0)), pa.lib.ArrowInvalid),
+                (
+                    pa.array([Decimal("9223372036854775808")], pa.decimal128(38, 0)),
+                    pa.lib.ArrowInvalid,
+                ),
             ],
             "uint8": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.uint8())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.uint8()),
+                ),
             ],
             "uint16": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.uint16())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.uint16()),
+                ),
             ],
             "uint32": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.uint32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.uint32()),
+                ),
             ],
             "uint64": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
-                 pa.array([0, 1, None], pa.uint64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
+                    pa.array([0, 1, None], pa.uint64()),
+                ),
             ],
             # decimal128 -> floats
-            "float16": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             "float32": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
-                 pa.array([0.0, 1.5, None], pa.float32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                    pa.array([0.0, 1.5, None], pa.float32()),
+                ),
             ],
             "float64": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
-                 pa.array([0.0, 1.5, None], pa.float64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                    pa.array([0.0, 1.5, None], pa.float64()),
+                ),
             ],
             # decimal128 -> bool (not supported)
-            "bool": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             # decimal128 -> string
             "string": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
-                 pa.array(["0E-10", "1.5000000000", None], pa.string())),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                    pa.array(["0E-10", "1.5000000000", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([Decimal("0"), None], pa.decimal128(38, 10)),
-                 pa.array(["0E-10", None], pa.large_string())),
+                (
+                    pa.array([Decimal("0"), None], pa.decimal128(38, 10)),
+                    pa.array(["0E-10", None], pa.large_string()),
+                ),
             ],
             # decimal128 -> binary (not supported)
-            "binary": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "large_binary": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             # decimal128 -> decimal
             "decimal128": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
-                 pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                ),
             ],
             "decimal256": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
-                 pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # decimal128 -> temporal (not supported)
-            "date32": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "date64": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_s": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "time32_s": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "time32_ms": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "time64_us": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
-            "time64_ns": [(pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)],
+            "date32": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "date64": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_s": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time32_s": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time32_ms": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_us": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_ns": [
+                (pa.array([Decimal("0")], pa.decimal128(38, 10)), pa.lib.ArrowNotImplementedError)
+            ],
         }
         self._run_cast_tests(casts, "decimal128")
 
@@ -3138,92 +3575,170 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         casts = {
             # decimal256 -> integers
             "int8": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.int8())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.int8()),
+                ),
             ],
             "int16": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.int16())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.int16()),
+                ),
             ],
             "int32": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.int32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.int32()),
+                ),
             ],
             "int64": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.int64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.int64()),
+                ),
             ],
             "uint8": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.uint8())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.uint8()),
+                ),
             ],
             "uint16": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.uint16())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.uint16()),
+                ),
             ],
             "uint32": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.uint32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.uint32()),
+                ),
             ],
             "uint64": [
-                (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
-                 pa.array([0, 1, None], pa.uint64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1"), None], pa.decimal256(76, 10)),
+                    pa.array([0, 1, None], pa.uint64()),
+                ),
             ],
             # decimal256 -> floats
-            "float16": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             "float32": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
-                 pa.array([0.0, 1.5, None], pa.float32())),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                    pa.array([0.0, 1.5, None], pa.float32()),
+                ),
             ],
             "float64": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
-                 pa.array([0.0, 1.5, None], pa.float64())),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                    pa.array([0.0, 1.5, None], pa.float64()),
+                ),
             ],
             # decimal256 -> bool (not supported)
-            "bool": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             # decimal256 -> string
             "string": [
-                (pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
-                 pa.array(["0E-10", None], pa.string())),
+                (
+                    pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
+                    pa.array(["0E-10", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
-                 pa.array(["0E-10", None], pa.large_string())),
+                (
+                    pa.array([Decimal("0"), None], pa.decimal256(76, 10)),
+                    pa.array(["0E-10", None], pa.large_string()),
+                ),
             ],
             # decimal256 -> binary (not supported)
-            "binary": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "large_binary": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
             # decimal256 -> decimal
             "decimal128": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
-                 pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10))),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal128(38, 10)),
+                ),
             ],
             "decimal256": [
-                (pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
-                 pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10))),
+                (
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                    pa.array([Decimal("0"), Decimal("1.5"), None], pa.decimal256(76, 10)),
+                ),
             ],
             # decimal256 -> temporal (not supported)
-            "date32": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "date64": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_s": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "time32_s": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "time32_ms": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "time64_us": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
-            "time64_ns": [(pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)],
+            "date32": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "date64": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_s": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time32_s": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time32_ms": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_us": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
+            "time64_ns": [
+                (pa.array([Decimal("0")], pa.decimal256(76, 10)), pa.lib.ArrowNotImplementedError)
+            ],
         }
         self._run_cast_tests(casts, "decimal256")
 
@@ -3263,7 +3778,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([d, None], pa.date32()), pa.array(["2022-01-01", None], pa.string())),
             ],
             "large_string": [
-                (pa.array([d, None], pa.date32()), pa.array(["2022-01-01", None], pa.large_string())),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array(["2022-01-01", None], pa.large_string()),
+                ),
             ],
             # date32 -> binary (not supported)
             "binary": [(pa.array([d], pa.date32()), pa.lib.ArrowNotImplementedError)],
@@ -3284,31 +3802,58 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([d, None], pa.date32()), pa.array([1640995200, None], pa.timestamp("s"))),
             ],
             "timestamp_ms": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns")),
+                ),
             ],
             "timestamp_s_tz": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([d, None], pa.date32()), pa.array([1640995200, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([d, None], pa.date32()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # date32 -> duration (not supported)
             "duration_s": [(pa.array([d], pa.date32()), pa.lib.ArrowNotImplementedError)],
@@ -3356,7 +3901,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([d, None], pa.date64()), pa.array(["2022-01-01", None], pa.string())),
             ],
             "large_string": [
-                (pa.array([d, None], pa.date64()), pa.array(["2022-01-01", None], pa.large_string())),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array(["2022-01-01", None], pa.large_string()),
+                ),
             ],
             # date64 -> binary (not supported)
             "binary": [(pa.array([d], pa.date64()), pa.lib.ArrowNotImplementedError)],
@@ -3377,31 +3925,58 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([d, None], pa.date64()), pa.array([1640995200, None], pa.timestamp("s"))),
             ],
             "timestamp_ms": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns")),
+                ),
             ],
             "timestamp_s_tz": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([d, None], pa.date64()), pa.array([1640995200, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([d, None], pa.date64()),
+                    pa.array([1640995200, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # date64 -> duration (not supported)
             "duration_s": [(pa.array([d], pa.date64()), pa.lib.ArrowNotImplementedError)],
@@ -3439,7 +4014,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # Unix epoch boundary
                 (pa.array([unix_epoch], pa.timestamp("s")), pa.array([0], pa.int64())),
                 # Negative timestamp (before 1970)
-                (pa.array([before_epoch], pa.timestamp("s")), pa.array([before_epoch_s], pa.int64())),
+                (
+                    pa.array([before_epoch], pa.timestamp("s")),
+                    pa.array([before_epoch_s], pa.int64()),
+                ),
             ],
             "uint8": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             "uint16": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
@@ -3453,60 +4031,107 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             # timestamp[s] -> string
             "string": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array(["2022-01-01 12:30:45", None], pa.string())),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array(["2022-01-01 12:30:45", None], pa.string()),
+                ),
                 # Unix epoch boundary
-                (pa.array([unix_epoch], pa.timestamp("s")), pa.array(["1970-01-01 00:00:00"], pa.string())),
+                (
+                    pa.array([unix_epoch], pa.timestamp("s")),
+                    pa.array(["1970-01-01 00:00:00"], pa.string()),
+                ),
                 # Negative timestamp (before 1970)
-                (pa.array([before_epoch], pa.timestamp("s")), pa.array(["1969-12-31 23:59:59"], pa.string())),
+                (
+                    pa.array([before_epoch], pa.timestamp("s")),
+                    pa.array(["1969-12-31 23:59:59"], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array(["2022-01-01 12:30:45", None], pa.large_string())),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array(["2022-01-01 12:30:45", None], pa.large_string()),
+                ),
             ],
             # timestamp[s] -> binary (not supported)
             "binary": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [
+                (pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s] -> decimal (not supported)
             "decimal128": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             # timestamp[s] -> date
             "date32": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[s] -> timestamp (conversions between units)
             "timestamp_s": [
                 (pa.array([ts, None], pa.timestamp("s")), pa.array([ts, None], pa.timestamp("s"))),
             ],
             "timestamp_ms": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[s] -> timestamp with tz (adds timezone)
             "timestamp_s_tz": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # timestamp[s] -> duration (not supported)
             "duration_s": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
@@ -3515,16 +4140,28 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "duration_ns": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             # timestamp[s] -> time
             "time32_s": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.time(12, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([ts, None], pa.timestamp("s")), pa.array([datetime.time(12, 30, 45), None], pa.time64("ns"))),
+                (
+                    pa.array([ts, None], pa.timestamp("s")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_s")
@@ -3545,93 +4182,176 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "int16": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             "int32": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             "int64": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy, None], pa.int64())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy, None], pa.int64()),
+                ),
             ],
             "uint8": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             "uint16": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             "uint32": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             "uint64": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             # timestamp[ms] -> floats (not supported)
-            "float16": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float32": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float64": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ms] -> bool (not supported)
             "bool": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
             # timestamp[ms] -> string
             "string": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array(["2022-01-01 12:30:45.123", None], pa.string())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array(["2022-01-01 12:30:45.123", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array(["2022-01-01 12:30:45.123", None], pa.large_string())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array(["2022-01-01 12:30:45.123", None], pa.large_string()),
+                ),
             ],
             # timestamp[ms] -> binary (not supported)
             "binary": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ms] -> decimal (not supported)
-            "decimal128": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ms] -> date
             "date32": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[ms] -> timestamp (lossy to lower precision)
             "timestamp_s": [
-                (pa.array([ts_lossless, None], pa.timestamp("ms")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([ts_lossy, None], pa.timestamp("ms"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[ms] -> timestamp with tz
             "timestamp_s_tz": [
-                (pa.array([ts_lossless, None], pa.timestamp("ms")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([ts_lossless, None], pa.timestamp("ms")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("ms")),
+                    pa.array(
+                        [epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="America/New_York")
+                    ),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([ts_lossless, None], pa.timestamp("ms")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("ms")),
+                    pa.array(
+                        [epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowInvalid),
             ],
             # timestamp[ms] -> duration (not supported)
-            "duration_s": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ms] -> time
             "time32_s": [
-                (pa.array([ts_lossless, None], pa.timestamp("ms")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("ms")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("ms")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time32("ms"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("us"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([ts_lossy, None], pa.timestamp("ms")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("ns"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("ms")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_ms")
@@ -3652,96 +4372,180 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "int16": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             "int32": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             "int64": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([epoch_us_lossy, None], pa.int64())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossy, None], pa.int64()),
+                ),
             ],
             "uint8": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             "uint16": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             "uint32": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             "uint64": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             # timestamp[us] -> floats (not supported)
-            "float16": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float32": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float64": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[us] -> bool (not supported)
             "bool": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
             # timestamp[us] -> string
             "string": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array(["2022-01-01 12:30:45.123456", None], pa.string())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array(["2022-01-01 12:30:45.123456", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array(["2022-01-01 12:30:45.123456", None], pa.large_string())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array(["2022-01-01 12:30:45.123456", None], pa.large_string()),
+                ),
             ],
             # timestamp[us] -> binary (not supported)
             "binary": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[us] -> decimal (not supported)
-            "decimal128": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[us] -> date
             "date32": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[us] -> timestamp (lossy to lower precision)
             "timestamp_s": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([ts_lossy, None], pa.timestamp("us"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[us] -> timestamp with tz
             "timestamp_s_tz": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us_tz": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000, None],
+                        pa.timestamp("s", tz="America/New_York"),
+                    ),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             # timestamp[us] -> duration (not supported)
-            "duration_s": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[us] -> time
             "time32_s": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([ts_lossless, None], pa.timestamp("us")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([ts_lossless, None], pa.timestamp("us")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
                 (pa.array([ts_lossy], pa.timestamp("us")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("us"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([ts_lossy, None], pa.timestamp("us")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns"))),
+                (
+                    pa.array([ts_lossy, None], pa.timestamp("us")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_us")
@@ -3758,105 +4562,208 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[ns] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([epoch_ns_lossy, None], pa.int64())),
+            "int8": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
             ],
-            "uint8": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "int32": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossy, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint16": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint32": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint64": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> floats (not supported)
-            "float16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float32": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float64": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> bool (not supported)
-            "bool": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> string
             "string": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array(["2022-01-01 12:30:45.123456789", None], pa.string())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array(["2022-01-01 12:30:45.123456789", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array(["2022-01-01 12:30:45.123456789", None], pa.large_string())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array(["2022-01-01 12:30:45.123456789", None], pa.large_string()),
+                ),
             ],
             # timestamp[ns] -> binary (not supported)
-            "binary": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "large_binary": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> date
             "date32": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[ns] -> timestamp (loses precision with safe=True)
             "timestamp_s": [
                 # Lossless conversion when no sub-second data
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s")),
+                ),
                 # Lossy conversion fails with safe=True
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([epoch_ns_lossy, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[ns] -> timestamp with tz (loses precision with safe=True)
             "timestamp_s_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000, None],
+                        pa.timestamp("s", tz="America/New_York"),
+                    ),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000, None],
+                        pa.timestamp("s", tz="Asia/Shanghai"),
+                    ),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             # timestamp[ns] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[ns] -> time (loses precision with safe=True)
             "time32_s": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns")), pa.array([datetime.time(12, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("us")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns")), pa.lib.ArrowInvalid),
             ],
             "time64_ns": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_ns")
@@ -3871,92 +4778,189 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[s,tz] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s, None], pa.int64())),
+            "int8": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
             ],
-            "uint8": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "int32": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint16": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint32": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "uint64": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> floats (not supported)
-            "float16": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float32": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "float64": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> bool (not supported)
-            "bool": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> string
             "string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array(["2022-01-01 12:30:45Z", None], pa.string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45Z", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array(["2022-01-01 12:30:45Z", None], pa.large_string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45Z", None], pa.large_string()),
+                ),
             ],
             # timestamp[s,tz] -> binary (not supported)
-            "binary": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "large_binary": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> date
             "date32": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[s,tz] -> timestamp (strips tz)
             "timestamp_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s, None], pa.timestamp("s")),
+                ),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[s,tz] -> timestamp with tz (same or different tz)
             "timestamp_s_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # timestamp[s,tz] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ms": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_us": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
+            "duration_ns": [
+                (pa.array([epoch_s], pa.timestamp("s", tz="UTC")), pa.lib.ArrowNotImplementedError)
+            ],
             # timestamp[s,tz] -> time
             "time32_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_s_tz")
@@ -3971,97 +4975,258 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[ms,tz] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy, None], pa.int64())),
+            "int8": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
             ],
-            "uint8": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int32": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint16": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint32": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint64": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> floats (not supported)
-            "float16": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float32": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float64": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> bool (not supported)
-            "bool": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> string
             "string": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array(["2022-01-01 12:30:45.123Z", None], pa.string())),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123Z", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array(["2022-01-01 12:30:45.123Z", None], pa.large_string())),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123Z", None], pa.large_string()),
+                ),
             ],
             # timestamp[ms,tz] -> binary (not supported)
-            "binary": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "large_binary": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "fixed_size_binary_16": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "decimal256": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> date
             "date32": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[ms,tz] -> timestamp (lossy to lower precision)
             "timestamp_s": [
-                (pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s")),
+                ),
                 (pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[ms,tz] -> timestamp with tz
             "timestamp_s_tz": [
-                (pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy * 1000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([epoch_ms_lossy * 1000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array(
+                        [epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="America/New_York")
+                    ),
+                ),
                 (pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")), pa.array([epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array(
+                        [epoch_ms_lossless // 1000, None], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
+                ),
                 (pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             # timestamp[ms,tz] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ms": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_us": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ns": [
+                (
+                    pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ms,tz] -> time
             "time32_s": [
-                (pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_ms_lossless, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([epoch_ms_lossy], pa.timestamp("ms", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_ms_lossy, None], pa.timestamp("ms", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123000), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_ms_tz")
@@ -4076,100 +5241,262 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[us,tz] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossy, None], pa.int64())),
+            "int8": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
             ],
-            "uint8": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int32": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossy, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint16": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint32": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint64": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> floats (not supported)
-            "float16": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float32": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float64": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> bool (not supported)
-            "bool": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> string
             "string": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array(["2022-01-01 12:30:45.123456Z", None], pa.string())),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123456Z", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array(["2022-01-01 12:30:45.123456Z", None], pa.large_string())),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123456Z", None], pa.large_string()),
+                ),
             ],
             # timestamp[us,tz] -> binary (not supported)
-            "binary": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "large_binary": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "fixed_size_binary_16": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "decimal256": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> date
             "date32": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[us,tz] -> timestamp (lossy to lower precision)
             "timestamp_s": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossy, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[us,tz] -> timestamp with tz
             "timestamp_s_tz": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossless // 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([epoch_us_lossy * 1000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000, None],
+                        pa.timestamp("s", tz="America/New_York"),
+                    ),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000, None], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             # timestamp[us,tz] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ms": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_us": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ns": [
+                (
+                    pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[us,tz] -> time
             "time32_s": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_us_lossless, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
                 (pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_us_lossy, None], pa.timestamp("us", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_us_tz")
@@ -4184,103 +5511,266 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[ns,tz] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossy, None], pa.int64())),
+            "int8": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
             ],
-            "uint8": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int32": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossy, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint16": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint32": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint64": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> floats (not supported)
-            "float16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float32": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float64": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> bool (not supported)
-            "bool": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> string
             "string": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array(["2022-01-01 12:30:45.123456789Z", None], pa.string())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123456789Z", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array(["2022-01-01 12:30:45.123456789Z", None], pa.large_string())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array(["2022-01-01 12:30:45.123456789Z", None], pa.large_string()),
+                ),
             ],
             # timestamp[ns,tz] -> binary (not supported)
-            "binary": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "large_binary": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "fixed_size_binary_16": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "decimal256": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> date
             "date32": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[ns,tz] -> timestamp (lossy to lower precision)
             "timestamp_s": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossy, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[ns,tz] -> timestamp with tz
             "timestamp_s_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000000, None], pa.timestamp("ms", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossless // 1000, None], pa.timestamp("us", tz="UTC")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000, None],
+                        pa.timestamp("s", tz="America/New_York"),
+                    ),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([epoch_ns_lossless // 1000000000, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000, None],
+                        pa.timestamp("s", tz="Asia/Shanghai"),
+                    ),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             # timestamp[ns,tz] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ms": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_us": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ns": [
+                (
+                    pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[ns,tz] -> time (loses ns precision)
             "time32_s": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("s")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time32("ms")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
-                (pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.time(12, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_ns_lossless, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45), None], pa.time64("us")),
+                ),
                 (pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")), pa.lib.ArrowInvalid),
             ],
             "time64_ns": [
-                (pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")), pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_ns_lossy, None], pa.timestamp("ns", tz="UTC")),
+                    pa.array([datetime.time(12, 30, 45, 123456), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_ns_tz")
@@ -4294,92 +5784,249 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[s,tz_ny] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s, None], pa.int64())),
+            "int8": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
             ],
-            "uint8": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint64": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> floats (not supported)
-            "float16": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float64": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> bool (not supported)
-            "bool": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> string (shows local time)
             "string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array(["2022-01-01 07:30:45-0500", None], pa.string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(["2022-01-01 07:30:45-0500", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array(["2022-01-01 07:30:45-0500", None], pa.large_string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(["2022-01-01 07:30:45-0500", None], pa.large_string()),
+                ),
             ],
             # timestamp[s,tz_ny] -> binary (not supported)
-            "binary": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "large_binary": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "fixed_size_binary_16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "decimal256": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> date (local date)
             "date32": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[s,tz_ny] -> timestamp NTZ (strips tz)
             "timestamp_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s, None], pa.timestamp("s")),
+                ),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[s,tz_ny] -> timestamp with tz (converts)
             "timestamp_s_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # timestamp[s,tz_ny] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ms": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_us": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ns": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="America/New_York")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_ny] -> time (local time)
             "time32_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.time(7, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.time(7, 30, 45), None], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.time(7, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.time(7, 30, 45), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.time(7, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.time(7, 30, 45), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")), pa.array([datetime.time(7, 30, 45), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                    pa.array([datetime.time(7, 30, 45), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_s_tz_ny")
@@ -4393,92 +6040,249 @@ class PyArrowNumericalCastTests(unittest.TestCase):
 
         casts = {
             # timestamp[s,tz_shanghai] -> integers (only int64 supported)
-            "int8": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "int16": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "int32": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "int64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s, None], pa.int64())),
+            "int8": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
             ],
-            "uint8": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "uint16": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "uint32": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "uint64": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "int16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "int64": [
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s, None], pa.int64()),
+                ),
+            ],
+            "uint8": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "uint64": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> floats (not supported)
-            "float16": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "float32": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "float64": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "float16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float32": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "float64": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> bool (not supported)
-            "bool": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "bool": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> string (shows local time)
             "string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array(["2022-01-01 20:30:45+0800", None], pa.string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array(["2022-01-01 20:30:45+0800", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array(["2022-01-01 20:30:45+0800", None], pa.large_string())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array(["2022-01-01 20:30:45+0800", None], pa.large_string()),
+                ),
             ],
             # timestamp[s,tz_shanghai] -> binary (not supported)
-            "binary": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "binary": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "large_binary": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "fixed_size_binary_16": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> decimal (not supported)
-            "decimal128": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "decimal256": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> date (local date)
             "date32": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.date(2022, 1, 1), None], pa.date32())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date32()),
+                ),
             ],
             "date64": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.date(2022, 1, 1), None], pa.date64())),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.date(2022, 1, 1), None], pa.date64()),
+                ),
             ],
             # timestamp[s,tz_shanghai] -> timestamp NTZ (strips tz)
             "timestamp_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s, None], pa.timestamp("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s, None], pa.timestamp("s")),
+                ),
             ],
             "timestamp_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000, None], pa.timestamp("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms")),
+                ),
             ],
             "timestamp_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000000, None], pa.timestamp("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us")),
+                ),
             ],
             "timestamp_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns")),
+                ),
             ],
             # timestamp[s,tz_shanghai] -> timestamp with tz (converts)
             "timestamp_s_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s, None], pa.timestamp("s", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="UTC")),
+                ),
             ],
             "timestamp_ms_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000, None], pa.timestamp("ms", tz="UTC")),
+                ),
             ],
             "timestamp_us_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000000, None], pa.timestamp("us", tz="UTC")),
+                ),
             ],
             "timestamp_ns_tz": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s * 1000000000, None], pa.timestamp("ns", tz="UTC")),
+                ),
             ],
             "timestamp_s_tz_ny": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="America/New_York")),
+                ),
             ],
             "timestamp_s_tz_shanghai": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                ),
             ],
             # timestamp[s,tz_shanghai] -> duration (not supported)
-            "duration_s": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ms": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_us": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
+            "duration_ns": [
+                (
+                    pa.array([epoch_s], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.lib.ArrowNotImplementedError,
+                )
+            ],
             # timestamp[s,tz_shanghai] -> time (local time)
             "time32_s": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.time(20, 30, 45), None], pa.time32("s"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.time(20, 30, 45), None], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.time(20, 30, 45), None], pa.time32("ms"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.time(20, 30, 45), None], pa.time32("ms")),
+                ),
             ],
             "time64_us": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.time(20, 30, 45), None], pa.time64("us"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.time(20, 30, 45), None], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
-                (pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")), pa.array([datetime.time(20, 30, 45), None], pa.time64("ns"))),
+                (
+                    pa.array([epoch_s, None], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array([datetime.time(20, 30, 45), None], pa.time64("ns")),
+                ),
             ],
         }
         self._run_cast_tests(casts, "timestamp_s_tz_shanghai")
@@ -4512,12 +6316,19 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([dur_s, None], pa.duration("s")), pa.array(["3600", None], pa.string())),
             ],
             "large_string": [
-                (pa.array([dur_s, None], pa.duration("s")), pa.array(["3600", None], pa.large_string())),
+                (
+                    pa.array([dur_s, None], pa.duration("s")),
+                    pa.array(["3600", None], pa.large_string()),
+                ),
             ],
             # duration[s] -> binary (not supported)
             "binary": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[s] -> decimal (not supported)
             "decimal128": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
@@ -4526,27 +6337,57 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "date64": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
             # duration[s] -> timestamp (not supported)
             "timestamp_s": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[s] -> duration (conversions between units)
             "duration_s": [
-                (pa.array([dur_s, None], pa.duration("s")), pa.array([dur_s, None], pa.duration("s"))),
+                (
+                    pa.array([dur_s, None], pa.duration("s")),
+                    pa.array([dur_s, None], pa.duration("s")),
+                ),
             ],
             "duration_ms": [
-                (pa.array([dur_s, None], pa.duration("s")), pa.array([dur_s * 1000, None], pa.duration("ms"))),
+                (
+                    pa.array([dur_s, None], pa.duration("s")),
+                    pa.array([dur_s * 1000, None], pa.duration("ms")),
+                ),
             ],
             "duration_us": [
-                (pa.array([dur_s, None], pa.duration("s")), pa.array([dur_s * 1000000, None], pa.duration("us"))),
+                (
+                    pa.array([dur_s, None], pa.duration("s")),
+                    pa.array([dur_s * 1000000, None], pa.duration("us")),
+                ),
             ],
             "duration_ns": [
-                (pa.array([dur_s, None], pa.duration("s")), pa.array([dur_s * 1000000000, None], pa.duration("ns"))),
+                (
+                    pa.array([dur_s, None], pa.duration("s")),
+                    pa.array([dur_s * 1000000000, None], pa.duration("ns")),
+                ),
             ],
             # duration[s] -> time (not supported)
             "time32_s": [(pa.array([dur_s], pa.duration("s")), pa.lib.ArrowNotImplementedError)],
@@ -4583,45 +6424,91 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
             # duration[ms] -> string
             "string": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array(["3600000", None], pa.string())),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array(["3600000", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array(["3600000", None], pa.large_string())),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array(["3600000", None], pa.large_string()),
+                ),
             ],
             # duration[ms] -> binary (not supported)
             "binary": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ms] -> decimal (not supported)
-            "decimal128": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ms] -> date (not supported)
             "date32": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
             "date64": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
             # duration[ms] -> timestamp (not supported)
-            "timestamp_s": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ms] -> duration (lossy to lower precision)
             "duration_s": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array([dur_ms // 1000, None], pa.duration("s"))),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array([dur_ms // 1000, None], pa.duration("s")),
+                ),
                 (pa.array([dur_ms_lossy], pa.duration("ms")), pa.lib.ArrowInvalid),
             ],
             "duration_ms": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array([dur_ms, None], pa.duration("ms"))),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                ),
             ],
             "duration_us": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array([dur_ms * 1000, None], pa.duration("us"))),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array([dur_ms * 1000, None], pa.duration("us")),
+                ),
             ],
             "duration_ns": [
-                (pa.array([dur_ms, None], pa.duration("ms")), pa.array([dur_ms * 1000000, None], pa.duration("ns"))),
+                (
+                    pa.array([dur_ms, None], pa.duration("ms")),
+                    pa.array([dur_ms * 1000000, None], pa.duration("ns")),
+                ),
             ],
             # duration[ms] -> time (not supported)
             "time32_s": [(pa.array([dur_ms], pa.duration("ms")), pa.lib.ArrowNotImplementedError)],
@@ -4658,46 +6545,92 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
             # duration[us] -> string
             "string": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array(["3600000000", None], pa.string())),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array(["3600000000", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array(["3600000000", None], pa.large_string())),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array(["3600000000", None], pa.large_string()),
+                ),
             ],
             # duration[us] -> binary (not supported)
             "binary": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[us] -> decimal (not supported)
-            "decimal128": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[us] -> date (not supported)
             "date32": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
             "date64": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
             # duration[us] -> timestamp (not supported)
-            "timestamp_s": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[us] -> duration (lossy to lower precision)
             "duration_s": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array([dur_us // 1000000, None], pa.duration("s"))),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array([dur_us // 1000000, None], pa.duration("s")),
+                ),
                 (pa.array([dur_us_lossy], pa.duration("us")), pa.lib.ArrowInvalid),
             ],
             "duration_ms": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array([dur_us // 1000, None], pa.duration("ms"))),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array([dur_us // 1000, None], pa.duration("ms")),
+                ),
                 (pa.array([dur_us_lossy], pa.duration("us")), pa.lib.ArrowInvalid),
             ],
             "duration_us": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array([dur_us, None], pa.duration("us"))),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array([dur_us, None], pa.duration("us")),
+                ),
             ],
             "duration_ns": [
-                (pa.array([dur_us, None], pa.duration("us")), pa.array([dur_us * 1000, None], pa.duration("ns"))),
+                (
+                    pa.array([dur_us, None], pa.duration("us")),
+                    pa.array([dur_us * 1000, None], pa.duration("ns")),
+                ),
             ],
             # duration[us] -> time (not supported)
             "time32_s": [(pa.array([dur_us], pa.duration("us")), pa.lib.ArrowNotImplementedError)],
@@ -4734,47 +6667,93 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
             # duration[ns] -> string
             "string": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array(["3600000000000", None], pa.string())),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array(["3600000000000", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array(["3600000000000", None], pa.large_string())),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array(["3600000000000", None], pa.large_string()),
+                ),
             ],
             # duration[ns] -> binary (not supported)
             "binary": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "fixed_size_binary_16": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ns] -> decimal (not supported)
-            "decimal128": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "decimal256": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
+            "decimal128": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "decimal256": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ns] -> date (not supported)
             "date32": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
             "date64": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
             # duration[ns] -> timestamp (not supported)
-            "timestamp_s": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # duration[ns] -> duration (lossy to lower precision)
             "duration_s": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array([dur_ns // 1000000000, None], pa.duration("s"))),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array([dur_ns // 1000000000, None], pa.duration("s")),
+                ),
                 (pa.array([dur_ns_lossy], pa.duration("ns")), pa.lib.ArrowInvalid),
             ],
             "duration_ms": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array([dur_ns // 1000000, None], pa.duration("ms"))),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array([dur_ns // 1000000, None], pa.duration("ms")),
+                ),
                 (pa.array([dur_ns_lossy], pa.duration("ns")), pa.lib.ArrowInvalid),
             ],
             "duration_us": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array([dur_ns // 1000, None], pa.duration("us"))),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array([dur_ns // 1000, None], pa.duration("us")),
+                ),
                 (pa.array([dur_ns_lossy], pa.duration("ns")), pa.lib.ArrowInvalid),
             ],
             "duration_ns": [
-                (pa.array([dur_ns, None], pa.duration("ns")), pa.array([dur_ns, None], pa.duration("ns"))),
+                (
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                    pa.array([dur_ns, None], pa.duration("ns")),
+                ),
             ],
             # duration[ns] -> time (not supported)
             "time32_s": [(pa.array([dur_ns], pa.duration("ns")), pa.lib.ArrowNotImplementedError)],
@@ -4815,12 +6794,17 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([t, None], pa.time32("s")), pa.array(["12:30:45", None], pa.string())),
             ],
             "large_string": [
-                (pa.array([t, None], pa.time32("s")), pa.array(["12:30:45", None], pa.large_string())),
+                (
+                    pa.array([t, None], pa.time32("s")),
+                    pa.array(["12:30:45", None], pa.large_string()),
+                ),
             ],
             # time32[s] -> binary (not supported)
             "binary": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [
+                (pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)
+            ],
             # time32[s] -> decimal (not supported)
             "decimal128": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
@@ -4837,7 +6821,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_us_tz": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns_tz": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
             "timestamp_s_tz_ny": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)
+            ],
             # time32[s] -> duration (not supported)
             "duration_s": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([t], pa.time32("s")), pa.lib.ArrowNotImplementedError)],
@@ -4888,15 +6874,23 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             # time32[ms] -> string
             "string": [
-                (pa.array([t, None], pa.time32("ms")), pa.array(["12:30:45.123", None], pa.string())),
+                (
+                    pa.array([t, None], pa.time32("ms")),
+                    pa.array(["12:30:45.123", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([t, None], pa.time32("ms")), pa.array(["12:30:45.123", None], pa.large_string())),
+                (
+                    pa.array([t, None], pa.time32("ms")),
+                    pa.array(["12:30:45.123", None], pa.large_string()),
+                ),
             ],
             # time32[ms] -> binary (not supported)
             "binary": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [
+                (pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # time32[ms] -> decimal (not supported)
             "decimal128": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
@@ -4912,8 +6906,12 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_ms_tz": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             "timestamp_us_tz": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns_tz": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz_ny": [
+                (pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)
+            ],
             # time32[ms] -> duration (not supported)
             "duration_s": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
@@ -4921,7 +6919,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "duration_ns": [(pa.array([t], pa.time32("ms")), pa.lib.ArrowNotImplementedError)],
             # time32[ms] -> time (lossy to lower precision)
             "time32_s": [
-                (pa.array([t_lossless, None], pa.time32("ms")), pa.array([t_lossless, None], pa.time32("s"))),
+                (
+                    pa.array([t_lossless, None], pa.time32("ms")),
+                    pa.array([t_lossless, None], pa.time32("s")),
+                ),
                 (pa.array([t], pa.time32("ms")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
@@ -4965,15 +6966,23 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             # time64[us] -> string
             "string": [
-                (pa.array([t, None], pa.time64("us")), pa.array(["12:30:45.123456", None], pa.string())),
+                (
+                    pa.array([t, None], pa.time64("us")),
+                    pa.array(["12:30:45.123456", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([t, None], pa.time64("us")), pa.array(["12:30:45.123456", None], pa.large_string())),
+                (
+                    pa.array([t, None], pa.time64("us")),
+                    pa.array(["12:30:45.123456", None], pa.large_string()),
+                ),
             ],
             # time64[us] -> binary (not supported)
             "binary": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [
+                (pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # time64[us] -> decimal (not supported)
             "decimal128": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
@@ -4989,8 +6998,12 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_ms_tz": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             "timestamp_us_tz": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns_tz": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz_ny": [
+                (pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)
+            ],
             # time64[us] -> duration (not supported)
             "duration_s": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
@@ -4998,11 +7011,17 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "duration_ns": [(pa.array([t], pa.time64("us")), pa.lib.ArrowNotImplementedError)],
             # time64[us] -> time (lossy to lower precision)
             "time32_s": [
-                (pa.array([t_lossless, None], pa.time64("us")), pa.array([t_lossless, None], pa.time32("s"))),
+                (
+                    pa.array([t_lossless, None], pa.time64("us")),
+                    pa.array([t_lossless, None], pa.time32("s")),
+                ),
                 (pa.array([t], pa.time64("us")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([t_lossless, None], pa.time64("us")), pa.array([t_lossless, None], pa.time32("ms"))),
+                (
+                    pa.array([t_lossless, None], pa.time64("us")),
+                    pa.array([t_lossless, None], pa.time32("ms")),
+                ),
                 (pa.array([t], pa.time64("us")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
@@ -5045,15 +7064,23 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "bool": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             # time64[ns] -> string
             "string": [
-                (pa.array([t_ns, None], pa.time64("ns")), pa.array(["12:30:45.123456789", None], pa.string())),
+                (
+                    pa.array([t_ns, None], pa.time64("ns")),
+                    pa.array(["12:30:45.123456789", None], pa.string()),
+                ),
             ],
             "large_string": [
-                (pa.array([t_ns, None], pa.time64("ns")), pa.array(["12:30:45.123456789", None], pa.large_string())),
+                (
+                    pa.array([t_ns, None], pa.time64("ns")),
+                    pa.array(["12:30:45.123456789", None], pa.large_string()),
+                ),
             ],
             # time64[ns] -> binary (not supported)
             "binary": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # time64[ns] -> decimal (not supported)
             "decimal128": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             "decimal256": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
@@ -5065,12 +7092,24 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "timestamp_ms": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             "timestamp_us": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             "timestamp_ns": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_shanghai": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ms_tz": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_us_tz": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_ns_tz": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_ny": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
+            "timestamp_s_tz_shanghai": [
+                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)
+            ],
             # time64[ns] -> duration (not supported)
             "duration_s": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             "duration_ms": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
@@ -5078,15 +7117,24 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "duration_ns": [(pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowNotImplementedError)],
             # time64[ns] -> time (lossy to lower precision)
             "time32_s": [
-                (pa.array([t_ns_lossless, None], pa.time64("ns")), pa.array([t_lossless, None], pa.time32("s"))),
+                (
+                    pa.array([t_ns_lossless, None], pa.time64("ns")),
+                    pa.array([t_lossless, None], pa.time32("s")),
+                ),
                 (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowInvalid),
             ],
             "time32_ms": [
-                (pa.array([t_ns_lossless, None], pa.time64("ns")), pa.array([t_lossless, None], pa.time32("ms"))),
+                (
+                    pa.array([t_ns_lossless, None], pa.time64("ns")),
+                    pa.array([t_lossless, None], pa.time32("ms")),
+                ),
                 (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowInvalid),
             ],
             "time64_us": [
-                (pa.array([t_ns_lossless, None], pa.time64("ns")), pa.array([t_lossless, None], pa.time64("us"))),
+                (
+                    pa.array([t_ns_lossless, None], pa.time64("ns")),
+                    pa.array([t_lossless, None], pa.time64("us")),
+                ),
                 (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowInvalid),
             ],
             "time64_ns": [
