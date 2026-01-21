@@ -466,7 +466,7 @@ class MicroBatchExecution(
     execCtx
   }
 
-  private def checkUnfinishedRepartitionBatch(
+  protected def checkUnfinishedRepartitionBatch(
       latestStartedBatchId: Option[Long],
       lastCommittedBatchId: Long,
       offsetLog: OffsetSeqLog): Unit = {
