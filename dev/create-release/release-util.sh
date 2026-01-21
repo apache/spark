@@ -229,13 +229,55 @@ function is_dry_run {
   [[ $DRY_RUN = 1 ]]
 }
 
-# Initializes JAVA_VERSION to the version of the JVM in use.
+# Initializes JAVA_HOME and JAVA_VERSION based on Spark version.
+# For Spark 4.0+, use Java 17. For earlier versions, use Java 8.
+# This allows a single Docker image (with multiple Java versions) to build all Spark versions.
 function init_java {
+  # If JAVA_HOME is already set externally (e.g., via -j flag), use it
+  if [ -n "$JAVA_HOME" ] && [ -d "$JAVA_HOME" ]; then
+    echo "Using provided JAVA_HOME: $JAVA_HOME"
+  else
+    # Auto-detect appropriate Java version based on RELEASE_VERSION
+    # Spark 4.0+ requires Java 17, earlier versions use Java 8
+    if [[ -z "$RELEASE_VERSION" ]]; then
+      error "RELEASE_VERSION is not set. Cannot determine Java version."
+    fi
+
+    if [[ "$RELEASE_VERSION" < "4.0" ]]; then
+      echo "Detected Spark version $RELEASE_VERSION - using Java 8"
+      if [ -n "$JAVA8_HOME" ] && [ -d "$JAVA8_HOME" ]; then
+        export JAVA_HOME="$JAVA8_HOME"
+      elif [ -d "/usr/lib/jvm/java-8-openjdk-amd64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-8-openjdk-amd64"
+      elif [ -d "/usr/lib/jvm/java-8-openjdk-arm64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-8-openjdk-arm64"
+      else
+        error "Java 8 is required for Spark $RELEASE_VERSION but not found."
+      fi
+    else
+      echo "Detected Spark version $RELEASE_VERSION - using Java 17"
+      if [ -n "$JAVA17_HOME" ] && [ -d "$JAVA17_HOME" ]; then
+        export JAVA_HOME="$JAVA17_HOME"
+      elif [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+      elif [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+      else
+        error "Java 17 is required for Spark $RELEASE_VERSION but not found."
+      fi
+    fi
+  fi
+
   if [ -z "$JAVA_HOME" ]; then
     error "JAVA_HOME is not set."
   fi
+
+  # Update PATH to use the selected Java version
+  export PATH="$JAVA_HOME/bin:$PATH"
+
   JAVA_VERSION=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
   export JAVA_VERSION
+  echo "Using Java version: $JAVA_VERSION (JAVA_HOME=$JAVA_HOME)"
 }
 
 # Initializes MVN_EXTRA_OPTS and SBT_OPTS depending on the JAVA_VERSION in use. Requires init_java.
