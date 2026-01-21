@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
+import org.apache.spark.sql.catalyst.analysis.{DeduplicateRelations, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
@@ -60,9 +60,20 @@ case class InlineCTE(
     // because:
     // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
     // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
+
+    def hasOuterReference(plan: LogicalPlan): Boolean = {
+      plan.exists {
+        case table: ResolvedInlineTable =>
+          // Check rows explicitly as they're not included in plan.expressions
+          table.rows.flatten.exists(_.isInstanceOf[OuterReference])
+        case other =>
+          other.expressions.exists(_.isInstanceOf[OuterReference])
+      }
+    }
+
     refCount == 1 ||
       cteDef.deterministic ||
-      cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+      hasOuterReference(cteDef.child)
   }
 
   /**
