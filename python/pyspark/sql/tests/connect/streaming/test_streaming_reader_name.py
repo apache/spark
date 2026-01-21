@@ -17,7 +17,6 @@
 
 import tempfile
 import time
-import unittest
 
 from pyspark.errors import PySparkTypeError
 from pyspark.testing.connectutils import ReusedConnectTestCase
