@@ -551,6 +551,12 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
+    "message": [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState": "54000"
+  },
   "MALFORMED_GEOGRAPHY": {
     "message": [
       "Geography binary is malformed. Please check the data source is valid."

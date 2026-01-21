@@ -561,6 +561,7 @@ Below is a list of all the keywords in Spark SQL.
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
+|IDENTIFIED|non-reserved|non-reserved|non-reserved|
 |IDENTITY|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|

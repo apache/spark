@@ -813,12 +813,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)} " +
+            logWarning(log"Requested isolation level " +
+              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
               log"is not supported; falling back to default isolation level " +
-              log"${MDC(DEFAULT_ISOLATION_LEVEL, defaultIsolation)}")
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
           }
         } else {
-          logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)}, " +
+          logWarning(log"Requested isolation level " +
+            log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
             log"but transactions are unsupported")
         }
       } catch {
@@ -912,6 +914,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
           case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
         }
       }
+    }
+  }
+
+  /**
+   * Convert the value of isolation level to string.
+   */
+  private def isolationLevelString(isolationLevel: Int): String = {
+    isolationLevel match {
+      case Connection.TRANSACTION_NONE => "NONE"
+      case Connection.TRANSACTION_READ_UNCOMMITTED => "READ_UNCOMMITTED"
+      case Connection.TRANSACTION_READ_COMMITTED => "READ_COMMITTED"
+      case Connection.TRANSACTION_REPEATABLE_READ => "REPEATABLE_READ"
+      case Connection.TRANSACTION_SERIALIZABLE => "SERIALIZABLE"
+      case value => value.toString
     }
   }
 

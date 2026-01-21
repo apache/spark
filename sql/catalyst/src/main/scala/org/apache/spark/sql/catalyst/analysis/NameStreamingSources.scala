@@ -120,11 +120,23 @@ object NameStreamingSources extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isStreaming) {
       plan
-    } else {
-      if (conf.enableStreamingSourceEvolution) {
-        checkSourceNamingEnforcement(plan)
-      }
+    } else if (conf.enableStreamingSourceEvolution) {
+      // Feature enabled - propagate names to streaming sources.
+      checkSourceNamingEnforcement(plan)
       propagateSourceNames(plan)
+    } else {
+      // Feature disabled - unwrap NamedStreamingRelation nodes without propagating names.
+      // Error if any source has an explicitly assigned name since the feature is disabled.
+      // Only unwrap when child is resolved - this allows FindDataSourceTable to resolve
+      // UnresolvedCatalogRelation to StreamingRelation before we unwrap.
+      plan.resolveOperatorsWithPruning(_.containsPattern(NAMED_STREAMING_RELATION)) {
+        case NamedStreamingRelation(child, Unassigned) if child.resolved =>
+          child
+        case NamedStreamingRelation(_, UserProvided(name)) =>
+          throw QueryCompilationErrors.streamingSourceNamingNotSupportedError(name)
+        case NamedStreamingRelation(_, FlowAssigned(name)) =>
+          throw QueryCompilationErrors.streamingSourceNamingNotSupportedError(name)
+      }
     }
   }
 }

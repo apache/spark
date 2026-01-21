@@ -2414,6 +2414,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("sourceInfo" -> sourceInfo))
   }
 
+  def streamingSourceNamingNotSupportedError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+      messageParameters = Map("name" -> name))
+  }
+
+  def invalidStreamingSourceNameError(sourceName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+      messageParameters = Map("sourceName" -> sourceName))
+  }
+
+  def duplicateStreamingSourceNamesError(duplicateNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
+      messageParameters = Map("names" -> duplicateNames.mkString(", ")))
+  }
+
   def columnNotFoundInExistingColumnsError(
       columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
     new AnalysisException(

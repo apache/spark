@@ -82,25 +82,10 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * These either get cloned from a pre-existing instance or newly created. The conf is merged
-   * with its [[SparkConf]] only when there is no parent session.
+   * Uses the SQLConf from the SparkSession, which is initialized before sessionState
+   * to avoid recursive access during sessionState initialization.
    */
-  protected lazy val conf: SQLConf = {
-    parentState.map { s =>
-      val cloned = s.conf.clone()
-      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        SQLConf.mergeSparkConf(cloned, session.sparkContext.conf)
-      }
-      cloned
-    }.getOrElse {
-      val conf = new SQLConf
-      SQLConf.mergeSparkConf(conf, session.sharedState.conf)
-      // the later added configs to spark conf shall be respected too
-      SQLConf.mergeNonStaticSQLConfigs(conf, session.sparkContext.conf.getAll.toMap)
-      SQLConf.mergeNonStaticSQLConfigs(conf, session.initialSessionOptions)
-      conf
-    }
-  }
+  protected def conf: SQLConf = session.sqlConf
 
   /**
    * Internal catalog managing functions registered by the user.
@@ -415,7 +400,8 @@ abstract class BaseSessionStateBuilder(
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
       (plan, mode) => new QueryExecution(session, plan, mode = mode,
-        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
+        shuffleCleanupModeOpt =
+          Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
 
   /**
    * Interface to start and stop streaming queries.
@@ -485,35 +471,6 @@ abstract class BaseSessionStateBuilder(
       adaptiveRulesHolder,
       planNormalizationRules,
       () => artifactManager)
-  }
-}
-
-/**
- * Helper class for using SessionStateBuilders during tests.
- */
-private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
-  def overrideConfs: Map[String, String]
-
-  override protected lazy val conf: SQLConf = {
-    val overrideConfigurations = overrideConfs
-    parentState.map { s =>
-      val cloned = s.conf.clone()
-      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
-      }
-      cloned
-    }.getOrElse {
-      val conf = new SQLConf {
-        clear()
-        override def clear(): Unit = {
-          super.clear()
-          // Make sure we start with the default test configs even after clear
-          overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
-        }
-      }
-      SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
-      conf
-    }
   }
 }
 
