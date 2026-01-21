@@ -268,12 +268,9 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     }
 
     runBenchmark("Hit Rate Impact Analysis") {
-      benchmarkMightContainOperation(
-        MEDIUM_ITEMS, 100000, 0.03, 0.1)  // 10% hit rate (mainly negative)
-      benchmarkMightContainOperation(
-        MEDIUM_ITEMS, 100000, 0.03, 0.5)  // 50% hit rate (balanced)
-      benchmarkMightContainOperation(
-        MEDIUM_ITEMS, 100000, 0.03, 0.9)  // 90% hit rate (mainly positive)
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.1)  // 10% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.5)  // 50% hit rate
+      benchmarkMightContainOperation(MEDIUM_ITEMS, 100000, 0.03, 0.9)  // 90% hit rate
     }
 
     runBenchmark("Binary Put Operation - Small Scale") {
