@@ -21,8 +21,9 @@ import org.apache.datasketches.tuple.TupleSketchIterator
 import org.apache.datasketches.tuple.adouble.DoubleSummary
 import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{TupleSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{SummaryAggregateMode, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DoubleType, LongType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,7 +45,8 @@ import org.apache.spark.unsafe.types.UTF8String
 case class TupleSketchSummaryDouble(left: Expression, right: Expression)
     extends BinaryExpression
     with CodegenFallback
-    with ExpectsInputTypes {
+    with ExpectsInputTypes
+    with SummaryAggregateMode {
 
   def this(child: Expression) = {
     this(child, Literal(TupleSummaryMode.Sum.toString))
@@ -59,6 +61,17 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
 
   override def prettyName: String = "tuple_sketch_summary_double"
 
+  override def mode: Expression = right
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
+  }
+
   override protected def withNewChildrenInternal(
       newFirst: Expression,
       newSecond: Expression): TupleSketchSummaryDouble =
@@ -68,7 +81,6 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
     val buffer = input.asInstanceOf[Array[Byte]]
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
 
-    // Parse and validate mode in one step
     val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
     val sketch = TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
@@ -97,7 +109,8 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
 case class TupleSketchSummaryInteger(left: Expression, right: Expression)
     extends BinaryExpression
     with CodegenFallback
-    with ExpectsInputTypes {
+    with ExpectsInputTypes
+    with SummaryAggregateMode {
 
   def this(child: Expression) = {
     this(child, Literal(TupleSummaryMode.Sum.toString))
@@ -112,6 +125,17 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
 
   override def prettyName: String = "tuple_sketch_summary_integer"
 
+  override def mode: Expression = right
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
+  }
+
   override protected def withNewChildrenInternal(
       newFirst: Expression,
       newSecond: Expression): TupleSketchSummaryInteger =
@@ -121,7 +145,6 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
     val buffer = input.asInstanceOf[Array[Byte]]
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
 
-    // Parse and validate mode in one step
     val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
     val sketch = TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)

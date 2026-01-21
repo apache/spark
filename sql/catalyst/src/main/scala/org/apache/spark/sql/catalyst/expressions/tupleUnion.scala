@@ -212,7 +212,6 @@ abstract class TupleUnionBase[S <: Summary]
       modeInput: Any): Any = {
 
     val logNominalEntries = lgNomEntries.asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
 
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
     val tupleSummaryMode = TupleSummaryMode.fromString(modeStr, prettyName)
