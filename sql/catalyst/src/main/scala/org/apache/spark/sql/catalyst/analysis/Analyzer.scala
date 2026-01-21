@@ -1706,6 +1706,20 @@ class Analyzer(
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
 
+      case eventTimeWatermark: EventTimeWatermark =>
+        eventTimeWatermark.mapExpressions { expression =>
+          val resolvedExpression = resolveExpressionByPlanChildren(
+            expression,
+            eventTimeWatermark,
+            includeLastResort = true
+          )
+
+          resolvedExpression match {
+            case alias: Alias => alias.toAttribute
+            case other => other
+          }
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))

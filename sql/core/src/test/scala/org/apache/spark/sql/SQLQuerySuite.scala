@@ -5088,6 +5088,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql(query), Row(1, 2))
     }
   }
+
+  test("SPARK-55117: EventTimeWatermark should be resolved when referencing recursive type") {
+    val df1 = sql("SELECT * FROM VALUES(1, named_struct('field', 2)) AS t(col1, col2)")
+      .withWatermark("col2.field", "0 seconds")
+
+    checkAnswer(df1, Row(1, Row(2)))
+
+    val df2 = sql("SELECT * FROM VALUES(1, map('field',2)) AS t(col1, col2)")
+      .withWatermark("col2.field", "0 seconds")
+
+    checkAnswer(df2, Row(1, Map("field" -> 2)))
+  }
 }
 
 case class Foo(bar: Option[String])
