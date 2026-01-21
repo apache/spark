@@ -15,7 +15,13 @@
 # limitations under the License.
 #
 
-# Image for building Spark releases. Based on Ubuntu 22.04.
+# Image for building Spark releases from all active branches. Based on Ubuntu 22.04.
+#
+# Includes both Java 8 and Java 17 to support building all Spark versions:
+# - Spark < 4.0: requires Java 8
+# - Spark >= 4.0: requires Java 17
+#
+# The release scripts will automatically select the appropriate Java version.
 FROM ubuntu:jammy-20250819
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
@@ -54,6 +60,7 @@ RUN apt-get update && apt-get install -y \
     msmtp \
     nodejs \
     npm \
+    openjdk-8-jdk-headless \
     openjdk-17-jdk-headless \
     pandoc \
     pkg-config \
@@ -74,6 +81,18 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Set up Java environment variables for multi-version support
+# Release scripts will select appropriate version based on Spark version
+# Detect architecture and set JAVA_HOME paths accordingly
+RUN ARCH=$(dpkg --print-architecture) && \
+    echo "export JAVA8_HOME=/usr/lib/jvm/java-8-openjdk-${ARCH}" >> /etc/profile.d/java.sh && \
+    echo "export JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-${ARCH}" >> /etc/profile.d/java.sh && \
+    echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-${ARCH}" >> /etc/profile.d/java.sh && \
+    echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> /etc/profile.d/java.sh
+
+ENV JAVA8_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
