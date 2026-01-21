@@ -524,7 +524,6 @@ class OfflineStateRepartitionIntegrationSuite
     )
   }
 
-  // Test stream-stream join V3 repartitioning with column family validation
   Seq(1, 2, 3).foreach { version =>
     testWithAllRepartitionOperations(s"stream-stream join ver $version") { newPartitions =>
       withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
@@ -534,8 +533,8 @@ class OfflineStateRepartitionIntegrationSuite
             storeName -> Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty[String, String])
           }.toMap
         } else {
-          Map(StateStoreId.DEFAULT_STORE_NAME -> allStoreNames.map { storeName =>
-            storeName -> Map(StateSourceOptions.STORE_NAME -> storeName)
+          Map(StateStoreId.DEFAULT_STORE_NAME -> allStoreNames.map { colFamilyName =>
+            colFamilyName -> Map(StateSourceOptions.STORE_NAME -> colFamilyName)
           }.toMap)
         }
 
