@@ -492,6 +492,7 @@ pyspark_core = Module(
         # unittests for upstream projects
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
