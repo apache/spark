@@ -487,7 +487,7 @@ class ConnectCompatibilityTestsMixin:
         """Test Data Stream Reader compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = {"name"}
+        expected_missing_connect_methods = set()
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicDataStreamReader,
