@@ -19,6 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import json
+import re
 import sys
 import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
@@ -125,7 +126,14 @@ class DataStreamReader(OptionUtils):
                     "arg_type": type(source_name).__name__,
                 },
             )
-        # Validation will be done on the server side
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r'^[a-zA-Z0-9_]+$', source_name):
+            raise ValueError(
+                f"Invalid streaming source name: '{source_name}'. "
+                f"Source names must contain only ASCII letters, digits, and underscores."
+            )
+
         self._source_name = source_name
         return self
 

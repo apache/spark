@@ -20,9 +20,8 @@ package org.apache.spark.sql.connect.streaming
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 
 /**
- * Test suite for DataStreamReader.name() functionality in Spark Connect.
- * Tests cover the naming API, validation rules, and proper transmission
- * of source names from Connect client to server.
+ * Test suite for DataStreamReader.name() functionality in Spark Connect. Tests cover the naming
+ * API, validation rules, and proper transmission of source names from Connect client to server.
  */
 class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
 
@@ -192,8 +191,11 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       assert(parquetDf.isStreaming, "Parquet DataFrame should be streaming")
 
       // Test with json - create test data and specify schema
-      spark.range(10).selectExpr("id", "CAST(id AS STRING) as value")
-        .write.json(path + "/json_data")
+      spark
+        .range(10)
+        .selectExpr("id", "CAST(id AS STRING) as value")
+        .write
+        .json(path + "/json_data")
 
       val jsonDf = spark.readStream
         .format("json")
@@ -233,7 +235,8 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
           assert(query.isActive, "Query should be active")
 
           // The query should have the checkpoint location set
-          assert(query.lastProgress != null || query.recentProgress.isEmpty,
+          assert(
+            query.lastProgress != null || query.recentProgress.isEmpty,
             "Query should have progress or be starting")
         } finally {
           query.stop()

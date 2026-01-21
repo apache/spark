@@ -31,23 +31,26 @@ import org.apache.spark.sql.types.StructType
  * Companion object for DataStreamReader with validation utilities.
  */
 private[sql] object DataStreamReader {
+
   /**
-   * Pattern for valid source names.
-   * Names must only contain ASCII letters, digits, and underscores.
+   * Pattern for valid source names. Names must only contain ASCII letters, digits, and
+   * underscores.
    */
   private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
 
   /**
    * Validates that a streaming source name only contains alphanumeric characters and underscores.
    *
-   * @param sourceName the source name to validate
-   * @throws IllegalArgumentException if the source name contains invalid characters
+   * @param sourceName
+   *   the source name to validate
+   * @throws IllegalArgumentException
+   *   if the source name contains invalid characters
    */
   def validateSourceName(sourceName: String): Unit = {
     if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
       throw new IllegalArgumentException(
         s"Invalid streaming source name: '$sourceName'. " +
-        "Source names must contain only ASCII letters, digits, and underscores.")
+          "Source names must contain only ASCII letters, digits, and underscores.")
     }
   }
 }
@@ -102,10 +105,11 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   }
 
   /**
-   * Specifies a name for the streaming source. This name is used to identify the source
-   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
+   * Specifies a name for the streaming source. This name is used to identify the source in
+   * checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
-   * @param sourceName the name to assign to this streaming source
+   * @param sourceName
+   *   the name to assign to this streaming source
    * @since 4.2.0
    */
   @Experimental
