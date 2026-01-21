@@ -33,646 +33,671 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import builtins
-import collections.abc
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.message
-import pyspark.sql.connect.proto.expressions_pb2
-import pyspark.sql.connect.proto.ml_common_pb2
-import pyspark.sql.connect.proto.relations_pb2
+
+from collections import abc as _abc
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
+from pyspark.sql.connect.proto import expressions_pb2 as _expressions_pb2
+from pyspark.sql.connect.proto import ml_common_pb2 as _ml_common_pb2
+from pyspark.sql.connect.proto import relations_pb2 as _relations_pb2
+import builtins as _builtins
 import sys
-import typing
+import typing as _typing
 
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias as _TypeAlias
 else:
-    import typing_extensions
+    from typing_extensions import TypeAlias as _TypeAlias
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRIPTOR: _descriptor.FileDescriptor
 
-class MlCommand(google.protobuf.message.Message):
+@_typing.final
+class MlCommand(_message.Message):
     """Command for ML"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class Fit(google.protobuf.message.Message):
+    @_typing.final
+    class Fit(_message.Message):
         """Command for estimator.fit(dataset)"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        ESTIMATOR_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
-        DATASET_FIELD_NUMBER: builtins.int
-        @property
-        def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+        ESTIMATOR_FIELD_NUMBER: _builtins.int
+        PARAMS_FIELD_NUMBER: _builtins.int
+        DATASET_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def estimator(self) -> _ml_common_pb2.MlOperator:
             """(Required) Estimator information (its type should be OPERATOR_TYPE_ESTIMATOR)"""
-        @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+        @_builtins.property
+        def params(self) -> _ml_common_pb2.MlParams:
             """(Optional) parameters of the Estimator"""
-        @property
-        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        @_builtins.property
+        def dataset(self) -> _relations_pb2.Relation:
             """(Required) the training dataset"""
         def __init__(
             self,
             *,
-            estimator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
-            dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            estimator: _ml_common_pb2.MlOperator | None = ...,
+            params: _ml_common_pb2.MlParams | None = ...,
+            dataset: _relations_pb2.Relation | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "dataset",
-                b"dataset",
-                "estimator",
-                b"estimator",
-                "params",
-                b"params",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "dataset",
-                b"dataset",
-                "estimator",
-                b"estimator",
-                "params",
-                b"params",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "dataset",
+            b"dataset",
+            "estimator",
+            b"estimator",
+            "params",
+            b"params",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "dataset",
+            b"dataset",
+            "estimator",
+            b"estimator",
+            "params",
+            b"params",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__params: _TypeAlias = _typing.Literal["params"]  # noqa: Y015
+        _WhichOneofArgType__params: _TypeAlias = _typing.Literal[
+            "_params", b"_params"
+        ]  # noqa: Y015
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: _WhichOneofArgType__params
+        ) -> _WhichOneofReturnType__params | None: ...
 
-    class Delete(google.protobuf.message.Message):
+    @_typing.final
+    class Delete(_message.Message):
         """Command to delete the cached objects which could be a model
         or summary evaluated by a model
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        OBJ_REFS_FIELD_NUMBER: builtins.int
-        EVICT_ONLY_FIELD_NUMBER: builtins.int
-        @property
-        def obj_refs(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            pyspark.sql.connect.proto.ml_common_pb2.ObjectRef
-        ]: ...
-        evict_only: builtins.bool
+        OBJ_REFS_FIELD_NUMBER: _builtins.int
+        EVICT_ONLY_FIELD_NUMBER: _builtins.int
+        evict_only: _builtins.bool
         """if set `evict_only` to true, only evict the cached model from memory,
         but keep the offloaded model in Spark driver local disk.
         """
+        @_builtins.property
+        def obj_refs(
+            self,
+        ) -> _containers.RepeatedCompositeFieldContainer[_ml_common_pb2.ObjectRef]: ...
         def __init__(
             self,
             *,
-            obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
-            | None = ...,
-            evict_only: builtins.bool | None = ...,
+            obj_refs: _abc.Iterable[_ml_common_pb2.ObjectRef] | None = ...,
+            evict_only: _builtins.bool | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_evict_only", b"_evict_only", "evict_only", b"evict_only"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_evict_only", b"_evict_only", "evict_only", b"evict_only", "obj_refs", b"obj_refs"
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_evict_only", b"_evict_only", "evict_only", b"evict_only"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_evict_only", b"_evict_only", "evict_only", b"evict_only", "obj_refs", b"obj_refs"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__evict_only: _TypeAlias = _typing.Literal["evict_only"]  # noqa: Y015
+        _WhichOneofArgType__evict_only: _TypeAlias = _typing.Literal[
+            "_evict_only", b"_evict_only"
+        ]  # noqa: Y015
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_evict_only", b"_evict_only"]
-        ) -> typing_extensions.Literal["evict_only"] | None: ...
+            self, oneof_group: _WhichOneofArgType__evict_only
+        ) -> _WhichOneofReturnType__evict_only | None: ...
 
-    class CleanCache(google.protobuf.message.Message):
+    @_typing.final
+    class CleanCache(_message.Message):
         """Force to clean up all the ML cached objects"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
         def __init__(
             self,
         ) -> None: ...
 
-    class GetCacheInfo(google.protobuf.message.Message):
+    @_typing.final
+    class GetCacheInfo(_message.Message):
         """Get the information of all the ML cached objects"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
         def __init__(
             self,
         ) -> None: ...
 
-    class Write(google.protobuf.message.Message):
+    @_typing.final
+    class Write(_message.Message):
         """Command to write ML operator"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        @_typing.final
+        class OptionsEntry(_message.Message):
+            DESCRIPTOR: _descriptor.Descriptor
 
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
+            KEY_FIELD_NUMBER: _builtins.int
+            VALUE_FIELD_NUMBER: _builtins.int
+            key: _builtins.str
+            value: _builtins.str
             def __init__(
                 self,
                 *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
+                key: _builtins.str = ...,
+                value: _builtins.str = ...,
             ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "key", b"key", "value", b"value"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-        OPERATOR_FIELD_NUMBER: builtins.int
-        OBJ_REF_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
-        PATH_FIELD_NUMBER: builtins.int
-        SHOULD_OVERWRITE_FIELD_NUMBER: builtins.int
-        OPTIONS_FIELD_NUMBER: builtins.int
-        @property
-        def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
-            """Estimator or evaluator"""
-        @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
-            """The cached model"""
-        @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
-            """(Optional) The parameters of operator which could be estimator/evaluator or a cached model"""
-        path: builtins.str
+        OPERATOR_FIELD_NUMBER: _builtins.int
+        OBJ_REF_FIELD_NUMBER: _builtins.int
+        PARAMS_FIELD_NUMBER: _builtins.int
+        PATH_FIELD_NUMBER: _builtins.int
+        SHOULD_OVERWRITE_FIELD_NUMBER: _builtins.int
+        OPTIONS_FIELD_NUMBER: _builtins.int
+        path: _builtins.str
         """(Required) Save the ML instance to the path"""
-        should_overwrite: builtins.bool
+        should_overwrite: _builtins.bool
         """(Optional) Overwrites if the output path already exists."""
-        @property
-        def options(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        @_builtins.property
+        def operator(self) -> _ml_common_pb2.MlOperator:
+            """Estimator or evaluator"""
+        @_builtins.property
+        def obj_ref(self) -> _ml_common_pb2.ObjectRef:
+            """The cached model"""
+        @_builtins.property
+        def params(self) -> _ml_common_pb2.MlParams:
+            """(Optional) The parameters of operator which could be estimator/evaluator or a cached model"""
+        @_builtins.property
+        def options(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
             """(Optional) The options of the writer"""
         def __init__(
             self,
             *,
-            operator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
-            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
-            path: builtins.str = ...,
-            should_overwrite: builtins.bool | None = ...,
-            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            operator: _ml_common_pb2.MlOperator | None = ...,
+            obj_ref: _ml_common_pb2.ObjectRef | None = ...,
+            params: _ml_common_pb2.MlParams | None = ...,
+            path: _builtins.str = ...,
+            should_overwrite: _builtins.bool | None = ...,
+            options: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "_should_overwrite",
-                b"_should_overwrite",
-                "obj_ref",
-                b"obj_ref",
-                "operator",
-                b"operator",
-                "params",
-                b"params",
-                "should_overwrite",
-                b"should_overwrite",
-                "type",
-                b"type",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "_should_overwrite",
-                b"_should_overwrite",
-                "obj_ref",
-                b"obj_ref",
-                "operator",
-                b"operator",
-                "options",
-                b"options",
-                "params",
-                b"params",
-                "path",
-                b"path",
-                "should_overwrite",
-                b"should_overwrite",
-                "type",
-                b"type",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "_should_overwrite",
+            b"_should_overwrite",
+            "obj_ref",
+            b"obj_ref",
+            "operator",
+            b"operator",
+            "params",
+            b"params",
+            "should_overwrite",
+            b"should_overwrite",
+            "type",
+            b"type",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "_should_overwrite",
+            b"_should_overwrite",
+            "obj_ref",
+            b"obj_ref",
+            "operator",
+            b"operator",
+            "options",
+            b"options",
+            "params",
+            b"params",
+            "path",
+            b"path",
+            "should_overwrite",
+            b"should_overwrite",
+            "type",
+            b"type",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__params: _TypeAlias = _typing.Literal["params"]  # noqa: Y015
+        _WhichOneofArgType__params: _TypeAlias = _typing.Literal[
+            "_params", b"_params"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__should_overwrite: _TypeAlias = _typing.Literal[
+            "should_overwrite"
+        ]  # noqa: Y015
+        _WhichOneofArgType__should_overwrite: _TypeAlias = _typing.Literal[
+            "_should_overwrite", b"_should_overwrite"
+        ]  # noqa: Y015
+        _WhichOneofReturnType_type: _TypeAlias = _typing.Literal[
+            "operator", "obj_ref"
+        ]  # noqa: Y015
+        _WhichOneofArgType_type: _TypeAlias = _typing.Literal["type", b"type"]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__params
+        ) -> _WhichOneofReturnType__params | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_should_overwrite", b"_should_overwrite"]
-        ) -> typing_extensions.Literal["should_overwrite"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__should_overwrite
+        ) -> _WhichOneofReturnType__should_overwrite | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["operator", "obj_ref"] | None: ...
+            self, oneof_group: _WhichOneofArgType_type
+        ) -> _WhichOneofReturnType_type | None: ...
 
-    class Read(google.protobuf.message.Message):
+    @_typing.final
+    class Read(_message.Message):
         """Command to load ML operator."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        OPERATOR_FIELD_NUMBER: builtins.int
-        PATH_FIELD_NUMBER: builtins.int
-        @property
-        def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
-            """(Required) ML operator information"""
-        path: builtins.str
+        OPERATOR_FIELD_NUMBER: _builtins.int
+        PATH_FIELD_NUMBER: _builtins.int
+        path: _builtins.str
         """(Required) Load the ML instance from the input path"""
+        @_builtins.property
+        def operator(self) -> _ml_common_pb2.MlOperator:
+            """(Required) ML operator information"""
         def __init__(
             self,
             *,
-            operator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
-            path: builtins.str = ...,
+            operator: _ml_common_pb2.MlOperator | None = ...,
+            path: _builtins.str = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["operator", b"operator"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["operator", b"operator", "path", b"path"]
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["operator", b"operator"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "operator", b"operator", "path", b"path"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Evaluate(google.protobuf.message.Message):
+    @_typing.final
+    class Evaluate(_message.Message):
         """Command for evaluator.evaluate(dataset)"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        EVALUATOR_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
-        DATASET_FIELD_NUMBER: builtins.int
-        @property
-        def evaluator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+        EVALUATOR_FIELD_NUMBER: _builtins.int
+        PARAMS_FIELD_NUMBER: _builtins.int
+        DATASET_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def evaluator(self) -> _ml_common_pb2.MlOperator:
             """(Required) Evaluator information (its type should be OPERATOR_TYPE_EVALUATOR)"""
-        @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+        @_builtins.property
+        def params(self) -> _ml_common_pb2.MlParams:
             """(Optional) parameters of the Evaluator"""
-        @property
-        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        @_builtins.property
+        def dataset(self) -> _relations_pb2.Relation:
             """(Required) the evaluating dataset"""
         def __init__(
             self,
             *,
-            evaluator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
-            dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            evaluator: _ml_common_pb2.MlOperator | None = ...,
+            params: _ml_common_pb2.MlParams | None = ...,
+            dataset: _relations_pb2.Relation | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "dataset",
-                b"dataset",
-                "evaluator",
-                b"evaluator",
-                "params",
-                b"params",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "dataset",
-                b"dataset",
-                "evaluator",
-                b"evaluator",
-                "params",
-                b"params",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "dataset",
+            b"dataset",
+            "evaluator",
+            b"evaluator",
+            "params",
+            b"params",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "dataset",
+            b"dataset",
+            "evaluator",
+            b"evaluator",
+            "params",
+            b"params",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__params: _TypeAlias = _typing.Literal["params"]  # noqa: Y015
+        _WhichOneofArgType__params: _TypeAlias = _typing.Literal[
+            "_params", b"_params"
+        ]  # noqa: Y015
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: _WhichOneofArgType__params
+        ) -> _WhichOneofReturnType__params | None: ...
 
-    class CreateSummary(google.protobuf.message.Message):
+    @_typing.final
+    class CreateSummary(_message.Message):
         """This is for re-creating the model summary when the model summary is lost
         (model summary is lost when the model is offloaded and then loaded back)
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        MODEL_REF_FIELD_NUMBER: builtins.int
-        DATASET_FIELD_NUMBER: builtins.int
-        @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
-        @property
-        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
+        MODEL_REF_FIELD_NUMBER: _builtins.int
+        DATASET_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def model_ref(self) -> _ml_common_pb2.ObjectRef: ...
+        @_builtins.property
+        def dataset(self) -> _relations_pb2.Relation: ...
         def __init__(
             self,
             *,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
-            dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            model_ref: _ml_common_pb2.ObjectRef | None = ...,
+            dataset: _relations_pb2.Relation | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal["dataset", b"dataset", "model_ref", b"model_ref"],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal["dataset", b"dataset", "model_ref", b"model_ref"],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "dataset", b"dataset", "model_ref", b"model_ref"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "dataset", b"dataset", "model_ref", b"model_ref"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class GetModelSize(google.protobuf.message.Message):
+    @_typing.final
+    class GetModelSize(_message.Message):
         """This is for query the model estimated in-memory size"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        MODEL_REF_FIELD_NUMBER: builtins.int
-        @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
+        MODEL_REF_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def model_ref(self) -> _ml_common_pb2.ObjectRef: ...
         def __init__(
             self,
             *,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+            model_ref: _ml_common_pb2.ObjectRef | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["model_ref", b"model_ref"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["model_ref", b"model_ref"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    FIT_FIELD_NUMBER: builtins.int
-    FETCH_FIELD_NUMBER: builtins.int
-    DELETE_FIELD_NUMBER: builtins.int
-    WRITE_FIELD_NUMBER: builtins.int
-    READ_FIELD_NUMBER: builtins.int
-    EVALUATE_FIELD_NUMBER: builtins.int
-    CLEAN_CACHE_FIELD_NUMBER: builtins.int
-    GET_CACHE_INFO_FIELD_NUMBER: builtins.int
-    CREATE_SUMMARY_FIELD_NUMBER: builtins.int
-    GET_MODEL_SIZE_FIELD_NUMBER: builtins.int
-    @property
-    def fit(self) -> global___MlCommand.Fit: ...
-    @property
-    def fetch(self) -> pyspark.sql.connect.proto.relations_pb2.Fetch: ...
-    @property
-    def delete(self) -> global___MlCommand.Delete: ...
-    @property
-    def write(self) -> global___MlCommand.Write: ...
-    @property
-    def read(self) -> global___MlCommand.Read: ...
-    @property
-    def evaluate(self) -> global___MlCommand.Evaluate: ...
-    @property
-    def clean_cache(self) -> global___MlCommand.CleanCache: ...
-    @property
-    def get_cache_info(self) -> global___MlCommand.GetCacheInfo: ...
-    @property
-    def create_summary(self) -> global___MlCommand.CreateSummary: ...
-    @property
-    def get_model_size(self) -> global___MlCommand.GetModelSize: ...
+    FIT_FIELD_NUMBER: _builtins.int
+    FETCH_FIELD_NUMBER: _builtins.int
+    DELETE_FIELD_NUMBER: _builtins.int
+    WRITE_FIELD_NUMBER: _builtins.int
+    READ_FIELD_NUMBER: _builtins.int
+    EVALUATE_FIELD_NUMBER: _builtins.int
+    CLEAN_CACHE_FIELD_NUMBER: _builtins.int
+    GET_CACHE_INFO_FIELD_NUMBER: _builtins.int
+    CREATE_SUMMARY_FIELD_NUMBER: _builtins.int
+    GET_MODEL_SIZE_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def fit(self) -> Global___MlCommand.Fit: ...
+    @_builtins.property
+    def fetch(self) -> _relations_pb2.Fetch: ...
+    @_builtins.property
+    def delete(self) -> Global___MlCommand.Delete: ...
+    @_builtins.property
+    def write(self) -> Global___MlCommand.Write: ...
+    @_builtins.property
+    def read(self) -> Global___MlCommand.Read: ...
+    @_builtins.property
+    def evaluate(self) -> Global___MlCommand.Evaluate: ...
+    @_builtins.property
+    def clean_cache(self) -> Global___MlCommand.CleanCache: ...
+    @_builtins.property
+    def get_cache_info(self) -> Global___MlCommand.GetCacheInfo: ...
+    @_builtins.property
+    def create_summary(self) -> Global___MlCommand.CreateSummary: ...
+    @_builtins.property
+    def get_model_size(self) -> Global___MlCommand.GetModelSize: ...
     def __init__(
         self,
         *,
-        fit: global___MlCommand.Fit | None = ...,
-        fetch: pyspark.sql.connect.proto.relations_pb2.Fetch | None = ...,
-        delete: global___MlCommand.Delete | None = ...,
-        write: global___MlCommand.Write | None = ...,
-        read: global___MlCommand.Read | None = ...,
-        evaluate: global___MlCommand.Evaluate | None = ...,
-        clean_cache: global___MlCommand.CleanCache | None = ...,
-        get_cache_info: global___MlCommand.GetCacheInfo | None = ...,
-        create_summary: global___MlCommand.CreateSummary | None = ...,
-        get_model_size: global___MlCommand.GetModelSize | None = ...,
+        fit: Global___MlCommand.Fit | None = ...,
+        fetch: _relations_pb2.Fetch | None = ...,
+        delete: Global___MlCommand.Delete | None = ...,
+        write: Global___MlCommand.Write | None = ...,
+        read: Global___MlCommand.Read | None = ...,
+        evaluate: Global___MlCommand.Evaluate | None = ...,
+        clean_cache: Global___MlCommand.CleanCache | None = ...,
+        get_cache_info: Global___MlCommand.GetCacheInfo | None = ...,
+        create_summary: Global___MlCommand.CreateSummary | None = ...,
+        get_model_size: Global___MlCommand.GetModelSize | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "clean_cache",
-            b"clean_cache",
-            "command",
-            b"command",
-            "create_summary",
-            b"create_summary",
-            "delete",
-            b"delete",
-            "evaluate",
-            b"evaluate",
-            "fetch",
-            b"fetch",
-            "fit",
-            b"fit",
-            "get_cache_info",
-            b"get_cache_info",
-            "get_model_size",
-            b"get_model_size",
-            "read",
-            b"read",
-            "write",
-            b"write",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "clean_cache",
-            b"clean_cache",
-            "command",
-            b"command",
-            "create_summary",
-            b"create_summary",
-            "delete",
-            b"delete",
-            "evaluate",
-            b"evaluate",
-            "fetch",
-            b"fetch",
-            "fit",
-            b"fit",
-            "get_cache_info",
-            b"get_cache_info",
-            "get_model_size",
-            b"get_model_size",
-            "read",
-            b"read",
-            "write",
-            b"write",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "clean_cache",
+        b"clean_cache",
+        "command",
+        b"command",
+        "create_summary",
+        b"create_summary",
+        "delete",
+        b"delete",
+        "evaluate",
+        b"evaluate",
+        "fetch",
+        b"fetch",
+        "fit",
+        b"fit",
+        "get_cache_info",
+        b"get_cache_info",
+        "get_model_size",
+        b"get_model_size",
+        "read",
+        b"read",
+        "write",
+        b"write",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "clean_cache",
+        b"clean_cache",
+        "command",
+        b"command",
+        "create_summary",
+        b"create_summary",
+        "delete",
+        b"delete",
+        "evaluate",
+        b"evaluate",
+        "fetch",
+        b"fetch",
+        "fit",
+        b"fit",
+        "get_cache_info",
+        b"get_cache_info",
+        "get_model_size",
+        b"get_model_size",
+        "read",
+        b"read",
+        "write",
+        b"write",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_command: _TypeAlias = _typing.Literal[
+        "fit",
+        "fetch",
+        "delete",
+        "write",
+        "read",
+        "evaluate",
+        "clean_cache",
+        "get_cache_info",
+        "create_summary",
+        "get_model_size",
+    ]  # noqa: Y015
+    _WhichOneofArgType_command: _TypeAlias = _typing.Literal["command", b"command"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal[
-            "fit",
-            "fetch",
-            "delete",
-            "write",
-            "read",
-            "evaluate",
-            "clean_cache",
-            "get_cache_info",
-            "create_summary",
-            "get_model_size",
-        ]
-        | None
-    ): ...
+        self, oneof_group: _WhichOneofArgType_command
+    ) -> _WhichOneofReturnType_command | None: ...
 
-global___MlCommand = MlCommand
+Global___MlCommand: _TypeAlias = MlCommand  # noqa: Y015
 
-class MlCommandResult(google.protobuf.message.Message):
+@_typing.final
+class MlCommandResult(_message.Message):
     """The result of MlCommand"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class MlOperatorInfo(google.protobuf.message.Message):
+    @_typing.final
+    class MlOperatorInfo(_message.Message):
         """Represents an operator info"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        OBJ_REF_FIELD_NUMBER: builtins.int
-        NAME_FIELD_NUMBER: builtins.int
-        UID_FIELD_NUMBER: builtins.int
-        PARAMS_FIELD_NUMBER: builtins.int
-        WARNING_MESSAGE_FIELD_NUMBER: builtins.int
-        @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
-            """The cached object which could be a model or summary evaluated by a model"""
-        name: builtins.str
+        OBJ_REF_FIELD_NUMBER: _builtins.int
+        NAME_FIELD_NUMBER: _builtins.int
+        UID_FIELD_NUMBER: _builtins.int
+        PARAMS_FIELD_NUMBER: _builtins.int
+        WARNING_MESSAGE_FIELD_NUMBER: _builtins.int
+        name: _builtins.str
         """Operator name"""
-        uid: builtins.str
+        uid: _builtins.str
         """(Optional) the 'uid' of a ML object
         Note it is different from the 'id' of a cached object.
         """
-        @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
-            """(Optional) parameters"""
-        warning_message: builtins.str
+        warning_message: _builtins.str
         """(Optional) warning message generated during the ML command execution"""
+        @_builtins.property
+        def obj_ref(self) -> _ml_common_pb2.ObjectRef:
+            """The cached object which could be a model or summary evaluated by a model"""
+        @_builtins.property
+        def params(self) -> _ml_common_pb2.MlParams:
+            """(Optional) parameters"""
         def __init__(
             self,
             *,
-            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
-            name: builtins.str = ...,
-            uid: builtins.str | None = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
-            warning_message: builtins.str | None = ...,
+            obj_ref: _ml_common_pb2.ObjectRef | None = ...,
+            name: _builtins.str = ...,
+            uid: _builtins.str | None = ...,
+            params: _ml_common_pb2.MlParams | None = ...,
+            warning_message: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "_uid",
-                b"_uid",
-                "_warning_message",
-                b"_warning_message",
-                "name",
-                b"name",
-                "obj_ref",
-                b"obj_ref",
-                "params",
-                b"params",
-                "type",
-                b"type",
-                "uid",
-                b"uid",
-                "warning_message",
-                b"warning_message",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_params",
-                b"_params",
-                "_uid",
-                b"_uid",
-                "_warning_message",
-                b"_warning_message",
-                "name",
-                b"name",
-                "obj_ref",
-                b"obj_ref",
-                "params",
-                b"params",
-                "type",
-                b"type",
-                "uid",
-                b"uid",
-                "warning_message",
-                b"warning_message",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "_uid",
+            b"_uid",
+            "_warning_message",
+            b"_warning_message",
+            "name",
+            b"name",
+            "obj_ref",
+            b"obj_ref",
+            "params",
+            b"params",
+            "type",
+            b"type",
+            "uid",
+            b"uid",
+            "warning_message",
+            b"warning_message",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_params",
+            b"_params",
+            "_uid",
+            b"_uid",
+            "_warning_message",
+            b"_warning_message",
+            "name",
+            b"name",
+            "obj_ref",
+            b"obj_ref",
+            "params",
+            b"params",
+            "type",
+            b"type",
+            "uid",
+            b"uid",
+            "warning_message",
+            b"warning_message",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__params: _TypeAlias = _typing.Literal["params"]  # noqa: Y015
+        _WhichOneofArgType__params: _TypeAlias = _typing.Literal[
+            "_params", b"_params"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__uid: _TypeAlias = _typing.Literal["uid"]  # noqa: Y015
+        _WhichOneofArgType__uid: _TypeAlias = _typing.Literal["_uid", b"_uid"]  # noqa: Y015
+        _WhichOneofReturnType__warning_message: _TypeAlias = _typing.Literal[
+            "warning_message"
+        ]  # noqa: Y015
+        _WhichOneofArgType__warning_message: _TypeAlias = _typing.Literal[
+            "_warning_message", b"_warning_message"
+        ]  # noqa: Y015
+        _WhichOneofReturnType_type: _TypeAlias = _typing.Literal["obj_ref", "name"]  # noqa: Y015
+        _WhichOneofArgType_type: _TypeAlias = _typing.Literal["type", b"type"]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__params
+        ) -> _WhichOneofReturnType__params | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_uid", b"_uid"]
-        ) -> typing_extensions.Literal["uid"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__uid
+        ) -> _WhichOneofReturnType__uid | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_warning_message", b"_warning_message"]
-        ) -> typing_extensions.Literal["warning_message"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__warning_message
+        ) -> _WhichOneofReturnType__warning_message | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["obj_ref", "name"] | None: ...
+            self, oneof_group: _WhichOneofArgType_type
+        ) -> _WhichOneofReturnType_type | None: ...
 
-    PARAM_FIELD_NUMBER: builtins.int
-    SUMMARY_FIELD_NUMBER: builtins.int
-    OPERATOR_INFO_FIELD_NUMBER: builtins.int
-    @property
-    def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
-        """The result of the attribute"""
-    summary: builtins.str
+    PARAM_FIELD_NUMBER: _builtins.int
+    SUMMARY_FIELD_NUMBER: _builtins.int
+    OPERATOR_INFO_FIELD_NUMBER: _builtins.int
+    summary: _builtins.str
     """Evaluate a Dataset in a model and return the cached ID of summary"""
-    @property
-    def operator_info(self) -> global___MlCommandResult.MlOperatorInfo:
+    @_builtins.property
+    def param(self) -> _expressions_pb2.Expression.Literal:
+        """The result of the attribute"""
+    @_builtins.property
+    def operator_info(self) -> Global___MlCommandResult.MlOperatorInfo:
         """Operator information"""
     def __init__(
         self,
         *,
-        param: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
-        summary: builtins.str = ...,
-        operator_info: global___MlCommandResult.MlOperatorInfo | None = ...,
+        param: _expressions_pb2.Expression.Literal | None = ...,
+        summary: _builtins.str = ...,
+        operator_info: Global___MlCommandResult.MlOperatorInfo | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "operator_info",
-            b"operator_info",
-            "param",
-            b"param",
-            "result_type",
-            b"result_type",
-            "summary",
-            b"summary",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "operator_info",
-            b"operator_info",
-            "param",
-            b"param",
-            "result_type",
-            b"result_type",
-            "summary",
-            b"summary",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "operator_info",
+        b"operator_info",
+        "param",
+        b"param",
+        "result_type",
+        b"result_type",
+        "summary",
+        b"summary",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "operator_info",
+        b"operator_info",
+        "param",
+        b"param",
+        "result_type",
+        b"result_type",
+        "summary",
+        b"summary",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_result_type: _TypeAlias = _typing.Literal[
+        "param", "summary", "operator_info"
+    ]  # noqa: Y015
+    _WhichOneofArgType_result_type: _TypeAlias = _typing.Literal[
+        "result_type", b"result_type"
+    ]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["param", "summary", "operator_info"] | None: ...
+        self, oneof_group: _WhichOneofArgType_result_type
+    ) -> _WhichOneofReturnType_result_type | None: ...
 
-global___MlCommandResult = MlCommandResult
+Global___MlCommandResult: _TypeAlias = MlCommandResult  # noqa: Y015

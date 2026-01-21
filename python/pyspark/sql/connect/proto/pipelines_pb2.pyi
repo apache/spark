@@ -33,36 +33,36 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import builtins
-import collections.abc
-import google.protobuf.any_pb2
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.internal.enum_type_wrapper
-import google.protobuf.message
-import google.protobuf.timestamp_pb2
-import pyspark.sql.connect.proto.common_pb2
-import pyspark.sql.connect.proto.relations_pb2
-import pyspark.sql.connect.proto.types_pb2
+
+from collections import abc as _abc
+from google.protobuf import any_pb2 as _any_pb2
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from pyspark.sql.connect.proto import common_pb2 as _common_pb2
+from pyspark.sql.connect.proto import relations_pb2 as _relations_pb2
+from pyspark.sql.connect.proto import types_pb2 as _types_pb2
+import builtins as _builtins
 import sys
-import typing
+import typing as _typing
 
 if sys.version_info >= (3, 10):
-    import typing as typing_extensions
+    from typing import TypeAlias as _TypeAlias
 else:
-    import typing_extensions
+    from typing_extensions import TypeAlias as _TypeAlias
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRIPTOR: _descriptor.FileDescriptor
 
 class _OutputType:
-    ValueType = typing.NewType("ValueType", builtins.int)
-    V: typing_extensions.TypeAlias = ValueType
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
 
 class _OutputTypeEnumTypeWrapper(
-    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_OutputType.ValueType],
-    builtins.type,
-):  # noqa: F821
-    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    _enum_type_wrapper._EnumTypeWrapper[_OutputType.ValueType], _builtins.type
+):
+    DESCRIPTOR: _descriptor.EnumDescriptor
     OUTPUT_TYPE_UNSPECIFIED: _OutputType.ValueType  # 0
     """Safe default value. Should not be used."""
     MATERIALIZED_VIEW: _OutputType.ValueType  # 1
@@ -87,993 +87,1100 @@ TEMPORARY_VIEW: OutputType.ValueType  # 3
 """A view which is not published to the catalog"""
 SINK: OutputType.ValueType  # 4
 """A sink which is not published to the catalog"""
-global___OutputType = OutputType
+Global___OutputType: _TypeAlias = OutputType  # noqa: Y015
 
-class PipelineCommand(google.protobuf.message.Message):
+@_typing.final
+class PipelineCommand(_message.Message):
     """Dispatch object for pipelines commands. See each individual command for documentation."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class CreateDataflowGraph(google.protobuf.message.Message):
+    @_typing.final
+    class CreateDataflowGraph(_message.Message):
         """Request to create a new dataflow graph."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        class SqlConfEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        @_typing.final
+        class SqlConfEntry(_message.Message):
+            DESCRIPTOR: _descriptor.Descriptor
 
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
+            KEY_FIELD_NUMBER: _builtins.int
+            VALUE_FIELD_NUMBER: _builtins.int
+            key: _builtins.str
+            value: _builtins.str
             def __init__(
                 self,
                 *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
+                key: _builtins.str = ...,
+                value: _builtins.str = ...,
             ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "key", b"key", "value", b"value"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-        DEFAULT_CATALOG_FIELD_NUMBER: builtins.int
-        DEFAULT_DATABASE_FIELD_NUMBER: builtins.int
-        SQL_CONF_FIELD_NUMBER: builtins.int
-        default_catalog: builtins.str
+        DEFAULT_CATALOG_FIELD_NUMBER: _builtins.int
+        DEFAULT_DATABASE_FIELD_NUMBER: _builtins.int
+        SQL_CONF_FIELD_NUMBER: _builtins.int
+        default_catalog: _builtins.str
         """The default catalog."""
-        default_database: builtins.str
+        default_database: _builtins.str
         """The default database."""
-        @property
-        def sql_conf(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        @_builtins.property
+        def sql_conf(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
             """SQL configurations for all flows in this graph."""
         def __init__(
             self,
             *,
-            default_catalog: builtins.str | None = ...,
-            default_database: builtins.str | None = ...,
-            sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            default_catalog: _builtins.str | None = ...,
+            default_database: _builtins.str | None = ...,
+            sql_conf: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_default_catalog",
-                b"_default_catalog",
-                "_default_database",
-                b"_default_database",
-                "default_catalog",
-                b"default_catalog",
-                "default_database",
-                b"default_database",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_default_catalog",
-                b"_default_catalog",
-                "_default_database",
-                b"_default_database",
-                "default_catalog",
-                b"default_catalog",
-                "default_database",
-                b"default_database",
-                "sql_conf",
-                b"sql_conf",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_default_catalog",
+            b"_default_catalog",
+            "_default_database",
+            b"_default_database",
+            "default_catalog",
+            b"default_catalog",
+            "default_database",
+            b"default_database",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_default_catalog",
+            b"_default_catalog",
+            "_default_database",
+            b"_default_database",
+            "default_catalog",
+            b"default_catalog",
+            "default_database",
+            b"default_database",
+            "sql_conf",
+            b"sql_conf",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__default_catalog: _TypeAlias = _typing.Literal[
+            "default_catalog"
+        ]  # noqa: Y015
+        _WhichOneofArgType__default_catalog: _TypeAlias = _typing.Literal[
+            "_default_catalog", b"_default_catalog"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__default_database: _TypeAlias = _typing.Literal[
+            "default_database"
+        ]  # noqa: Y015
+        _WhichOneofArgType__default_database: _TypeAlias = _typing.Literal[
+            "_default_database", b"_default_database"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_default_catalog", b"_default_catalog"]
-        ) -> typing_extensions.Literal["default_catalog"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__default_catalog
+        ) -> _WhichOneofReturnType__default_catalog | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_default_database", b"_default_database"]
-        ) -> typing_extensions.Literal["default_database"] | None: ...
+            self, oneof_group: _WhichOneofArgType__default_database
+        ) -> _WhichOneofReturnType__default_database | None: ...
 
-    class DropDataflowGraph(google.protobuf.message.Message):
+    @_typing.final
+    class DropDataflowGraph(_message.Message):
         """Drops the graph and stops any running attached flows."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to drop."""
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id", "dataflow_graph_id", b"dataflow_graph_id"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id", "dataflow_graph_id", b"dataflow_graph_id"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
 
-    class DefineOutput(google.protobuf.message.Message):
+    @_typing.final
+    class DefineOutput(_message.Message):
         """Request to define an output: a table, a materialized view, a temporary view or a sink."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        class TableDetails(google.protobuf.message.Message):
+        @_typing.final
+        class TableDetails(_message.Message):
             """Metadata that's only applicable to tables and materialized views."""
 
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRIPTOR: _descriptor.Descriptor
 
-            class TablePropertiesEntry(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            @_typing.final
+            class TablePropertiesEntry(_message.Message):
+                DESCRIPTOR: _descriptor.Descriptor
 
-                KEY_FIELD_NUMBER: builtins.int
-                VALUE_FIELD_NUMBER: builtins.int
-                key: builtins.str
-                value: builtins.str
+                KEY_FIELD_NUMBER: _builtins.int
+                VALUE_FIELD_NUMBER: _builtins.int
+                key: _builtins.str
+                value: _builtins.str
                 def __init__(
                     self,
                     *,
-                    key: builtins.str = ...,
-                    value: builtins.str = ...,
+                    key: _builtins.str = ...,
+                    value: _builtins.str = ...,
                 ) -> None: ...
-                def ClearField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> None: ...
+                _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                    "key", b"key", "value", b"value"
+                ]  # noqa: Y015
+                def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-            TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
-            PARTITION_COLS_FIELD_NUMBER: builtins.int
-            FORMAT_FIELD_NUMBER: builtins.int
-            SCHEMA_DATA_TYPE_FIELD_NUMBER: builtins.int
-            SCHEMA_STRING_FIELD_NUMBER: builtins.int
-            CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
-            @property
-            def table_properties(
-                self,
-            ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-                """Optional table properties."""
-            @property
-            def partition_cols(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-                """Optional partition columns for the table."""
-            format: builtins.str
+            TABLE_PROPERTIES_FIELD_NUMBER: _builtins.int
+            PARTITION_COLS_FIELD_NUMBER: _builtins.int
+            FORMAT_FIELD_NUMBER: _builtins.int
+            SCHEMA_DATA_TYPE_FIELD_NUMBER: _builtins.int
+            SCHEMA_STRING_FIELD_NUMBER: _builtins.int
+            CLUSTERING_COLUMNS_FIELD_NUMBER: _builtins.int
+            format: _builtins.str
             """The output table format for the table."""
-            @property
-            def schema_data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-            schema_string: builtins.str
-            @property
-            def clustering_columns(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            schema_string: _builtins.str
+            @_builtins.property
+            def table_properties(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+                """Optional table properties."""
+            @_builtins.property
+            def partition_cols(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+                """Optional partition columns for the table."""
+            @_builtins.property
+            def schema_data_type(self) -> _types_pb2.DataType: ...
+            @_builtins.property
+            def clustering_columns(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
                 """Optional cluster columns for the table."""
             def __init__(
                 self,
                 *,
-                table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-                partition_cols: collections.abc.Iterable[builtins.str] | None = ...,
-                format: builtins.str | None = ...,
-                schema_data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-                schema_string: builtins.str = ...,
-                clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
+                table_properties: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+                partition_cols: _abc.Iterable[_builtins.str] | None = ...,
+                format: _builtins.str | None = ...,
+                schema_data_type: _types_pb2.DataType | None = ...,
+                schema_string: _builtins.str = ...,
+                clustering_columns: _abc.Iterable[_builtins.str] | None = ...,
             ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_format",
-                    b"_format",
-                    "format",
-                    b"format",
-                    "schema",
-                    b"schema",
-                    "schema_data_type",
-                    b"schema_data_type",
-                    "schema_string",
-                    b"schema_string",
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_format",
-                    b"_format",
-                    "clustering_columns",
-                    b"clustering_columns",
-                    "format",
-                    b"format",
-                    "partition_cols",
-                    b"partition_cols",
-                    "schema",
-                    b"schema",
-                    "schema_data_type",
-                    b"schema_data_type",
-                    "schema_string",
-                    b"schema_string",
-                    "table_properties",
-                    b"table_properties",
-                ],
-            ) -> None: ...
-            @typing.overload
+            _HasFieldArgType: _TypeAlias = _typing.Literal[
+                "_format",
+                b"_format",
+                "format",
+                b"format",
+                "schema",
+                b"schema",
+                "schema_data_type",
+                b"schema_data_type",
+                "schema_string",
+                b"schema_string",
+            ]  # noqa: Y015
+            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "_format",
+                b"_format",
+                "clustering_columns",
+                b"clustering_columns",
+                "format",
+                b"format",
+                "partition_cols",
+                b"partition_cols",
+                "schema",
+                b"schema",
+                "schema_data_type",
+                b"schema_data_type",
+                "schema_string",
+                b"schema_string",
+                "table_properties",
+                b"table_properties",
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            _WhichOneofReturnType__format: _TypeAlias = _typing.Literal["format"]  # noqa: Y015
+            _WhichOneofArgType__format: _TypeAlias = _typing.Literal[
+                "_format", b"_format"
+            ]  # noqa: Y015
+            _WhichOneofReturnType_schema: _TypeAlias = _typing.Literal[
+                "schema_data_type", "schema_string"
+            ]  # noqa: Y015
+            _WhichOneofArgType_schema: _TypeAlias = _typing.Literal[
+                "schema", b"schema"
+            ]  # noqa: Y015
+            @_typing.overload
             def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_format", b"_format"]
-            ) -> typing_extensions.Literal["format"] | None: ...
-            @typing.overload
+                self, oneof_group: _WhichOneofArgType__format
+            ) -> _WhichOneofReturnType__format | None: ...
+            @_typing.overload
             def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-            ) -> typing_extensions.Literal["schema_data_type", "schema_string"] | None: ...
+                self, oneof_group: _WhichOneofArgType_schema
+            ) -> _WhichOneofReturnType_schema | None: ...
 
-        class SinkDetails(google.protobuf.message.Message):
+        @_typing.final
+        class SinkDetails(_message.Message):
             """Metadata that's only applicable to sinks."""
 
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRIPTOR: _descriptor.Descriptor
 
-            class OptionsEntry(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            @_typing.final
+            class OptionsEntry(_message.Message):
+                DESCRIPTOR: _descriptor.Descriptor
 
-                KEY_FIELD_NUMBER: builtins.int
-                VALUE_FIELD_NUMBER: builtins.int
-                key: builtins.str
-                value: builtins.str
+                KEY_FIELD_NUMBER: _builtins.int
+                VALUE_FIELD_NUMBER: _builtins.int
+                key: _builtins.str
+                value: _builtins.str
                 def __init__(
                     self,
                     *,
-                    key: builtins.str = ...,
-                    value: builtins.str = ...,
+                    key: _builtins.str = ...,
+                    value: _builtins.str = ...,
                 ) -> None: ...
-                def ClearField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> None: ...
+                _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                    "key", b"key", "value", b"value"
+                ]  # noqa: Y015
+                def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-            OPTIONS_FIELD_NUMBER: builtins.int
-            FORMAT_FIELD_NUMBER: builtins.int
-            @property
-            def options(
-                self,
-            ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-                """Streaming write options"""
-            format: builtins.str
+            OPTIONS_FIELD_NUMBER: _builtins.int
+            FORMAT_FIELD_NUMBER: _builtins.int
+            format: _builtins.str
             """Streaming write format"""
+            @_builtins.property
+            def options(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+                """Streaming write options"""
             def __init__(
                 self,
                 *,
-                options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-                format: builtins.str | None = ...,
+                options: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+                format: _builtins.str | None = ...,
             ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal["_format", b"_format", "format", b"format"],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_format", b"_format", "format", b"format", "options", b"options"
-                ],
-            ) -> None: ...
+            _HasFieldArgType: _TypeAlias = _typing.Literal[
+                "_format", b"_format", "format", b"format"
+            ]  # noqa: Y015
+            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "_format", b"_format", "format", b"format", "options", b"options"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            _WhichOneofReturnType__format: _TypeAlias = _typing.Literal["format"]  # noqa: Y015
+            _WhichOneofArgType__format: _TypeAlias = _typing.Literal[
+                "_format", b"_format"
+            ]  # noqa: Y015
             def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_format", b"_format"]
-            ) -> typing_extensions.Literal["format"] | None: ...
+                self, oneof_group: _WhichOneofArgType__format
+            ) -> _WhichOneofReturnType__format | None: ...
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        OUTPUT_NAME_FIELD_NUMBER: builtins.int
-        OUTPUT_TYPE_FIELD_NUMBER: builtins.int
-        COMMENT_FIELD_NUMBER: builtins.int
-        SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
-        TABLE_DETAILS_FIELD_NUMBER: builtins.int
-        SINK_DETAILS_FIELD_NUMBER: builtins.int
-        EXTENSION_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        OUTPUT_NAME_FIELD_NUMBER: _builtins.int
+        OUTPUT_TYPE_FIELD_NUMBER: _builtins.int
+        COMMENT_FIELD_NUMBER: _builtins.int
+        SOURCE_CODE_LOCATION_FIELD_NUMBER: _builtins.int
+        TABLE_DETAILS_FIELD_NUMBER: _builtins.int
+        SINK_DETAILS_FIELD_NUMBER: _builtins.int
+        EXTENSION_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to attach this output to."""
-        output_name: builtins.str
+        output_name: _builtins.str
         """Name of the output. Can be partially or fully qualified."""
-        output_type: global___OutputType.ValueType
+        output_type: Global___OutputType.ValueType
         """The type of the output."""
-        comment: builtins.str
+        comment: _builtins.str
         """Optional comment for the output."""
-        @property
-        def source_code_location(self) -> global___SourceCodeLocation:
+        @_builtins.property
+        def source_code_location(self) -> Global___SourceCodeLocation:
             """The location in source code that this output was defined."""
-        @property
-        def table_details(self) -> global___PipelineCommand.DefineOutput.TableDetails: ...
-        @property
-        def sink_details(self) -> global___PipelineCommand.DefineOutput.SinkDetails: ...
-        @property
-        def extension(self) -> google.protobuf.any_pb2.Any: ...
+        @_builtins.property
+        def table_details(self) -> Global___PipelineCommand.DefineOutput.TableDetails: ...
+        @_builtins.property
+        def sink_details(self) -> Global___PipelineCommand.DefineOutput.SinkDetails: ...
+        @_builtins.property
+        def extension(self) -> _any_pb2.Any: ...
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
-            output_name: builtins.str | None = ...,
-            output_type: global___OutputType.ValueType | None = ...,
-            comment: builtins.str | None = ...,
-            source_code_location: global___SourceCodeLocation | None = ...,
-            table_details: global___PipelineCommand.DefineOutput.TableDetails | None = ...,
-            sink_details: global___PipelineCommand.DefineOutput.SinkDetails | None = ...,
-            extension: google.protobuf.any_pb2.Any | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
+            output_name: _builtins.str | None = ...,
+            output_type: Global___OutputType.ValueType | None = ...,
+            comment: _builtins.str | None = ...,
+            source_code_location: Global___SourceCodeLocation | None = ...,
+            table_details: Global___PipelineCommand.DefineOutput.TableDetails | None = ...,
+            sink_details: Global___PipelineCommand.DefineOutput.SinkDetails | None = ...,
+            extension: _any_pb2.Any | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_comment",
-                b"_comment",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_output_name",
-                b"_output_name",
-                "_output_type",
-                b"_output_type",
-                "_source_code_location",
-                b"_source_code_location",
-                "comment",
-                b"comment",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "details",
-                b"details",
-                "extension",
-                b"extension",
-                "output_name",
-                b"output_name",
-                "output_type",
-                b"output_type",
-                "sink_details",
-                b"sink_details",
-                "source_code_location",
-                b"source_code_location",
-                "table_details",
-                b"table_details",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_comment",
-                b"_comment",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_output_name",
-                b"_output_name",
-                "_output_type",
-                b"_output_type",
-                "_source_code_location",
-                b"_source_code_location",
-                "comment",
-                b"comment",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "details",
-                b"details",
-                "extension",
-                b"extension",
-                "output_name",
-                b"output_name",
-                "output_type",
-                b"output_type",
-                "sink_details",
-                b"sink_details",
-                "source_code_location",
-                b"source_code_location",
-                "table_details",
-                b"table_details",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_comment",
+            b"_comment",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_output_name",
+            b"_output_name",
+            "_output_type",
+            b"_output_type",
+            "_source_code_location",
+            b"_source_code_location",
+            "comment",
+            b"comment",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "details",
+            b"details",
+            "extension",
+            b"extension",
+            "output_name",
+            b"output_name",
+            "output_type",
+            b"output_type",
+            "sink_details",
+            b"sink_details",
+            "source_code_location",
+            b"source_code_location",
+            "table_details",
+            b"table_details",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_comment",
+            b"_comment",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_output_name",
+            b"_output_name",
+            "_output_type",
+            b"_output_type",
+            "_source_code_location",
+            b"_source_code_location",
+            "comment",
+            b"comment",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "details",
+            b"details",
+            "extension",
+            b"extension",
+            "output_name",
+            b"output_name",
+            "output_type",
+            b"output_type",
+            "sink_details",
+            b"sink_details",
+            "source_code_location",
+            b"source_code_location",
+            "table_details",
+            b"table_details",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__comment: _TypeAlias = _typing.Literal["comment"]  # noqa: Y015
+        _WhichOneofArgType__comment: _TypeAlias = _typing.Literal[
+            "_comment", b"_comment"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__output_name: _TypeAlias = _typing.Literal[
+            "output_name"
+        ]  # noqa: Y015
+        _WhichOneofArgType__output_name: _TypeAlias = _typing.Literal[
+            "_output_name", b"_output_name"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__output_type: _TypeAlias = _typing.Literal[
+            "output_type"
+        ]  # noqa: Y015
+        _WhichOneofArgType__output_type: _TypeAlias = _typing.Literal[
+            "_output_type", b"_output_type"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__source_code_location: _TypeAlias = _typing.Literal[
+            "source_code_location"
+        ]  # noqa: Y015
+        _WhichOneofArgType__source_code_location: _TypeAlias = _typing.Literal[
+            "_source_code_location", b"_source_code_location"
+        ]  # noqa: Y015
+        _WhichOneofReturnType_details: _TypeAlias = _typing.Literal[
+            "table_details", "sink_details", "extension"
+        ]  # noqa: Y015
+        _WhichOneofArgType_details: _TypeAlias = _typing.Literal[
+            "details", b"details"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_comment", b"_comment"]
-        ) -> typing_extensions.Literal["comment"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__comment
+        ) -> _WhichOneofReturnType__comment | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_output_name", b"_output_name"]
-        ) -> typing_extensions.Literal["output_name"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__output_name
+        ) -> _WhichOneofReturnType__output_name | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_output_type", b"_output_type"]
-        ) -> typing_extensions.Literal["output_type"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__output_type
+        ) -> _WhichOneofReturnType__output_type | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal[
-                "_source_code_location", b"_source_code_location"
-            ],
-        ) -> typing_extensions.Literal["source_code_location"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__source_code_location
+        ) -> _WhichOneofReturnType__source_code_location | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["details", b"details"]
-        ) -> typing_extensions.Literal["table_details", "sink_details", "extension"] | None: ...
+            self, oneof_group: _WhichOneofArgType_details
+        ) -> _WhichOneofReturnType_details | None: ...
 
-    class DefineFlow(google.protobuf.message.Message):
+    @_typing.final
+    class DefineFlow(_message.Message):
         """Request to define a flow targeting a dataset."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        class SqlConfEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        @_typing.final
+        class SqlConfEntry(_message.Message):
+            DESCRIPTOR: _descriptor.Descriptor
 
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
+            KEY_FIELD_NUMBER: _builtins.int
+            VALUE_FIELD_NUMBER: _builtins.int
+            key: _builtins.str
+            value: _builtins.str
             def __init__(
                 self,
                 *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
+                key: _builtins.str = ...,
+                value: _builtins.str = ...,
             ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "key", b"key", "value", b"value"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-        class WriteRelationFlowDetails(google.protobuf.message.Message):
+        @_typing.final
+        class WriteRelationFlowDetails(_message.Message):
             """A flow that is that takes the contents of a relation and writes it to the target dataset."""
 
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRIPTOR: _descriptor.Descriptor
 
-            RELATION_FIELD_NUMBER: builtins.int
-            @property
-            def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            RELATION_FIELD_NUMBER: _builtins.int
+            @_builtins.property
+            def relation(self) -> _relations_pb2.Relation:
                 """An unresolved relation that defines the dataset's flow. Empty if the query function
                 that defines the flow cannot be analyzed at the time of flow definition.
                 """
             def __init__(
                 self,
                 *,
-                relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+                relation: _relations_pb2.Relation | None = ...,
             ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_relation", b"_relation", "relation", b"relation"
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_relation", b"_relation", "relation", b"relation"
-                ],
-            ) -> None: ...
+            _HasFieldArgType: _TypeAlias = _typing.Literal[
+                "_relation", b"_relation", "relation", b"relation"
+            ]  # noqa: Y015
+            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "_relation", b"_relation", "relation", b"relation"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            _WhichOneofReturnType__relation: _TypeAlias = _typing.Literal["relation"]  # noqa: Y015
+            _WhichOneofArgType__relation: _TypeAlias = _typing.Literal[
+                "_relation", b"_relation"
+            ]  # noqa: Y015
             def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
-            ) -> typing_extensions.Literal["relation"] | None: ...
+                self, oneof_group: _WhichOneofArgType__relation
+            ) -> _WhichOneofReturnType__relation | None: ...
 
-        class Response(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        @_typing.final
+        class Response(_message.Message):
+            DESCRIPTOR: _descriptor.Descriptor
 
-            FLOW_NAME_FIELD_NUMBER: builtins.int
-            flow_name: builtins.str
+            FLOW_NAME_FIELD_NUMBER: _builtins.int
+            flow_name: _builtins.str
             """Fully qualified flow name that uniquely identify a flow in the Dataflow graph."""
             def __init__(
                 self,
                 *,
-                flow_name: builtins.str | None = ...,
+                flow_name: _builtins.str | None = ...,
             ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_flow_name", b"_flow_name", "flow_name", b"flow_name"
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_flow_name", b"_flow_name", "flow_name", b"flow_name"
-                ],
-            ) -> None: ...
+            _HasFieldArgType: _TypeAlias = _typing.Literal[
+                "_flow_name", b"_flow_name", "flow_name", b"flow_name"
+            ]  # noqa: Y015
+            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+            _ClearFieldArgType: _TypeAlias = _typing.Literal[
+                "_flow_name", b"_flow_name", "flow_name", b"flow_name"
+            ]  # noqa: Y015
+            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            _WhichOneofReturnType__flow_name: _TypeAlias = _typing.Literal[
+                "flow_name"
+            ]  # noqa: Y015
+            _WhichOneofArgType__flow_name: _TypeAlias = _typing.Literal[
+                "_flow_name", b"_flow_name"
+            ]  # noqa: Y015
             def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
-            ) -> typing_extensions.Literal["flow_name"] | None: ...
+                self, oneof_group: _WhichOneofArgType__flow_name
+            ) -> _WhichOneofReturnType__flow_name | None: ...
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        FLOW_NAME_FIELD_NUMBER: builtins.int
-        TARGET_DATASET_NAME_FIELD_NUMBER: builtins.int
-        SQL_CONF_FIELD_NUMBER: builtins.int
-        CLIENT_ID_FIELD_NUMBER: builtins.int
-        SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
-        RELATION_FLOW_DETAILS_FIELD_NUMBER: builtins.int
-        EXTENSION_FIELD_NUMBER: builtins.int
-        ONCE_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        FLOW_NAME_FIELD_NUMBER: _builtins.int
+        TARGET_DATASET_NAME_FIELD_NUMBER: _builtins.int
+        SQL_CONF_FIELD_NUMBER: _builtins.int
+        CLIENT_ID_FIELD_NUMBER: _builtins.int
+        SOURCE_CODE_LOCATION_FIELD_NUMBER: _builtins.int
+        RELATION_FLOW_DETAILS_FIELD_NUMBER: _builtins.int
+        EXTENSION_FIELD_NUMBER: _builtins.int
+        ONCE_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to attach this flow to."""
-        flow_name: builtins.str
+        flow_name: _builtins.str
         """Name of the flow. For standalone flows, this must be a single-part name."""
-        target_dataset_name: builtins.str
+        target_dataset_name: _builtins.str
         """Name of the dataset this flow writes to. Can be partially or fully qualified."""
-        @property
-        def sql_conf(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-            """SQL configurations set when running this flow."""
-        client_id: builtins.str
+        client_id: _builtins.str
         """Identifier for the client making the request. The server uses this to determine what flow
         evaluation request stream to dispatch evaluation requests to for this flow.
         """
-        @property
-        def source_code_location(self) -> global___SourceCodeLocation:
-            """The location in source code that this flow was defined."""
-        @property
-        def relation_flow_details(
-            self,
-        ) -> global___PipelineCommand.DefineFlow.WriteRelationFlowDetails: ...
-        @property
-        def extension(self) -> google.protobuf.any_pb2.Any: ...
-        once: builtins.bool
+        once: _builtins.bool
         """If true, define the flow as a one-time flow, such as for backfill.
         Set to true changes the flow in two ways:
           - The flow is run one time by default. If the pipeline is ran with a full refresh,
             the flow will run again.
           - The flow function must be a batch DataFrame, not a streaming DataFrame.
         """
+        @_builtins.property
+        def sql_conf(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+            """SQL configurations set when running this flow."""
+        @_builtins.property
+        def source_code_location(self) -> Global___SourceCodeLocation:
+            """The location in source code that this flow was defined."""
+        @_builtins.property
+        def relation_flow_details(
+            self,
+        ) -> Global___PipelineCommand.DefineFlow.WriteRelationFlowDetails: ...
+        @_builtins.property
+        def extension(self) -> _any_pb2.Any: ...
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
-            flow_name: builtins.str | None = ...,
-            target_dataset_name: builtins.str | None = ...,
-            sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-            client_id: builtins.str | None = ...,
-            source_code_location: global___SourceCodeLocation | None = ...,
-            relation_flow_details: global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
+            dataflow_graph_id: _builtins.str | None = ...,
+            flow_name: _builtins.str | None = ...,
+            target_dataset_name: _builtins.str | None = ...,
+            sql_conf: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+            client_id: _builtins.str | None = ...,
+            source_code_location: Global___SourceCodeLocation | None = ...,
+            relation_flow_details: Global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
             | None = ...,
-            extension: google.protobuf.any_pb2.Any | None = ...,
-            once: builtins.bool | None = ...,
+            extension: _any_pb2.Any | None = ...,
+            once: _builtins.bool | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_client_id",
-                b"_client_id",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
-                "_once",
-                b"_once",
-                "_source_code_location",
-                b"_source_code_location",
-                "_target_dataset_name",
-                b"_target_dataset_name",
-                "client_id",
-                b"client_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "details",
-                b"details",
-                "extension",
-                b"extension",
-                "flow_name",
-                b"flow_name",
-                "once",
-                b"once",
-                "relation_flow_details",
-                b"relation_flow_details",
-                "source_code_location",
-                b"source_code_location",
-                "target_dataset_name",
-                b"target_dataset_name",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_client_id",
-                b"_client_id",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
-                "_once",
-                b"_once",
-                "_source_code_location",
-                b"_source_code_location",
-                "_target_dataset_name",
-                b"_target_dataset_name",
-                "client_id",
-                b"client_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "details",
-                b"details",
-                "extension",
-                b"extension",
-                "flow_name",
-                b"flow_name",
-                "once",
-                b"once",
-                "relation_flow_details",
-                b"relation_flow_details",
-                "source_code_location",
-                b"source_code_location",
-                "sql_conf",
-                b"sql_conf",
-                "target_dataset_name",
-                b"target_dataset_name",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_client_id",
+            b"_client_id",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_flow_name",
+            b"_flow_name",
+            "_once",
+            b"_once",
+            "_source_code_location",
+            b"_source_code_location",
+            "_target_dataset_name",
+            b"_target_dataset_name",
+            "client_id",
+            b"client_id",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "details",
+            b"details",
+            "extension",
+            b"extension",
+            "flow_name",
+            b"flow_name",
+            "once",
+            b"once",
+            "relation_flow_details",
+            b"relation_flow_details",
+            "source_code_location",
+            b"source_code_location",
+            "target_dataset_name",
+            b"target_dataset_name",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_client_id",
+            b"_client_id",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_flow_name",
+            b"_flow_name",
+            "_once",
+            b"_once",
+            "_source_code_location",
+            b"_source_code_location",
+            "_target_dataset_name",
+            b"_target_dataset_name",
+            "client_id",
+            b"client_id",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "details",
+            b"details",
+            "extension",
+            b"extension",
+            "flow_name",
+            b"flow_name",
+            "once",
+            b"once",
+            "relation_flow_details",
+            b"relation_flow_details",
+            "source_code_location",
+            b"source_code_location",
+            "sql_conf",
+            b"sql_conf",
+            "target_dataset_name",
+            b"target_dataset_name",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__client_id: _TypeAlias = _typing.Literal["client_id"]  # noqa: Y015
+        _WhichOneofArgType__client_id: _TypeAlias = _typing.Literal[
+            "_client_id", b"_client_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__flow_name: _TypeAlias = _typing.Literal["flow_name"]  # noqa: Y015
+        _WhichOneofArgType__flow_name: _TypeAlias = _typing.Literal[
+            "_flow_name", b"_flow_name"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__once: _TypeAlias = _typing.Literal["once"]  # noqa: Y015
+        _WhichOneofArgType__once: _TypeAlias = _typing.Literal["_once", b"_once"]  # noqa: Y015
+        _WhichOneofReturnType__source_code_location: _TypeAlias = _typing.Literal[
+            "source_code_location"
+        ]  # noqa: Y015
+        _WhichOneofArgType__source_code_location: _TypeAlias = _typing.Literal[
+            "_source_code_location", b"_source_code_location"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__target_dataset_name: _TypeAlias = _typing.Literal[
+            "target_dataset_name"
+        ]  # noqa: Y015
+        _WhichOneofArgType__target_dataset_name: _TypeAlias = _typing.Literal[
+            "_target_dataset_name", b"_target_dataset_name"
+        ]  # noqa: Y015
+        _WhichOneofReturnType_details: _TypeAlias = _typing.Literal[
+            "relation_flow_details", "extension"
+        ]  # noqa: Y015
+        _WhichOneofArgType_details: _TypeAlias = _typing.Literal[
+            "details", b"details"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_client_id", b"_client_id"]
-        ) -> typing_extensions.Literal["client_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__client_id
+        ) -> _WhichOneofReturnType__client_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
-        ) -> typing_extensions.Literal["flow_name"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__flow_name
+        ) -> _WhichOneofReturnType__flow_name | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_once", b"_once"]
-        ) -> typing_extensions.Literal["once"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__once
+        ) -> _WhichOneofReturnType__once | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal[
-                "_source_code_location", b"_source_code_location"
-            ],
-        ) -> typing_extensions.Literal["source_code_location"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__source_code_location
+        ) -> _WhichOneofReturnType__source_code_location | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_target_dataset_name", b"_target_dataset_name"],
-        ) -> typing_extensions.Literal["target_dataset_name"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__target_dataset_name
+        ) -> _WhichOneofReturnType__target_dataset_name | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["details", b"details"]
-        ) -> typing_extensions.Literal["relation_flow_details", "extension"] | None: ...
+            self, oneof_group: _WhichOneofArgType_details
+        ) -> _WhichOneofReturnType_details | None: ...
 
-    class StartRun(google.protobuf.message.Message):
+    @_typing.final
+    class StartRun(_message.Message):
         """Resolves all datasets and flows and start a pipeline update. Should be called after all
         graph elements are registered.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        FULL_REFRESH_SELECTION_FIELD_NUMBER: builtins.int
-        FULL_REFRESH_ALL_FIELD_NUMBER: builtins.int
-        REFRESH_SELECTION_FIELD_NUMBER: builtins.int
-        DRY_FIELD_NUMBER: builtins.int
-        STORAGE_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        FULL_REFRESH_SELECTION_FIELD_NUMBER: _builtins.int
+        FULL_REFRESH_ALL_FIELD_NUMBER: _builtins.int
+        REFRESH_SELECTION_FIELD_NUMBER: _builtins.int
+        DRY_FIELD_NUMBER: _builtins.int
+        STORAGE_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to start."""
-        @property
-        def full_refresh_selection(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """List of dataset to reset and recompute."""
-        full_refresh_all: builtins.bool
+        full_refresh_all: _builtins.bool
         """Perform a full graph reset and recompute."""
-        @property
-        def refresh_selection(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """List of dataset to update."""
-        dry: builtins.bool
+        dry: _builtins.bool
         """If true, the run will not actually execute any flows, but will only validate the graph and
         check for any errors. This is useful for testing and validation purposes.
         """
-        storage: builtins.str
+        storage: _builtins.str
         """storage location for pipeline checkpoints and metadata."""
+        @_builtins.property
+        def full_refresh_selection(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+            """List of dataset to reset and recompute."""
+        @_builtins.property
+        def refresh_selection(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+            """List of dataset to update."""
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
-            full_refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
-            full_refresh_all: builtins.bool | None = ...,
-            refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
-            dry: builtins.bool | None = ...,
-            storage: builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
+            full_refresh_selection: _abc.Iterable[_builtins.str] | None = ...,
+            full_refresh_all: _builtins.bool | None = ...,
+            refresh_selection: _abc.Iterable[_builtins.str] | None = ...,
+            dry: _builtins.bool | None = ...,
+            storage: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_dry",
-                b"_dry",
-                "_full_refresh_all",
-                b"_full_refresh_all",
-                "_storage",
-                b"_storage",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "dry",
-                b"dry",
-                "full_refresh_all",
-                b"full_refresh_all",
-                "storage",
-                b"storage",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_dry",
-                b"_dry",
-                "_full_refresh_all",
-                b"_full_refresh_all",
-                "_storage",
-                b"_storage",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "dry",
-                b"dry",
-                "full_refresh_all",
-                b"full_refresh_all",
-                "full_refresh_selection",
-                b"full_refresh_selection",
-                "refresh_selection",
-                b"refresh_selection",
-                "storage",
-                b"storage",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_dry",
+            b"_dry",
+            "_full_refresh_all",
+            b"_full_refresh_all",
+            "_storage",
+            b"_storage",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "dry",
+            b"dry",
+            "full_refresh_all",
+            b"full_refresh_all",
+            "storage",
+            b"storage",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_dry",
+            b"_dry",
+            "_full_refresh_all",
+            b"_full_refresh_all",
+            "_storage",
+            b"_storage",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "dry",
+            b"dry",
+            "full_refresh_all",
+            b"full_refresh_all",
+            "full_refresh_selection",
+            b"full_refresh_selection",
+            "refresh_selection",
+            b"refresh_selection",
+            "storage",
+            b"storage",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__dry: _TypeAlias = _typing.Literal["dry"]  # noqa: Y015
+        _WhichOneofArgType__dry: _TypeAlias = _typing.Literal["_dry", b"_dry"]  # noqa: Y015
+        _WhichOneofReturnType__full_refresh_all: _TypeAlias = _typing.Literal[
+            "full_refresh_all"
+        ]  # noqa: Y015
+        _WhichOneofArgType__full_refresh_all: _TypeAlias = _typing.Literal[
+            "_full_refresh_all", b"_full_refresh_all"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__storage: _TypeAlias = _typing.Literal["storage"]  # noqa: Y015
+        _WhichOneofArgType__storage: _TypeAlias = _typing.Literal[
+            "_storage", b"_storage"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_dry", b"_dry"]
-        ) -> typing_extensions.Literal["dry"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dry
+        ) -> _WhichOneofReturnType__dry | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_full_refresh_all", b"_full_refresh_all"]
-        ) -> typing_extensions.Literal["full_refresh_all"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__full_refresh_all
+        ) -> _WhichOneofReturnType__full_refresh_all | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_storage", b"_storage"]
-        ) -> typing_extensions.Literal["storage"] | None: ...
+            self, oneof_group: _WhichOneofArgType__storage
+        ) -> _WhichOneofReturnType__storage | None: ...
 
-    class DefineSqlGraphElements(google.protobuf.message.Message):
+    @_typing.final
+    class DefineSqlGraphElements(_message.Message):
         """Parses the SQL file and registers all datasets and flows."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        SQL_FILE_PATH_FIELD_NUMBER: builtins.int
-        SQL_TEXT_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        SQL_FILE_PATH_FIELD_NUMBER: _builtins.int
+        SQL_TEXT_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to attach this dataset to."""
-        sql_file_path: builtins.str
+        sql_file_path: _builtins.str
         """The full path to the SQL file. Can be relative or absolute."""
-        sql_text: builtins.str
+        sql_text: _builtins.str
         """The contents of the SQL file."""
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
-            sql_file_path: builtins.str | None = ...,
-            sql_text: builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
+            sql_file_path: _builtins.str | None = ...,
+            sql_text: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_sql_file_path",
-                b"_sql_file_path",
-                "_sql_text",
-                b"_sql_text",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "sql_file_path",
-                b"sql_file_path",
-                "sql_text",
-                b"sql_text",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_sql_file_path",
-                b"_sql_file_path",
-                "_sql_text",
-                b"_sql_text",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "sql_file_path",
-                b"sql_file_path",
-                "sql_text",
-                b"sql_text",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_sql_file_path",
+            b"_sql_file_path",
+            "_sql_text",
+            b"_sql_text",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "sql_file_path",
+            b"sql_file_path",
+            "sql_text",
+            b"sql_text",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_sql_file_path",
+            b"_sql_file_path",
+            "_sql_text",
+            b"_sql_text",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "sql_file_path",
+            b"sql_file_path",
+            "sql_text",
+            b"sql_text",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__sql_file_path: _TypeAlias = _typing.Literal[
+            "sql_file_path"
+        ]  # noqa: Y015
+        _WhichOneofArgType__sql_file_path: _TypeAlias = _typing.Literal[
+            "_sql_file_path", b"_sql_file_path"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__sql_text: _TypeAlias = _typing.Literal["sql_text"]  # noqa: Y015
+        _WhichOneofArgType__sql_text: _TypeAlias = _typing.Literal[
+            "_sql_text", b"_sql_text"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_sql_file_path", b"_sql_file_path"]
-        ) -> typing_extensions.Literal["sql_file_path"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__sql_file_path
+        ) -> _WhichOneofReturnType__sql_file_path | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
-        ) -> typing_extensions.Literal["sql_text"] | None: ...
+            self, oneof_group: _WhichOneofArgType__sql_text
+        ) -> _WhichOneofReturnType__sql_text | None: ...
 
-    class GetQueryFunctionExecutionSignalStream(google.protobuf.message.Message):
+    @_typing.final
+    class GetQueryFunctionExecutionSignalStream(_message.Message):
         """Request to get the stream of query function execution signals for a graph. Responses should
         be a stream of PipelineQueryFunctionExecutionSignal messages.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        CLIENT_ID_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        CLIENT_ID_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The graph to get the query function execution signal stream for."""
-        client_id: builtins.str
+        client_id: _builtins.str
         """Identifier for the client that is requesting the stream."""
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
-            client_id: builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
+            client_id: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_client_id",
-                b"_client_id",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "client_id",
-                b"client_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_client_id",
-                b"_client_id",
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "client_id",
-                b"client_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_client_id",
+            b"_client_id",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "client_id",
+            b"client_id",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_client_id",
+            b"_client_id",
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "client_id",
+            b"client_id",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__client_id: _TypeAlias = _typing.Literal["client_id"]  # noqa: Y015
+        _WhichOneofArgType__client_id: _TypeAlias = _typing.Literal[
+            "_client_id", b"_client_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_client_id", b"_client_id"]
-        ) -> typing_extensions.Literal["client_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__client_id
+        ) -> _WhichOneofReturnType__client_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
 
-    class DefineFlowQueryFunctionResult(google.protobuf.message.Message):
+    @_typing.final
+    class DefineFlowQueryFunctionResult(_message.Message):
         """Request from the client to update the flow function evaluation result
         for a previously un-analyzed flow.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        FLOW_NAME_FIELD_NUMBER: builtins.int
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        RELATION_FIELD_NUMBER: builtins.int
-        flow_name: builtins.str
+        FLOW_NAME_FIELD_NUMBER: _builtins.int
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        RELATION_FIELD_NUMBER: _builtins.int
+        flow_name: _builtins.str
         """The fully qualified name of the flow being updated."""
-        dataflow_graph_id: builtins.str
+        dataflow_graph_id: _builtins.str
         """The ID of the graph this flow belongs to."""
-        @property
-        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        @_builtins.property
+        def relation(self) -> _relations_pb2.Relation:
             """An unresolved relation that defines the dataset's flow."""
         def __init__(
             self,
             *,
-            flow_name: builtins.str | None = ...,
-            dataflow_graph_id: builtins.str | None = ...,
-            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            flow_name: _builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
+            relation: _relations_pb2.Relation | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
-                "_relation",
-                b"_relation",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "flow_name",
-                b"flow_name",
-                "relation",
-                b"relation",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_flow_name",
-                b"_flow_name",
-                "_relation",
-                b"_relation",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "flow_name",
-                b"flow_name",
-                "relation",
-                b"relation",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_flow_name",
+            b"_flow_name",
+            "_relation",
+            b"_relation",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "flow_name",
+            b"flow_name",
+            "relation",
+            b"relation",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_flow_name",
+            b"_flow_name",
+            "_relation",
+            b"_relation",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "flow_name",
+            b"flow_name",
+            "relation",
+            b"relation",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__flow_name: _TypeAlias = _typing.Literal["flow_name"]  # noqa: Y015
+        _WhichOneofArgType__flow_name: _TypeAlias = _typing.Literal[
+            "_flow_name", b"_flow_name"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__relation: _TypeAlias = _typing.Literal["relation"]  # noqa: Y015
+        _WhichOneofArgType__relation: _TypeAlias = _typing.Literal[
+            "_relation", b"_relation"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
-        ) -> typing_extensions.Literal["flow_name"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__flow_name
+        ) -> _WhichOneofReturnType__flow_name | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
-        ) -> typing_extensions.Literal["relation"] | None: ...
+            self, oneof_group: _WhichOneofArgType__relation
+        ) -> _WhichOneofReturnType__relation | None: ...
 
-    CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
-    DEFINE_OUTPUT_FIELD_NUMBER: builtins.int
-    DEFINE_FLOW_FIELD_NUMBER: builtins.int
-    DROP_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
-    START_RUN_FIELD_NUMBER: builtins.int
-    DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: builtins.int
-    GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM_FIELD_NUMBER: builtins.int
-    DEFINE_FLOW_QUERY_FUNCTION_RESULT_FIELD_NUMBER: builtins.int
-    EXTENSION_FIELD_NUMBER: builtins.int
-    @property
-    def create_dataflow_graph(self) -> global___PipelineCommand.CreateDataflowGraph: ...
-    @property
-    def define_output(self) -> global___PipelineCommand.DefineOutput: ...
-    @property
-    def define_flow(self) -> global___PipelineCommand.DefineFlow: ...
-    @property
-    def drop_dataflow_graph(self) -> global___PipelineCommand.DropDataflowGraph: ...
-    @property
-    def start_run(self) -> global___PipelineCommand.StartRun: ...
-    @property
-    def define_sql_graph_elements(self) -> global___PipelineCommand.DefineSqlGraphElements: ...
-    @property
+    CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: _builtins.int
+    DEFINE_OUTPUT_FIELD_NUMBER: _builtins.int
+    DEFINE_FLOW_FIELD_NUMBER: _builtins.int
+    DROP_DATAFLOW_GRAPH_FIELD_NUMBER: _builtins.int
+    START_RUN_FIELD_NUMBER: _builtins.int
+    DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: _builtins.int
+    GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM_FIELD_NUMBER: _builtins.int
+    DEFINE_FLOW_QUERY_FUNCTION_RESULT_FIELD_NUMBER: _builtins.int
+    EXTENSION_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def create_dataflow_graph(self) -> Global___PipelineCommand.CreateDataflowGraph: ...
+    @_builtins.property
+    def define_output(self) -> Global___PipelineCommand.DefineOutput: ...
+    @_builtins.property
+    def define_flow(self) -> Global___PipelineCommand.DefineFlow: ...
+    @_builtins.property
+    def drop_dataflow_graph(self) -> Global___PipelineCommand.DropDataflowGraph: ...
+    @_builtins.property
+    def start_run(self) -> Global___PipelineCommand.StartRun: ...
+    @_builtins.property
+    def define_sql_graph_elements(self) -> Global___PipelineCommand.DefineSqlGraphElements: ...
+    @_builtins.property
     def get_query_function_execution_signal_stream(
         self,
-    ) -> global___PipelineCommand.GetQueryFunctionExecutionSignalStream: ...
-    @property
+    ) -> Global___PipelineCommand.GetQueryFunctionExecutionSignalStream: ...
+    @_builtins.property
     def define_flow_query_function_result(
         self,
-    ) -> global___PipelineCommand.DefineFlowQueryFunctionResult: ...
-    @property
-    def extension(self) -> google.protobuf.any_pb2.Any:
+    ) -> Global___PipelineCommand.DefineFlowQueryFunctionResult: ...
+    @_builtins.property
+    def extension(self) -> _any_pb2.Any:
         """Reserved field for protocol extensions.
         Used to support forward-compatibility by carrying additional command types
         that are not yet defined in this version of the proto. During planning, the
@@ -1082,329 +1189,319 @@ class PipelineCommand(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        create_dataflow_graph: global___PipelineCommand.CreateDataflowGraph | None = ...,
-        define_output: global___PipelineCommand.DefineOutput | None = ...,
-        define_flow: global___PipelineCommand.DefineFlow | None = ...,
-        drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
-        start_run: global___PipelineCommand.StartRun | None = ...,
-        define_sql_graph_elements: global___PipelineCommand.DefineSqlGraphElements | None = ...,
-        get_query_function_execution_signal_stream: global___PipelineCommand.GetQueryFunctionExecutionSignalStream
+        create_dataflow_graph: Global___PipelineCommand.CreateDataflowGraph | None = ...,
+        define_output: Global___PipelineCommand.DefineOutput | None = ...,
+        define_flow: Global___PipelineCommand.DefineFlow | None = ...,
+        drop_dataflow_graph: Global___PipelineCommand.DropDataflowGraph | None = ...,
+        start_run: Global___PipelineCommand.StartRun | None = ...,
+        define_sql_graph_elements: Global___PipelineCommand.DefineSqlGraphElements | None = ...,
+        get_query_function_execution_signal_stream: Global___PipelineCommand.GetQueryFunctionExecutionSignalStream
         | None = ...,
-        define_flow_query_function_result: global___PipelineCommand.DefineFlowQueryFunctionResult
+        define_flow_query_function_result: Global___PipelineCommand.DefineFlowQueryFunctionResult
         | None = ...,
-        extension: google.protobuf.any_pb2.Any | None = ...,
+        extension: _any_pb2.Any | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "command_type",
-            b"command_type",
-            "create_dataflow_graph",
-            b"create_dataflow_graph",
-            "define_flow",
-            b"define_flow",
-            "define_flow_query_function_result",
-            b"define_flow_query_function_result",
-            "define_output",
-            b"define_output",
-            "define_sql_graph_elements",
-            b"define_sql_graph_elements",
-            "drop_dataflow_graph",
-            b"drop_dataflow_graph",
-            "extension",
-            b"extension",
-            "get_query_function_execution_signal_stream",
-            b"get_query_function_execution_signal_stream",
-            "start_run",
-            b"start_run",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "command_type",
-            b"command_type",
-            "create_dataflow_graph",
-            b"create_dataflow_graph",
-            "define_flow",
-            b"define_flow",
-            "define_flow_query_function_result",
-            b"define_flow_query_function_result",
-            "define_output",
-            b"define_output",
-            "define_sql_graph_elements",
-            b"define_sql_graph_elements",
-            "drop_dataflow_graph",
-            b"drop_dataflow_graph",
-            "extension",
-            b"extension",
-            "get_query_function_execution_signal_stream",
-            b"get_query_function_execution_signal_stream",
-            "start_run",
-            b"start_run",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "command_type",
+        b"command_type",
+        "create_dataflow_graph",
+        b"create_dataflow_graph",
+        "define_flow",
+        b"define_flow",
+        "define_flow_query_function_result",
+        b"define_flow_query_function_result",
+        "define_output",
+        b"define_output",
+        "define_sql_graph_elements",
+        b"define_sql_graph_elements",
+        "drop_dataflow_graph",
+        b"drop_dataflow_graph",
+        "extension",
+        b"extension",
+        "get_query_function_execution_signal_stream",
+        b"get_query_function_execution_signal_stream",
+        "start_run",
+        b"start_run",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "command_type",
+        b"command_type",
+        "create_dataflow_graph",
+        b"create_dataflow_graph",
+        "define_flow",
+        b"define_flow",
+        "define_flow_query_function_result",
+        b"define_flow_query_function_result",
+        "define_output",
+        b"define_output",
+        "define_sql_graph_elements",
+        b"define_sql_graph_elements",
+        "drop_dataflow_graph",
+        b"drop_dataflow_graph",
+        "extension",
+        b"extension",
+        "get_query_function_execution_signal_stream",
+        b"get_query_function_execution_signal_stream",
+        "start_run",
+        b"start_run",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_command_type: _TypeAlias = _typing.Literal[
+        "create_dataflow_graph",
+        "define_output",
+        "define_flow",
+        "drop_dataflow_graph",
+        "start_run",
+        "define_sql_graph_elements",
+        "get_query_function_execution_signal_stream",
+        "define_flow_query_function_result",
+        "extension",
+    ]  # noqa: Y015
+    _WhichOneofArgType_command_type: _TypeAlias = _typing.Literal[
+        "command_type", b"command_type"
+    ]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "create_dataflow_graph",
-            "define_output",
-            "define_flow",
-            "drop_dataflow_graph",
-            "start_run",
-            "define_sql_graph_elements",
-            "get_query_function_execution_signal_stream",
-            "define_flow_query_function_result",
-            "extension",
-        ]
-        | None
-    ): ...
+        self, oneof_group: _WhichOneofArgType_command_type
+    ) -> _WhichOneofReturnType_command_type | None: ...
 
-global___PipelineCommand = PipelineCommand
+Global___PipelineCommand: _TypeAlias = PipelineCommand  # noqa: Y015
 
-class PipelineCommandResult(google.protobuf.message.Message):
+@_typing.final
+class PipelineCommandResult(_message.Message):
     """Dispatch object for pipelines command results."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class CreateDataflowGraphResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class CreateDataflowGraphResult(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+        dataflow_graph_id: _builtins.str
         """The ID of the created graph."""
         def __init__(
             self,
             *,
-            dataflow_graph_id: builtins.str | None = ...,
+            dataflow_graph_id: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id", "dataflow_graph_id", b"dataflow_graph_id"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id", "dataflow_graph_id", b"dataflow_graph_id"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "dataflow_graph_id"
+        ]  # noqa: Y015
+        _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+            "_dataflow_graph_id", b"_dataflow_graph_id"
+        ]  # noqa: Y015
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+            self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+        ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
 
-    class DefineOutputResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class DefineOutputResult(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
-        @property
-        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+        RESOLVED_IDENTIFIER_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def resolved_identifier(self) -> _common_pb2.ResolvedIdentifier:
             """Resolved identifier of the output"""
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-            | None = ...,
+            resolved_identifier: _common_pb2.ResolvedIdentifier | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_resolved_identifier",
+            b"_resolved_identifier",
+            "resolved_identifier",
+            b"resolved_identifier",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_resolved_identifier",
+            b"_resolved_identifier",
+            "resolved_identifier",
+            b"resolved_identifier",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__resolved_identifier: _TypeAlias = _typing.Literal[
+            "resolved_identifier"
+        ]  # noqa: Y015
+        _WhichOneofArgType__resolved_identifier: _TypeAlias = _typing.Literal[
+            "_resolved_identifier", b"_resolved_identifier"
+        ]  # noqa: Y015
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
-        ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
+            self, oneof_group: _WhichOneofArgType__resolved_identifier
+        ) -> _WhichOneofReturnType__resolved_identifier | None: ...
 
-    class DefineFlowResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class DefineFlowResult(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
-        @property
-        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+        RESOLVED_IDENTIFIER_FIELD_NUMBER: _builtins.int
+        @_builtins.property
+        def resolved_identifier(self) -> _common_pb2.ResolvedIdentifier:
             """Resolved identifier of the flow"""
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-            | None = ...,
+            resolved_identifier: _common_pb2.ResolvedIdentifier | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_resolved_identifier",
+            b"_resolved_identifier",
+            "resolved_identifier",
+            b"resolved_identifier",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_resolved_identifier",
+            b"_resolved_identifier",
+            "resolved_identifier",
+            b"resolved_identifier",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__resolved_identifier: _TypeAlias = _typing.Literal[
+            "resolved_identifier"
+        ]  # noqa: Y015
+        _WhichOneofArgType__resolved_identifier: _TypeAlias = _typing.Literal[
+            "_resolved_identifier", b"_resolved_identifier"
+        ]  # noqa: Y015
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
-        ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
+            self, oneof_group: _WhichOneofArgType__resolved_identifier
+        ) -> _WhichOneofReturnType__resolved_identifier | None: ...
 
-    CREATE_DATAFLOW_GRAPH_RESULT_FIELD_NUMBER: builtins.int
-    DEFINE_OUTPUT_RESULT_FIELD_NUMBER: builtins.int
-    DEFINE_FLOW_RESULT_FIELD_NUMBER: builtins.int
-    @property
+    CREATE_DATAFLOW_GRAPH_RESULT_FIELD_NUMBER: _builtins.int
+    DEFINE_OUTPUT_RESULT_FIELD_NUMBER: _builtins.int
+    DEFINE_FLOW_RESULT_FIELD_NUMBER: _builtins.int
+    @_builtins.property
     def create_dataflow_graph_result(
         self,
-    ) -> global___PipelineCommandResult.CreateDataflowGraphResult: ...
-    @property
-    def define_output_result(self) -> global___PipelineCommandResult.DefineOutputResult: ...
-    @property
-    def define_flow_result(self) -> global___PipelineCommandResult.DefineFlowResult: ...
+    ) -> Global___PipelineCommandResult.CreateDataflowGraphResult: ...
+    @_builtins.property
+    def define_output_result(self) -> Global___PipelineCommandResult.DefineOutputResult: ...
+    @_builtins.property
+    def define_flow_result(self) -> Global___PipelineCommandResult.DefineFlowResult: ...
     def __init__(
         self,
         *,
-        create_dataflow_graph_result: global___PipelineCommandResult.CreateDataflowGraphResult
+        create_dataflow_graph_result: Global___PipelineCommandResult.CreateDataflowGraphResult
         | None = ...,
-        define_output_result: global___PipelineCommandResult.DefineOutputResult | None = ...,
-        define_flow_result: global___PipelineCommandResult.DefineFlowResult | None = ...,
+        define_output_result: Global___PipelineCommandResult.DefineOutputResult | None = ...,
+        define_flow_result: Global___PipelineCommandResult.DefineFlowResult | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "create_dataflow_graph_result",
-            b"create_dataflow_graph_result",
-            "define_flow_result",
-            b"define_flow_result",
-            "define_output_result",
-            b"define_output_result",
-            "result_type",
-            b"result_type",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "create_dataflow_graph_result",
-            b"create_dataflow_graph_result",
-            "define_flow_result",
-            b"define_flow_result",
-            "define_output_result",
-            b"define_output_result",
-            "result_type",
-            b"result_type",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "create_dataflow_graph_result",
+        b"create_dataflow_graph_result",
+        "define_flow_result",
+        b"define_flow_result",
+        "define_output_result",
+        b"define_output_result",
+        "result_type",
+        b"result_type",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "create_dataflow_graph_result",
+        b"create_dataflow_graph_result",
+        "define_flow_result",
+        b"define_flow_result",
+        "define_output_result",
+        b"define_output_result",
+        "result_type",
+        b"result_type",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_result_type: _TypeAlias = _typing.Literal[
+        "create_dataflow_graph_result", "define_output_result", "define_flow_result"
+    ]  # noqa: Y015
+    _WhichOneofArgType_result_type: _TypeAlias = _typing.Literal[
+        "result_type", b"result_type"
+    ]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "create_dataflow_graph_result", "define_output_result", "define_flow_result"
-        ]
-        | None
-    ): ...
+        self, oneof_group: _WhichOneofArgType_result_type
+    ) -> _WhichOneofReturnType_result_type | None: ...
 
-global___PipelineCommandResult = PipelineCommandResult
+Global___PipelineCommandResult: _TypeAlias = PipelineCommandResult  # noqa: Y015
 
-class PipelineEventResult(google.protobuf.message.Message):
+@_typing.final
+class PipelineEventResult(_message.Message):
     """A response containing an event emitted during the run of a pipeline."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    EVENT_FIELD_NUMBER: builtins.int
-    @property
-    def event(self) -> global___PipelineEvent: ...
+    EVENT_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def event(self) -> Global___PipelineEvent: ...
     def __init__(
         self,
         *,
-        event: global___PipelineEvent | None = ...,
+        event: Global___PipelineEvent | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["event", b"event"]
-    ) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["event", b"event"]) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["event", b"event"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["event", b"event"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___PipelineEventResult = PipelineEventResult
+Global___PipelineEventResult: _TypeAlias = PipelineEventResult  # noqa: Y015
 
-class PipelineEvent(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+@_typing.final
+class PipelineEvent(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TIMESTAMP_FIELD_NUMBER: builtins.int
-    MESSAGE_FIELD_NUMBER: builtins.int
-    @property
-    def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
-        """The timestamp corresponding to when the event occurred."""
-    message: builtins.str
+    TIMESTAMP_FIELD_NUMBER: _builtins.int
+    MESSAGE_FIELD_NUMBER: _builtins.int
+    message: _builtins.str
     """The message that should be displayed to users."""
+    @_builtins.property
+    def timestamp(self) -> _timestamp_pb2.Timestamp:
+        """The timestamp corresponding to when the event occurred."""
     def __init__(
         self,
         *,
-        timestamp: google.protobuf.timestamp_pb2.Timestamp | None = ...,
-        message: builtins.str | None = ...,
+        timestamp: _timestamp_pb2.Timestamp | None = ...,
+        message: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_message", b"_message", "message", b"message", "timestamp", b"timestamp"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__message: _TypeAlias = _typing.Literal["message"]  # noqa: Y015
+    _WhichOneofArgType__message: _TypeAlias = _typing.Literal["_message", b"_message"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_message", b"_message"]
-    ) -> typing_extensions.Literal["message"] | None: ...
+        self, oneof_group: _WhichOneofArgType__message
+    ) -> _WhichOneofReturnType__message | None: ...
 
-global___PipelineEvent = PipelineEvent
+Global___PipelineEvent: _TypeAlias = PipelineEvent  # noqa: Y015
 
-class SourceCodeLocation(google.protobuf.message.Message):
+@_typing.final
+class SourceCodeLocation(_message.Message):
     """Source code location information associated with a particular dataset or flow."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    FILE_NAME_FIELD_NUMBER: builtins.int
-    LINE_NUMBER_FIELD_NUMBER: builtins.int
-    DEFINITION_PATH_FIELD_NUMBER: builtins.int
-    EXTENSION_FIELD_NUMBER: builtins.int
-    file_name: builtins.str
+    FILE_NAME_FIELD_NUMBER: _builtins.int
+    LINE_NUMBER_FIELD_NUMBER: _builtins.int
+    DEFINITION_PATH_FIELD_NUMBER: _builtins.int
+    EXTENSION_FIELD_NUMBER: _builtins.int
+    file_name: _builtins.str
     """The file that this pipeline source code was defined in."""
-    line_number: builtins.int
+    line_number: _builtins.int
     """The specific line number that this pipeline source code is located at, if applicable."""
-    definition_path: builtins.str
+    definition_path: _builtins.str
     """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
-    @property
-    def extension(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        google.protobuf.any_pb2.Any
-    ]:
+    @_builtins.property
+    def extension(self) -> _containers.RepeatedCompositeFieldContainer[_any_pb2.Any]:
         """Reserved field for protocol extensions.
         Used to support forward-compatibility by carrying additional fields
         that are not yet defined in this version of the proto. During planning, the
@@ -1413,162 +1510,181 @@ class SourceCodeLocation(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        file_name: builtins.str | None = ...,
-        line_number: builtins.int | None = ...,
-        definition_path: builtins.str | None = ...,
-        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        file_name: _builtins.str | None = ...,
+        line_number: _builtins.int | None = ...,
+        definition_path: _builtins.str | None = ...,
+        extension: _abc.Iterable[_any_pb2.Any] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_definition_path",
-            b"_definition_path",
-            "_file_name",
-            b"_file_name",
-            "_line_number",
-            b"_line_number",
-            "definition_path",
-            b"definition_path",
-            "file_name",
-            b"file_name",
-            "line_number",
-            b"line_number",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_definition_path",
-            b"_definition_path",
-            "_file_name",
-            b"_file_name",
-            "_line_number",
-            b"_line_number",
-            "definition_path",
-            b"definition_path",
-            "extension",
-            b"extension",
-            "file_name",
-            b"file_name",
-            "line_number",
-            b"line_number",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_definition_path",
+        b"_definition_path",
+        "_file_name",
+        b"_file_name",
+        "_line_number",
+        b"_line_number",
+        "definition_path",
+        b"definition_path",
+        "file_name",
+        b"file_name",
+        "line_number",
+        b"line_number",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_definition_path",
+        b"_definition_path",
+        "_file_name",
+        b"_file_name",
+        "_line_number",
+        b"_line_number",
+        "definition_path",
+        b"definition_path",
+        "extension",
+        b"extension",
+        "file_name",
+        b"file_name",
+        "line_number",
+        b"line_number",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__definition_path: _TypeAlias = _typing.Literal[
+        "definition_path"
+    ]  # noqa: Y015
+    _WhichOneofArgType__definition_path: _TypeAlias = _typing.Literal[
+        "_definition_path", b"_definition_path"
+    ]  # noqa: Y015
+    _WhichOneofReturnType__file_name: _TypeAlias = _typing.Literal["file_name"]  # noqa: Y015
+    _WhichOneofArgType__file_name: _TypeAlias = _typing.Literal[
+        "_file_name", b"_file_name"
+    ]  # noqa: Y015
+    _WhichOneofReturnType__line_number: _TypeAlias = _typing.Literal["line_number"]  # noqa: Y015
+    _WhichOneofArgType__line_number: _TypeAlias = _typing.Literal[
+        "_line_number", b"_line_number"
+    ]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
-    ) -> typing_extensions.Literal["definition_path"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__definition_path
+    ) -> _WhichOneofReturnType__definition_path | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
-    ) -> typing_extensions.Literal["file_name"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__file_name
+    ) -> _WhichOneofReturnType__file_name | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_line_number", b"_line_number"]
-    ) -> typing_extensions.Literal["line_number"] | None: ...
+        self, oneof_group: _WhichOneofArgType__line_number
+    ) -> _WhichOneofReturnType__line_number | None: ...
 
-global___SourceCodeLocation = SourceCodeLocation
+Global___SourceCodeLocation: _TypeAlias = SourceCodeLocation  # noqa: Y015
 
-class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
+@_typing.final
+class PipelineQueryFunctionExecutionSignal(_message.Message):
     """A signal from the server to the client to execute the query function for one or more flows, and
     to register their results with the server.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    FLOW_NAMES_FIELD_NUMBER: builtins.int
-    @property
-    def flow_names(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    FLOW_NAMES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def flow_names(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     def __init__(
         self,
         *,
-        flow_names: collections.abc.Iterable[builtins.str] | None = ...,
+        flow_names: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["flow_names", b"flow_names"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["flow_names", b"flow_names"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
+Global___PipelineQueryFunctionExecutionSignal: _TypeAlias = (
+    PipelineQueryFunctionExecutionSignal  # noqa: Y015
+)
 
-class PipelineAnalysisContext(google.protobuf.message.Message):
+@_typing.final
+class PipelineAnalysisContext(_message.Message):
     """Metadata providing context about the pipeline during Spark Connect query analysis."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-    DEFINITION_PATH_FIELD_NUMBER: builtins.int
-    FLOW_NAME_FIELD_NUMBER: builtins.int
-    EXTENSION_FIELD_NUMBER: builtins.int
-    dataflow_graph_id: builtins.str
+    DATAFLOW_GRAPH_ID_FIELD_NUMBER: _builtins.int
+    DEFINITION_PATH_FIELD_NUMBER: _builtins.int
+    FLOW_NAME_FIELD_NUMBER: _builtins.int
+    EXTENSION_FIELD_NUMBER: _builtins.int
+    dataflow_graph_id: _builtins.str
     """Unique identifier of the dataflow graph associated with this pipeline."""
-    definition_path: builtins.str
+    definition_path: _builtins.str
     """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
-    flow_name: builtins.str
+    flow_name: _builtins.str
     """The name of the Flow involved in this analysis"""
-    @property
-    def extension(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        google.protobuf.any_pb2.Any
-    ]:
+    @_builtins.property
+    def extension(self) -> _containers.RepeatedCompositeFieldContainer[_any_pb2.Any]:
         """Reserved field for protocol extensions."""
     def __init__(
         self,
         *,
-        dataflow_graph_id: builtins.str | None = ...,
-        definition_path: builtins.str | None = ...,
-        flow_name: builtins.str | None = ...,
-        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        dataflow_graph_id: _builtins.str | None = ...,
+        definition_path: _builtins.str | None = ...,
+        flow_name: _builtins.str | None = ...,
+        extension: _abc.Iterable[_any_pb2.Any] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_dataflow_graph_id",
-            b"_dataflow_graph_id",
-            "_definition_path",
-            b"_definition_path",
-            "_flow_name",
-            b"_flow_name",
-            "dataflow_graph_id",
-            b"dataflow_graph_id",
-            "definition_path",
-            b"definition_path",
-            "flow_name",
-            b"flow_name",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_dataflow_graph_id",
-            b"_dataflow_graph_id",
-            "_definition_path",
-            b"_definition_path",
-            "_flow_name",
-            b"_flow_name",
-            "dataflow_graph_id",
-            b"dataflow_graph_id",
-            "definition_path",
-            b"definition_path",
-            "extension",
-            b"extension",
-            "flow_name",
-            b"flow_name",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_dataflow_graph_id",
+        b"_dataflow_graph_id",
+        "_definition_path",
+        b"_definition_path",
+        "_flow_name",
+        b"_flow_name",
+        "dataflow_graph_id",
+        b"dataflow_graph_id",
+        "definition_path",
+        b"definition_path",
+        "flow_name",
+        b"flow_name",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_dataflow_graph_id",
+        b"_dataflow_graph_id",
+        "_definition_path",
+        b"_definition_path",
+        "_flow_name",
+        b"_flow_name",
+        "dataflow_graph_id",
+        b"dataflow_graph_id",
+        "definition_path",
+        b"definition_path",
+        "extension",
+        b"extension",
+        "flow_name",
+        b"flow_name",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+        "dataflow_graph_id"
+    ]  # noqa: Y015
+    _WhichOneofArgType__dataflow_graph_id: _TypeAlias = _typing.Literal[
+        "_dataflow_graph_id", b"_dataflow_graph_id"
+    ]  # noqa: Y015
+    _WhichOneofReturnType__definition_path: _TypeAlias = _typing.Literal[
+        "definition_path"
+    ]  # noqa: Y015
+    _WhichOneofArgType__definition_path: _TypeAlias = _typing.Literal[
+        "_definition_path", b"_definition_path"
+    ]  # noqa: Y015
+    _WhichOneofReturnType__flow_name: _TypeAlias = _typing.Literal["flow_name"]  # noqa: Y015
+    _WhichOneofArgType__flow_name: _TypeAlias = _typing.Literal[
+        "_flow_name", b"_flow_name"
+    ]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"]
-    ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__dataflow_graph_id
+    ) -> _WhichOneofReturnType__dataflow_graph_id | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
-    ) -> typing_extensions.Literal["definition_path"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__definition_path
+    ) -> _WhichOneofReturnType__definition_path | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
-    ) -> typing_extensions.Literal["flow_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__flow_name
+    ) -> _WhichOneofReturnType__flow_name | None: ...
 
-global___PipelineAnalysisContext = PipelineAnalysisContext
+Global___PipelineAnalysisContext: _TypeAlias = PipelineAnalysisContext  # noqa: Y015

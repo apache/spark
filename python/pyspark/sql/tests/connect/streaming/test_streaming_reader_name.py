@@ -186,9 +186,7 @@ class DataStreamReaderNameTests(ReusedConnectTestCase):
             )
 
             query = (
-                df.writeStream.format("noop")
-                .option("checkpointLocation", checkpoint_dir)
-                .start()
+                df.writeStream.format("noop").option("checkpointLocation", checkpoint_dir).start()
             )
 
             try:

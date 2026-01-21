@@ -120,7 +120,10 @@ class DataStreamReader(OptionUtils):
         if not source_name or not isinstance(source_name, str):
             raise PySparkTypeError(
                 errorClass="NOT_STR",
-                messageParameters={"arg_name": "source_name", "arg_type": type(source_name).__name__},
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
             )
         # Validation will be done on the server side
         self._source_name = source_name

@@ -33,1094 +33,1101 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import builtins
-import collections.abc
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.message
+
+from collections import abc as _abc
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
+import builtins as _builtins
 import sys
-import typing
+import typing as _typing
 
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias as _TypeAlias
 else:
-    import typing_extensions
+    from typing_extensions import TypeAlias as _TypeAlias
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRIPTOR: _descriptor.FileDescriptor
 
-class DataType(google.protobuf.message.Message):
+@_typing.final
+class DataType(_message.Message):
     """This message describes the logical [[DataType]] of something. It does not carry the value
     itself but only describes it.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class Boolean(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Boolean(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Byte(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Byte(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Short(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Short(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Integer(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Integer(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Long(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Long(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Float(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Float(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Double(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Double(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class String(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class String(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        COLLATION_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
-        collation: builtins.str
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        COLLATION_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
+        collation: _builtins.str
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
-            collation: builtins.str = ...,
+            type_variation_reference: _builtins.int = ...,
+            collation: _builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "collation", b"collation", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "collation", b"collation", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Binary(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Binary(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class NULL(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class NULL(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Timestamp(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Timestamp(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Date(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Date(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class TimestampNTZ(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class TimestampNTZ(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Time(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Time(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        PRECISION_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        precision: builtins.int
-        type_variation_reference: builtins.int
+        PRECISION_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        precision: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            precision: builtins.int | None = ...,
-            type_variation_reference: builtins.int = ...,
+            precision: _builtins.int | None = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_precision", b"_precision", "precision", b"precision"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_precision",
-                b"_precision",
-                "precision",
-                b"precision",
-                "type_variation_reference",
-                b"type_variation_reference",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_precision", b"_precision", "precision", b"precision"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_precision",
+            b"_precision",
+            "precision",
+            b"precision",
+            "type_variation_reference",
+            b"type_variation_reference",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__precision: _TypeAlias = _typing.Literal["precision"]  # noqa: Y015
+        _WhichOneofArgType__precision: _TypeAlias = _typing.Literal[
+            "_precision", b"_precision"
+        ]  # noqa: Y015
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
-        ) -> typing_extensions.Literal["precision"] | None: ...
+            self, oneof_group: _WhichOneofArgType__precision
+        ) -> _WhichOneofReturnType__precision | None: ...
 
-    class CalendarInterval(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class CalendarInterval(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class YearMonthInterval(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class YearMonthInterval(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        START_FIELD_FIELD_NUMBER: builtins.int
-        END_FIELD_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        start_field: builtins.int
-        end_field: builtins.int
-        type_variation_reference: builtins.int
+        START_FIELD_FIELD_NUMBER: _builtins.int
+        END_FIELD_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        start_field: _builtins.int
+        end_field: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            start_field: builtins.int | None = ...,
-            end_field: builtins.int | None = ...,
-            type_variation_reference: builtins.int = ...,
+            start_field: _builtins.int | None = ...,
+            end_field: _builtins.int | None = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_end_field",
-                b"_end_field",
-                "_start_field",
-                b"_start_field",
-                "end_field",
-                b"end_field",
-                "start_field",
-                b"start_field",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_end_field",
-                b"_end_field",
-                "_start_field",
-                b"_start_field",
-                "end_field",
-                b"end_field",
-                "start_field",
-                b"start_field",
-                "type_variation_reference",
-                b"type_variation_reference",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_end_field",
+            b"_end_field",
+            "_start_field",
+            b"_start_field",
+            "end_field",
+            b"end_field",
+            "start_field",
+            b"start_field",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_end_field",
+            b"_end_field",
+            "_start_field",
+            b"_start_field",
+            "end_field",
+            b"end_field",
+            "start_field",
+            b"start_field",
+            "type_variation_reference",
+            b"type_variation_reference",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__end_field: _TypeAlias = _typing.Literal["end_field"]  # noqa: Y015
+        _WhichOneofArgType__end_field: _TypeAlias = _typing.Literal[
+            "_end_field", b"_end_field"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__start_field: _TypeAlias = _typing.Literal[
+            "start_field"
+        ]  # noqa: Y015
+        _WhichOneofArgType__start_field: _TypeAlias = _typing.Literal[
+            "_start_field", b"_start_field"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_end_field", b"_end_field"]
-        ) -> typing_extensions.Literal["end_field"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__end_field
+        ) -> _WhichOneofReturnType__end_field | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
-        ) -> typing_extensions.Literal["start_field"] | None: ...
+            self, oneof_group: _WhichOneofArgType__start_field
+        ) -> _WhichOneofReturnType__start_field | None: ...
 
-    class DayTimeInterval(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class DayTimeInterval(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        START_FIELD_FIELD_NUMBER: builtins.int
-        END_FIELD_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        start_field: builtins.int
-        end_field: builtins.int
-        type_variation_reference: builtins.int
+        START_FIELD_FIELD_NUMBER: _builtins.int
+        END_FIELD_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        start_field: _builtins.int
+        end_field: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            start_field: builtins.int | None = ...,
-            end_field: builtins.int | None = ...,
-            type_variation_reference: builtins.int = ...,
+            start_field: _builtins.int | None = ...,
+            end_field: _builtins.int | None = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_end_field",
-                b"_end_field",
-                "_start_field",
-                b"_start_field",
-                "end_field",
-                b"end_field",
-                "start_field",
-                b"start_field",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_end_field",
-                b"_end_field",
-                "_start_field",
-                b"_start_field",
-                "end_field",
-                b"end_field",
-                "start_field",
-                b"start_field",
-                "type_variation_reference",
-                b"type_variation_reference",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_end_field",
+            b"_end_field",
+            "_start_field",
+            b"_start_field",
+            "end_field",
+            b"end_field",
+            "start_field",
+            b"start_field",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_end_field",
+            b"_end_field",
+            "_start_field",
+            b"_start_field",
+            "end_field",
+            b"end_field",
+            "start_field",
+            b"start_field",
+            "type_variation_reference",
+            b"type_variation_reference",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__end_field: _TypeAlias = _typing.Literal["end_field"]  # noqa: Y015
+        _WhichOneofArgType__end_field: _TypeAlias = _typing.Literal[
+            "_end_field", b"_end_field"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__start_field: _TypeAlias = _typing.Literal[
+            "start_field"
+        ]  # noqa: Y015
+        _WhichOneofArgType__start_field: _TypeAlias = _typing.Literal[
+            "_start_field", b"_start_field"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_end_field", b"_end_field"]
-        ) -> typing_extensions.Literal["end_field"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__end_field
+        ) -> _WhichOneofReturnType__end_field | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
-        ) -> typing_extensions.Literal["start_field"] | None: ...
+            self, oneof_group: _WhichOneofArgType__start_field
+        ) -> _WhichOneofReturnType__start_field | None: ...
 
-    class Char(google.protobuf.message.Message):
+    @_typing.final
+    class Char(_message.Message):
         """Start compound types."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRIPTOR: _descriptor.Descriptor
 
-        LENGTH_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        length: builtins.int
-        type_variation_reference: builtins.int
+        LENGTH_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        length: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            length: builtins.int = ...,
-            type_variation_reference: builtins.int = ...,
+            length: _builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "length", b"length", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class VarChar(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class VarChar(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        LENGTH_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        length: builtins.int
-        type_variation_reference: builtins.int
+        LENGTH_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        length: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            length: builtins.int = ...,
-            type_variation_reference: builtins.int = ...,
+            length: _builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "length", b"length", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Decimal(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Decimal(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        SCALE_FIELD_NUMBER: builtins.int
-        PRECISION_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        scale: builtins.int
-        precision: builtins.int
-        type_variation_reference: builtins.int
+        SCALE_FIELD_NUMBER: _builtins.int
+        PRECISION_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        scale: _builtins.int
+        precision: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            scale: builtins.int | None = ...,
-            precision: builtins.int | None = ...,
-            type_variation_reference: builtins.int = ...,
+            scale: _builtins.int | None = ...,
+            precision: _builtins.int | None = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_precision",
-                b"_precision",
-                "_scale",
-                b"_scale",
-                "precision",
-                b"precision",
-                "scale",
-                b"scale",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_precision",
-                b"_precision",
-                "_scale",
-                b"_scale",
-                "precision",
-                b"precision",
-                "scale",
-                b"scale",
-                "type_variation_reference",
-                b"type_variation_reference",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_precision",
+            b"_precision",
+            "_scale",
+            b"_scale",
+            "precision",
+            b"precision",
+            "scale",
+            b"scale",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_precision",
+            b"_precision",
+            "_scale",
+            b"_scale",
+            "precision",
+            b"precision",
+            "scale",
+            b"scale",
+            "type_variation_reference",
+            b"type_variation_reference",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__precision: _TypeAlias = _typing.Literal["precision"]  # noqa: Y015
+        _WhichOneofArgType__precision: _TypeAlias = _typing.Literal[
+            "_precision", b"_precision"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__scale: _TypeAlias = _typing.Literal["scale"]  # noqa: Y015
+        _WhichOneofArgType__scale: _TypeAlias = _typing.Literal["_scale", b"_scale"]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
-        ) -> typing_extensions.Literal["precision"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__precision
+        ) -> _WhichOneofReturnType__precision | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
-        ) -> typing_extensions.Literal["scale"] | None: ...
+            self, oneof_group: _WhichOneofArgType__scale
+        ) -> _WhichOneofReturnType__scale | None: ...
 
-    class StructField(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class StructField(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        NAME_FIELD_NUMBER: builtins.int
-        DATA_TYPE_FIELD_NUMBER: builtins.int
-        NULLABLE_FIELD_NUMBER: builtins.int
-        METADATA_FIELD_NUMBER: builtins.int
-        name: builtins.str
-        @property
-        def data_type(self) -> global___DataType: ...
-        nullable: builtins.bool
-        metadata: builtins.str
+        NAME_FIELD_NUMBER: _builtins.int
+        DATA_TYPE_FIELD_NUMBER: _builtins.int
+        NULLABLE_FIELD_NUMBER: _builtins.int
+        METADATA_FIELD_NUMBER: _builtins.int
+        name: _builtins.str
+        nullable: _builtins.bool
+        metadata: _builtins.str
+        @_builtins.property
+        def data_type(self) -> Global___DataType: ...
         def __init__(
             self,
             *,
-            name: builtins.str = ...,
-            data_type: global___DataType | None = ...,
-            nullable: builtins.bool = ...,
-            metadata: builtins.str | None = ...,
+            name: _builtins.str = ...,
+            data_type: Global___DataType | None = ...,
+            nullable: _builtins.bool = ...,
+            metadata: _builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_metadata", b"_metadata", "data_type", b"data_type", "metadata", b"metadata"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_metadata",
-                b"_metadata",
-                "data_type",
-                b"data_type",
-                "metadata",
-                b"metadata",
-                "name",
-                b"name",
-                "nullable",
-                b"nullable",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_metadata", b"_metadata", "data_type", b"data_type", "metadata", b"metadata"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_metadata",
+            b"_metadata",
+            "data_type",
+            b"data_type",
+            "metadata",
+            b"metadata",
+            "name",
+            b"name",
+            "nullable",
+            b"nullable",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__metadata: _TypeAlias = _typing.Literal["metadata"]  # noqa: Y015
+        _WhichOneofArgType__metadata: _TypeAlias = _typing.Literal[
+            "_metadata", b"_metadata"
+        ]  # noqa: Y015
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
-        ) -> typing_extensions.Literal["metadata"] | None: ...
+            self, oneof_group: _WhichOneofArgType__metadata
+        ) -> _WhichOneofReturnType__metadata | None: ...
 
-    class Struct(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Struct(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        FIELDS_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        @property
+        FIELDS_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
+        @_builtins.property
         def fields(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___DataType.StructField
-        ]: ...
-        type_variation_reference: builtins.int
+        ) -> _containers.RepeatedCompositeFieldContainer[Global___DataType.StructField]: ...
         def __init__(
             self,
             *,
-            fields: collections.abc.Iterable[global___DataType.StructField] | None = ...,
-            type_variation_reference: builtins.int = ...,
+            fields: _abc.Iterable[Global___DataType.StructField] | None = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "fields", b"fields", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "fields", b"fields", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Array(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Array(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        ELEMENT_TYPE_FIELD_NUMBER: builtins.int
-        CONTAINS_NULL_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        @property
-        def element_type(self) -> global___DataType: ...
-        contains_null: builtins.bool
-        type_variation_reference: builtins.int
+        ELEMENT_TYPE_FIELD_NUMBER: _builtins.int
+        CONTAINS_NULL_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        contains_null: _builtins.bool
+        type_variation_reference: _builtins.int
+        @_builtins.property
+        def element_type(self) -> Global___DataType: ...
         def __init__(
             self,
             *,
-            element_type: global___DataType | None = ...,
-            contains_null: builtins.bool = ...,
-            type_variation_reference: builtins.int = ...,
+            element_type: Global___DataType | None = ...,
+            contains_null: _builtins.bool = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["element_type", b"element_type"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "contains_null",
-                b"contains_null",
-                "element_type",
-                b"element_type",
-                "type_variation_reference",
-                b"type_variation_reference",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "element_type", b"element_type"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "contains_null",
+            b"contains_null",
+            "element_type",
+            b"element_type",
+            "type_variation_reference",
+            b"type_variation_reference",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Map(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Map(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        KEY_TYPE_FIELD_NUMBER: builtins.int
-        VALUE_TYPE_FIELD_NUMBER: builtins.int
-        VALUE_CONTAINS_NULL_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        @property
-        def key_type(self) -> global___DataType: ...
-        @property
-        def value_type(self) -> global___DataType: ...
-        value_contains_null: builtins.bool
-        type_variation_reference: builtins.int
+        KEY_TYPE_FIELD_NUMBER: _builtins.int
+        VALUE_TYPE_FIELD_NUMBER: _builtins.int
+        VALUE_CONTAINS_NULL_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        value_contains_null: _builtins.bool
+        type_variation_reference: _builtins.int
+        @_builtins.property
+        def key_type(self) -> Global___DataType: ...
+        @_builtins.property
+        def value_type(self) -> Global___DataType: ...
         def __init__(
             self,
             *,
-            key_type: global___DataType | None = ...,
-            value_type: global___DataType | None = ...,
-            value_contains_null: builtins.bool = ...,
-            type_variation_reference: builtins.int = ...,
+            key_type: Global___DataType | None = ...,
+            value_type: Global___DataType | None = ...,
+            value_contains_null: _builtins.bool = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "key_type", b"key_type", "value_type", b"value_type"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "key_type",
-                b"key_type",
-                "type_variation_reference",
-                b"type_variation_reference",
-                "value_contains_null",
-                b"value_contains_null",
-                "value_type",
-                b"value_type",
-            ],
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "key_type", b"key_type", "value_type", b"value_type"
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "key_type",
+            b"key_type",
+            "type_variation_reference",
+            b"type_variation_reference",
+            "value_contains_null",
+            b"value_contains_null",
+            "value_type",
+            b"value_type",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Geometry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Geometry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        SRID_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        srid: builtins.int
-        type_variation_reference: builtins.int
+        SRID_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        srid: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            srid: builtins.int = ...,
-            type_variation_reference: builtins.int = ...,
+            srid: _builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Geography(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Geography(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        SRID_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        srid: builtins.int
-        type_variation_reference: builtins.int
+        SRID_FIELD_NUMBER: _builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        srid: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            srid: builtins.int = ...,
-            type_variation_reference: builtins.int = ...,
+            srid: _builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class Variant(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Variant(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: _builtins.int
+        type_variation_reference: _builtins.int
         def __init__(
             self,
             *,
-            type_variation_reference: builtins.int = ...,
+            type_variation_reference: _builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "type_variation_reference", b"type_variation_reference"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    class UDT(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class UDT(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        TYPE_FIELD_NUMBER: builtins.int
-        JVM_CLASS_FIELD_NUMBER: builtins.int
-        PYTHON_CLASS_FIELD_NUMBER: builtins.int
-        SERIALIZED_PYTHON_CLASS_FIELD_NUMBER: builtins.int
-        SQL_TYPE_FIELD_NUMBER: builtins.int
-        type: builtins.str
-        jvm_class: builtins.str
+        TYPE_FIELD_NUMBER: _builtins.int
+        JVM_CLASS_FIELD_NUMBER: _builtins.int
+        PYTHON_CLASS_FIELD_NUMBER: _builtins.int
+        SERIALIZED_PYTHON_CLASS_FIELD_NUMBER: _builtins.int
+        SQL_TYPE_FIELD_NUMBER: _builtins.int
+        type: _builtins.str
+        jvm_class: _builtins.str
         """Required for Scala/Java UDT"""
-        python_class: builtins.str
+        python_class: _builtins.str
         """Required for Python UDT"""
-        serialized_python_class: builtins.str
+        serialized_python_class: _builtins.str
         """Required for Python UDT"""
-        @property
-        def sql_type(self) -> global___DataType:
+        @_builtins.property
+        def sql_type(self) -> Global___DataType:
             """Required for Python UDT"""
         def __init__(
             self,
             *,
-            type: builtins.str = ...,
-            jvm_class: builtins.str | None = ...,
-            python_class: builtins.str | None = ...,
-            serialized_python_class: builtins.str | None = ...,
-            sql_type: global___DataType | None = ...,
+            type: _builtins.str = ...,
+            jvm_class: _builtins.str | None = ...,
+            python_class: _builtins.str | None = ...,
+            serialized_python_class: _builtins.str | None = ...,
+            sql_type: Global___DataType | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_jvm_class",
-                b"_jvm_class",
-                "_python_class",
-                b"_python_class",
-                "_serialized_python_class",
-                b"_serialized_python_class",
-                "_sql_type",
-                b"_sql_type",
-                "jvm_class",
-                b"jvm_class",
-                "python_class",
-                b"python_class",
-                "serialized_python_class",
-                b"serialized_python_class",
-                "sql_type",
-                b"sql_type",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_jvm_class",
-                b"_jvm_class",
-                "_python_class",
-                b"_python_class",
-                "_serialized_python_class",
-                b"_serialized_python_class",
-                "_sql_type",
-                b"_sql_type",
-                "jvm_class",
-                b"jvm_class",
-                "python_class",
-                b"python_class",
-                "serialized_python_class",
-                b"serialized_python_class",
-                "sql_type",
-                b"sql_type",
-                "type",
-                b"type",
-            ],
-        ) -> None: ...
-        @typing.overload
+        _HasFieldArgType: _TypeAlias = _typing.Literal[
+            "_jvm_class",
+            b"_jvm_class",
+            "_python_class",
+            b"_python_class",
+            "_serialized_python_class",
+            b"_serialized_python_class",
+            "_sql_type",
+            b"_sql_type",
+            "jvm_class",
+            b"jvm_class",
+            "python_class",
+            b"python_class",
+            "serialized_python_class",
+            b"serialized_python_class",
+            "sql_type",
+            b"sql_type",
+        ]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "_jvm_class",
+            b"_jvm_class",
+            "_python_class",
+            b"_python_class",
+            "_serialized_python_class",
+            b"_serialized_python_class",
+            "_sql_type",
+            b"_sql_type",
+            "jvm_class",
+            b"jvm_class",
+            "python_class",
+            b"python_class",
+            "serialized_python_class",
+            b"serialized_python_class",
+            "sql_type",
+            b"sql_type",
+            "type",
+            b"type",
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        _WhichOneofReturnType__jvm_class: _TypeAlias = _typing.Literal["jvm_class"]  # noqa: Y015
+        _WhichOneofArgType__jvm_class: _TypeAlias = _typing.Literal[
+            "_jvm_class", b"_jvm_class"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__python_class: _TypeAlias = _typing.Literal[
+            "python_class"
+        ]  # noqa: Y015
+        _WhichOneofArgType__python_class: _TypeAlias = _typing.Literal[
+            "_python_class", b"_python_class"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__serialized_python_class: _TypeAlias = _typing.Literal[
+            "serialized_python_class"
+        ]  # noqa: Y015
+        _WhichOneofArgType__serialized_python_class: _TypeAlias = _typing.Literal[
+            "_serialized_python_class", b"_serialized_python_class"
+        ]  # noqa: Y015
+        _WhichOneofReturnType__sql_type: _TypeAlias = _typing.Literal["sql_type"]  # noqa: Y015
+        _WhichOneofArgType__sql_type: _TypeAlias = _typing.Literal[
+            "_sql_type", b"_sql_type"
+        ]  # noqa: Y015
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_jvm_class", b"_jvm_class"]
-        ) -> typing_extensions.Literal["jvm_class"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__jvm_class
+        ) -> _WhichOneofReturnType__jvm_class | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_python_class", b"_python_class"]
-        ) -> typing_extensions.Literal["python_class"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__python_class
+        ) -> _WhichOneofReturnType__python_class | None: ...
+        @_typing.overload
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal[
-                "_serialized_python_class", b"_serialized_python_class"
-            ],
-        ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
-        @typing.overload
+            self, oneof_group: _WhichOneofArgType__serialized_python_class
+        ) -> _WhichOneofReturnType__serialized_python_class | None: ...
+        @_typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_sql_type", b"_sql_type"]
-        ) -> typing_extensions.Literal["sql_type"] | None: ...
+            self, oneof_group: _WhichOneofArgType__sql_type
+        ) -> _WhichOneofReturnType__sql_type | None: ...
 
-    class Unparsed(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class Unparsed(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        DATA_TYPE_STRING_FIELD_NUMBER: builtins.int
-        data_type_string: builtins.str
+        DATA_TYPE_STRING_FIELD_NUMBER: _builtins.int
+        data_type_string: _builtins.str
         """(Required) The unparsed data type string"""
         def __init__(
             self,
             *,
-            data_type_string: builtins.str = ...,
+            data_type_string: _builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["data_type_string", b"data_type_string"]
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "data_type_string", b"data_type_string"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    NULL_FIELD_NUMBER: builtins.int
-    BINARY_FIELD_NUMBER: builtins.int
-    BOOLEAN_FIELD_NUMBER: builtins.int
-    BYTE_FIELD_NUMBER: builtins.int
-    SHORT_FIELD_NUMBER: builtins.int
-    INTEGER_FIELD_NUMBER: builtins.int
-    LONG_FIELD_NUMBER: builtins.int
-    FLOAT_FIELD_NUMBER: builtins.int
-    DOUBLE_FIELD_NUMBER: builtins.int
-    DECIMAL_FIELD_NUMBER: builtins.int
-    STRING_FIELD_NUMBER: builtins.int
-    CHAR_FIELD_NUMBER: builtins.int
-    VAR_CHAR_FIELD_NUMBER: builtins.int
-    DATE_FIELD_NUMBER: builtins.int
-    TIMESTAMP_FIELD_NUMBER: builtins.int
-    TIMESTAMP_NTZ_FIELD_NUMBER: builtins.int
-    CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
-    YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
-    DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
-    ARRAY_FIELD_NUMBER: builtins.int
-    STRUCT_FIELD_NUMBER: builtins.int
-    MAP_FIELD_NUMBER: builtins.int
-    VARIANT_FIELD_NUMBER: builtins.int
-    UDT_FIELD_NUMBER: builtins.int
-    GEOMETRY_FIELD_NUMBER: builtins.int
-    GEOGRAPHY_FIELD_NUMBER: builtins.int
-    UNPARSED_FIELD_NUMBER: builtins.int
-    TIME_FIELD_NUMBER: builtins.int
-    @property
-    def null(self) -> global___DataType.NULL: ...
-    @property
-    def binary(self) -> global___DataType.Binary: ...
-    @property
-    def boolean(self) -> global___DataType.Boolean: ...
-    @property
-    def byte(self) -> global___DataType.Byte:
+    NULL_FIELD_NUMBER: _builtins.int
+    BINARY_FIELD_NUMBER: _builtins.int
+    BOOLEAN_FIELD_NUMBER: _builtins.int
+    BYTE_FIELD_NUMBER: _builtins.int
+    SHORT_FIELD_NUMBER: _builtins.int
+    INTEGER_FIELD_NUMBER: _builtins.int
+    LONG_FIELD_NUMBER: _builtins.int
+    FLOAT_FIELD_NUMBER: _builtins.int
+    DOUBLE_FIELD_NUMBER: _builtins.int
+    DECIMAL_FIELD_NUMBER: _builtins.int
+    STRING_FIELD_NUMBER: _builtins.int
+    CHAR_FIELD_NUMBER: _builtins.int
+    VAR_CHAR_FIELD_NUMBER: _builtins.int
+    DATE_FIELD_NUMBER: _builtins.int
+    TIMESTAMP_FIELD_NUMBER: _builtins.int
+    TIMESTAMP_NTZ_FIELD_NUMBER: _builtins.int
+    CALENDAR_INTERVAL_FIELD_NUMBER: _builtins.int
+    YEAR_MONTH_INTERVAL_FIELD_NUMBER: _builtins.int
+    DAY_TIME_INTERVAL_FIELD_NUMBER: _builtins.int
+    ARRAY_FIELD_NUMBER: _builtins.int
+    STRUCT_FIELD_NUMBER: _builtins.int
+    MAP_FIELD_NUMBER: _builtins.int
+    VARIANT_FIELD_NUMBER: _builtins.int
+    UDT_FIELD_NUMBER: _builtins.int
+    GEOMETRY_FIELD_NUMBER: _builtins.int
+    GEOGRAPHY_FIELD_NUMBER: _builtins.int
+    UNPARSED_FIELD_NUMBER: _builtins.int
+    TIME_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def null(self) -> Global___DataType.NULL: ...
+    @_builtins.property
+    def binary(self) -> Global___DataType.Binary: ...
+    @_builtins.property
+    def boolean(self) -> Global___DataType.Boolean: ...
+    @_builtins.property
+    def byte(self) -> Global___DataType.Byte:
         """Numeric types"""
-    @property
-    def short(self) -> global___DataType.Short: ...
-    @property
-    def integer(self) -> global___DataType.Integer: ...
-    @property
-    def long(self) -> global___DataType.Long: ...
-    @property
-    def float(self) -> global___DataType.Float: ...
-    @property
-    def double(self) -> global___DataType.Double: ...
-    @property
-    def decimal(self) -> global___DataType.Decimal: ...
-    @property
-    def string(self) -> global___DataType.String:
+    @_builtins.property
+    def short(self) -> Global___DataType.Short: ...
+    @_builtins.property
+    def integer(self) -> Global___DataType.Integer: ...
+    @_builtins.property
+    def long(self) -> Global___DataType.Long: ...
+    @_builtins.property
+    def float(self) -> Global___DataType.Float: ...
+    @_builtins.property
+    def double(self) -> Global___DataType.Double: ...
+    @_builtins.property
+    def decimal(self) -> Global___DataType.Decimal: ...
+    @_builtins.property
+    def string(self) -> Global___DataType.String:
         """String types"""
-    @property
-    def char(self) -> global___DataType.Char: ...
-    @property
-    def var_char(self) -> global___DataType.VarChar: ...
-    @property
-    def date(self) -> global___DataType.Date:
+    @_builtins.property
+    def char(self) -> Global___DataType.Char: ...
+    @_builtins.property
+    def var_char(self) -> Global___DataType.VarChar: ...
+    @_builtins.property
+    def date(self) -> Global___DataType.Date:
         """Datatime types"""
-    @property
-    def timestamp(self) -> global___DataType.Timestamp: ...
-    @property
-    def timestamp_ntz(self) -> global___DataType.TimestampNTZ: ...
-    @property
-    def calendar_interval(self) -> global___DataType.CalendarInterval:
+    @_builtins.property
+    def timestamp(self) -> Global___DataType.Timestamp: ...
+    @_builtins.property
+    def timestamp_ntz(self) -> Global___DataType.TimestampNTZ: ...
+    @_builtins.property
+    def calendar_interval(self) -> Global___DataType.CalendarInterval:
         """Interval types"""
-    @property
-    def year_month_interval(self) -> global___DataType.YearMonthInterval: ...
-    @property
-    def day_time_interval(self) -> global___DataType.DayTimeInterval: ...
-    @property
-    def array(self) -> global___DataType.Array:
+    @_builtins.property
+    def year_month_interval(self) -> Global___DataType.YearMonthInterval: ...
+    @_builtins.property
+    def day_time_interval(self) -> Global___DataType.DayTimeInterval: ...
+    @_builtins.property
+    def array(self) -> Global___DataType.Array:
         """Complex types"""
-    @property
-    def struct(self) -> global___DataType.Struct: ...
-    @property
-    def map(self) -> global___DataType.Map: ...
-    @property
-    def variant(self) -> global___DataType.Variant: ...
-    @property
-    def udt(self) -> global___DataType.UDT:
+    @_builtins.property
+    def struct(self) -> Global___DataType.Struct: ...
+    @_builtins.property
+    def map(self) -> Global___DataType.Map: ...
+    @_builtins.property
+    def variant(self) -> Global___DataType.Variant: ...
+    @_builtins.property
+    def udt(self) -> Global___DataType.UDT:
         """UserDefinedType"""
-    @property
-    def geometry(self) -> global___DataType.Geometry:
+    @_builtins.property
+    def geometry(self) -> Global___DataType.Geometry:
         """Geospatial types"""
-    @property
-    def geography(self) -> global___DataType.Geography: ...
-    @property
-    def unparsed(self) -> global___DataType.Unparsed:
+    @_builtins.property
+    def geography(self) -> Global___DataType.Geography: ...
+    @_builtins.property
+    def unparsed(self) -> Global___DataType.Unparsed:
         """UnparsedDataType"""
-    @property
-    def time(self) -> global___DataType.Time: ...
+    @_builtins.property
+    def time(self) -> Global___DataType.Time: ...
     def __init__(
         self,
         *,
-        null: global___DataType.NULL | None = ...,
-        binary: global___DataType.Binary | None = ...,
-        boolean: global___DataType.Boolean | None = ...,
-        byte: global___DataType.Byte | None = ...,
-        short: global___DataType.Short | None = ...,
-        integer: global___DataType.Integer | None = ...,
-        long: global___DataType.Long | None = ...,
-        float: global___DataType.Float | None = ...,
-        double: global___DataType.Double | None = ...,
-        decimal: global___DataType.Decimal | None = ...,
-        string: global___DataType.String | None = ...,
-        char: global___DataType.Char | None = ...,
-        var_char: global___DataType.VarChar | None = ...,
-        date: global___DataType.Date | None = ...,
-        timestamp: global___DataType.Timestamp | None = ...,
-        timestamp_ntz: global___DataType.TimestampNTZ | None = ...,
-        calendar_interval: global___DataType.CalendarInterval | None = ...,
-        year_month_interval: global___DataType.YearMonthInterval | None = ...,
-        day_time_interval: global___DataType.DayTimeInterval | None = ...,
-        array: global___DataType.Array | None = ...,
-        struct: global___DataType.Struct | None = ...,
-        map: global___DataType.Map | None = ...,
-        variant: global___DataType.Variant | None = ...,
-        udt: global___DataType.UDT | None = ...,
-        geometry: global___DataType.Geometry | None = ...,
-        geography: global___DataType.Geography | None = ...,
-        unparsed: global___DataType.Unparsed | None = ...,
-        time: global___DataType.Time | None = ...,
+        null: Global___DataType.NULL | None = ...,
+        binary: Global___DataType.Binary | None = ...,
+        boolean: Global___DataType.Boolean | None = ...,
+        byte: Global___DataType.Byte | None = ...,
+        short: Global___DataType.Short | None = ...,
+        integer: Global___DataType.Integer | None = ...,
+        long: Global___DataType.Long | None = ...,
+        float: Global___DataType.Float | None = ...,
+        double: Global___DataType.Double | None = ...,
+        decimal: Global___DataType.Decimal | None = ...,
+        string: Global___DataType.String | None = ...,
+        char: Global___DataType.Char | None = ...,
+        var_char: Global___DataType.VarChar | None = ...,
+        date: Global___DataType.Date | None = ...,
+        timestamp: Global___DataType.Timestamp | None = ...,
+        timestamp_ntz: Global___DataType.TimestampNTZ | None = ...,
+        calendar_interval: Global___DataType.CalendarInterval | None = ...,
+        year_month_interval: Global___DataType.YearMonthInterval | None = ...,
+        day_time_interval: Global___DataType.DayTimeInterval | None = ...,
+        array: Global___DataType.Array | None = ...,
+        struct: Global___DataType.Struct | None = ...,
+        map: Global___DataType.Map | None = ...,
+        variant: Global___DataType.Variant | None = ...,
+        udt: Global___DataType.UDT | None = ...,
+        geometry: Global___DataType.Geometry | None = ...,
+        geography: Global___DataType.Geography | None = ...,
+        unparsed: Global___DataType.Unparsed | None = ...,
+        time: Global___DataType.Time | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "array",
-            b"array",
-            "binary",
-            b"binary",
-            "boolean",
-            b"boolean",
-            "byte",
-            b"byte",
-            "calendar_interval",
-            b"calendar_interval",
-            "char",
-            b"char",
-            "date",
-            b"date",
-            "day_time_interval",
-            b"day_time_interval",
-            "decimal",
-            b"decimal",
-            "double",
-            b"double",
-            "float",
-            b"float",
-            "geography",
-            b"geography",
-            "geometry",
-            b"geometry",
-            "integer",
-            b"integer",
-            "kind",
-            b"kind",
-            "long",
-            b"long",
-            "map",
-            b"map",
-            "null",
-            b"null",
-            "short",
-            b"short",
-            "string",
-            b"string",
-            "struct",
-            b"struct",
-            "time",
-            b"time",
-            "timestamp",
-            b"timestamp",
-            "timestamp_ntz",
-            b"timestamp_ntz",
-            "udt",
-            b"udt",
-            "unparsed",
-            b"unparsed",
-            "var_char",
-            b"var_char",
-            "variant",
-            b"variant",
-            "year_month_interval",
-            b"year_month_interval",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "array",
-            b"array",
-            "binary",
-            b"binary",
-            "boolean",
-            b"boolean",
-            "byte",
-            b"byte",
-            "calendar_interval",
-            b"calendar_interval",
-            "char",
-            b"char",
-            "date",
-            b"date",
-            "day_time_interval",
-            b"day_time_interval",
-            "decimal",
-            b"decimal",
-            "double",
-            b"double",
-            "float",
-            b"float",
-            "geography",
-            b"geography",
-            "geometry",
-            b"geometry",
-            "integer",
-            b"integer",
-            "kind",
-            b"kind",
-            "long",
-            b"long",
-            "map",
-            b"map",
-            "null",
-            b"null",
-            "short",
-            b"short",
-            "string",
-            b"string",
-            "struct",
-            b"struct",
-            "time",
-            b"time",
-            "timestamp",
-            b"timestamp",
-            "timestamp_ntz",
-            b"timestamp_ntz",
-            "udt",
-            b"udt",
-            "unparsed",
-            b"unparsed",
-            "var_char",
-            b"var_char",
-            "variant",
-            b"variant",
-            "year_month_interval",
-            b"year_month_interval",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "array",
+        b"array",
+        "binary",
+        b"binary",
+        "boolean",
+        b"boolean",
+        "byte",
+        b"byte",
+        "calendar_interval",
+        b"calendar_interval",
+        "char",
+        b"char",
+        "date",
+        b"date",
+        "day_time_interval",
+        b"day_time_interval",
+        "decimal",
+        b"decimal",
+        "double",
+        b"double",
+        "float",
+        b"float",
+        "geography",
+        b"geography",
+        "geometry",
+        b"geometry",
+        "integer",
+        b"integer",
+        "kind",
+        b"kind",
+        "long",
+        b"long",
+        "map",
+        b"map",
+        "null",
+        b"null",
+        "short",
+        b"short",
+        "string",
+        b"string",
+        "struct",
+        b"struct",
+        "time",
+        b"time",
+        "timestamp",
+        b"timestamp",
+        "timestamp_ntz",
+        b"timestamp_ntz",
+        "udt",
+        b"udt",
+        "unparsed",
+        b"unparsed",
+        "var_char",
+        b"var_char",
+        "variant",
+        b"variant",
+        "year_month_interval",
+        b"year_month_interval",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "array",
+        b"array",
+        "binary",
+        b"binary",
+        "boolean",
+        b"boolean",
+        "byte",
+        b"byte",
+        "calendar_interval",
+        b"calendar_interval",
+        "char",
+        b"char",
+        "date",
+        b"date",
+        "day_time_interval",
+        b"day_time_interval",
+        "decimal",
+        b"decimal",
+        "double",
+        b"double",
+        "float",
+        b"float",
+        "geography",
+        b"geography",
+        "geometry",
+        b"geometry",
+        "integer",
+        b"integer",
+        "kind",
+        b"kind",
+        "long",
+        b"long",
+        "map",
+        b"map",
+        "null",
+        b"null",
+        "short",
+        b"short",
+        "string",
+        b"string",
+        "struct",
+        b"struct",
+        "time",
+        b"time",
+        "timestamp",
+        b"timestamp",
+        "timestamp_ntz",
+        b"timestamp_ntz",
+        "udt",
+        b"udt",
+        "unparsed",
+        b"unparsed",
+        "var_char",
+        b"var_char",
+        "variant",
+        b"variant",
+        "year_month_interval",
+        b"year_month_interval",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_kind: _TypeAlias = _typing.Literal[
+        "null",
+        "binary",
+        "boolean",
+        "byte",
+        "short",
+        "integer",
+        "long",
+        "float",
+        "double",
+        "decimal",
+        "string",
+        "char",
+        "var_char",
+        "date",
+        "timestamp",
+        "timestamp_ntz",
+        "calendar_interval",
+        "year_month_interval",
+        "day_time_interval",
+        "array",
+        "struct",
+        "map",
+        "variant",
+        "udt",
+        "geometry",
+        "geography",
+        "unparsed",
+        "time",
+    ]  # noqa: Y015
+    _WhichOneofArgType_kind: _TypeAlias = _typing.Literal["kind", b"kind"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-    ) -> (
-        typing_extensions.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "char",
-            "var_char",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-            "struct",
-            "map",
-            "variant",
-            "udt",
-            "geometry",
-            "geography",
-            "unparsed",
-            "time",
-        ]
-        | None
-    ): ...
+        self, oneof_group: _WhichOneofArgType_kind
+    ) -> _WhichOneofReturnType_kind | None: ...
 
-global___DataType = DataType
+Global___DataType: _TypeAlias = DataType  # noqa: Y015

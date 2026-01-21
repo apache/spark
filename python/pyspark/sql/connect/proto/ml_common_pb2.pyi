@@ -33,85 +33,80 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import builtins
-import collections.abc
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.internal.enum_type_wrapper
-import google.protobuf.message
-import pyspark.sql.connect.proto.expressions_pb2
+
+from collections import abc as _abc
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from pyspark.sql.connect.proto import expressions_pb2 as _expressions_pb2
+import builtins as _builtins
 import sys
-import typing
+import typing as _typing
 
 if sys.version_info >= (3, 10):
-    import typing as typing_extensions
+    from typing import TypeAlias as _TypeAlias
 else:
-    import typing_extensions
+    from typing_extensions import TypeAlias as _TypeAlias
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRIPTOR: _descriptor.FileDescriptor
 
-class MlParams(google.protobuf.message.Message):
+@_typing.final
+class MlParams(_message.Message):
     """MlParams stores param settings for ML Estimator / Transformer / Evaluator"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class ParamsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class ParamsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: builtins.int
-        VALUE_FIELD_NUMBER: builtins.int
-        key: builtins.str
-        @property
-        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> _expressions_pb2.Expression.Literal: ...
         def __init__(
             self,
             *,
-            key: builtins.str = ...,
-            value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            key: _builtins.str = ...,
+            value: _expressions_pb2.Expression.Literal | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "key", b"key", "value", b"value"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    PARAMS_FIELD_NUMBER: builtins.int
-    @property
-    def params(
-        self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]:
+    PARAMS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def params(self) -> _containers.MessageMap[_builtins.str, _expressions_pb2.Expression.Literal]:
         """User-supplied params"""
     def __init__(
         self,
         *,
-        params: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
+        params: _abc.Mapping[_builtins.str, _expressions_pb2.Expression.Literal] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["params", b"params"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["params", b"params"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___MlParams = MlParams
+Global___MlParams: _TypeAlias = MlParams  # noqa: Y015
 
-class MlOperator(google.protobuf.message.Message):
+@_typing.final
+class MlOperator(_message.Message):
     """MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
     class _OperatorType:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
+        ValueType = _typing.NewType("ValueType", _builtins.int)
+        V: _TypeAlias = ValueType  # noqa: Y015
 
     class _OperatorTypeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-            MlOperator._OperatorType.ValueType
-        ],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        _enum_type_wrapper._EnumTypeWrapper[MlOperator._OperatorType.ValueType], _builtins.type
+    ):
+        DESCRIPTOR: _descriptor.EnumDescriptor
         OPERATOR_TYPE_UNSPECIFIED: MlOperator._OperatorType.ValueType  # 0
         OPERATOR_TYPE_ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
         """ML estimator"""
@@ -133,45 +128,48 @@ class MlOperator(google.protobuf.message.Message):
     OPERATOR_TYPE_MODEL: MlOperator.OperatorType.ValueType  # 4
     """ML model"""
 
-    NAME_FIELD_NUMBER: builtins.int
-    UID_FIELD_NUMBER: builtins.int
-    TYPE_FIELD_NUMBER: builtins.int
-    name: builtins.str
+    NAME_FIELD_NUMBER: _builtins.int
+    UID_FIELD_NUMBER: _builtins.int
+    TYPE_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
     """(Required) The qualified name of the ML operator."""
-    uid: builtins.str
+    uid: _builtins.str
     """(Required) Unique id of the ML operator"""
-    type: global___MlOperator.OperatorType.ValueType
+    type: Global___MlOperator.OperatorType.ValueType
     """(Required) Represents what the ML operator is"""
     def __init__(
         self,
         *,
-        name: builtins.str = ...,
-        uid: builtins.str = ...,
-        type: global___MlOperator.OperatorType.ValueType = ...,
+        name: _builtins.str = ...,
+        uid: _builtins.str = ...,
+        type: Global___MlOperator.OperatorType.ValueType = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["name", b"name", "type", b"type", "uid", b"uid"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "name", b"name", "type", b"type", "uid", b"uid"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___MlOperator = MlOperator
+Global___MlOperator: _TypeAlias = MlOperator  # noqa: Y015
 
-class ObjectRef(google.protobuf.message.Message):
+@_typing.final
+class ObjectRef(_message.Message):
     """Represents a reference to the cached object which could be a model
     or summary evaluated by a model
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    ID_FIELD_NUMBER: builtins.int
-    id: builtins.str
+    ID_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
     """(Required) The ID is used to lookup the object on the server side.
     Note it is different from the 'uid' of a ML object.
     """
     def __init__(
         self,
         *,
-        id: builtins.str = ...,
+        id: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___ObjectRef = ObjectRef
+Global___ObjectRef: _TypeAlias = ObjectRef  # noqa: Y015

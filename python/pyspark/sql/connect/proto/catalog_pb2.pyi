@@ -33,1101 +33,1148 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import builtins
-import collections.abc
-import google.protobuf.descriptor
-import google.protobuf.internal.containers
-import google.protobuf.message
-import pyspark.sql.connect.proto.common_pb2
-import pyspark.sql.connect.proto.types_pb2
+
+from collections import abc as _abc
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf.internal import containers as _containers
+from pyspark.sql.connect.proto import common_pb2 as _common_pb2
+from pyspark.sql.connect.proto import types_pb2 as _types_pb2
+import builtins as _builtins
 import sys
-import typing
+import typing as _typing
 
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias as _TypeAlias
 else:
-    import typing_extensions
+    from typing_extensions import TypeAlias as _TypeAlias
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRIPTOR: _descriptor.FileDescriptor
 
-class Catalog(google.protobuf.message.Message):
+@_typing.final
+class Catalog(_message.Message):
     """Catalog messages are marked as unstable."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    CURRENT_DATABASE_FIELD_NUMBER: builtins.int
-    SET_CURRENT_DATABASE_FIELD_NUMBER: builtins.int
-    LIST_DATABASES_FIELD_NUMBER: builtins.int
-    LIST_TABLES_FIELD_NUMBER: builtins.int
-    LIST_FUNCTIONS_FIELD_NUMBER: builtins.int
-    LIST_COLUMNS_FIELD_NUMBER: builtins.int
-    GET_DATABASE_FIELD_NUMBER: builtins.int
-    GET_TABLE_FIELD_NUMBER: builtins.int
-    GET_FUNCTION_FIELD_NUMBER: builtins.int
-    DATABASE_EXISTS_FIELD_NUMBER: builtins.int
-    TABLE_EXISTS_FIELD_NUMBER: builtins.int
-    FUNCTION_EXISTS_FIELD_NUMBER: builtins.int
-    CREATE_EXTERNAL_TABLE_FIELD_NUMBER: builtins.int
-    CREATE_TABLE_FIELD_NUMBER: builtins.int
-    DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
-    DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
-    RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
-    IS_CACHED_FIELD_NUMBER: builtins.int
-    CACHE_TABLE_FIELD_NUMBER: builtins.int
-    UNCACHE_TABLE_FIELD_NUMBER: builtins.int
-    CLEAR_CACHE_FIELD_NUMBER: builtins.int
-    REFRESH_TABLE_FIELD_NUMBER: builtins.int
-    REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
-    CURRENT_CATALOG_FIELD_NUMBER: builtins.int
-    SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
-    LIST_CATALOGS_FIELD_NUMBER: builtins.int
-    @property
-    def current_database(self) -> global___CurrentDatabase: ...
-    @property
-    def set_current_database(self) -> global___SetCurrentDatabase: ...
-    @property
-    def list_databases(self) -> global___ListDatabases: ...
-    @property
-    def list_tables(self) -> global___ListTables: ...
-    @property
-    def list_functions(self) -> global___ListFunctions: ...
-    @property
-    def list_columns(self) -> global___ListColumns: ...
-    @property
-    def get_database(self) -> global___GetDatabase: ...
-    @property
-    def get_table(self) -> global___GetTable: ...
-    @property
-    def get_function(self) -> global___GetFunction: ...
-    @property
-    def database_exists(self) -> global___DatabaseExists: ...
-    @property
-    def table_exists(self) -> global___TableExists: ...
-    @property
-    def function_exists(self) -> global___FunctionExists: ...
-    @property
-    def create_external_table(self) -> global___CreateExternalTable: ...
-    @property
-    def create_table(self) -> global___CreateTable: ...
-    @property
-    def drop_temp_view(self) -> global___DropTempView: ...
-    @property
-    def drop_global_temp_view(self) -> global___DropGlobalTempView: ...
-    @property
-    def recover_partitions(self) -> global___RecoverPartitions: ...
-    @property
-    def is_cached(self) -> global___IsCached: ...
-    @property
-    def cache_table(self) -> global___CacheTable: ...
-    @property
-    def uncache_table(self) -> global___UncacheTable: ...
-    @property
-    def clear_cache(self) -> global___ClearCache: ...
-    @property
-    def refresh_table(self) -> global___RefreshTable: ...
-    @property
-    def refresh_by_path(self) -> global___RefreshByPath: ...
-    @property
-    def current_catalog(self) -> global___CurrentCatalog: ...
-    @property
-    def set_current_catalog(self) -> global___SetCurrentCatalog: ...
-    @property
-    def list_catalogs(self) -> global___ListCatalogs: ...
+    CURRENT_DATABASE_FIELD_NUMBER: _builtins.int
+    SET_CURRENT_DATABASE_FIELD_NUMBER: _builtins.int
+    LIST_DATABASES_FIELD_NUMBER: _builtins.int
+    LIST_TABLES_FIELD_NUMBER: _builtins.int
+    LIST_FUNCTIONS_FIELD_NUMBER: _builtins.int
+    LIST_COLUMNS_FIELD_NUMBER: _builtins.int
+    GET_DATABASE_FIELD_NUMBER: _builtins.int
+    GET_TABLE_FIELD_NUMBER: _builtins.int
+    GET_FUNCTION_FIELD_NUMBER: _builtins.int
+    DATABASE_EXISTS_FIELD_NUMBER: _builtins.int
+    TABLE_EXISTS_FIELD_NUMBER: _builtins.int
+    FUNCTION_EXISTS_FIELD_NUMBER: _builtins.int
+    CREATE_EXTERNAL_TABLE_FIELD_NUMBER: _builtins.int
+    CREATE_TABLE_FIELD_NUMBER: _builtins.int
+    DROP_TEMP_VIEW_FIELD_NUMBER: _builtins.int
+    DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: _builtins.int
+    RECOVER_PARTITIONS_FIELD_NUMBER: _builtins.int
+    IS_CACHED_FIELD_NUMBER: _builtins.int
+    CACHE_TABLE_FIELD_NUMBER: _builtins.int
+    UNCACHE_TABLE_FIELD_NUMBER: _builtins.int
+    CLEAR_CACHE_FIELD_NUMBER: _builtins.int
+    REFRESH_TABLE_FIELD_NUMBER: _builtins.int
+    REFRESH_BY_PATH_FIELD_NUMBER: _builtins.int
+    CURRENT_CATALOG_FIELD_NUMBER: _builtins.int
+    SET_CURRENT_CATALOG_FIELD_NUMBER: _builtins.int
+    LIST_CATALOGS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def current_database(self) -> Global___CurrentDatabase: ...
+    @_builtins.property
+    def set_current_database(self) -> Global___SetCurrentDatabase: ...
+    @_builtins.property
+    def list_databases(self) -> Global___ListDatabases: ...
+    @_builtins.property
+    def list_tables(self) -> Global___ListTables: ...
+    @_builtins.property
+    def list_functions(self) -> Global___ListFunctions: ...
+    @_builtins.property
+    def list_columns(self) -> Global___ListColumns: ...
+    @_builtins.property
+    def get_database(self) -> Global___GetDatabase: ...
+    @_builtins.property
+    def get_table(self) -> Global___GetTable: ...
+    @_builtins.property
+    def get_function(self) -> Global___GetFunction: ...
+    @_builtins.property
+    def database_exists(self) -> Global___DatabaseExists: ...
+    @_builtins.property
+    def table_exists(self) -> Global___TableExists: ...
+    @_builtins.property
+    def function_exists(self) -> Global___FunctionExists: ...
+    @_builtins.property
+    def create_external_table(self) -> Global___CreateExternalTable: ...
+    @_builtins.property
+    def create_table(self) -> Global___CreateTable: ...
+    @_builtins.property
+    def drop_temp_view(self) -> Global___DropTempView: ...
+    @_builtins.property
+    def drop_global_temp_view(self) -> Global___DropGlobalTempView: ...
+    @_builtins.property
+    def recover_partitions(self) -> Global___RecoverPartitions: ...
+    @_builtins.property
+    def is_cached(self) -> Global___IsCached: ...
+    @_builtins.property
+    def cache_table(self) -> Global___CacheTable: ...
+    @_builtins.property
+    def uncache_table(self) -> Global___UncacheTable: ...
+    @_builtins.property
+    def clear_cache(self) -> Global___ClearCache: ...
+    @_builtins.property
+    def refresh_table(self) -> Global___RefreshTable: ...
+    @_builtins.property
+    def refresh_by_path(self) -> Global___RefreshByPath: ...
+    @_builtins.property
+    def current_catalog(self) -> Global___CurrentCatalog: ...
+    @_builtins.property
+    def set_current_catalog(self) -> Global___SetCurrentCatalog: ...
+    @_builtins.property
+    def list_catalogs(self) -> Global___ListCatalogs: ...
     def __init__(
         self,
         *,
-        current_database: global___CurrentDatabase | None = ...,
-        set_current_database: global___SetCurrentDatabase | None = ...,
-        list_databases: global___ListDatabases | None = ...,
-        list_tables: global___ListTables | None = ...,
-        list_functions: global___ListFunctions | None = ...,
-        list_columns: global___ListColumns | None = ...,
-        get_database: global___GetDatabase | None = ...,
-        get_table: global___GetTable | None = ...,
-        get_function: global___GetFunction | None = ...,
-        database_exists: global___DatabaseExists | None = ...,
-        table_exists: global___TableExists | None = ...,
-        function_exists: global___FunctionExists | None = ...,
-        create_external_table: global___CreateExternalTable | None = ...,
-        create_table: global___CreateTable | None = ...,
-        drop_temp_view: global___DropTempView | None = ...,
-        drop_global_temp_view: global___DropGlobalTempView | None = ...,
-        recover_partitions: global___RecoverPartitions | None = ...,
-        is_cached: global___IsCached | None = ...,
-        cache_table: global___CacheTable | None = ...,
-        uncache_table: global___UncacheTable | None = ...,
-        clear_cache: global___ClearCache | None = ...,
-        refresh_table: global___RefreshTable | None = ...,
-        refresh_by_path: global___RefreshByPath | None = ...,
-        current_catalog: global___CurrentCatalog | None = ...,
-        set_current_catalog: global___SetCurrentCatalog | None = ...,
-        list_catalogs: global___ListCatalogs | None = ...,
+        current_database: Global___CurrentDatabase | None = ...,
+        set_current_database: Global___SetCurrentDatabase | None = ...,
+        list_databases: Global___ListDatabases | None = ...,
+        list_tables: Global___ListTables | None = ...,
+        list_functions: Global___ListFunctions | None = ...,
+        list_columns: Global___ListColumns | None = ...,
+        get_database: Global___GetDatabase | None = ...,
+        get_table: Global___GetTable | None = ...,
+        get_function: Global___GetFunction | None = ...,
+        database_exists: Global___DatabaseExists | None = ...,
+        table_exists: Global___TableExists | None = ...,
+        function_exists: Global___FunctionExists | None = ...,
+        create_external_table: Global___CreateExternalTable | None = ...,
+        create_table: Global___CreateTable | None = ...,
+        drop_temp_view: Global___DropTempView | None = ...,
+        drop_global_temp_view: Global___DropGlobalTempView | None = ...,
+        recover_partitions: Global___RecoverPartitions | None = ...,
+        is_cached: Global___IsCached | None = ...,
+        cache_table: Global___CacheTable | None = ...,
+        uncache_table: Global___UncacheTable | None = ...,
+        clear_cache: Global___ClearCache | None = ...,
+        refresh_table: Global___RefreshTable | None = ...,
+        refresh_by_path: Global___RefreshByPath | None = ...,
+        current_catalog: Global___CurrentCatalog | None = ...,
+        set_current_catalog: Global___SetCurrentCatalog | None = ...,
+        list_catalogs: Global___ListCatalogs | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "cache_table",
-            b"cache_table",
-            "cat_type",
-            b"cat_type",
-            "clear_cache",
-            b"clear_cache",
-            "create_external_table",
-            b"create_external_table",
-            "create_table",
-            b"create_table",
-            "current_catalog",
-            b"current_catalog",
-            "current_database",
-            b"current_database",
-            "database_exists",
-            b"database_exists",
-            "drop_global_temp_view",
-            b"drop_global_temp_view",
-            "drop_temp_view",
-            b"drop_temp_view",
-            "function_exists",
-            b"function_exists",
-            "get_database",
-            b"get_database",
-            "get_function",
-            b"get_function",
-            "get_table",
-            b"get_table",
-            "is_cached",
-            b"is_cached",
-            "list_catalogs",
-            b"list_catalogs",
-            "list_columns",
-            b"list_columns",
-            "list_databases",
-            b"list_databases",
-            "list_functions",
-            b"list_functions",
-            "list_tables",
-            b"list_tables",
-            "recover_partitions",
-            b"recover_partitions",
-            "refresh_by_path",
-            b"refresh_by_path",
-            "refresh_table",
-            b"refresh_table",
-            "set_current_catalog",
-            b"set_current_catalog",
-            "set_current_database",
-            b"set_current_database",
-            "table_exists",
-            b"table_exists",
-            "uncache_table",
-            b"uncache_table",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "cache_table",
-            b"cache_table",
-            "cat_type",
-            b"cat_type",
-            "clear_cache",
-            b"clear_cache",
-            "create_external_table",
-            b"create_external_table",
-            "create_table",
-            b"create_table",
-            "current_catalog",
-            b"current_catalog",
-            "current_database",
-            b"current_database",
-            "database_exists",
-            b"database_exists",
-            "drop_global_temp_view",
-            b"drop_global_temp_view",
-            "drop_temp_view",
-            b"drop_temp_view",
-            "function_exists",
-            b"function_exists",
-            "get_database",
-            b"get_database",
-            "get_function",
-            b"get_function",
-            "get_table",
-            b"get_table",
-            "is_cached",
-            b"is_cached",
-            "list_catalogs",
-            b"list_catalogs",
-            "list_columns",
-            b"list_columns",
-            "list_databases",
-            b"list_databases",
-            "list_functions",
-            b"list_functions",
-            "list_tables",
-            b"list_tables",
-            "recover_partitions",
-            b"recover_partitions",
-            "refresh_by_path",
-            b"refresh_by_path",
-            "refresh_table",
-            b"refresh_table",
-            "set_current_catalog",
-            b"set_current_catalog",
-            "set_current_database",
-            b"set_current_database",
-            "table_exists",
-            b"table_exists",
-            "uncache_table",
-            b"uncache_table",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "cache_table",
+        b"cache_table",
+        "cat_type",
+        b"cat_type",
+        "clear_cache",
+        b"clear_cache",
+        "create_external_table",
+        b"create_external_table",
+        "create_table",
+        b"create_table",
+        "current_catalog",
+        b"current_catalog",
+        "current_database",
+        b"current_database",
+        "database_exists",
+        b"database_exists",
+        "drop_global_temp_view",
+        b"drop_global_temp_view",
+        "drop_temp_view",
+        b"drop_temp_view",
+        "function_exists",
+        b"function_exists",
+        "get_database",
+        b"get_database",
+        "get_function",
+        b"get_function",
+        "get_table",
+        b"get_table",
+        "is_cached",
+        b"is_cached",
+        "list_catalogs",
+        b"list_catalogs",
+        "list_columns",
+        b"list_columns",
+        "list_databases",
+        b"list_databases",
+        "list_functions",
+        b"list_functions",
+        "list_tables",
+        b"list_tables",
+        "recover_partitions",
+        b"recover_partitions",
+        "refresh_by_path",
+        b"refresh_by_path",
+        "refresh_table",
+        b"refresh_table",
+        "set_current_catalog",
+        b"set_current_catalog",
+        "set_current_database",
+        b"set_current_database",
+        "table_exists",
+        b"table_exists",
+        "uncache_table",
+        b"uncache_table",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "cache_table",
+        b"cache_table",
+        "cat_type",
+        b"cat_type",
+        "clear_cache",
+        b"clear_cache",
+        "create_external_table",
+        b"create_external_table",
+        "create_table",
+        b"create_table",
+        "current_catalog",
+        b"current_catalog",
+        "current_database",
+        b"current_database",
+        "database_exists",
+        b"database_exists",
+        "drop_global_temp_view",
+        b"drop_global_temp_view",
+        "drop_temp_view",
+        b"drop_temp_view",
+        "function_exists",
+        b"function_exists",
+        "get_database",
+        b"get_database",
+        "get_function",
+        b"get_function",
+        "get_table",
+        b"get_table",
+        "is_cached",
+        b"is_cached",
+        "list_catalogs",
+        b"list_catalogs",
+        "list_columns",
+        b"list_columns",
+        "list_databases",
+        b"list_databases",
+        "list_functions",
+        b"list_functions",
+        "list_tables",
+        b"list_tables",
+        "recover_partitions",
+        b"recover_partitions",
+        "refresh_by_path",
+        b"refresh_by_path",
+        "refresh_table",
+        b"refresh_table",
+        "set_current_catalog",
+        b"set_current_catalog",
+        "set_current_database",
+        b"set_current_database",
+        "table_exists",
+        b"table_exists",
+        "uncache_table",
+        b"uncache_table",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_cat_type: _TypeAlias = _typing.Literal[
+        "current_database",
+        "set_current_database",
+        "list_databases",
+        "list_tables",
+        "list_functions",
+        "list_columns",
+        "get_database",
+        "get_table",
+        "get_function",
+        "database_exists",
+        "table_exists",
+        "function_exists",
+        "create_external_table",
+        "create_table",
+        "drop_temp_view",
+        "drop_global_temp_view",
+        "recover_partitions",
+        "is_cached",
+        "cache_table",
+        "uncache_table",
+        "clear_cache",
+        "refresh_table",
+        "refresh_by_path",
+        "current_catalog",
+        "set_current_catalog",
+        "list_catalogs",
+    ]  # noqa: Y015
+    _WhichOneofArgType_cat_type: _TypeAlias = _typing.Literal["cat_type", b"cat_type"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "current_database",
-            "set_current_database",
-            "list_databases",
-            "list_tables",
-            "list_functions",
-            "list_columns",
-            "get_database",
-            "get_table",
-            "get_function",
-            "database_exists",
-            "table_exists",
-            "function_exists",
-            "create_external_table",
-            "create_table",
-            "drop_temp_view",
-            "drop_global_temp_view",
-            "recover_partitions",
-            "is_cached",
-            "cache_table",
-            "uncache_table",
-            "clear_cache",
-            "refresh_table",
-            "refresh_by_path",
-            "current_catalog",
-            "set_current_catalog",
-            "list_catalogs",
-        ]
-        | None
-    ): ...
+        self, oneof_group: _WhichOneofArgType_cat_type
+    ) -> _WhichOneofReturnType_cat_type | None: ...
 
-global___Catalog = Catalog
+Global___Catalog: _TypeAlias = Catalog  # noqa: Y015
 
-class CurrentDatabase(google.protobuf.message.Message):
+@_typing.final
+class CurrentDatabase(_message.Message):
     """See `spark.catalog.currentDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
     def __init__(
         self,
     ) -> None: ...
 
-global___CurrentDatabase = CurrentDatabase
+Global___CurrentDatabase: _TypeAlias = CurrentDatabase  # noqa: Y015
 
-class SetCurrentDatabase(google.protobuf.message.Message):
+@_typing.final
+class SetCurrentDatabase(_message.Message):
     """See `spark.catalog.setCurrentDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DB_NAME_FIELD_NUMBER: builtins.int
-    db_name: builtins.str
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    db_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        db_name: builtins.str = ...,
+        db_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["db_name", b"db_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___SetCurrentDatabase = SetCurrentDatabase
+Global___SetCurrentDatabase: _TypeAlias = SetCurrentDatabase  # noqa: Y015
 
-class ListDatabases(google.protobuf.message.Message):
+@_typing.final
+class ListDatabases(_message.Message):
     """See `spark.catalog.listDatabases`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    PATTERN_FIELD_NUMBER: builtins.int
-    pattern: builtins.str
+    PATTERN_FIELD_NUMBER: _builtins.int
+    pattern: _builtins.str
     """(Optional) The pattern that the database name needs to match"""
     def __init__(
         self,
         *,
-        pattern: builtins.str | None = ...,
+        pattern: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_pattern", b"_pattern", "pattern", b"pattern"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_pattern", b"_pattern", "pattern", b"pattern"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__pattern: _TypeAlias = _typing.Literal["pattern"]  # noqa: Y015
+    _WhichOneofArgType__pattern: _TypeAlias = _typing.Literal["_pattern", b"_pattern"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
-    ) -> typing_extensions.Literal["pattern"] | None: ...
+        self, oneof_group: _WhichOneofArgType__pattern
+    ) -> _WhichOneofReturnType__pattern | None: ...
 
-global___ListDatabases = ListDatabases
+Global___ListDatabases: _TypeAlias = ListDatabases  # noqa: Y015
 
-class ListTables(google.protobuf.message.Message):
+@_typing.final
+class ListTables(_message.Message):
     """See `spark.catalog.listTables`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DB_NAME_FIELD_NUMBER: builtins.int
-    PATTERN_FIELD_NUMBER: builtins.int
-    db_name: builtins.str
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    PATTERN_FIELD_NUMBER: _builtins.int
+    db_name: _builtins.str
     """(Optional)"""
-    pattern: builtins.str
+    pattern: _builtins.str
     """(Optional) The pattern that the table name needs to match"""
     def __init__(
         self,
         *,
-        db_name: builtins.str | None = ...,
-        pattern: builtins.str | None = ...,
+        db_name: _builtins.str | None = ...,
+        pattern: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name",
-            b"_db_name",
-            "_pattern",
-            b"_pattern",
-            "db_name",
-            b"db_name",
-            "pattern",
-            b"pattern",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name",
-            b"_db_name",
-            "_pattern",
-            b"_pattern",
-            "db_name",
-            b"db_name",
-            "pattern",
-            b"pattern",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name",
+        b"_db_name",
+        "_pattern",
+        b"_pattern",
+        "db_name",
+        b"db_name",
+        "pattern",
+        b"pattern",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name",
+        b"_db_name",
+        "_pattern",
+        b"_pattern",
+        "db_name",
+        b"db_name",
+        "pattern",
+        b"pattern",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
+    _WhichOneofReturnType__pattern: _TypeAlias = _typing.Literal["pattern"]  # noqa: Y015
+    _WhichOneofArgType__pattern: _TypeAlias = _typing.Literal["_pattern", b"_pattern"]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
-    ) -> typing_extensions.Literal["pattern"] | None: ...
+        self, oneof_group: _WhichOneofArgType__pattern
+    ) -> _WhichOneofReturnType__pattern | None: ...
 
-global___ListTables = ListTables
+Global___ListTables: _TypeAlias = ListTables  # noqa: Y015
 
-class ListFunctions(google.protobuf.message.Message):
+@_typing.final
+class ListFunctions(_message.Message):
     """See `spark.catalog.listFunctions`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DB_NAME_FIELD_NUMBER: builtins.int
-    PATTERN_FIELD_NUMBER: builtins.int
-    db_name: builtins.str
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    PATTERN_FIELD_NUMBER: _builtins.int
+    db_name: _builtins.str
     """(Optional)"""
-    pattern: builtins.str
+    pattern: _builtins.str
     """(Optional) The pattern that the function name needs to match"""
     def __init__(
         self,
         *,
-        db_name: builtins.str | None = ...,
-        pattern: builtins.str | None = ...,
+        db_name: _builtins.str | None = ...,
+        pattern: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name",
-            b"_db_name",
-            "_pattern",
-            b"_pattern",
-            "db_name",
-            b"db_name",
-            "pattern",
-            b"pattern",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name",
-            b"_db_name",
-            "_pattern",
-            b"_pattern",
-            "db_name",
-            b"db_name",
-            "pattern",
-            b"pattern",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name",
+        b"_db_name",
+        "_pattern",
+        b"_pattern",
+        "db_name",
+        b"db_name",
+        "pattern",
+        b"pattern",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name",
+        b"_db_name",
+        "_pattern",
+        b"_pattern",
+        "db_name",
+        b"db_name",
+        "pattern",
+        b"pattern",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
+    _WhichOneofReturnType__pattern: _TypeAlias = _typing.Literal["pattern"]  # noqa: Y015
+    _WhichOneofArgType__pattern: _TypeAlias = _typing.Literal["_pattern", b"_pattern"]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
-    ) -> typing_extensions.Literal["pattern"] | None: ...
+        self, oneof_group: _WhichOneofArgType__pattern
+    ) -> _WhichOneofReturnType__pattern | None: ...
 
-global___ListFunctions = ListFunctions
+Global___ListFunctions: _TypeAlias = ListFunctions  # noqa: Y015
 
-class ListColumns(google.protobuf.message.Message):
+@_typing.final
+class ListColumns(_message.Message):
     """See `spark.catalog.listColumns`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    DB_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    db_name: builtins.str
+    db_name: _builtins.str
     """(Optional)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        table_name: _builtins.str = ...,
+        db_name: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
 
-global___ListColumns = ListColumns
+Global___ListColumns: _TypeAlias = ListColumns  # noqa: Y015
 
-class GetDatabase(google.protobuf.message.Message):
+@_typing.final
+class GetDatabase(_message.Message):
     """See `spark.catalog.getDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DB_NAME_FIELD_NUMBER: builtins.int
-    db_name: builtins.str
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    db_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        db_name: builtins.str = ...,
+        db_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["db_name", b"db_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___GetDatabase = GetDatabase
+Global___GetDatabase: _TypeAlias = GetDatabase  # noqa: Y015
 
-class GetTable(google.protobuf.message.Message):
+@_typing.final
+class GetTable(_message.Message):
     """See `spark.catalog.getTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    DB_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    db_name: builtins.str
+    db_name: _builtins.str
     """(Optional)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        table_name: _builtins.str = ...,
+        db_name: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
 
-global___GetTable = GetTable
+Global___GetTable: _TypeAlias = GetTable  # noqa: Y015
 
-class GetFunction(google.protobuf.message.Message):
+@_typing.final
+class GetFunction(_message.Message):
     """See `spark.catalog.getFunction`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    FUNCTION_NAME_FIELD_NUMBER: builtins.int
-    DB_NAME_FIELD_NUMBER: builtins.int
-    function_name: builtins.str
+    FUNCTION_NAME_FIELD_NUMBER: _builtins.int
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    function_name: _builtins.str
     """(Required)"""
-    db_name: builtins.str
+    db_name: _builtins.str
     """(Optional)"""
     def __init__(
         self,
         *,
-        function_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        function_name: _builtins.str = ...,
+        db_name: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
 
-global___GetFunction = GetFunction
+Global___GetFunction: _TypeAlias = GetFunction  # noqa: Y015
 
-class DatabaseExists(google.protobuf.message.Message):
+@_typing.final
+class DatabaseExists(_message.Message):
     """See `spark.catalog.databaseExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    DB_NAME_FIELD_NUMBER: builtins.int
-    db_name: builtins.str
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    db_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        db_name: builtins.str = ...,
+        db_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["db_name", b"db_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___DatabaseExists = DatabaseExists
+Global___DatabaseExists: _TypeAlias = DatabaseExists  # noqa: Y015
 
-class TableExists(google.protobuf.message.Message):
+@_typing.final
+class TableExists(_message.Message):
     """See `spark.catalog.tableExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    DB_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    db_name: builtins.str
+    db_name: _builtins.str
     """(Optional)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        table_name: _builtins.str = ...,
+        db_name: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name", "table_name", b"table_name"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
 
-global___TableExists = TableExists
+Global___TableExists: _TypeAlias = TableExists  # noqa: Y015
 
-class FunctionExists(google.protobuf.message.Message):
+@_typing.final
+class FunctionExists(_message.Message):
     """See `spark.catalog.functionExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    FUNCTION_NAME_FIELD_NUMBER: builtins.int
-    DB_NAME_FIELD_NUMBER: builtins.int
-    function_name: builtins.str
+    FUNCTION_NAME_FIELD_NUMBER: _builtins.int
+    DB_NAME_FIELD_NUMBER: _builtins.int
+    function_name: _builtins.str
     """(Required)"""
-    db_name: builtins.str
+    db_name: _builtins.str
     """(Optional)"""
     def __init__(
         self,
         *,
-        function_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        function_name: _builtins.str = ...,
+        db_name: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_db_name", b"_db_name", "db_name", b"db_name", "function_name", b"function_name"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__db_name: _TypeAlias = _typing.Literal["db_name"]  # noqa: Y015
+    _WhichOneofArgType__db_name: _TypeAlias = _typing.Literal["_db_name", b"_db_name"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
-    ) -> typing_extensions.Literal["db_name"] | None: ...
+        self, oneof_group: _WhichOneofArgType__db_name
+    ) -> _WhichOneofReturnType__db_name | None: ...
 
-global___FunctionExists = FunctionExists
+Global___FunctionExists: _TypeAlias = FunctionExists  # noqa: Y015
 
-class CreateExternalTable(google.protobuf.message.Message):
+@_typing.final
+class CreateExternalTable(_message.Message):
     """See `spark.catalog.createExternalTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class OptionsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: builtins.int
-        VALUE_FIELD_NUMBER: builtins.int
-        key: builtins.str
-        value: builtins.str
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
         def __init__(
             self,
             *,
-            key: builtins.str = ...,
-            value: builtins.str = ...,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "key", b"key", "value", b"value"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    PATH_FIELD_NUMBER: builtins.int
-    SOURCE_FIELD_NUMBER: builtins.int
-    SCHEMA_FIELD_NUMBER: builtins.int
-    OPTIONS_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    PATH_FIELD_NUMBER: _builtins.int
+    SOURCE_FIELD_NUMBER: _builtins.int
+    SCHEMA_FIELD_NUMBER: _builtins.int
+    OPTIONS_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    path: builtins.str
+    path: _builtins.str
     """(Optional)"""
-    source: builtins.str
+    source: _builtins.str
     """(Optional)"""
-    @property
-    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+    @_builtins.property
+    def schema(self) -> _types_pb2.DataType:
         """(Optional)"""
-    @property
-    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+    @_builtins.property
+    def options(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
         """Options could be empty for valid data source format.
         The map key is case insensitive.
         """
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        path: builtins.str | None = ...,
-        source: builtins.str | None = ...,
-        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        table_name: _builtins.str = ...,
+        path: _builtins.str | None = ...,
+        source: _builtins.str | None = ...,
+        schema: _types_pb2.DataType | None = ...,
+        options: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_path",
-            b"_path",
-            "_schema",
-            b"_schema",
-            "_source",
-            b"_source",
-            "path",
-            b"path",
-            "schema",
-            b"schema",
-            "source",
-            b"source",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_path",
-            b"_path",
-            "_schema",
-            b"_schema",
-            "_source",
-            b"_source",
-            "options",
-            b"options",
-            "path",
-            b"path",
-            "schema",
-            b"schema",
-            "source",
-            b"source",
-            "table_name",
-            b"table_name",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_path",
+        b"_path",
+        "_schema",
+        b"_schema",
+        "_source",
+        b"_source",
+        "path",
+        b"path",
+        "schema",
+        b"schema",
+        "source",
+        b"source",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_path",
+        b"_path",
+        "_schema",
+        b"_schema",
+        "_source",
+        b"_source",
+        "options",
+        b"options",
+        "path",
+        b"path",
+        "schema",
+        b"schema",
+        "source",
+        b"source",
+        "table_name",
+        b"table_name",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__path: _TypeAlias = _typing.Literal["path"]  # noqa: Y015
+    _WhichOneofArgType__path: _TypeAlias = _typing.Literal["_path", b"_path"]  # noqa: Y015
+    _WhichOneofReturnType__schema: _TypeAlias = _typing.Literal["schema"]  # noqa: Y015
+    _WhichOneofArgType__schema: _TypeAlias = _typing.Literal["_schema", b"_schema"]  # noqa: Y015
+    _WhichOneofReturnType__source: _TypeAlias = _typing.Literal["source"]  # noqa: Y015
+    _WhichOneofArgType__source: _TypeAlias = _typing.Literal["_source", b"_source"]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
-    ) -> typing_extensions.Literal["path"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__path
+    ) -> _WhichOneofReturnType__path | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
-    ) -> typing_extensions.Literal["schema"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__schema
+    ) -> _WhichOneofReturnType__schema | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
-    ) -> typing_extensions.Literal["source"] | None: ...
+        self, oneof_group: _WhichOneofArgType__source
+    ) -> _WhichOneofReturnType__source | None: ...
 
-global___CreateExternalTable = CreateExternalTable
+Global___CreateExternalTable: _TypeAlias = CreateExternalTable  # noqa: Y015
 
-class CreateTable(google.protobuf.message.Message):
+@_typing.final
+class CreateTable(_message.Message):
     """See `spark.catalog.createTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    @_typing.final
+    class OptionsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: builtins.int
-        VALUE_FIELD_NUMBER: builtins.int
-        key: builtins.str
-        value: builtins.str
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
         def __init__(
             self,
             *,
-            key: builtins.str = ...,
-            value: builtins.str = ...,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal[
+            "key", b"key", "value", b"value"
+        ]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    PATH_FIELD_NUMBER: builtins.int
-    SOURCE_FIELD_NUMBER: builtins.int
-    DESCRIPTION_FIELD_NUMBER: builtins.int
-    SCHEMA_FIELD_NUMBER: builtins.int
-    OPTIONS_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    PATH_FIELD_NUMBER: _builtins.int
+    SOURCE_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    SCHEMA_FIELD_NUMBER: _builtins.int
+    OPTIONS_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    path: builtins.str
+    path: _builtins.str
     """(Optional)"""
-    source: builtins.str
+    source: _builtins.str
     """(Optional)"""
-    description: builtins.str
+    description: _builtins.str
     """(Optional)"""
-    @property
-    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+    @_builtins.property
+    def schema(self) -> _types_pb2.DataType:
         """(Optional)"""
-    @property
-    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+    @_builtins.property
+    def options(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
         """Options could be empty for valid data source format.
         The map key is case insensitive.
         """
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        path: builtins.str | None = ...,
-        source: builtins.str | None = ...,
-        description: builtins.str | None = ...,
-        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        table_name: _builtins.str = ...,
+        path: _builtins.str | None = ...,
+        source: _builtins.str | None = ...,
+        description: _builtins.str | None = ...,
+        schema: _types_pb2.DataType | None = ...,
+        options: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_description",
-            b"_description",
-            "_path",
-            b"_path",
-            "_schema",
-            b"_schema",
-            "_source",
-            b"_source",
-            "description",
-            b"description",
-            "path",
-            b"path",
-            "schema",
-            b"schema",
-            "source",
-            b"source",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_description",
-            b"_description",
-            "_path",
-            b"_path",
-            "_schema",
-            b"_schema",
-            "_source",
-            b"_source",
-            "description",
-            b"description",
-            "options",
-            b"options",
-            "path",
-            b"path",
-            "schema",
-            b"schema",
-            "source",
-            b"source",
-            "table_name",
-            b"table_name",
-        ],
-    ) -> None: ...
-    @typing.overload
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_description",
+        b"_description",
+        "_path",
+        b"_path",
+        "_schema",
+        b"_schema",
+        "_source",
+        b"_source",
+        "description",
+        b"description",
+        "path",
+        b"path",
+        "schema",
+        b"schema",
+        "source",
+        b"source",
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_description",
+        b"_description",
+        "_path",
+        b"_path",
+        "_schema",
+        b"_schema",
+        "_source",
+        b"_source",
+        "description",
+        b"description",
+        "options",
+        b"options",
+        "path",
+        b"path",
+        "schema",
+        b"schema",
+        "source",
+        b"source",
+        "table_name",
+        b"table_name",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__description: _TypeAlias = _typing.Literal["description"]  # noqa: Y015
+    _WhichOneofArgType__description: _TypeAlias = _typing.Literal[
+        "_description", b"_description"
+    ]  # noqa: Y015
+    _WhichOneofReturnType__path: _TypeAlias = _typing.Literal["path"]  # noqa: Y015
+    _WhichOneofArgType__path: _TypeAlias = _typing.Literal["_path", b"_path"]  # noqa: Y015
+    _WhichOneofReturnType__schema: _TypeAlias = _typing.Literal["schema"]  # noqa: Y015
+    _WhichOneofArgType__schema: _TypeAlias = _typing.Literal["_schema", b"_schema"]  # noqa: Y015
+    _WhichOneofReturnType__source: _TypeAlias = _typing.Literal["source"]  # noqa: Y015
+    _WhichOneofArgType__source: _TypeAlias = _typing.Literal["_source", b"_source"]  # noqa: Y015
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_description", b"_description"]
-    ) -> typing_extensions.Literal["description"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__description
+    ) -> _WhichOneofReturnType__description | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
-    ) -> typing_extensions.Literal["path"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__path
+    ) -> _WhichOneofReturnType__path | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
-    ) -> typing_extensions.Literal["schema"] | None: ...
-    @typing.overload
+        self, oneof_group: _WhichOneofArgType__schema
+    ) -> _WhichOneofReturnType__schema | None: ...
+    @_typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
-    ) -> typing_extensions.Literal["source"] | None: ...
+        self, oneof_group: _WhichOneofArgType__source
+    ) -> _WhichOneofReturnType__source | None: ...
 
-global___CreateTable = CreateTable
+Global___CreateTable: _TypeAlias = CreateTable  # noqa: Y015
 
-class DropTempView(google.protobuf.message.Message):
+@_typing.final
+class DropTempView(_message.Message):
     """See `spark.catalog.dropTempView`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    VIEW_NAME_FIELD_NUMBER: builtins.int
-    view_name: builtins.str
+    VIEW_NAME_FIELD_NUMBER: _builtins.int
+    view_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        view_name: builtins.str = ...,
+        view_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["view_name", b"view_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["view_name", b"view_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___DropTempView = DropTempView
+Global___DropTempView: _TypeAlias = DropTempView  # noqa: Y015
 
-class DropGlobalTempView(google.protobuf.message.Message):
+@_typing.final
+class DropGlobalTempView(_message.Message):
     """See `spark.catalog.dropGlobalTempView`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    VIEW_NAME_FIELD_NUMBER: builtins.int
-    view_name: builtins.str
+    VIEW_NAME_FIELD_NUMBER: _builtins.int
+    view_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        view_name: builtins.str = ...,
+        view_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["view_name", b"view_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["view_name", b"view_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___DropGlobalTempView = DropGlobalTempView
+Global___DropGlobalTempView: _TypeAlias = DropGlobalTempView  # noqa: Y015
 
-class RecoverPartitions(google.protobuf.message.Message):
+@_typing.final
+class RecoverPartitions(_message.Message):
     """See `spark.catalog.recoverPartitions`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
+        table_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["table_name", b"table_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___RecoverPartitions = RecoverPartitions
+Global___RecoverPartitions: _TypeAlias = RecoverPartitions  # noqa: Y015
 
-class IsCached(google.protobuf.message.Message):
+@_typing.final
+class IsCached(_message.Message):
     """See `spark.catalog.isCached`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
+        table_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["table_name", b"table_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___IsCached = IsCached
+Global___IsCached: _TypeAlias = IsCached  # noqa: Y015
 
-class CacheTable(google.protobuf.message.Message):
+@_typing.final
+class CacheTable(_message.Message):
     """See `spark.catalog.cacheTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    STORAGE_LEVEL_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    STORAGE_LEVEL_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
-    @property
-    def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+    @_builtins.property
+    def storage_level(self) -> _common_pb2.StorageLevel:
         """(Optional)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
-        storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
+        table_name: _builtins.str = ...,
+        storage_level: _common_pb2.StorageLevel | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_storage_level", b"_storage_level", "storage_level", b"storage_level"
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_storage_level",
-            b"_storage_level",
-            "storage_level",
-            b"storage_level",
-            "table_name",
-            b"table_name",
-        ],
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_storage_level", b"_storage_level", "storage_level", b"storage_level"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_storage_level",
+        b"_storage_level",
+        "storage_level",
+        b"storage_level",
+        "table_name",
+        b"table_name",
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__storage_level: _TypeAlias = _typing.Literal[
+        "storage_level"
+    ]  # noqa: Y015
+    _WhichOneofArgType__storage_level: _TypeAlias = _typing.Literal[
+        "_storage_level", b"_storage_level"
+    ]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
-    ) -> typing_extensions.Literal["storage_level"] | None: ...
+        self, oneof_group: _WhichOneofArgType__storage_level
+    ) -> _WhichOneofReturnType__storage_level | None: ...
 
-global___CacheTable = CacheTable
+Global___CacheTable: _TypeAlias = CacheTable  # noqa: Y015
 
-class UncacheTable(google.protobuf.message.Message):
+@_typing.final
+class UncacheTable(_message.Message):
     """See `spark.catalog.uncacheTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
+        table_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["table_name", b"table_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___UncacheTable = UncacheTable
+Global___UncacheTable: _TypeAlias = UncacheTable  # noqa: Y015
 
-class ClearCache(google.protobuf.message.Message):
+@_typing.final
+class ClearCache(_message.Message):
     """See `spark.catalog.clearCache`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
     def __init__(
         self,
     ) -> None: ...
 
-global___ClearCache = ClearCache
+Global___ClearCache: _TypeAlias = ClearCache  # noqa: Y015
 
-class RefreshTable(google.protobuf.message.Message):
+@_typing.final
+class RefreshTable(_message.Message):
     """See `spark.catalog.refreshTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
+    TABLE_NAME_FIELD_NUMBER: _builtins.int
+    table_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        table_name: builtins.str = ...,
+        table_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["table_name", b"table_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___RefreshTable = RefreshTable
+Global___RefreshTable: _TypeAlias = RefreshTable  # noqa: Y015
 
-class RefreshByPath(google.protobuf.message.Message):
+@_typing.final
+class RefreshByPath(_message.Message):
     """See `spark.catalog.refreshByPath`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    PATH_FIELD_NUMBER: builtins.int
-    path: builtins.str
+    PATH_FIELD_NUMBER: _builtins.int
+    path: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        path: builtins.str = ...,
+        path: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["path", b"path"]) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["path", b"path"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___RefreshByPath = RefreshByPath
+Global___RefreshByPath: _TypeAlias = RefreshByPath  # noqa: Y015
 
-class CurrentCatalog(google.protobuf.message.Message):
+@_typing.final
+class CurrentCatalog(_message.Message):
     """See `spark.catalog.currentCatalog`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
     def __init__(
         self,
     ) -> None: ...
 
-global___CurrentCatalog = CurrentCatalog
+Global___CurrentCatalog: _TypeAlias = CurrentCatalog  # noqa: Y015
 
-class SetCurrentCatalog(google.protobuf.message.Message):
+@_typing.final
+class SetCurrentCatalog(_message.Message):
     """See `spark.catalog.setCurrentCatalog`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    CATALOG_NAME_FIELD_NUMBER: builtins.int
-    catalog_name: builtins.str
+    CATALOG_NAME_FIELD_NUMBER: _builtins.int
+    catalog_name: _builtins.str
     """(Required)"""
     def __init__(
         self,
         *,
-        catalog_name: builtins.str = ...,
+        catalog_name: _builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["catalog_name", b"catalog_name"]
-    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["catalog_name", b"catalog_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
-global___SetCurrentCatalog = SetCurrentCatalog
+Global___SetCurrentCatalog: _TypeAlias = SetCurrentCatalog  # noqa: Y015
 
-class ListCatalogs(google.protobuf.message.Message):
+@_typing.final
+class ListCatalogs(_message.Message):
     """See `spark.catalog.listCatalogs`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRIPTOR: _descriptor.Descriptor
 
-    PATTERN_FIELD_NUMBER: builtins.int
-    pattern: builtins.str
+    PATTERN_FIELD_NUMBER: _builtins.int
+    pattern: _builtins.str
     """(Optional) The pattern that the catalog name needs to match"""
     def __init__(
         self,
         *,
-        pattern: builtins.str | None = ...,
+        pattern: _builtins.str | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
-    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal[
+        "_pattern", b"_pattern", "pattern", b"pattern"
+    ]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal[
+        "_pattern", b"_pattern", "pattern", b"pattern"
+    ]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__pattern: _TypeAlias = _typing.Literal["pattern"]  # noqa: Y015
+    _WhichOneofArgType__pattern: _TypeAlias = _typing.Literal["_pattern", b"_pattern"]  # noqa: Y015
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
-    ) -> typing_extensions.Literal["pattern"] | None: ...
+        self, oneof_group: _WhichOneofArgType__pattern
+    ) -> _WhichOneofReturnType__pattern | None: ...
 
-global___ListCatalogs = ListCatalogs
+Global___ListCatalogs: _TypeAlias = ListCatalogs  # noqa: Y015
