@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, Type
+from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -31,13 +31,13 @@ from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
     SupportsAdmissionControl,
-    CompositeReadLimit,
     ReadMaxBytes,
     ReadMaxRows,
     ReadMinRows,
 )
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors.exceptions.base import PySparkException
 
 
 def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
@@ -101,16 +101,19 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionContro
         # We do not consider providing different read limit on simple stream reader.
         return ReadAllAvailable()
 
-    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
+    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:  # type: ignore[override]
         if self.current_offset is None:
-            assert start != None, "start offset should not be None"
+            assert start is not None, "start offset should not be None"
             self.current_offset = start
         else:
-            assert self.current_offset == start, ("start offset does not match current offset. "
-                   f"current: {self.current_offset}, start: {start}")
+            assert self.current_offset == start, (
+                "start offset does not match current offset. "
+                f"current: {self.current_offset}, start: {start}"
+            )
 
-        assert isinstance(readLimit, ReadAllAvailable), ("simple stream reader does not "
-                                                         "support read limit")
+        assert isinstance(readLimit, ReadAllAvailable), (
+            "simple stream reader does not " "support read limit"
+        )
 
         (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
@@ -169,23 +172,23 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionContro
 class ReadLimitRegistry:
     def __init__(self) -> None:
         self._registry: Dict[str, Type[ReadLimit]] = {}
+        # Register built-in ReadLimit types
         self.__register(ReadAllAvailable.type_name(), ReadAllAvailable)
         self.__register(ReadMinRows.type_name(), ReadMinRows)
         self.__register(ReadMaxRows.type_name(), ReadMaxRows)
         self.__register(ReadMaxBytes.type_name(), ReadMaxBytes)
-        self.__register(CompositeReadLimit.type_name(), CompositeReadLimit)
 
     def __register(self, type_name: str, read_limit_type: Type["ReadLimit"]) -> None:
         if type_name in self._registry:
-            # FIXME: error class?
-            raise Exception(f"ReadLimit type '{type_name}' is already registered.")
+            raise PySparkException(f"ReadLimit type '{type_name}' is already registered.")
 
         self._registry[type_name] = read_limit_type
 
     def get(self, type_name: str, params: dict) -> ReadLimit:
         read_limit_type = self._registry[type_name]
         if read_limit_type is None:
-            raise Exception("type_name '{}' is not registered.".format(type_name))
+            raise PySparkException("type_name '{}' is not registered.".format(type_name))
+
         params_without_type = params.copy()
         del params_without_type["type"]
         return read_limit_type.load(params_without_type)

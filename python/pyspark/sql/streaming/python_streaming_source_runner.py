@@ -22,6 +22,7 @@ from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError
+from pyspark.errors.exceptions.base import PySparkException
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -33,11 +34,14 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
 )
 from pyspark.sql.streaming.datasource import (
-    ReadAllAvailable,
     SupportsAdmissionControl,
     SupportsTriggerAvailableNow,
 )
-from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader, ReadLimitRegistry
+from pyspark.sql.datasource_internal import (
+    _SimpleStreamReaderWrapper,
+    _streamReader,
+    ReadLimitRegistry,
+)
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -54,6 +58,8 @@ from pyspark.worker_util import (
     setup_spark_files,
     utf8_deserializer,
 )
+
+from pyspark.sql.streaming.datasource import ReadAllAvailable
 
 INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
@@ -77,7 +83,6 @@ READ_LIMIT_REGISTRY = ReadLimitRegistry()
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     offset = reader.initialOffset()
-    # raise Exception(f"Debug info for initial offset: offset: {offset}, json: {json.dumps(offset).encode('utf-8')}")
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
@@ -135,7 +140,7 @@ def send_batch_func(
         write_int(EMPTY_PYARROW_RECORD_BATCHES, outfile)
 
 
-def check_support_func(reader, outfile):
+def check_support_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     support_flags = 0
     if isinstance(reader, _SimpleStreamReaderWrapper):
         # We consider the method of `read` in simple_reader to already have admission control
@@ -151,44 +156,46 @@ def check_support_func(reader, outfile):
     write_int(support_flags, outfile)
 
 
-def prepare_for_trigger_available_now_func(reader, outfile):
+def prepare_for_trigger_available_now_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     if isinstance(reader, _SimpleStreamReaderWrapper):
         if isinstance(reader.simple_reader, SupportsTriggerAvailableNow):
             reader.simple_reader.prepareForTriggerAvailableNow()
         else:
-            # FIXME: code for not supported? or should it be assertion?
-            raise Exception("prepareForTriggerAvailableNow is not supported by the "
-                            "underlying simple reader.")
+            raise PySparkException(
+                "prepareForTriggerAvailableNow is not supported by the underlying simple reader."
+            )
     else:
         if isinstance(reader, SupportsTriggerAvailableNow):
             reader.prepareForTriggerAvailableNow()
         else:
-            # FIXME: code for not supported? or should it be assertion?
-            raise Exception("prepareForTriggerAvailableNow is not supported by the "
-                            "stream reader.")
+            raise PySparkException(
+                "prepareForTriggerAvailableNow is not supported by the stream reader."
+            )
     write_int(0, outfile)
 
 
-def latest_offset_admission_control_func(reader, infile, outfile):
+def latest_offset_admission_control_func(
+    reader: DataSourceStreamReader, infile: IO, outfile: IO
+) -> None:
     start_offset_dict = json.loads(utf8_deserializer.loads(infile))
 
     limit = json.loads(utf8_deserializer.loads(infile))
     limit_obj = READ_LIMIT_REGISTRY.get(limit["type"], limit)
 
-    offset = reader.latestOffset(start_offset_dict, limit_obj)
+    offset = reader.latestOffset(start_offset_dict, limit_obj)  # type: ignore[call-arg]
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def get_default_read_limit_func(reader, outfile):
+def get_default_read_limit_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     if isinstance(reader, SupportsAdmissionControl):
         limit = reader.getDefaultReadLimit()
     else:
-        limit = READ_ALL_AVAILABLE
+        limit = ReadAllAvailable()
 
     write_with_length(json.dumps(limit.dump()).encode("utf-8"), outfile)
 
 
-def report_latest_offset_func(reader, outfile):
+def report_latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     if isinstance(reader, _SimpleStreamReaderWrapper):
         # We do not consider providing latest offset on simple stream reader.
         write_int(0, outfile)

@@ -149,10 +149,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             SupportsAdmissionControl,
         )
 
-        class TestDataStreamReader(
-            DataSourceStreamReader,
-            SupportsAdmissionControl
-        ):
+        class TestDataStreamReader(DataSourceStreamReader, SupportsAdmissionControl):
             def initialOffset(self):
                 return {"partition-1": 0}
 
@@ -164,8 +161,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 if isinstance(readLimit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
-                    assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read limit but got "
-                                                                + str(type(readLimit)))
+                    assert isinstance(
+                        readLimit, ReadMaxRows
+                    ), "Expected ReadMaxRows read limit but got " + str(type(readLimit))
                     end_offset = start_idx + readLimit.max_rows
                 return {"partition-1": end_offset}
 
@@ -183,6 +181,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         class TestDataSource(DataSource):
             def schema(self) -> str:
                 return "id INT"
+
             def streamReader(self, schema):
                 return TestDataStreamReader()
 
@@ -337,7 +336,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             def read(self, start: dict):
                 start_idx = start["offset"]
                 end_offset = min(start_idx + 2, self.desired_end_offset["offset"])
-                it = iter([(i, ) for i in range(start_idx, end_offset)])
+                it = iter([(i,) for i in range(start_idx, end_offset)])
                 return (it, {"offset": end_offset})
 
             def commit(self, end):
