@@ -22,7 +22,7 @@ import org.apache.datasketches.tuple.adouble.DoubleSummary
 import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSketchUtils}
+import org.apache.spark.sql.catalyst.util.TupleSketchUtils
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 // scalastyle:off line.size.limit
@@ -64,42 +64,6 @@ case class TupleDifferenceDouble(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(tupleSketch, thetaSketch) - Subtracts the binary representation of a
-    Datasketches ThetaSketch from a TupleSketch with double summary data type using a TupleSketch
-    AnotB object. Returns elements in the TupleSketch that are not in the ThetaSketch. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (5, 5.0D, 4), (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 1) tab(col1, val1, col2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleDifferenceThetaDouble(left: Expression, right: Expression)
-    extends TupleDifferenceBase[DoubleSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleDifferenceThetaDouble =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_difference_theta_double"
-
-  override protected def differenceSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      aNotB: AnotB[DoubleSummary]): Unit = {
-    val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
-    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
-
-    aNotB.setA(tupleSketch)
-    aNotB.notB(thetaSketch)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
     _FUNC_(tupleSketch1, tupleSketch2) - Subtracts two binary representations of Datasketches
     TupleSketch objects with integer summary data type using a TupleSketch AnotB object.
     Returns elements in the first sketch that are not in the second sketch. """,
@@ -130,42 +94,6 @@ case class TupleDifferenceInteger(left: Expression, right: Expression)
 
     aNotB.setA(tupleSketch1)
     aNotB.notB(tupleSketch2)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch) - Subtracts the binary representation of a
-    Datasketches ThetaSketch from a TupleSketch with integer summary data type using a TupleSketch
-    AnotB object. Returns elements in the TupleSketch that are not in the ThetaSketch. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (5, 5, 4), (1, 1, 4), (2, 2, 5), (3, 3, 1) tab(col1, val1, col2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleDifferenceThetaInteger(left: Expression, right: Expression)
-    extends TupleDifferenceBase[IntegerSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleDifferenceThetaInteger =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_difference_theta_integer"
-
-  override protected def differenceSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      aNotB: AnotB[IntegerSummary]): Unit = {
-    val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
-    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
-
-    aNotB.setA(tupleSketch)
-    aNotB.notB(thetaSketch)
   }
 }
 

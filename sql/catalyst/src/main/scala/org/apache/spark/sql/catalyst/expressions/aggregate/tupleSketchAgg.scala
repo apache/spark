@@ -349,27 +349,23 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
         case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
       }
 
-      key.dataType match {
-        case ArrayType(IntegerType, _) =>
-          val arr = keyValue.asInstanceOf[ArrayData].toIntArray()
-          sketch.update(arr, normalizedSummary)
-        case ArrayType(LongType, _) =>
-          val arr = keyValue.asInstanceOf[ArrayData].toLongArray()
-          sketch.update(arr, normalizedSummary)
-        case BinaryType =>
-          val bytes = keyValue.asInstanceOf[Array[Byte]]
+      (key.dataType, keyValue) match {
+        case (ArrayType(IntegerType, _), arr: ArrayData) =>
+          sketch.update(arr.toIntArray(), normalizedSummary)
+        case (ArrayType(LongType, _), arr: ArrayData) =>
+          sketch.update(arr.toLongArray(), normalizedSummary)
+        case (BinaryType, bytes: Array[Byte]) =>
           sketch.update(bytes, normalizedSummary)
-        case DoubleType =>
-          sketch.update(keyValue.asInstanceOf[Double], normalizedSummary)
-        case FloatType =>
-          sketch.update(keyValue.asInstanceOf[Float].toDouble, normalizedSummary)
-        case IntegerType =>
-          sketch.update(keyValue.asInstanceOf[Int].toLong, normalizedSummary)
-        case LongType =>
-          sketch.update(keyValue.asInstanceOf[Long], normalizedSummary)
-        case st: StringType =>
+        case (DoubleType, v: Double) =>
+          sketch.update(v, normalizedSummary)
+        case (FloatType, v: Float) =>
+          sketch.update(v.toDouble, normalizedSummary)
+        case (IntegerType, v: Int) =>
+          sketch.update(v.toLong, normalizedSummary)
+        case (LongType, v: Long) =>
+          sketch.update(v, normalizedSummary)
+        case (st: StringType, str: UTF8String) =>
           val collation = CollationFactory.fetchCollation(st.collationId)
-          val str = keyValue.asInstanceOf[UTF8String]
           if (!collation.equalsFunction(str, UTF8String.EMPTY_UTF8)) {
             sketch.update(collation.sortKeyFunction.apply(str), normalizedSummary)
           }

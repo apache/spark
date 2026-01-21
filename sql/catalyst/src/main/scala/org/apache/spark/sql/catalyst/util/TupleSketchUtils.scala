@@ -27,7 +27,6 @@ import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDe
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -96,10 +95,10 @@ object TupleSummaryMode {
 }
 
 /**
- * Trait for TupleSketch aggregation functions that use the lgNomEntries parameter. Provides
+ * Trait for TupleSketch expressions that use the lgNomEntries parameter. Provides
  * validation and extraction functionality for the log-base-2 of nominal entries.
  */
-trait SketchSize extends AggregateFunction {
+trait SketchSize extends Expression {
 
   /** log-base-2 of nominal entries (determines sketch size). */
   def lgNomEntries: Expression
@@ -143,7 +142,7 @@ trait SketchSize extends AggregateFunction {
 }
 
 /**
- * Trait for TupleSketch aggregation functions that use the mode parameter. Provides validation
+ * Trait for TupleSketch expressions that use the mode parameter. Provides validation
  * and extraction functionality for the aggregation mode.
  *
  * Tuple sketches extend Theta sketches by associating summary values with each key. When
@@ -152,7 +151,7 @@ trait SketchSize extends AggregateFunction {
  * adds them together, 'min' keeps the smallest, 'max' keeps the largest, and 'alwaysone' sets all
  * summary values to 1 (effectively behaving like a Theta sketch).
  */
-trait SummaryAggregateMode extends AggregateFunction {
+trait SummaryAggregateMode extends Expression {
 
   /** Aggregation mode for numeric summaries (sum, min, max, alwaysone). */
   def mode: Expression
