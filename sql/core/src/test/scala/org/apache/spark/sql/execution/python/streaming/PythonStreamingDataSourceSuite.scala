@@ -350,7 +350,8 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource
-         |from pyspark.sql.datasource import SimpleDataSourceStreamReader, SupportsTriggerAvailableNow
+         |from pyspark.sql.datasource import SimpleDataSourceStreamReader
+         |from pyspark.sql.streaming.datasource import SupportsTriggerAvailableNow
          |
          |class SimpleDataStreamReader(SimpleDataSourceStreamReader, SupportsTriggerAvailableNow):
          |    def initialOffset(self):
@@ -673,6 +674,205 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     q.awaitTermination()
   }
 
+  private val testAdmissionControlScript =
+    s"""
+       |from pyspark.sql.datasource import DataSource
+       |from pyspark.sql.datasource import (
+       |    DataSourceStreamReader,
+       |    InputPartition,
+       |)
+       |from pyspark.sql.streaming.datasource import (
+       |    ReadAllAvailable,
+       |    ReadLimit,
+       |    ReadMaxRows,
+       |    SupportsAdmissionControl,
+       |)
+       |
+       |class TestDataStreamReader(
+       |    DataSourceStreamReader,
+       |    SupportsAdmissionControl
+       |):
+       |    def initialOffset(self):
+       |        return {"partition-1": 0}
+       |    def getDefaultReadLimit(self):
+       |        return ReadMaxRows(2)
+       |    def latestOffset(self, start: dict, readLimit: ReadLimit):
+       |        start_idx = start["partition-1"]
+       |        if isinstance(readLimit, ReadAllAvailable):
+       |            end_offset = start_idx + 10
+       |        else:
+       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read limit but got "
+       |                                                        + str(type(readLimit)))
+       |            end_offset = start_idx + readLimit.max_rows
+       |        return {"partition-1": end_offset}
+       |    def reportLatestOffset(self):
+       |        return {"partition-1": 1000000}
+       |    def partitions(self, start: dict, end: dict):
+       |        start_index = start["partition-1"]
+       |        end_index = end["partition-1"]
+       |        return [InputPartition(i) for i in range(start_index, end_index)]
+       |    def read(self, partition):
+       |        yield (partition.value,)
+       |
+       |class $dataSourceName(DataSource):
+       |    def schema(self) -> str:
+       |        return "id INT"
+       |    def streamReader(self, schema):
+       |        return TestDataStreamReader()
+       |""".stripMargin
+
+  private val testAvailableNowScript =
+    s"""
+       |from pyspark.sql.datasource import DataSource
+       |from pyspark.sql.datasource import (
+       |    DataSourceStreamReader,
+       |    InputPartition,
+       |)
+       |from pyspark.sql.streaming.datasource import (
+       |    ReadAllAvailable,
+       |    ReadLimit,
+       |    ReadMaxRows,
+       |    SupportsAdmissionControl,
+       |    SupportsTriggerAvailableNow
+       |)
+       |
+       |class TestDataStreamReader(
+       |    DataSourceStreamReader,
+       |    SupportsAdmissionControl,
+       |    SupportsTriggerAvailableNow
+       |):
+       |    def initialOffset(self):
+       |        return {"partition-1": 0}
+       |    def getDefaultReadLimit(self):
+       |        return ReadMaxRows(2)
+       |    def latestOffset(self, start: dict, readLimit: ReadLimit):
+       |        start_idx = start["partition-1"]
+       |        if isinstance(readLimit, ReadAllAvailable):
+       |            end_offset = start_idx + 5
+       |        else:
+       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read limit but got "
+       |                                                        + str(type(readLimit)))
+       |            end_offset = start_idx + readLimit.max_rows
+       |        end_offset = min(end_offset, self.desired_end_offset)
+       |        return {"partition-1": end_offset}
+       |    def reportLatestOffset(self):
+       |        return {"partition-1": 1000000}
+       |    def prepareForTriggerAvailableNow(self):
+       |        self.desired_end_offset = 10
+       |    def partitions(self, start: dict, end: dict):
+       |        start_index = start["partition-1"]
+       |        end_index = end["partition-1"]
+       |        return [InputPartition(i) for i in range(start_index, end_index)]
+       |    def read(self, partition):
+       |        yield (partition.value,)
+       |
+       |class $dataSourceName(DataSource):
+       |    def schema(self) -> str:
+       |        return "id INT"
+       |    def streamReader(self, schema):
+       |        return TestDataStreamReader()
+       |""".stripMargin
+
+  test("DataSourceStreamReader with Admission Control, Trigger.Once") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, testAdmissionControlScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val outputDir = new File(path, "output")
+      val df = spark.readStream.format(dataSourceName).load()
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .format("json")
+        // Use Trigger.Once here by intention to test read with admission control.
+        .trigger(Trigger.Once())
+        .start(outputDir.getAbsolutePath)
+      q.awaitTermination(waitTimeout.toMillis)
+
+      assert(q.recentProgress.length === 1)
+      assert(q.lastProgress.numInputRows === 10)
+      assert(q.lastProgress.sources(0).numInputRows === 10)
+      assert(q.lastProgress.sources(0).latestOffset === """{"partition-1": 1000000}""")
+
+      val rowCount = spark.read.format("json").load(outputDir.getAbsolutePath).count()
+      assert(rowCount === 10)
+      checkAnswer(
+        spark.read.format("json").load(outputDir.getAbsolutePath),
+        (0 until rowCount.toInt).map(Row(_))
+      )
+    }
+  }
+
+  test("DataSourceStreamReader with Admission Control, processing time trigger") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, testAdmissionControlScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal = new CountDownLatch(1)
+
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          if (batchId == 10) stopSignal.countDown()
+        })
+        .trigger(Trigger.ProcessingTime(0))
+        .start()
+      stopSignal.await()
+      q.stop()
+      q.awaitTermination()
+
+      assert(q.recentProgress.length >= 10)
+      q.recentProgress.foreach { progress =>
+        assert(progress.numInputRows === 2)
+        assert(progress.sources(0).numInputRows === 2)
+        assert(progress.sources(0).latestOffset === """{"partition-1": 1000000}""")
+      }
+    }
+  }
+
+  test("DataSourceStreamReader with Trigger.AvailableNow") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, testAvailableNowScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val outputDir = new File(path, "output")
+      val df = spark.readStream.format(dataSourceName).load()
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .format("json")
+        .trigger(Trigger.AvailableNow())
+        .start(outputDir.getAbsolutePath)
+      q.awaitTermination(waitTimeout.toMillis)
+
+      // 2 rows * 5 batches = 10 rows
+      assert(q.recentProgress.length === 5)
+      q.recentProgress.foreach { progress =>
+        assert(progress.numInputRows === 2)
+        assert(progress.sources(0).numInputRows === 2)
+        assert(progress.sources(0).latestOffset === """{"partition-1": 1000000}""")
+      }
+
+      val rowCount = spark.read.format("json").load(outputDir.getAbsolutePath).count()
+      assert(rowCount === 10)
+      checkAnswer(
+        spark.read.format("json").load(outputDir.getAbsolutePath),
+        (0 until rowCount.toInt).map(Row(_))
+      )
+    }
+  }
+
   test("Error creating stream reader") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -770,7 +970,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         func: PythonMicroBatchStream => Unit): Unit = {
       val options = CaseInsensitiveStringMap.empty()
       val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
-        pythonDs, dataSourceName, inputSchema, options)
+        pythonDs, errorDataSourceName, inputSchema, options)
       runner.init()
 
       val stream = new PythonMicroBatchStream(
@@ -837,7 +1037,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         func: PythonMicroBatchStream => Unit): Unit = {
       val options = CaseInsensitiveStringMap.empty()
       val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
-        pythonDs, dataSourceName, inputSchema, options)
+        pythonDs, errorDataSourceName, inputSchema, options)
       runner.init()
 
       val stream = new PythonMicroBatchStream(

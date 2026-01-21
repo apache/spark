@@ -19,16 +19,22 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple, Type
 
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceStreamReader,
     InputPartition,
+    SimpleDataSourceStreamReader,
+)
+from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
-    SimpleDataSourceStreamReader,
     SupportsAdmissionControl,
+    CompositeReadLimit,
+    ReadMaxBytes,
+    ReadMaxRows,
+    ReadMinRows,
 )
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
@@ -91,14 +97,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionContro
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self) -> dict:
-        # when query start for the first time, use initial offset as the start offset.
-        if self.current_offset is None:
-            self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
-        return end
+    def getDefaultReadLimit(self) -> ReadLimit:
+        # We do not consider providing different read limit on simple stream reader.
+        return ReadAllAvailable()
 
     def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
         if self.current_offset is None:
@@ -163,3 +164,28 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionContro
         self, input_partition: SimpleInputPartition  # type: ignore[override]
     ) -> Iterator[Tuple]:
         return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+
+
+class ReadLimitRegistry:
+    def __init__(self) -> None:
+        self._registry: Dict[str, Type[ReadLimit]] = {}
+        self.__register(ReadAllAvailable.type_name(), ReadAllAvailable)
+        self.__register(ReadMinRows.type_name(), ReadMinRows)
+        self.__register(ReadMaxRows.type_name(), ReadMaxRows)
+        self.__register(ReadMaxBytes.type_name(), ReadMaxBytes)
+        self.__register(CompositeReadLimit.type_name(), CompositeReadLimit)
+
+    def __register(self, type_name: str, read_limit_type: Type["ReadLimit"]) -> None:
+        if type_name in self._registry:
+            # FIXME: error class?
+            raise Exception(f"ReadLimit type '{type_name}' is already registered.")
+
+        self._registry[type_name] = read_limit_type
+
+    def get(self, type_name: str, params: dict) -> ReadLimit:
+        read_limit_type = self._registry[type_name]
+        if read_limit_type is None:
+            raise Exception("type_name '{}' is not registered.".format(type_name))
+        params_without_type = params.copy()
+        del params_without_type["type"]
+        return read_limit_type.load(params_without_type)

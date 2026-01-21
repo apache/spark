@@ -29,6 +29,8 @@ import org.apache.spark.storage.{PythonStreamBlockId, StorageLevel}
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
+case class PythonStreamingSourceReadLimit(json: String) extends ReadLimit
+
 class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
     shortName: String,
@@ -121,6 +123,20 @@ class PythonMicroBatchStreamWithAdmissionControl(
 
   override def latestOffset(startOffset: Offset, limit: ReadLimit): Offset = {
     PythonStreamingSourceOffset(runner.latestOffset(startOffset, limit))
+  }
+
+  override def getDefaultReadLimit: ReadLimit = {
+    val readLimitJson = runner.getDefaultReadLimit()
+    PythonStreamingSourceReadLimit(readLimitJson)
+  }
+
+  override def reportLatestOffset(): Offset = {
+    val offsetJson = runner.reportLatestOffset()
+    if (offsetJson == null) {
+      null
+    } else {
+      PythonStreamingSourceOffset(offsetJson)
+    }
   }
 }
 
