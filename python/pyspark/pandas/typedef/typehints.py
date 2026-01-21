@@ -28,7 +28,7 @@ from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hi
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
 

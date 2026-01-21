@@ -38,6 +38,7 @@ from typing import (
     Iterable,
     Iterator,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -52,20 +53,20 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     is_bool_dtype,
     is_list_like,
     is_dict_like,
     is_scalar,
 )
-from pandas.tseries.frequencies import DateOffset, to_offset
+from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
-from pandas.core.dtypes.common import infer_dtype_from_object
-from pandas.core.accessor import CachedAccessor
-from pandas.core.dtypes.inference import is_sequence
+from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.core.dtypes.inference import is_sequence  # type: ignore[attr-defined]
 
 from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
@@ -3193,7 +3194,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         should_retain_index = should_infer_schema
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
+            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
             if isinstance(pdf_or_pser, pd.Series):
                 return pdf_or_pser.to_frame()
             else:
@@ -3211,7 +3212,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
+            applied = pdf.apply(func, axis=axis, args=args, **kwds)
             psser_or_psdf = ps.from_pandas(applied)
             if len(pdf) <= limit:
                 return psser_or_psdf
@@ -3458,7 +3459,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
-            transformed = pdf.transform(func, axis, *args, **kwargs)  # type: ignore[arg-type]
+            transformed = pdf.transform(func, axis, *args, **kwargs)
             psdf: DataFrame = DataFrame(transformed)
             if len(pdf) <= limit:
                 return psdf
@@ -5780,7 +5781,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  0.0  0.0  1.0
         """
         return DataFrame(
-            pd.DataFrame.from_records(data, index, exclude, columns, coerce_float, nrows)
+            pd.DataFrame.from_records(data, index, exclude, columns, coerce_float, nrows)  # type: ignore[arg-type]
         )
 
     def to_records(
@@ -6970,8 +6971,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf_columns = psdf.columns
         if isinstance(psdf_columns, pd.MultiIndex):
-            psdf.columns = psdf_columns.set_levels(
-                psdf_columns.levels[-1].astype(  # type: ignore[index]
+            psdf.columns = psdf_columns.set_levels(  # type: ignore[call-overload]
+                psdf_columns.levels[-1].astype(
                     spark_type_to_pandas_dtype(self._psser_for(columns).spark.data_type)
                 ),
                 level=-1,
@@ -7496,7 +7497,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
         else:
             psdf = self.copy()
-            psdf.columns = psdf.columns.droplevel(level)  # type: ignore[arg-type]
+            psdf.columns = psdf.columns.droplevel(level)
             return psdf
 
     def drop(
@@ -10367,9 +10368,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             labels.append(label)
 
         if isinstance(columns, pd.Index):
-            column_label_names = [
-                name if is_name_like_tuple(name) else (name,) for name in columns.names
-            ]
+            column_label_names = cast(
+                list[tuple[Any]],
+                [name if is_name_like_tuple(name) else (name,) for name in columns.names],
+            )
             internal = self._internal.with_new_columns(
                 scols_or_pssers, column_labels=labels, column_label_names=column_label_names
             )
@@ -11283,7 +11285,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            return bool(self.any(axis=1, bool_only=bool_only, skipna=skipna).any())  # type: ignore
+            return bool(self.any(axis=1, bool_only=bool_only, skipna=skipna).any())
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
@@ -11291,7 +11293,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         # Rely on dtype rather than spark type because columns that consist of bools and
         # Nones should be excluded if bool_only is True
-        return [label for label in column_labels if is_bool_dtype(self._psser_for(label))]
+        return [label for label in column_labels if is_bool_dtype(self._psser_for(label))]  # type: ignore[arg-type]
 
     def _result_aggregated(
         self, column_labels: List[Label], scols: Sequence[PySparkColumn]
@@ -12404,7 +12406,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     buf=buf,
                     max_cols=max_cols,
                     memory_usage=False,
-                    show_counts=show_counts,  # type: ignore
+                    show_counts=show_counts,
                 )
             finally:
                 del self._data
@@ -13416,8 +13418,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_2  10  20  30  40
         """
         return DataFrame(
-            pd.DataFrame.from_dict(
-                data, orient=orient, dtype=dtype, columns=columns  # type: ignore[arg-type]
+            pd.DataFrame.from_dict(  # type: ignore[call-overload]
+                data, orient=orient, dtype=dtype, columns=columns
             )
         )
 
@@ -13445,8 +13447,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def resample(
         self,
         rule: str,
-        closed: Optional[str] = None,
-        label: Optional[str] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         on: Optional["Series"] = None,
     ) -> "DataFrameResampler":
         """
