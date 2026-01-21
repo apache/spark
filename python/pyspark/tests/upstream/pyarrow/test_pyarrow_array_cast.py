@@ -2614,16 +2614,39 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             # string -> string (identity)
             "string": [
                 (pa.array(["hello", "world", None], pa.string()), pa.array(["hello", "world", None], pa.string())),
+                # Empty string
+                (pa.array(["", None], pa.string()), pa.array(["", None], pa.string())),
+                # Unicode: CJK characters (Chinese, Japanese, Korean)
+                (pa.array(["你好", "世界", None], pa.string()), pa.array(["你好", "世界", None], pa.string())),
+                (pa.array(["こんにちは", "日本語"], pa.string()), pa.array(["こんにちは", "日本語"], pa.string())),
+                (pa.array(["안녕하세요", "한국어"], pa.string()), pa.array(["안녕하세요", "한국어"], pa.string())),
+                # Unicode: Emoji (including multi-codepoint emoji)
+                (pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string()), pa.array(["😀", "🎉🎊", "👨‍👩‍👧‍👦"], pa.string())),
+                # Unicode: RTL languages (Arabic, Hebrew)
+                (pa.array(["مرحبا", "שלום"], pa.string()), pa.array(["مرحبا", "שלום"], pa.string())),
+                # Unicode: Mixed scripts
+                (pa.array(["Hello世界🌍", "Привет мир"], pa.string()), pa.array(["Hello世界🌍", "Привет мир"], pa.string())),
+                # Special characters (whitespace, control chars)
+                (pa.array(["a\tb\nc", "  spaces  "], pa.string()), pa.array(["a\tb\nc", "  spaces  "], pa.string())),
             ],
             "large_string": [
                 (pa.array(["hello", "world", None], pa.string()), pa.array(["hello", "world", None], pa.large_string())),
+                # Unicode preserved in large_string
+                (pa.array(["你好", "😀", None], pa.string()), pa.array(["你好", "😀", None], pa.large_string())),
             ],
             # string -> binary
             "binary": [
                 (pa.array(["hello", "world", None], pa.string()), pa.array([b"hello", b"world", None], pa.binary())),
+                # Empty string -> empty binary
+                (pa.array(["", None], pa.string()), pa.array([b"", None], pa.binary())),
+                # Unicode strings -> UTF-8 encoded binary
+                (pa.array(["你好", None], pa.string()), pa.array(["你好".encode("utf-8"), None], pa.binary())),
+                (pa.array(["😀"], pa.string()), pa.array(["😀".encode("utf-8")], pa.binary())),
             ],
             "large_binary": [
                 (pa.array(["hello", "world", None], pa.string()), pa.array([b"hello", b"world", None], pa.large_binary())),
+                # Unicode to large_binary
+                (pa.array(["世界", None], pa.string()), pa.array(["世界".encode("utf-8"), None], pa.large_binary())),
             ],
             "fixed_size_binary_16": [
                 (pa.array(["hello"], pa.string()), pa.lib.ArrowInvalid),  # wrong size
@@ -2802,13 +2825,27 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             # binary -> string
             "string": [
                 (pa.array([b"hello", b"world", None], pa.binary()), pa.array(["hello", "world", None], pa.string())),
+                # Empty binary -> empty string
+                (pa.array([b"", None], pa.binary()), pa.array(["", None], pa.string())),
+                # UTF-8 encoded Unicode in binary -> string (valid UTF-8)
+                (pa.array(["你好".encode("utf-8"), None], pa.binary()), pa.array(["你好", None], pa.string())),
+                (pa.array(["😀".encode("utf-8")], pa.binary()), pa.array(["😀"], pa.string())),
+                # Invalid UTF-8 sequences -> ArrowInvalid
+                (pa.array([b"\xff\xfe"], pa.binary()), pa.lib.ArrowInvalid),
+                (pa.array([b"\x80\x81\x82"], pa.binary()), pa.lib.ArrowInvalid),
             ],
             "large_string": [
                 (pa.array([b"hello", None], pa.binary()), pa.array(["hello", None], pa.large_string())),
+                # UTF-8 encoded Unicode
+                (pa.array(["世界".encode("utf-8"), None], pa.binary()), pa.array(["世界", None], pa.large_string())),
             ],
             # binary -> binary
             "binary": [
                 (pa.array([b"hello", None], pa.binary()), pa.array([b"hello", None], pa.binary())),
+                # Empty binary
+                (pa.array([b"", None], pa.binary()), pa.array([b"", None], pa.binary())),
+                # Binary with null bytes (preserved)
+                (pa.array([b"\x00\x01\x02", None], pa.binary()), pa.array([b"\x00\x01\x02", None], pa.binary())),
             ],
             "large_binary": [
                 (pa.array([b"hello", None], pa.binary()), pa.array([b"hello", None], pa.large_binary())),
@@ -2996,6 +3033,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([Decimal("0"), Decimal("1"), Decimal("-1"), None], pa.decimal128(38, 10)),
                  pa.array([0, 1, -1, None], pa.int8())),
                 (pa.array([Decimal("1.5")], pa.decimal128(38, 10)), pa.lib.ArrowInvalid),  # fractional
+                # Boundary: int8 max/min
+                (pa.array([Decimal("127"), Decimal("-128")], pa.decimal128(38, 10)),
+                 pa.array([127, -128], pa.int8())),
+                # Overflow: beyond int8 range
+                (pa.array([Decimal("128")], pa.decimal128(38, 10)), pa.lib.ArrowInvalid),
             ],
             "int16": [
                 (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
@@ -3008,6 +3050,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "int64": [
                 (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
                  pa.array([0, 1, None], pa.int64())),
+                # Large decimal values
+                (pa.array([Decimal("9223372036854775807")], pa.decimal128(38, 0)),
+                 pa.array([9223372036854775807], pa.int64())),  # int64 max
+                # Overflow: int64 max + 1
+                (pa.array([Decimal("9223372036854775808")], pa.decimal128(38, 0)), pa.lib.ArrowInvalid),
             ],
             "uint8": [
                 (pa.array([Decimal("0"), Decimal("1"), None], pa.decimal128(38, 10)),
@@ -3377,6 +3424,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         ts = datetime.datetime(2022, 1, 1, 12, 30, 45)
         epoch_s = 1641040245  # seconds since epoch
 
+        # Boundary timestamps for additional coverage
+        unix_epoch = datetime.datetime(1970, 1, 1, 0, 0, 0)  # Unix epoch
+        before_epoch = datetime.datetime(1969, 12, 31, 23, 59, 59)  # 1 second before epoch
+        before_epoch_s = -1  # negative timestamp
+
         casts = {
             # timestamp[s] -> integers (only int64 supported)
             "int8": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
@@ -3384,6 +3436,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "int32": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             "int64": [
                 (pa.array([ts, None], pa.timestamp("s")), pa.array([epoch_s, None], pa.int64())),
+                # Unix epoch boundary
+                (pa.array([unix_epoch], pa.timestamp("s")), pa.array([0], pa.int64())),
+                # Negative timestamp (before 1970)
+                (pa.array([before_epoch], pa.timestamp("s")), pa.array([before_epoch_s], pa.int64())),
             ],
             "uint8": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
             "uint16": [(pa.array([ts], pa.timestamp("s")), pa.lib.ArrowNotImplementedError)],
@@ -3398,6 +3454,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             # timestamp[s] -> string
             "string": [
                 (pa.array([ts, None], pa.timestamp("s")), pa.array(["2022-01-01 12:30:45", None], pa.string())),
+                # Unix epoch boundary
+                (pa.array([unix_epoch], pa.timestamp("s")), pa.array(["1970-01-01 00:00:00"], pa.string())),
+                # Negative timestamp (before 1970)
+                (pa.array([before_epoch], pa.timestamp("s")), pa.array(["1969-12-31 23:59:59"], pa.string())),
             ],
             "large_string": [
                 (pa.array([ts, None], pa.timestamp("s")), pa.array(["2022-01-01 12:30:45", None], pa.large_string())),
