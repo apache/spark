@@ -446,12 +446,12 @@ struct<c1:int>
 
 
 -- !query
-select * from values (1) as t(c1),
+select c1, c2, c3 = current_date as date_matches from values (1) as t(c1),
   lateral (values (t.c1, current_date)) as s(c2, c3)
 -- !query schema
-struct<c1:int,c2:int,c3:date>
+struct<c1:int,c2:int,date_matches:boolean>
 -- !query output
-1	1	2026-01-20
+1	1	true
 
 
 -- !query
