@@ -145,7 +145,6 @@ def check_support_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     if isinstance(reader, _SimpleStreamReaderWrapper):
         # We consider the method of `read` in simple_reader to already have admission control
         # into it.
-        support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
         if isinstance(reader.simple_reader, SupportsTriggerAvailableNow):
             support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
     else:
