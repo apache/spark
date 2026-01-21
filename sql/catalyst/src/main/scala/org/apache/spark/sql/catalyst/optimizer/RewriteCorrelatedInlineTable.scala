@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.ResolvedInlineTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LogicalPlan, OneRowRelation, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * The transformation converts each row into a [[Project]] over [[OneRowRelation]], then unions
  * them together. This structure allows [[PullupCorrelatedPredicates]] to handle the correlation.
  *
- * This rule applies to all correlated subquery contexts: scalar subqueries, EXISTS, IN, and
- * LATERAL subqueries.
+ * This rule applies to all correlated subquery contexts: scalar subqueries, EXISTS, IN,
+ * LATERAL subqueries, and CTEs.
  *
  * Example:
  * {{{
@@ -61,6 +61,14 @@ object RewriteCorrelatedInlineTable extends Rule[LogicalPlan] {
       case table: ResolvedInlineTable
           if table.rows.flatten.exists(SubExprUtils.containsOuter) =>
         rewriteTable(table)
+      case cte: CTERelationDef =>
+        // Also transform inside CTE definitions
+        val newChild = cte.child.transformUp {
+          case table: ResolvedInlineTable
+              if table.rows.flatten.exists(SubExprUtils.containsOuter) =>
+            rewriteTable(table)
+        }
+        if (newChild ne cte.child) cte.copy(child = newChild) else cte
     }.transformAllExpressionsWithPruning(
       _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL)) {
       case subquery: SubqueryExpression =>
