@@ -26,9 +26,34 @@ Tests for PyArrow's pa.Array.cast() method with default parameters only.
 - **Floats**: float16, float32, float64
 """
 
+import platform
 import unittest
 
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+
+
+def _get_float_to_int_boundary_expected(float_val, float_type, int_max, int_type):
+    """
+    Get the expected result for float-to-int boundary cast.
+
+    Float-to-int casts at boundary values have platform-dependent behavior:
+    - On macOS arm64: the cast succeeds with rounding to int max
+    - On Linux x86_64: the cast fails with ArrowInvalid
+
+    This is due to differences in floating-point precision and rounding
+    behavior across CPU architectures and compilers.
+    """
+    import pyarrow as pa
+
+    system = platform.system()
+    machine = platform.machine()
+
+    # macOS arm64 rounds to int max; Linux x86_64 raises ArrowInvalid
+    if system == "Darwin" and machine == "arm64":
+        return pa.array([int_max], int_type)
+    else:
+        # Default to ArrowInvalid for Linux/x86_64 and other platforms
+        return pa.lib.ArrowInvalid
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -1984,8 +2009,13 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0.0, 1.0, -1.0, None], pa.float32()),
                     pa.array([0, 1, -1, None], pa.int32()),
                 ),
-                # float32 2147483648.0 rounds to int32 max due to float32 precision
-                (pa.array([2147483648.0], pa.float32()), pa.array([2147483647], pa.int32())),
+                # float32 2147483648.0 boundary: behavior varies across environments
+                (
+                    pa.array([2147483648.0], pa.float32()),
+                    _get_float_to_int_boundary_expected(
+                        2147483648.0, pa.float32(), 2147483647, pa.int32()
+                    ),
+                ),
                 (
                     pa.array([1.5, 3e9, float("nan")], pa.float32()),
                     pa.lib.ArrowInvalid,
@@ -2235,10 +2265,12 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, None], pa.int64()),
                 ),
                 (pa.array([1.5], pa.float64()), pa.lib.ArrowInvalid),
-                # float64 can't represent int64 max exactly; 9223372036854775808.0 rounds to int64 max
+                # float64 9223372036854775808.0 boundary: behavior varies across environments
                 (
                     pa.array([9223372036854775808.0], pa.float64()),
-                    pa.array([9223372036854775807], pa.int64()),
+                    _get_float_to_int_boundary_expected(
+                        9223372036854775808.0, pa.float64(), 9223372036854775807, pa.int64()
+                    ),
                 ),
                 # truly overflow - values beyond int64 range
                 (pa.array([1e19], pa.float64()), pa.lib.ArrowInvalid),
