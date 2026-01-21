@@ -26,8 +26,14 @@ from pyspark.sql.datasource import (
     DataSourceStreamWriter,
     DataSourceStreamArrowWriter,
     SimpleDataSourceStreamReader,
-    SupportsTriggerAvailableNow,
     WriterCommitMessage,
+)
+from pyspark.sql.streaming.datasource import (
+    ReadAllAvailable,
+    ReadLimit,
+    ReadMaxRows,
+    SupportsAdmissionControl,
+    SupportsTriggerAvailableNow,
 )
 from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
@@ -142,13 +148,6 @@ class BasePythonStreamingDataSourceTestsMixin:
         return TestDataSource
 
     def _get_test_data_source_for_admission_control(self):
-        from pyspark.sql.streaming.datasource import (
-            ReadAllAvailable,
-            ReadLimit,
-            ReadMaxRows,
-            SupportsAdmissionControl,
-        )
-
         class TestDataStreamReader(DataSourceStreamReader, SupportsAdmissionControl):
             def initialOffset(self):
                 return {"partition-1": 0}
