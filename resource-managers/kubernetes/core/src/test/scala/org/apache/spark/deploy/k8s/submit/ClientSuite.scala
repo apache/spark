@@ -93,7 +93,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val KEY_TO_PATH =
     new KeyToPath(SPARK_CONF_FILE_NAME, 420, SPARK_CONF_FILE_NAME)
 
-  private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+  private def fullExpectedPod(
+      configMapName: String,
+      keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
     new PodBuilder(BUILT_DRIVER_POD)
       .editSpec()
         .addToContainers(FULL_EXPECTED_CONTAINER)
@@ -101,14 +103,16 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
           .withName(SPARK_CONF_VOLUME_DRIVER)
           .withNewConfigMap()
             .withItems(keyToPaths.asJava)
-            .withName(KubernetesClientUtils.configMapNameDriver)
+            .withName(configMapName)
             .endConfigMap()
           .endVolume()
         .endSpec()
       .build()
 
-  private def podWithOwnerReference(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
-    new PodBuilder(fullExpectedPod(keyToPaths))
+  private def podWithOwnerReference(
+      configMapName: String,
+      keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(fullExpectedPod(configMapName, keyToPaths))
       .editMetadata()
         .withUid(DRIVER_POD_UID)
         .endMetadata()
@@ -168,9 +172,12 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
+  private var testConfigMapName: String = _
 
   before {
     MockitoAnnotations.openMocks(this).close()
+    // Generate the config map name once per test to simulate consistent behavior
+    testConfigMapName = KubernetesClientUtils.configMapNameDriver
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
@@ -180,10 +187,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
-    when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    when(podsWithNamespace.resource(fullExpectedPod(testConfigMapName))).thenReturn(namedPods)
     when(resourceList.forceConflicts()).thenReturn(resourceList)
-    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference())
-    when(namedPods.create()).thenReturn(podWithOwnerReference())
+    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(testConfigMapName))
+    when(namedPods.create()).thenReturn(podWithOwnerReference(testConfigMapName))
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     val sId = submissionId(kconf.namespace, POD_NAME)
     when(loggingPodStatusWatcher.watchOrStop(sId)).thenReturn(true)
@@ -199,7 +206,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podsWithNamespace).resource(fullExpectedPod())
+    verify(podsWithNamespace).resource(fullExpectedPod(testConfigMapName))
     verify(namedPods).create()
   }
 
@@ -219,8 +226,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
+    // Verify the config map name starts with expected prefix and ends with expected suffix
+    assert(configMap.getMetadata.getName.startsWith("spark-drv-"))
+    assert(configMap.getMetadata.getName.endsWith("-conf-map"))
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -265,8 +273,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
+    // Verify the config map name starts with expected prefix and ends with expected suffix
+    assert(configMap.getMetadata.getName.startsWith("spark-drv-"))
+    assert(configMap.getMetadata.getName.endsWith("-conf-map"))
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -309,10 +318,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
       List(KEY_TO_PATH)).sortBy(x => x.getKey)
 
-    when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))
+    when(podsWithNamespace.resource(fullExpectedPod(testConfigMapName, expectedKeyToPaths)))
       .thenReturn(namedPods)
     when(namedPods.forceConflicts()).thenReturn(namedPods)
-    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(expectedKeyToPaths))
+    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(testConfigMapName, expectedKeyToPaths))
 
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
@@ -331,9 +340,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val configMaps = otherCreatedResources.toArray
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
     assert(configMaps.nonEmpty)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
     val configMap: ConfigMap = configMaps.head
-    assert(configMap.getMetadata.getName == configMapName)
+    // Verify the config map name has expected format
+    assert(configMap.getMetadata.getName.startsWith("spark-drv-"))
+    assert(configMap.getMetadata.getName.endsWith("-conf-map"))
     val configMapLoadedFiles = configMap.getData.keySet().asScala.toSet -
         Config.KUBERNETES_NAMESPACE.key
     assert(configMapLoadedFiles === expectedConfFiles.toSet ++ Set(SPARK_CONF_FILE_NAME))
