@@ -129,9 +129,9 @@ class DataStreamReader(OptionUtils):
 
         # Validate that source_name contains only ASCII letters, digits, and underscores
         if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
-            raise ValueError(
-                f"Invalid streaming source name: '{source_name}'. "
-                f"Source names must contain only ASCII letters, digits, and underscores."
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
             )
 
         self._source_name = source_name
