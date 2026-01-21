@@ -131,8 +131,8 @@ select t.c1 from values (1) as t(c1),
 -- Edge cases and complex scenarios
 -- ============================================================================
 
--- correlated with CURRENT_LIKE
-select * from values (1) as t(c1),
+-- correlated with CURRENT_LIKE - check non-deterministic works and result is deterministic
+select c1, c2, c3 = current_date as date_matches from values (1) as t(c1),
   lateral (values (t.c1, current_date)) as s(c2, c3);
 
 -- correlated with type coercion
