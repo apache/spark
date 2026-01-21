@@ -10368,9 +10368,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             labels.append(label)
 
         if isinstance(columns, pd.Index):
-            column_label_names = cast(list[tuple[Any]], [
-                name if is_name_like_tuple(name) else (name,) for name in columns.names
-            ])
+            column_label_names = cast(
+                list[tuple[Any]],
+                [name if is_name_like_tuple(name) else (name,) for name in columns.names],
+            )
             internal = self._internal.with_new_columns(
                 scols_or_pssers, column_labels=labels, column_label_names=column_label_names
             )

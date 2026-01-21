@@ -294,9 +294,7 @@ class PandasConversionMixin:
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
         if len(rows) > 0:
-            pdf = pd.DataFrame.from_records(
-                rows, index=range(len(rows)), columns=self.columns
-            )
+            pdf = pd.DataFrame.from_records(rows, index=range(len(rows)), columns=self.columns)
         else:
             pdf = pd.DataFrame(columns=self.columns)
 

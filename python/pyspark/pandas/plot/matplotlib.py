@@ -37,7 +37,7 @@ from pandas.plotting._matplotlib import (  # type: ignore[import-untyped]
     KdePlot as PandasKdePlot,
 )
 from pandas.plotting._core import PlotAccessor
-from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot # type: ignore[import-untyped]
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot  # type: ignore[import-untyped]
 
 from pyspark.pandas.plot import (
     TopNPlotBase,

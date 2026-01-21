@@ -1275,9 +1275,7 @@ def _create_converter_to_pandas(
 
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
-        return lambda pser: pser.apply(
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1341,9 +1339,7 @@ def _create_converter_from_pandas(
 
             def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
                 if pd.api.types.is_integer_dtype(pser):
-                    return pser.apply(
-                        lambda x: Decimal(x) if pd.notna(x) else None
-                    )
+                    return pser.apply(lambda x: Decimal(x) if pd.notna(x) else None)
                 else:
                     return pser
 
@@ -1577,9 +1573,7 @@ def _create_converter_from_pandas(
 
     conv = _converter(data_type)
     if conv is not None:
-        return lambda pser: pser.apply(
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
