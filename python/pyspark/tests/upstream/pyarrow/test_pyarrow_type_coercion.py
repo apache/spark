@@ -46,6 +46,8 @@ from pyspark.testing.utils import (
 if have_pyarrow:
     import pyarrow as pa
 
+    pyarrow_19_or_greater = LooseVersion(pa.__version__) >= LooseVersion("19.0.0")
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class PyArrowTypeCoercionTests(unittest.TestCase):
@@ -440,7 +442,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     @unittest.skipIf(
-        have_pyarrow and LooseVersion(pa.__version__) < LooseVersion("19.0.0"),
+        have_pyarrow and not pyarrow_19_or_greater,
         "PyArrow < 19 has different type coercion behavior for ArrowDtype-backed Series",
     )
     def test_pandas_instances_coercion(self):
@@ -764,7 +766,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     @unittest.skipIf(
-        have_pyarrow and LooseVersion(pa.__version__) >= LooseVersion("19.0.0"),
+        have_pyarrow and pyarrow_19_or_greater,
         "PyArrow >= 19 has different type coercion behavior for ArrowDtype-backed Series",
     )
     def test_pandas_arrow_dtype_no_coercion_pyarrow18(self):
