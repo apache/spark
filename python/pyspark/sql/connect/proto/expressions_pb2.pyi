@@ -33,62 +33,53 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
-from collections import abc as _abc
-from google.protobuf import any_pb2 as _any_pb2
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
-from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
-from pyspark.sql.connect.proto import common_pb2 as _common_pb2
-from pyspark.sql.connect.proto import types_pb2 as _types_pb2
-import builtins as _builtins
+import builtins
+import collections.abc
+import google.protobuf.any_pb2
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
+import google.protobuf.message
+import pyspark.sql.connect.proto.common_pb2
+import pyspark.sql.connect.proto.types_pb2
 import sys
-import typing as _typing
+import typing
 
 if sys.version_info >= (3, 10):
-    from typing import TypeAlias as _TypeAlias
+    import typing as typing_extensions
 else:
-    from typing_extensions import TypeAlias as _TypeAlias
+    import typing_extensions
 
-if sys.version_info >= (3, 13):
-    from warnings import deprecated as _deprecated
-else:
-    from typing_extensions import deprecated as _deprecated
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-DESCRIPTOR: _descriptor.FileDescriptor
-
-@_typing.final
-class Expression(_message.Message):
+class Expression(google.protobuf.message.Message):
     """Expression used to refer to fields, functions and similar. This can be used everywhere
     expressions in SQL appear.
     """
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @_typing.final
-    class Window(_message.Message):
+    class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @_typing.final
-        class WindowFrame(_message.Message):
+        class WindowFrame(google.protobuf.message.Message):
             """The window frame"""
 
-            DESCRIPTOR: _descriptor.Descriptor
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
             class _FrameType:
-                ValueType = _typing.NewType("ValueType", _builtins.int)
-                V: _TypeAlias = ValueType  # noqa: Y015
+                ValueType = typing.NewType("ValueType", builtins.int)
+                V: typing_extensions.TypeAlias = ValueType
 
             class _FrameTypeEnumTypeWrapper(
-                _enum_type_wrapper._EnumTypeWrapper[
+                google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
                     Expression.Window.WindowFrame._FrameType.ValueType
                 ],
-                _builtins.type,
-            ):
-                DESCRIPTOR: _descriptor.EnumDescriptor
+                builtins.type,
+            ):  # noqa: F821
+                DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
                 FRAME_TYPE_UNDEFINED: Expression.Window.WindowFrame._FrameType.ValueType  # 0
                 FRAME_TYPE_ROW: Expression.Window.WindowFrame._FrameType.ValueType  # 1
                 """RowFrame treats rows in a partition individually."""
@@ -106,108 +97,110 @@ class Expression(_message.Message):
             All rows having the same 'ORDER BY' ordering are considered as peers.
             """
 
-            @_typing.final
-            class FrameBoundary(_message.Message):
-                DESCRIPTOR: _descriptor.Descriptor
+            class FrameBoundary(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-                CURRENT_ROW_FIELD_NUMBER: _builtins.int
-                UNBOUNDED_FIELD_NUMBER: _builtins.int
-                VALUE_FIELD_NUMBER: _builtins.int
-                current_row: _builtins.bool
+                CURRENT_ROW_FIELD_NUMBER: builtins.int
+                UNBOUNDED_FIELD_NUMBER: builtins.int
+                VALUE_FIELD_NUMBER: builtins.int
+                current_row: builtins.bool
                 """CURRENT ROW boundary"""
-                unbounded: _builtins.bool
+                unbounded: builtins.bool
                 """UNBOUNDED boundary.
                 For lower bound, it will be converted to 'UnboundedPreceding'.
                 for upper bound, it will be converted to 'UnboundedFollowing'.
                 """
-                @_builtins.property
-                def value(self) -> Global___Expression:
+                @property
+                def value(self) -> global___Expression:
                     """This is an expression for future proofing. We are expecting literals on the server side."""
                 def __init__(
                     self,
                     *,
-                    current_row: _builtins.bool = ...,
-                    unbounded: _builtins.bool = ...,
-                    value: Global___Expression | None = ...,
+                    current_row: builtins.bool = ...,
+                    unbounded: builtins.bool = ...,
+                    value: global___Expression | None = ...,
                 ) -> None: ...
-                _HasFieldArgType: _TypeAlias = _typing.Literal[
-                    "boundary",
-                    b"boundary",
-                    "current_row",
-                    b"current_row",
-                    "unbounded",
-                    b"unbounded",
-                    "value",
-                    b"value",
-                ]  # noqa: Y015
-                def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-                _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                    "boundary",
-                    b"boundary",
-                    "current_row",
-                    b"current_row",
-                    "unbounded",
-                    b"unbounded",
-                    "value",
-                    b"value",
-                ]  # noqa: Y015
-                def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-                _WhichOneofReturnType_boundary: _TypeAlias = _typing.Literal[
-                    "current_row", "unbounded", "value"
-                ]  # noqa: Y015
-                _WhichOneofArgType_boundary: _TypeAlias = _typing.Literal[
-                    "boundary", b"boundary"
-                ]  # noqa: Y015
+                def HasField(
+                    self,
+                    field_name: typing_extensions.Literal[
+                        "boundary",
+                        b"boundary",
+                        "current_row",
+                        b"current_row",
+                        "unbounded",
+                        b"unbounded",
+                        "value",
+                        b"value",
+                    ],
+                ) -> builtins.bool: ...
+                def ClearField(
+                    self,
+                    field_name: typing_extensions.Literal[
+                        "boundary",
+                        b"boundary",
+                        "current_row",
+                        b"current_row",
+                        "unbounded",
+                        b"unbounded",
+                        "value",
+                        b"value",
+                    ],
+                ) -> None: ...
                 def WhichOneof(
-                    self, oneof_group: _WhichOneofArgType_boundary
-                ) -> _WhichOneofReturnType_boundary | None: ...
+                    self, oneof_group: typing_extensions.Literal["boundary", b"boundary"]
+                ) -> typing_extensions.Literal["current_row", "unbounded", "value"] | None: ...
 
-            FRAME_TYPE_FIELD_NUMBER: _builtins.int
-            LOWER_FIELD_NUMBER: _builtins.int
-            UPPER_FIELD_NUMBER: _builtins.int
-            frame_type: Global___Expression.Window.WindowFrame.FrameType.ValueType
+            FRAME_TYPE_FIELD_NUMBER: builtins.int
+            LOWER_FIELD_NUMBER: builtins.int
+            UPPER_FIELD_NUMBER: builtins.int
+            frame_type: global___Expression.Window.WindowFrame.FrameType.ValueType
             """(Required) The type of the frame."""
-            @_builtins.property
-            def lower(self) -> Global___Expression.Window.WindowFrame.FrameBoundary:
+            @property
+            def lower(self) -> global___Expression.Window.WindowFrame.FrameBoundary:
                 """(Required) The lower bound of the frame."""
-            @_builtins.property
-            def upper(self) -> Global___Expression.Window.WindowFrame.FrameBoundary:
+            @property
+            def upper(self) -> global___Expression.Window.WindowFrame.FrameBoundary:
                 """(Required) The upper bound of the frame."""
             def __init__(
                 self,
                 *,
-                frame_type: Global___Expression.Window.WindowFrame.FrameType.ValueType = ...,
-                lower: Global___Expression.Window.WindowFrame.FrameBoundary | None = ...,
-                upper: Global___Expression.Window.WindowFrame.FrameBoundary | None = ...,
+                frame_type: global___Expression.Window.WindowFrame.FrameType.ValueType = ...,
+                lower: global___Expression.Window.WindowFrame.FrameBoundary | None = ...,
+                upper: global___Expression.Window.WindowFrame.FrameBoundary | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "lower", b"lower", "upper", b"upper"
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "frame_type", b"frame_type", "lower", b"lower", "upper", b"upper"
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["lower", b"lower", "upper", b"upper"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "frame_type", b"frame_type", "lower", b"lower", "upper", b"upper"
+                ],
+            ) -> None: ...
 
-        WINDOW_FUNCTION_FIELD_NUMBER: _builtins.int
-        PARTITION_SPEC_FIELD_NUMBER: _builtins.int
-        ORDER_SPEC_FIELD_NUMBER: _builtins.int
-        FRAME_SPEC_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def window_function(self) -> Global___Expression:
+        WINDOW_FUNCTION_FIELD_NUMBER: builtins.int
+        PARTITION_SPEC_FIELD_NUMBER: builtins.int
+        ORDER_SPEC_FIELD_NUMBER: builtins.int
+        FRAME_SPEC_FIELD_NUMBER: builtins.int
+        @property
+        def window_function(self) -> global___Expression:
             """(Required) The window function."""
-        @_builtins.property
+        @property
         def partition_spec(
             self,
-        ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression
+        ]:
             """(Optional) The way that input rows are partitioned."""
-        @_builtins.property
+        @property
         def order_spec(
             self,
-        ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.SortOrder]:
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.SortOrder
+        ]:
             """(Optional) Ordering of rows in a partition."""
-        @_builtins.property
-        def frame_spec(self) -> Global___Expression.Window.WindowFrame:
+        @property
+        def frame_spec(self) -> global___Expression.Window.WindowFrame:
             """(Optional) Window frame in a partition.
 
             If not set, it will be treated as 'UnspecifiedFrame'.
@@ -215,44 +208,49 @@ class Expression(_message.Message):
         def __init__(
             self,
             *,
-            window_function: Global___Expression | None = ...,
-            partition_spec: _abc.Iterable[Global___Expression] | None = ...,
-            order_spec: _abc.Iterable[Global___Expression.SortOrder] | None = ...,
-            frame_spec: Global___Expression.Window.WindowFrame | None = ...,
+            window_function: global___Expression | None = ...,
+            partition_spec: collections.abc.Iterable[global___Expression] | None = ...,
+            order_spec: collections.abc.Iterable[global___Expression.SortOrder] | None = ...,
+            frame_spec: global___Expression.Window.WindowFrame | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "frame_spec", b"frame_spec", "window_function", b"window_function"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "frame_spec",
-            b"frame_spec",
-            "order_spec",
-            b"order_spec",
-            "partition_spec",
-            b"partition_spec",
-            "window_function",
-            b"window_function",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "frame_spec", b"frame_spec", "window_function", b"window_function"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "frame_spec",
+                b"frame_spec",
+                "order_spec",
+                b"order_spec",
+                "partition_spec",
+                b"partition_spec",
+                "window_function",
+                b"window_function",
+            ],
+        ) -> None: ...
 
-    @_typing.final
-    class SortOrder(_message.Message):
+    class SortOrder(google.protobuf.message.Message):
         """SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
         It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
         """
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         class _SortDirection:
-            ValueType = _typing.NewType("ValueType", _builtins.int)
-            V: _TypeAlias = ValueType  # noqa: Y015
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
 
         class _SortDirectionEnumTypeWrapper(
-            _enum_type_wrapper._EnumTypeWrapper[Expression.SortOrder._SortDirection.ValueType],
-            _builtins.type,
-        ):
-            DESCRIPTOR: _descriptor.EnumDescriptor
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.SortOrder._SortDirection.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             SORT_DIRECTION_UNSPECIFIED: Expression.SortOrder._SortDirection.ValueType  # 0
             SORT_DIRECTION_ASCENDING: Expression.SortOrder._SortDirection.ValueType  # 1
             SORT_DIRECTION_DESCENDING: Expression.SortOrder._SortDirection.ValueType  # 2
@@ -263,14 +261,16 @@ class Expression(_message.Message):
         SORT_DIRECTION_DESCENDING: Expression.SortOrder.SortDirection.ValueType  # 2
 
         class _NullOrdering:
-            ValueType = _typing.NewType("ValueType", _builtins.int)
-            V: _TypeAlias = ValueType  # noqa: Y015
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
 
         class _NullOrderingEnumTypeWrapper(
-            _enum_type_wrapper._EnumTypeWrapper[Expression.SortOrder._NullOrdering.ValueType],
-            _builtins.type,
-        ):
-            DESCRIPTOR: _descriptor.EnumDescriptor
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.SortOrder._NullOrdering.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             SORT_NULLS_UNSPECIFIED: Expression.SortOrder._NullOrdering.ValueType  # 0
             SORT_NULLS_FIRST: Expression.SortOrder._NullOrdering.ValueType  # 1
             SORT_NULLS_LAST: Expression.SortOrder._NullOrdering.ValueType  # 2
@@ -280,65 +280,69 @@ class Expression(_message.Message):
         SORT_NULLS_FIRST: Expression.SortOrder.NullOrdering.ValueType  # 1
         SORT_NULLS_LAST: Expression.SortOrder.NullOrdering.ValueType  # 2
 
-        CHILD_FIELD_NUMBER: _builtins.int
-        DIRECTION_FIELD_NUMBER: _builtins.int
-        NULL_ORDERING_FIELD_NUMBER: _builtins.int
-        direction: Global___Expression.SortOrder.SortDirection.ValueType
-        """(Required) The sort direction, should be ASCENDING or DESCENDING."""
-        null_ordering: Global___Expression.SortOrder.NullOrdering.ValueType
-        """(Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST."""
-        @_builtins.property
-        def child(self) -> Global___Expression:
+        CHILD_FIELD_NUMBER: builtins.int
+        DIRECTION_FIELD_NUMBER: builtins.int
+        NULL_ORDERING_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
             """(Required) The expression to be sorted."""
+        direction: global___Expression.SortOrder.SortDirection.ValueType
+        """(Required) The sort direction, should be ASCENDING or DESCENDING."""
+        null_ordering: global___Expression.SortOrder.NullOrdering.ValueType
+        """(Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST."""
         def __init__(
             self,
             *,
-            child: Global___Expression | None = ...,
-            direction: Global___Expression.SortOrder.SortDirection.ValueType = ...,
-            null_ordering: Global___Expression.SortOrder.NullOrdering.ValueType = ...,
+            child: global___Expression | None = ...,
+            direction: global___Expression.SortOrder.SortDirection.ValueType = ...,
+            null_ordering: global___Expression.SortOrder.NullOrdering.ValueType = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["child", b"child"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "child", b"child", "direction", b"direction", "null_ordering", b"null_ordering"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["child", b"child"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "child", b"child", "direction", b"direction", "null_ordering", b"null_ordering"
+            ],
+        ) -> None: ...
 
-    @_typing.final
-    class DirectShufflePartitionID(_message.Message):
+    class DirectShufflePartitionID(google.protobuf.message.Message):
         """Expression that takes a partition ID value and passes it through directly for use in
         shuffle partitioning. This is used with RepartitionByExpression to allow users to
         directly specify target partition IDs.
         """
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        CHILD_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def child(self) -> Global___Expression:
+        CHILD_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
             """(Required) The expression that evaluates to the partition ID."""
         def __init__(
             self,
             *,
-            child: Global___Expression | None = ...,
+            child: global___Expression | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["child", b"child"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["child", b"child"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["child", b"child"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["child", b"child"]) -> None: ...
 
-    @_typing.final
-    class Cast(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class Cast(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         class _EvalMode:
-            ValueType = _typing.NewType("ValueType", _builtins.int)
-            V: _TypeAlias = ValueType  # noqa: Y015
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
 
         class _EvalModeEnumTypeWrapper(
-            _enum_type_wrapper._EnumTypeWrapper[Expression.Cast._EvalMode.ValueType], _builtins.type
-        ):
-            DESCRIPTOR: _descriptor.EnumDescriptor
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.Cast._EvalMode.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             EVAL_MODE_UNSPECIFIED: Expression.Cast._EvalMode.ValueType  # 0
             EVAL_MODE_LEGACY: Expression.Cast._EvalMode.ValueType  # 1
             EVAL_MODE_ANSI: Expression.Cast._EvalMode.ValueType  # 2
@@ -350,443 +354,438 @@ class Expression(_message.Message):
         EVAL_MODE_ANSI: Expression.Cast.EvalMode.ValueType  # 2
         EVAL_MODE_TRY: Expression.Cast.EvalMode.ValueType  # 3
 
-        EXPR_FIELD_NUMBER: _builtins.int
-        TYPE_FIELD_NUMBER: _builtins.int
-        TYPE_STR_FIELD_NUMBER: _builtins.int
-        EVAL_MODE_FIELD_NUMBER: _builtins.int
-        type_str: _builtins.str
-        """If this is set, Server will use Catalyst parser to parse this string to DataType."""
-        eval_mode: Global___Expression.Cast.EvalMode.ValueType
-        """(Optional) The expression evaluation mode."""
-        @_builtins.property
-        def expr(self) -> Global___Expression:
+        EXPR_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
+        TYPE_STR_FIELD_NUMBER: builtins.int
+        EVAL_MODE_FIELD_NUMBER: builtins.int
+        @property
+        def expr(self) -> global___Expression:
             """(Required) the expression to be casted."""
-        @_builtins.property
-        def type(self) -> _types_pb2.DataType: ...
+        @property
+        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        type_str: builtins.str
+        """If this is set, Server will use Catalyst parser to parse this string to DataType."""
+        eval_mode: global___Expression.Cast.EvalMode.ValueType
+        """(Optional) The expression evaluation mode."""
         def __init__(
             self,
             *,
-            expr: Global___Expression | None = ...,
-            type: _types_pb2.DataType | None = ...,
-            type_str: _builtins.str = ...,
-            eval_mode: Global___Expression.Cast.EvalMode.ValueType = ...,
+            expr: global___Expression | None = ...,
+            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            type_str: builtins.str = ...,
+            eval_mode: global___Expression.Cast.EvalMode.ValueType = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "cast_to_type",
-            b"cast_to_type",
-            "expr",
-            b"expr",
-            "type",
-            b"type",
-            "type_str",
-            b"type_str",
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "cast_to_type",
-            b"cast_to_type",
-            "eval_mode",
-            b"eval_mode",
-            "expr",
-            b"expr",
-            "type",
-            b"type",
-            "type_str",
-            b"type_str",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType_cast_to_type: _TypeAlias = _typing.Literal[
-            "type", "type_str"
-        ]  # noqa: Y015
-        _WhichOneofArgType_cast_to_type: _TypeAlias = _typing.Literal[
-            "cast_to_type", b"cast_to_type"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "eval_mode",
+                b"eval_mode",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType_cast_to_type
-        ) -> _WhichOneofReturnType_cast_to_type | None: ...
+            self, oneof_group: typing_extensions.Literal["cast_to_type", b"cast_to_type"]
+        ) -> typing_extensions.Literal["type", "type_str"] | None: ...
 
-    @_typing.final
-    class Literal(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class Literal(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @_typing.final
-        class Decimal(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class Decimal(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            VALUE_FIELD_NUMBER: _builtins.int
-            PRECISION_FIELD_NUMBER: _builtins.int
-            SCALE_FIELD_NUMBER: _builtins.int
-            value: _builtins.str
+            VALUE_FIELD_NUMBER: builtins.int
+            PRECISION_FIELD_NUMBER: builtins.int
+            SCALE_FIELD_NUMBER: builtins.int
+            value: builtins.str
             """the string representation."""
-            precision: _builtins.int
+            precision: builtins.int
             """The maximum number of digits allowed in the value.
             the maximum precision is 38.
             """
-            scale: _builtins.int
+            scale: builtins.int
             """declared scale of decimal literal"""
             def __init__(
                 self,
                 *,
-                value: _builtins.str = ...,
-                precision: _builtins.int | None = ...,
-                scale: _builtins.int | None = ...,
+                value: builtins.str = ...,
+                precision: builtins.int | None = ...,
+                scale: builtins.int | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "_precision",
-                b"_precision",
-                "_scale",
-                b"_scale",
-                "precision",
-                b"precision",
-                "scale",
-                b"scale",
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "_precision",
-                b"_precision",
-                "_scale",
-                b"_scale",
-                "precision",
-                b"precision",
-                "scale",
-                b"scale",
-                "value",
-                b"value",
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-            _WhichOneofReturnType__precision: _TypeAlias = _typing.Literal[
-                "precision"
-            ]  # noqa: Y015
-            _WhichOneofArgType__precision: _TypeAlias = _typing.Literal[
-                "_precision", b"_precision"
-            ]  # noqa: Y015
-            _WhichOneofReturnType__scale: _TypeAlias = _typing.Literal["scale"]  # noqa: Y015
-            _WhichOneofArgType__scale: _TypeAlias = _typing.Literal[
-                "_scale", b"_scale"
-            ]  # noqa: Y015
-            @_typing.overload
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision",
+                    b"_precision",
+                    "_scale",
+                    b"_scale",
+                    "precision",
+                    b"precision",
+                    "scale",
+                    b"scale",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision",
+                    b"_precision",
+                    "_scale",
+                    b"_scale",
+                    "precision",
+                    b"precision",
+                    "scale",
+                    b"scale",
+                    "value",
+                    b"value",
+                ],
+            ) -> None: ...
+            @typing.overload
             def WhichOneof(
-                self, oneof_group: _WhichOneofArgType__precision
-            ) -> _WhichOneofReturnType__precision | None: ...
-            @_typing.overload
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
+            @typing.overload
             def WhichOneof(
-                self, oneof_group: _WhichOneofArgType__scale
-            ) -> _WhichOneofReturnType__scale | None: ...
+                self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
+            ) -> typing_extensions.Literal["scale"] | None: ...
 
-        @_typing.final
-        class CalendarInterval(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class CalendarInterval(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            MONTHS_FIELD_NUMBER: _builtins.int
-            DAYS_FIELD_NUMBER: _builtins.int
-            MICROSECONDS_FIELD_NUMBER: _builtins.int
-            months: _builtins.int
-            days: _builtins.int
-            microseconds: _builtins.int
+            MONTHS_FIELD_NUMBER: builtins.int
+            DAYS_FIELD_NUMBER: builtins.int
+            MICROSECONDS_FIELD_NUMBER: builtins.int
+            months: builtins.int
+            days: builtins.int
+            microseconds: builtins.int
             def __init__(
                 self,
                 *,
-                months: _builtins.int = ...,
-                days: _builtins.int = ...,
-                microseconds: _builtins.int = ...,
+                months: builtins.int = ...,
+                days: builtins.int = ...,
+                microseconds: builtins.int = ...,
             ) -> None: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "days", b"days", "microseconds", b"microseconds", "months", b"months"
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "days", b"days", "microseconds", b"microseconds", "months", b"months"
+                ],
+            ) -> None: ...
 
-        @_typing.final
-        class Array(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class Array(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            ELEMENT_TYPE_FIELD_NUMBER: _builtins.int
-            ELEMENTS_FIELD_NUMBER: _builtins.int
-            @_builtins.property
-            @_deprecated("""This field has been marked as deprecated using proto field options.""")
-            def element_type(self) -> _types_pb2.DataType:
+            ELEMENT_TYPE_FIELD_NUMBER: builtins.int
+            ELEMENTS_FIELD_NUMBER: builtins.int
+            @property
+            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The element type of the array.
 
                 This field is deprecated since Spark 4.1+. Use data_type field instead.
                 """
-            @_builtins.property
+            @property
             def elements(
                 self,
-            ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.Literal]:
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]:
                 """The literal values that make up the array elements."""
             def __init__(
                 self,
                 *,
-                element_type: _types_pb2.DataType | None = ...,
-                elements: _abc.Iterable[Global___Expression.Literal] | None = ...,
+                element_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "element_type", b"element_type"
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "element_type", b"element_type", "elements", b"elements"
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["element_type", b"element_type"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "element_type", b"element_type", "elements", b"elements"
+                ],
+            ) -> None: ...
 
-        @_typing.final
-        class Map(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class Map(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            KEY_TYPE_FIELD_NUMBER: _builtins.int
-            VALUE_TYPE_FIELD_NUMBER: _builtins.int
-            KEYS_FIELD_NUMBER: _builtins.int
-            VALUES_FIELD_NUMBER: _builtins.int
-            @_builtins.property
-            @_deprecated("""This field has been marked as deprecated using proto field options.""")
-            def key_type(self) -> _types_pb2.DataType:
+            KEY_TYPE_FIELD_NUMBER: builtins.int
+            VALUE_TYPE_FIELD_NUMBER: builtins.int
+            KEYS_FIELD_NUMBER: builtins.int
+            VALUES_FIELD_NUMBER: builtins.int
+            @property
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The key type of the map.
 
                 This field is deprecated since Spark 4.1+. Use data_type field instead.
                 """
-            @_builtins.property
-            @_deprecated("""This field has been marked as deprecated using proto field options.""")
-            def value_type(self) -> _types_pb2.DataType:
+            @property
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The value type of the map.
 
                 This field is deprecated since Spark 4.1+ and should only be set
                 if the data_type field is not set. Use data_type field instead.
                 """
-            @_builtins.property
+            @property
             def keys(
                 self,
-            ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.Literal]:
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]:
                 """The literal keys that make up the map."""
-            @_builtins.property
+            @property
             def values(
                 self,
-            ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.Literal]:
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]:
                 """The literal values that make up the map."""
             def __init__(
                 self,
                 *,
-                key_type: _types_pb2.DataType | None = ...,
-                value_type: _types_pb2.DataType | None = ...,
-                keys: _abc.Iterable[Global___Expression.Literal] | None = ...,
-                values: _abc.Iterable[Global___Expression.Literal] | None = ...,
+                key_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                value_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                keys: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                values: collections.abc.Iterable[global___Expression.Literal] | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "key_type", b"key_type", "value_type", b"value_type"
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "key_type",
-                b"key_type",
-                "keys",
-                b"keys",
-                "value_type",
-                b"value_type",
-                "values",
-                b"values",
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type", b"key_type", "value_type", b"value_type"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type",
+                    b"key_type",
+                    "keys",
+                    b"keys",
+                    "value_type",
+                    b"value_type",
+                    "values",
+                    b"values",
+                ],
+            ) -> None: ...
 
-        @_typing.final
-        class Struct(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class Struct(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            STRUCT_TYPE_FIELD_NUMBER: _builtins.int
-            ELEMENTS_FIELD_NUMBER: _builtins.int
-            @_builtins.property
-            @_deprecated("""This field has been marked as deprecated using proto field options.""")
-            def struct_type(self) -> _types_pb2.DataType:
+            STRUCT_TYPE_FIELD_NUMBER: builtins.int
+            ELEMENTS_FIELD_NUMBER: builtins.int
+            @property
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The type of the struct.
 
                 This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
                 is ambiguous. Use data_type field instead.
                 """
-            @_builtins.property
+            @property
             def elements(
                 self,
-            ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.Literal]:
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]:
                 """The literal values that make up the struct elements."""
             def __init__(
                 self,
                 *,
-                struct_type: _types_pb2.DataType | None = ...,
-                elements: _abc.Iterable[Global___Expression.Literal] | None = ...,
+                struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "struct_type", b"struct_type"
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "elements", b"elements", "struct_type", b"struct_type"
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "elements", b"elements", "struct_type", b"struct_type"
+                ],
+            ) -> None: ...
 
-        @_typing.final
-        class SpecializedArray(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class SpecializedArray(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            BOOLS_FIELD_NUMBER: _builtins.int
-            INTS_FIELD_NUMBER: _builtins.int
-            LONGS_FIELD_NUMBER: _builtins.int
-            FLOATS_FIELD_NUMBER: _builtins.int
-            DOUBLES_FIELD_NUMBER: _builtins.int
-            STRINGS_FIELD_NUMBER: _builtins.int
-            @_builtins.property
-            def bools(self) -> _common_pb2.Bools: ...
-            @_builtins.property
-            def ints(self) -> _common_pb2.Ints: ...
-            @_builtins.property
-            def longs(self) -> _common_pb2.Longs: ...
-            @_builtins.property
-            def floats(self) -> _common_pb2.Floats: ...
-            @_builtins.property
-            def doubles(self) -> _common_pb2.Doubles: ...
-            @_builtins.property
-            def strings(self) -> _common_pb2.Strings: ...
+            BOOLS_FIELD_NUMBER: builtins.int
+            INTS_FIELD_NUMBER: builtins.int
+            LONGS_FIELD_NUMBER: builtins.int
+            FLOATS_FIELD_NUMBER: builtins.int
+            DOUBLES_FIELD_NUMBER: builtins.int
+            STRINGS_FIELD_NUMBER: builtins.int
+            @property
+            def bools(self) -> pyspark.sql.connect.proto.common_pb2.Bools: ...
+            @property
+            def ints(self) -> pyspark.sql.connect.proto.common_pb2.Ints: ...
+            @property
+            def longs(self) -> pyspark.sql.connect.proto.common_pb2.Longs: ...
+            @property
+            def floats(self) -> pyspark.sql.connect.proto.common_pb2.Floats: ...
+            @property
+            def doubles(self) -> pyspark.sql.connect.proto.common_pb2.Doubles: ...
+            @property
+            def strings(self) -> pyspark.sql.connect.proto.common_pb2.Strings: ...
             def __init__(
                 self,
                 *,
-                bools: _common_pb2.Bools | None = ...,
-                ints: _common_pb2.Ints | None = ...,
-                longs: _common_pb2.Longs | None = ...,
-                floats: _common_pb2.Floats | None = ...,
-                doubles: _common_pb2.Doubles | None = ...,
-                strings: _common_pb2.Strings | None = ...,
+                bools: pyspark.sql.connect.proto.common_pb2.Bools | None = ...,
+                ints: pyspark.sql.connect.proto.common_pb2.Ints | None = ...,
+                longs: pyspark.sql.connect.proto.common_pb2.Longs | None = ...,
+                floats: pyspark.sql.connect.proto.common_pb2.Floats | None = ...,
+                doubles: pyspark.sql.connect.proto.common_pb2.Doubles | None = ...,
+                strings: pyspark.sql.connect.proto.common_pb2.Strings | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "bools",
-                b"bools",
-                "doubles",
-                b"doubles",
-                "floats",
-                b"floats",
-                "ints",
-                b"ints",
-                "longs",
-                b"longs",
-                "strings",
-                b"strings",
-                "value_type",
-                b"value_type",
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "bools",
-                b"bools",
-                "doubles",
-                b"doubles",
-                "floats",
-                b"floats",
-                "ints",
-                b"ints",
-                "longs",
-                b"longs",
-                "strings",
-                b"strings",
-                "value_type",
-                b"value_type",
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-            _WhichOneofReturnType_value_type: _TypeAlias = _typing.Literal[
-                "bools", "ints", "longs", "floats", "doubles", "strings"
-            ]  # noqa: Y015
-            _WhichOneofArgType_value_type: _TypeAlias = _typing.Literal[
-                "value_type", b"value_type"
-            ]  # noqa: Y015
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "bools",
+                    b"bools",
+                    "doubles",
+                    b"doubles",
+                    "floats",
+                    b"floats",
+                    "ints",
+                    b"ints",
+                    "longs",
+                    b"longs",
+                    "strings",
+                    b"strings",
+                    "value_type",
+                    b"value_type",
+                ],
+            ) -> None: ...
             def WhichOneof(
-                self, oneof_group: _WhichOneofArgType_value_type
-            ) -> _WhichOneofReturnType_value_type | None: ...
+                self, oneof_group: typing_extensions.Literal["value_type", b"value_type"]
+            ) -> (
+                typing_extensions.Literal["bools", "ints", "longs", "floats", "doubles", "strings"]
+                | None
+            ): ...
 
-        @_typing.final
-        class Time(_message.Message):
-            DESCRIPTOR: _descriptor.Descriptor
+        class Time(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            NANO_FIELD_NUMBER: _builtins.int
-            PRECISION_FIELD_NUMBER: _builtins.int
-            nano: _builtins.int
-            precision: _builtins.int
+            NANO_FIELD_NUMBER: builtins.int
+            PRECISION_FIELD_NUMBER: builtins.int
+            nano: builtins.int
+            precision: builtins.int
             """The precision of this time, if omitted, uses the default value of MICROS_PRECISION."""
             def __init__(
                 self,
                 *,
-                nano: _builtins.int = ...,
-                precision: _builtins.int | None = ...,
+                nano: builtins.int = ...,
+                precision: builtins.int | None = ...,
             ) -> None: ...
-            _HasFieldArgType: _TypeAlias = _typing.Literal[
-                "_precision", b"_precision", "precision", b"precision"
-            ]  # noqa: Y015
-            def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-            _ClearFieldArgType: _TypeAlias = _typing.Literal[
-                "_precision", b"_precision", "nano", b"nano", "precision", b"precision"
-            ]  # noqa: Y015
-            def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-            _WhichOneofReturnType__precision: _TypeAlias = _typing.Literal[
-                "precision"
-            ]  # noqa: Y015
-            _WhichOneofArgType__precision: _TypeAlias = _typing.Literal[
-                "_precision", b"_precision"
-            ]  # noqa: Y015
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "precision", b"precision"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "nano", b"nano", "precision", b"precision"
+                ],
+            ) -> None: ...
             def WhichOneof(
-                self, oneof_group: _WhichOneofArgType__precision
-            ) -> _WhichOneofReturnType__precision | None: ...
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
 
-        NULL_FIELD_NUMBER: _builtins.int
-        BINARY_FIELD_NUMBER: _builtins.int
-        BOOLEAN_FIELD_NUMBER: _builtins.int
-        BYTE_FIELD_NUMBER: _builtins.int
-        SHORT_FIELD_NUMBER: _builtins.int
-        INTEGER_FIELD_NUMBER: _builtins.int
-        LONG_FIELD_NUMBER: _builtins.int
-        FLOAT_FIELD_NUMBER: _builtins.int
-        DOUBLE_FIELD_NUMBER: _builtins.int
-        DECIMAL_FIELD_NUMBER: _builtins.int
-        STRING_FIELD_NUMBER: _builtins.int
-        DATE_FIELD_NUMBER: _builtins.int
-        TIMESTAMP_FIELD_NUMBER: _builtins.int
-        TIMESTAMP_NTZ_FIELD_NUMBER: _builtins.int
-        CALENDAR_INTERVAL_FIELD_NUMBER: _builtins.int
-        YEAR_MONTH_INTERVAL_FIELD_NUMBER: _builtins.int
-        DAY_TIME_INTERVAL_FIELD_NUMBER: _builtins.int
-        ARRAY_FIELD_NUMBER: _builtins.int
-        MAP_FIELD_NUMBER: _builtins.int
-        STRUCT_FIELD_NUMBER: _builtins.int
-        SPECIALIZED_ARRAY_FIELD_NUMBER: _builtins.int
-        TIME_FIELD_NUMBER: _builtins.int
-        DATA_TYPE_FIELD_NUMBER: _builtins.int
-        binary: _builtins.bytes
-        boolean: _builtins.bool
-        byte: _builtins.int
-        short: _builtins.int
-        integer: _builtins.int
-        long: _builtins.int
-        float: _builtins.float
-        double: _builtins.float
-        string: _builtins.str
-        date: _builtins.int
+        NULL_FIELD_NUMBER: builtins.int
+        BINARY_FIELD_NUMBER: builtins.int
+        BOOLEAN_FIELD_NUMBER: builtins.int
+        BYTE_FIELD_NUMBER: builtins.int
+        SHORT_FIELD_NUMBER: builtins.int
+        INTEGER_FIELD_NUMBER: builtins.int
+        LONG_FIELD_NUMBER: builtins.int
+        FLOAT_FIELD_NUMBER: builtins.int
+        DOUBLE_FIELD_NUMBER: builtins.int
+        DECIMAL_FIELD_NUMBER: builtins.int
+        STRING_FIELD_NUMBER: builtins.int
+        DATE_FIELD_NUMBER: builtins.int
+        TIMESTAMP_FIELD_NUMBER: builtins.int
+        TIMESTAMP_NTZ_FIELD_NUMBER: builtins.int
+        CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
+        YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
+        DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
+        MAP_FIELD_NUMBER: builtins.int
+        STRUCT_FIELD_NUMBER: builtins.int
+        SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
+        TIME_FIELD_NUMBER: builtins.int
+        DATA_TYPE_FIELD_NUMBER: builtins.int
+        @property
+        def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        binary: builtins.bytes
+        boolean: builtins.bool
+        byte: builtins.int
+        short: builtins.int
+        integer: builtins.int
+        long: builtins.int
+        float: builtins.float
+        double: builtins.float
+        @property
+        def decimal(self) -> global___Expression.Literal.Decimal: ...
+        string: builtins.str
+        date: builtins.int
         """Date in units of days since the UNIX epoch."""
-        timestamp: _builtins.int
+        timestamp: builtins.int
         """Timestamp in units of microseconds since the UNIX epoch."""
-        timestamp_ntz: _builtins.int
+        timestamp_ntz: builtins.int
         """Timestamp in units of microseconds since the UNIX epoch (without timezone information)."""
-        year_month_interval: _builtins.int
-        day_time_interval: _builtins.int
-        @_builtins.property
-        def null(self) -> _types_pb2.DataType: ...
-        @_builtins.property
-        def decimal(self) -> Global___Expression.Literal.Decimal: ...
-        @_builtins.property
-        def calendar_interval(self) -> Global___Expression.Literal.CalendarInterval: ...
-        @_builtins.property
-        def array(self) -> Global___Expression.Literal.Array: ...
-        @_builtins.property
-        def map(self) -> Global___Expression.Literal.Map: ...
-        @_builtins.property
-        def struct(self) -> Global___Expression.Literal.Struct: ...
-        @_builtins.property
-        def specialized_array(self) -> Global___Expression.Literal.SpecializedArray: ...
-        @_builtins.property
-        def time(self) -> Global___Expression.Literal.Time: ...
-        @_builtins.property
-        def data_type(self) -> _types_pb2.DataType:
+        @property
+        def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
+        year_month_interval: builtins.int
+        day_time_interval: builtins.int
+        @property
+        def array(self) -> global___Expression.Literal.Array: ...
+        @property
+        def map(self) -> global___Expression.Literal.Map: ...
+        @property
+        def struct(self) -> global___Expression.Literal.Struct: ...
+        @property
+        def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
+        @property
+        def time(self) -> global___Expression.Literal.Time: ...
+        @property
+        def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
             """Data type information for the literal.
             This field is required only in the root literal message for null values or
             for data types (e.g., array, map, or struct) with non-trivial information.
@@ -796,466 +795,452 @@ class Expression(_message.Message):
         def __init__(
             self,
             *,
-            null: _types_pb2.DataType | None = ...,
-            binary: _builtins.bytes = ...,
-            boolean: _builtins.bool = ...,
-            byte: _builtins.int = ...,
-            short: _builtins.int = ...,
-            integer: _builtins.int = ...,
-            long: _builtins.int = ...,
-            float: _builtins.float = ...,
-            double: _builtins.float = ...,
-            decimal: Global___Expression.Literal.Decimal | None = ...,
-            string: _builtins.str = ...,
-            date: _builtins.int = ...,
-            timestamp: _builtins.int = ...,
-            timestamp_ntz: _builtins.int = ...,
-            calendar_interval: Global___Expression.Literal.CalendarInterval | None = ...,
-            year_month_interval: _builtins.int = ...,
-            day_time_interval: _builtins.int = ...,
-            array: Global___Expression.Literal.Array | None = ...,
-            map: Global___Expression.Literal.Map | None = ...,
-            struct: Global___Expression.Literal.Struct | None = ...,
-            specialized_array: Global___Expression.Literal.SpecializedArray | None = ...,
-            time: Global___Expression.Literal.Time | None = ...,
-            data_type: _types_pb2.DataType | None = ...,
+            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            binary: builtins.bytes = ...,
+            boolean: builtins.bool = ...,
+            byte: builtins.int = ...,
+            short: builtins.int = ...,
+            integer: builtins.int = ...,
+            long: builtins.int = ...,
+            float: builtins.float = ...,
+            double: builtins.float = ...,
+            decimal: global___Expression.Literal.Decimal | None = ...,
+            string: builtins.str = ...,
+            date: builtins.int = ...,
+            timestamp: builtins.int = ...,
+            timestamp_ntz: builtins.int = ...,
+            calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
+            year_month_interval: builtins.int = ...,
+            day_time_interval: builtins.int = ...,
+            array: global___Expression.Literal.Array | None = ...,
+            map: global___Expression.Literal.Map | None = ...,
+            struct: global___Expression.Literal.Struct | None = ...,
+            specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
+            time: global___Expression.Literal.Time | None = ...,
+            data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "array",
-            b"array",
-            "binary",
-            b"binary",
-            "boolean",
-            b"boolean",
-            "byte",
-            b"byte",
-            "calendar_interval",
-            b"calendar_interval",
-            "data_type",
-            b"data_type",
-            "date",
-            b"date",
-            "day_time_interval",
-            b"day_time_interval",
-            "decimal",
-            b"decimal",
-            "double",
-            b"double",
-            "float",
-            b"float",
-            "integer",
-            b"integer",
-            "literal_type",
-            b"literal_type",
-            "long",
-            b"long",
-            "map",
-            b"map",
-            "null",
-            b"null",
-            "short",
-            b"short",
-            "specialized_array",
-            b"specialized_array",
-            "string",
-            b"string",
-            "struct",
-            b"struct",
-            "time",
-            b"time",
-            "timestamp",
-            b"timestamp",
-            "timestamp_ntz",
-            b"timestamp_ntz",
-            "year_month_interval",
-            b"year_month_interval",
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "array",
-            b"array",
-            "binary",
-            b"binary",
-            "boolean",
-            b"boolean",
-            "byte",
-            b"byte",
-            "calendar_interval",
-            b"calendar_interval",
-            "data_type",
-            b"data_type",
-            "date",
-            b"date",
-            "day_time_interval",
-            b"day_time_interval",
-            "decimal",
-            b"decimal",
-            "double",
-            b"double",
-            "float",
-            b"float",
-            "integer",
-            b"integer",
-            "literal_type",
-            b"literal_type",
-            "long",
-            b"long",
-            "map",
-            b"map",
-            "null",
-            b"null",
-            "short",
-            b"short",
-            "specialized_array",
-            b"specialized_array",
-            "string",
-            b"string",
-            "struct",
-            b"struct",
-            "time",
-            b"time",
-            "timestamp",
-            b"timestamp",
-            "timestamp_ntz",
-            b"timestamp_ntz",
-            "year_month_interval",
-            b"year_month_interval",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType_literal_type: _TypeAlias = _typing.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-            "map",
-            "struct",
-            "specialized_array",
-            "time",
-        ]  # noqa: Y015
-        _WhichOneofArgType_literal_type: _TypeAlias = _typing.Literal[
-            "literal_type", b"literal_type"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "array",
+                b"array",
+                "binary",
+                b"binary",
+                "boolean",
+                b"boolean",
+                "byte",
+                b"byte",
+                "calendar_interval",
+                b"calendar_interval",
+                "data_type",
+                b"data_type",
+                "date",
+                b"date",
+                "day_time_interval",
+                b"day_time_interval",
+                "decimal",
+                b"decimal",
+                "double",
+                b"double",
+                "float",
+                b"float",
+                "integer",
+                b"integer",
+                "literal_type",
+                b"literal_type",
+                "long",
+                b"long",
+                "map",
+                b"map",
+                "null",
+                b"null",
+                "short",
+                b"short",
+                "specialized_array",
+                b"specialized_array",
+                "string",
+                b"string",
+                "struct",
+                b"struct",
+                "time",
+                b"time",
+                "timestamp",
+                b"timestamp",
+                "timestamp_ntz",
+                b"timestamp_ntz",
+                "year_month_interval",
+                b"year_month_interval",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "array",
+                b"array",
+                "binary",
+                b"binary",
+                "boolean",
+                b"boolean",
+                "byte",
+                b"byte",
+                "calendar_interval",
+                b"calendar_interval",
+                "data_type",
+                b"data_type",
+                "date",
+                b"date",
+                "day_time_interval",
+                b"day_time_interval",
+                "decimal",
+                b"decimal",
+                "double",
+                b"double",
+                "float",
+                b"float",
+                "integer",
+                b"integer",
+                "literal_type",
+                b"literal_type",
+                "long",
+                b"long",
+                "map",
+                b"map",
+                "null",
+                b"null",
+                "short",
+                b"short",
+                "specialized_array",
+                b"specialized_array",
+                "string",
+                b"string",
+                "struct",
+                b"struct",
+                "time",
+                b"time",
+                "timestamp",
+                b"timestamp",
+                "timestamp_ntz",
+                b"timestamp_ntz",
+                "year_month_interval",
+                b"year_month_interval",
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType_literal_type
-        ) -> _WhichOneofReturnType_literal_type | None: ...
+            self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
+        ) -> (
+            typing_extensions.Literal[
+                "null",
+                "binary",
+                "boolean",
+                "byte",
+                "short",
+                "integer",
+                "long",
+                "float",
+                "double",
+                "decimal",
+                "string",
+                "date",
+                "timestamp",
+                "timestamp_ntz",
+                "calendar_interval",
+                "year_month_interval",
+                "day_time_interval",
+                "array",
+                "map",
+                "struct",
+                "specialized_array",
+                "time",
+            ]
+            | None
+        ): ...
 
-    @_typing.final
-    class UnresolvedAttribute(_message.Message):
+    class UnresolvedAttribute(google.protobuf.message.Message):
         """An unresolved attribute that is not explicitly bound to a specific column, but the column
         is resolved during analysis by name.
         """
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        UNPARSED_IDENTIFIER_FIELD_NUMBER: _builtins.int
-        PLAN_ID_FIELD_NUMBER: _builtins.int
-        IS_METADATA_COLUMN_FIELD_NUMBER: _builtins.int
-        unparsed_identifier: _builtins.str
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
+        IS_METADATA_COLUMN_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
         """(Required) An identifier that will be parsed by Catalyst parser. This should follow the
         Spark SQL identifier syntax.
         """
-        plan_id: _builtins.int
+        plan_id: builtins.int
         """(Optional) The id of corresponding connect plan."""
-        is_metadata_column: _builtins.bool
+        is_metadata_column: builtins.bool
         """(Optional) The requested column is a metadata column."""
         def __init__(
             self,
             *,
-            unparsed_identifier: _builtins.str = ...,
-            plan_id: _builtins.int | None = ...,
-            is_metadata_column: _builtins.bool | None = ...,
+            unparsed_identifier: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
+            is_metadata_column: builtins.bool | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_is_metadata_column",
-            b"_is_metadata_column",
-            "_plan_id",
-            b"_plan_id",
-            "is_metadata_column",
-            b"is_metadata_column",
-            "plan_id",
-            b"plan_id",
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_is_metadata_column",
-            b"_is_metadata_column",
-            "_plan_id",
-            b"_plan_id",
-            "is_metadata_column",
-            b"is_metadata_column",
-            "plan_id",
-            b"plan_id",
-            "unparsed_identifier",
-            b"unparsed_identifier",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__is_metadata_column: _TypeAlias = _typing.Literal[
-            "is_metadata_column"
-        ]  # noqa: Y015
-        _WhichOneofArgType__is_metadata_column: _TypeAlias = _typing.Literal[
-            "_is_metadata_column", b"_is_metadata_column"
-        ]  # noqa: Y015
-        _WhichOneofReturnType__plan_id: _TypeAlias = _typing.Literal["plan_id"]  # noqa: Y015
-        _WhichOneofArgType__plan_id: _TypeAlias = _typing.Literal[
-            "_plan_id", b"_plan_id"
-        ]  # noqa: Y015
-        @_typing.overload
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_is_metadata_column",
+                b"_is_metadata_column",
+                "_plan_id",
+                b"_plan_id",
+                "is_metadata_column",
+                b"is_metadata_column",
+                "plan_id",
+                b"plan_id",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_is_metadata_column",
+                b"_is_metadata_column",
+                "_plan_id",
+                b"_plan_id",
+                "is_metadata_column",
+                b"is_metadata_column",
+                "plan_id",
+                b"plan_id",
+                "unparsed_identifier",
+                b"unparsed_identifier",
+            ],
+        ) -> None: ...
+        @typing.overload
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__is_metadata_column
-        ) -> _WhichOneofReturnType__is_metadata_column | None: ...
-        @_typing.overload
+            self,
+            oneof_group: typing_extensions.Literal["_is_metadata_column", b"_is_metadata_column"],
+        ) -> typing_extensions.Literal["is_metadata_column"] | None: ...
+        @typing.overload
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__plan_id
-        ) -> _WhichOneofReturnType__plan_id | None: ...
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
-    @_typing.final
-    class UnresolvedFunction(_message.Message):
+    class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function
         is resolved during analysis following Sparks name resolution rules.
         """
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        FUNCTION_NAME_FIELD_NUMBER: _builtins.int
-        ARGUMENTS_FIELD_NUMBER: _builtins.int
-        IS_DISTINCT_FIELD_NUMBER: _builtins.int
-        IS_USER_DEFINED_FUNCTION_FIELD_NUMBER: _builtins.int
-        IS_INTERNAL_FIELD_NUMBER: _builtins.int
-        function_name: _builtins.str
+        FUNCTION_NAME_FIELD_NUMBER: builtins.int
+        ARGUMENTS_FIELD_NUMBER: builtins.int
+        IS_DISTINCT_FIELD_NUMBER: builtins.int
+        IS_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+        IS_INTERNAL_FIELD_NUMBER: builtins.int
+        function_name: builtins.str
         """(Required) name (or unparsed name for user defined function) for the unresolved function."""
-        is_distinct: _builtins.bool
+        @property
+        def arguments(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression
+        ]:
+            """(Optional) Function arguments. Empty arguments are allowed."""
+        is_distinct: builtins.bool
         """(Required) Indicate if this function should be applied on distinct values."""
-        is_user_defined_function: _builtins.bool
+        is_user_defined_function: builtins.bool
         """(Required) Indicate if this is a user defined function.
 
         When it is not a user defined function, Connect will use the function name directly.
         When it is a user defined function, Connect will parse the function name first.
         """
-        is_internal: _builtins.bool
+        is_internal: builtins.bool
         """(Optional) Indicate if this function is defined in the internal function registry.
         If not set, the server will try to look up the function in the internal function registry
         and decide appropriately.
         """
-        @_builtins.property
-        def arguments(self) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
-            """(Optional) Function arguments. Empty arguments are allowed."""
         def __init__(
             self,
             *,
-            function_name: _builtins.str = ...,
-            arguments: _abc.Iterable[Global___Expression] | None = ...,
-            is_distinct: _builtins.bool = ...,
-            is_user_defined_function: _builtins.bool = ...,
-            is_internal: _builtins.bool | None = ...,
+            function_name: builtins.str = ...,
+            arguments: collections.abc.Iterable[global___Expression] | None = ...,
+            is_distinct: builtins.bool = ...,
+            is_user_defined_function: builtins.bool = ...,
+            is_internal: builtins.bool | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_is_internal", b"_is_internal", "is_internal", b"is_internal"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_is_internal",
-            b"_is_internal",
-            "arguments",
-            b"arguments",
-            "function_name",
-            b"function_name",
-            "is_distinct",
-            b"is_distinct",
-            "is_internal",
-            b"is_internal",
-            "is_user_defined_function",
-            b"is_user_defined_function",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__is_internal: _TypeAlias = _typing.Literal[
-            "is_internal"
-        ]  # noqa: Y015
-        _WhichOneofArgType__is_internal: _TypeAlias = _typing.Literal[
-            "_is_internal", b"_is_internal"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_is_internal", b"_is_internal", "is_internal", b"is_internal"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_is_internal",
+                b"_is_internal",
+                "arguments",
+                b"arguments",
+                "function_name",
+                b"function_name",
+                "is_distinct",
+                b"is_distinct",
+                "is_internal",
+                b"is_internal",
+                "is_user_defined_function",
+                b"is_user_defined_function",
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__is_internal
-        ) -> _WhichOneofReturnType__is_internal | None: ...
+            self, oneof_group: typing_extensions.Literal["_is_internal", b"_is_internal"]
+        ) -> typing_extensions.Literal["is_internal"] | None: ...
 
-    @_typing.final
-    class ExpressionString(_message.Message):
+    class ExpressionString(google.protobuf.message.Message):
         """Expression as string."""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        EXPRESSION_FIELD_NUMBER: _builtins.int
-        expression: _builtins.str
+        EXPRESSION_FIELD_NUMBER: builtins.int
+        expression: builtins.str
         """(Required) A SQL expression that will be parsed by Catalyst parser."""
         def __init__(
             self,
             *,
-            expression: _builtins.str = ...,
+            expression: builtins.str = ...,
         ) -> None: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["expression", b"expression"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["expression", b"expression"]
+        ) -> None: ...
 
-    @_typing.final
-    class UnresolvedStar(_message.Message):
+    class UnresolvedStar(google.protobuf.message.Message):
         """UnresolvedStar is used to expand all the fields of a relation or struct."""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        UNPARSED_TARGET_FIELD_NUMBER: _builtins.int
-        PLAN_ID_FIELD_NUMBER: _builtins.int
-        unparsed_target: _builtins.str
+        UNPARSED_TARGET_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
+        unparsed_target: builtins.str
         """(Optional) The target of the expansion.
 
         If set, it should end with '.*' and will be parsed by 'parseAttributeName'
         in the server side.
         """
-        plan_id: _builtins.int
+        plan_id: builtins.int
         """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
-            unparsed_target: _builtins.str | None = ...,
-            plan_id: _builtins.int | None = ...,
+            unparsed_target: builtins.str | None = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_plan_id",
-            b"_plan_id",
-            "_unparsed_target",
-            b"_unparsed_target",
-            "plan_id",
-            b"plan_id",
-            "unparsed_target",
-            b"unparsed_target",
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_plan_id",
-            b"_plan_id",
-            "_unparsed_target",
-            b"_unparsed_target",
-            "plan_id",
-            b"plan_id",
-            "unparsed_target",
-            b"unparsed_target",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__plan_id: _TypeAlias = _typing.Literal["plan_id"]  # noqa: Y015
-        _WhichOneofArgType__plan_id: _TypeAlias = _typing.Literal[
-            "_plan_id", b"_plan_id"
-        ]  # noqa: Y015
-        _WhichOneofReturnType__unparsed_target: _TypeAlias = _typing.Literal[
-            "unparsed_target"
-        ]  # noqa: Y015
-        _WhichOneofArgType__unparsed_target: _TypeAlias = _typing.Literal[
-            "_unparsed_target", b"_unparsed_target"
-        ]  # noqa: Y015
-        @_typing.overload
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id",
+                b"_plan_id",
+                "_unparsed_target",
+                b"_unparsed_target",
+                "plan_id",
+                b"plan_id",
+                "unparsed_target",
+                b"unparsed_target",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id",
+                b"_plan_id",
+                "_unparsed_target",
+                b"_unparsed_target",
+                "plan_id",
+                b"plan_id",
+                "unparsed_target",
+                b"unparsed_target",
+            ],
+        ) -> None: ...
+        @typing.overload
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__plan_id
-        ) -> _WhichOneofReturnType__plan_id | None: ...
-        @_typing.overload
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
+        @typing.overload
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__unparsed_target
-        ) -> _WhichOneofReturnType__unparsed_target | None: ...
+            self, oneof_group: typing_extensions.Literal["_unparsed_target", b"_unparsed_target"]
+        ) -> typing_extensions.Literal["unparsed_target"] | None: ...
 
-    @_typing.final
-    class UnresolvedRegex(_message.Message):
+    class UnresolvedRegex(google.protobuf.message.Message):
         """Represents all of the input attributes to a given relational operator, for example in
         "SELECT `(id)?+.+` FROM ...".
         """
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        COL_NAME_FIELD_NUMBER: _builtins.int
-        PLAN_ID_FIELD_NUMBER: _builtins.int
-        col_name: _builtins.str
+        COL_NAME_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
         """(Required) The column name used to extract column with regex."""
-        plan_id: _builtins.int
+        plan_id: builtins.int
         """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
-            col_name: _builtins.str = ...,
-            plan_id: _builtins.int | None = ...,
+            col_name: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_plan_id", b"_plan_id", "plan_id", b"plan_id"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_plan_id", b"_plan_id", "col_name", b"col_name", "plan_id", b"plan_id"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__plan_id: _TypeAlias = _typing.Literal["plan_id"]  # noqa: Y015
-        _WhichOneofArgType__plan_id: _TypeAlias = _typing.Literal[
-            "_plan_id", b"_plan_id"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id", b"_plan_id", "col_name", b"col_name", "plan_id", b"plan_id"
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__plan_id
-        ) -> _WhichOneofReturnType__plan_id | None: ...
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
-    @_typing.final
-    class UnresolvedExtractValue(_message.Message):
+    class UnresolvedExtractValue(google.protobuf.message.Message):
         """Extracts a value or values from an Expression"""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        CHILD_FIELD_NUMBER: _builtins.int
-        EXTRACTION_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def child(self) -> Global___Expression:
+        CHILD_FIELD_NUMBER: builtins.int
+        EXTRACTION_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
             """(Required) The expression to extract value from, can be
             Map, Array, Struct or array of Structs.
             """
-        @_builtins.property
-        def extraction(self) -> Global___Expression:
+        @property
+        def extraction(self) -> global___Expression:
             """(Required) The expression to describe the extraction, can be
             key of Map, index of Array, field name of Struct.
             """
         def __init__(
             self,
             *,
-            child: Global___Expression | None = ...,
-            extraction: Global___Expression | None = ...,
+            child: global___Expression | None = ...,
+            extraction: global___Expression | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "child", b"child", "extraction", b"extraction"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "child", b"child", "extraction", b"extraction"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["child", b"child", "extraction", b"extraction"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["child", b"child", "extraction", b"extraction"],
+        ) -> None: ...
 
-    @_typing.final
-    class UpdateFields(_message.Message):
+    class UpdateFields(google.protobuf.message.Message):
         """Add, replace or drop a field of `StructType` expression by name."""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        STRUCT_EXPRESSION_FIELD_NUMBER: _builtins.int
-        FIELD_NAME_FIELD_NUMBER: _builtins.int
-        VALUE_EXPRESSION_FIELD_NUMBER: _builtins.int
-        field_name: _builtins.str
-        """(Required) The field name."""
-        @_builtins.property
-        def struct_expression(self) -> Global___Expression:
+        STRUCT_EXPRESSION_FIELD_NUMBER: builtins.int
+        FIELD_NAME_FIELD_NUMBER: builtins.int
+        VALUE_EXPRESSION_FIELD_NUMBER: builtins.int
+        @property
+        def struct_expression(self) -> global___Expression:
             """(Required) The struct expression."""
-        @_builtins.property
-        def value_expression(self) -> Global___Expression:
+        field_name: builtins.str
+        """(Required) The field name."""
+        @property
+        def value_expression(self) -> global___Expression:
             """(Optional) The expression to add or replace.
 
             When not set, it means this field will be dropped.
@@ -1263,675 +1248,700 @@ class Expression(_message.Message):
         def __init__(
             self,
             *,
-            struct_expression: Global___Expression | None = ...,
-            field_name: _builtins.str = ...,
-            value_expression: Global___Expression | None = ...,
+            struct_expression: global___Expression | None = ...,
+            field_name: builtins.str = ...,
+            value_expression: global___Expression | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "struct_expression", b"struct_expression", "value_expression", b"value_expression"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "field_name",
-            b"field_name",
-            "struct_expression",
-            b"struct_expression",
-            "value_expression",
-            b"value_expression",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "struct_expression", b"struct_expression", "value_expression", b"value_expression"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "field_name",
+                b"field_name",
+                "struct_expression",
+                b"struct_expression",
+                "value_expression",
+                b"value_expression",
+            ],
+        ) -> None: ...
 
-    @_typing.final
-    class Alias(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class Alias(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        EXPR_FIELD_NUMBER: _builtins.int
-        NAME_FIELD_NUMBER: _builtins.int
-        METADATA_FIELD_NUMBER: _builtins.int
-        metadata: _builtins.str
-        """(Optional) Alias metadata expressed as a JSON map."""
-        @_builtins.property
-        def expr(self) -> Global___Expression:
+        EXPR_FIELD_NUMBER: builtins.int
+        NAME_FIELD_NUMBER: builtins.int
+        METADATA_FIELD_NUMBER: builtins.int
+        @property
+        def expr(self) -> global___Expression:
             """(Required) The expression that alias will be added on."""
-        @_builtins.property
-        def name(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        @property
+        def name(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) a list of name parts for the alias.
 
             Scalar columns only has one name that presents.
             """
+        metadata: builtins.str
+        """(Optional) Alias metadata expressed as a JSON map."""
         def __init__(
             self,
             *,
-            expr: Global___Expression | None = ...,
-            name: _abc.Iterable[_builtins.str] | None = ...,
-            metadata: _builtins.str | None = ...,
+            expr: global___Expression | None = ...,
+            name: collections.abc.Iterable[builtins.str] | None = ...,
+            metadata: builtins.str | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata", "name", b"name"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__metadata: _TypeAlias = _typing.Literal["metadata"]  # noqa: Y015
-        _WhichOneofArgType__metadata: _TypeAlias = _typing.Literal[
-            "_metadata", b"_metadata"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata", "name", b"name"
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__metadata
-        ) -> _WhichOneofReturnType__metadata | None: ...
+            self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
+        ) -> typing_extensions.Literal["metadata"] | None: ...
 
-    @_typing.final
-    class LambdaFunction(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class LambdaFunction(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        FUNCTION_FIELD_NUMBER: _builtins.int
-        ARGUMENTS_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def function(self) -> Global___Expression:
+        FUNCTION_FIELD_NUMBER: builtins.int
+        ARGUMENTS_FIELD_NUMBER: builtins.int
+        @property
+        def function(self) -> global___Expression:
             """(Required) The lambda function.
 
             The function body should use 'UnresolvedAttribute' as arguments, the sever side will
             replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
             """
-        @_builtins.property
+        @property
         def arguments(
             self,
-        ) -> _containers.RepeatedCompositeFieldContainer[
-            Global___Expression.UnresolvedNamedLambdaVariable
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.UnresolvedNamedLambdaVariable
         ]:
             """(Required) Function variables. Must contains 1 ~ 3 variables."""
         def __init__(
             self,
             *,
-            function: Global___Expression | None = ...,
-            arguments: _abc.Iterable[Global___Expression.UnresolvedNamedLambdaVariable]
+            function: global___Expression | None = ...,
+            arguments: collections.abc.Iterable[global___Expression.UnresolvedNamedLambdaVariable]
             | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["function", b"function"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "arguments", b"arguments", "function", b"function"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["function", b"function"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arguments", b"arguments", "function", b"function"
+            ],
+        ) -> None: ...
 
-    @_typing.final
-    class UnresolvedNamedLambdaVariable(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class UnresolvedNamedLambdaVariable(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        NAME_PARTS_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def name_parts(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        NAME_PARTS_FIELD_NUMBER: builtins.int
+        @property
+        def name_parts(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) a list of name parts for the variable. Must not be empty."""
         def __init__(
             self,
             *,
-            name_parts: _abc.Iterable[_builtins.str] | None = ...,
+            name_parts: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["name_parts", b"name_parts"]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name_parts", b"name_parts"]
+        ) -> None: ...
 
-    COMMON_FIELD_NUMBER: _builtins.int
-    LITERAL_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_FUNCTION_FIELD_NUMBER: _builtins.int
-    EXPRESSION_STRING_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_STAR_FIELD_NUMBER: _builtins.int
-    ALIAS_FIELD_NUMBER: _builtins.int
-    CAST_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_REGEX_FIELD_NUMBER: _builtins.int
-    SORT_ORDER_FIELD_NUMBER: _builtins.int
-    LAMBDA_FUNCTION_FIELD_NUMBER: _builtins.int
-    WINDOW_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: _builtins.int
-    UPDATE_FIELDS_FIELD_NUMBER: _builtins.int
-    UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: _builtins.int
-    COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: _builtins.int
-    CALL_FUNCTION_FIELD_NUMBER: _builtins.int
-    NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: _builtins.int
-    MERGE_ACTION_FIELD_NUMBER: _builtins.int
-    TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: _builtins.int
-    SUBQUERY_EXPRESSION_FIELD_NUMBER: _builtins.int
-    DIRECT_SHUFFLE_PARTITION_ID_FIELD_NUMBER: _builtins.int
-    EXTENSION_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def common(self) -> Global___ExpressionCommon: ...
-    @_builtins.property
-    def literal(self) -> Global___Expression.Literal: ...
-    @_builtins.property
-    def unresolved_attribute(self) -> Global___Expression.UnresolvedAttribute: ...
-    @_builtins.property
-    def unresolved_function(self) -> Global___Expression.UnresolvedFunction: ...
-    @_builtins.property
-    def expression_string(self) -> Global___Expression.ExpressionString: ...
-    @_builtins.property
-    def unresolved_star(self) -> Global___Expression.UnresolvedStar: ...
-    @_builtins.property
-    def alias(self) -> Global___Expression.Alias: ...
-    @_builtins.property
-    def cast(self) -> Global___Expression.Cast: ...
-    @_builtins.property
-    def unresolved_regex(self) -> Global___Expression.UnresolvedRegex: ...
-    @_builtins.property
-    def sort_order(self) -> Global___Expression.SortOrder: ...
-    @_builtins.property
-    def lambda_function(self) -> Global___Expression.LambdaFunction: ...
-    @_builtins.property
-    def window(self) -> Global___Expression.Window: ...
-    @_builtins.property
-    def unresolved_extract_value(self) -> Global___Expression.UnresolvedExtractValue: ...
-    @_builtins.property
-    def update_fields(self) -> Global___Expression.UpdateFields: ...
-    @_builtins.property
+    COMMON_FIELD_NUMBER: builtins.int
+    LITERAL_FIELD_NUMBER: builtins.int
+    UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
+    UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
+    EXPRESSION_STRING_FIELD_NUMBER: builtins.int
+    UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
+    CAST_FIELD_NUMBER: builtins.int
+    UNRESOLVED_REGEX_FIELD_NUMBER: builtins.int
+    SORT_ORDER_FIELD_NUMBER: builtins.int
+    LAMBDA_FUNCTION_FIELD_NUMBER: builtins.int
+    WINDOW_FIELD_NUMBER: builtins.int
+    UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: builtins.int
+    UPDATE_FIELDS_FIELD_NUMBER: builtins.int
+    UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
+    COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+    CALL_FUNCTION_FIELD_NUMBER: builtins.int
+    NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
+    MERGE_ACTION_FIELD_NUMBER: builtins.int
+    TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
+    SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
+    DIRECT_SHUFFLE_PARTITION_ID_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
+    @property
+    def common(self) -> global___ExpressionCommon: ...
+    @property
+    def literal(self) -> global___Expression.Literal: ...
+    @property
+    def unresolved_attribute(self) -> global___Expression.UnresolvedAttribute: ...
+    @property
+    def unresolved_function(self) -> global___Expression.UnresolvedFunction: ...
+    @property
+    def expression_string(self) -> global___Expression.ExpressionString: ...
+    @property
+    def unresolved_star(self) -> global___Expression.UnresolvedStar: ...
+    @property
+    def alias(self) -> global___Expression.Alias: ...
+    @property
+    def cast(self) -> global___Expression.Cast: ...
+    @property
+    def unresolved_regex(self) -> global___Expression.UnresolvedRegex: ...
+    @property
+    def sort_order(self) -> global___Expression.SortOrder: ...
+    @property
+    def lambda_function(self) -> global___Expression.LambdaFunction: ...
+    @property
+    def window(self) -> global___Expression.Window: ...
+    @property
+    def unresolved_extract_value(self) -> global___Expression.UnresolvedExtractValue: ...
+    @property
+    def update_fields(self) -> global___Expression.UpdateFields: ...
+    @property
     def unresolved_named_lambda_variable(
         self,
-    ) -> Global___Expression.UnresolvedNamedLambdaVariable: ...
-    @_builtins.property
-    def common_inline_user_defined_function(self) -> Global___CommonInlineUserDefinedFunction: ...
-    @_builtins.property
-    def call_function(self) -> Global___CallFunction: ...
-    @_builtins.property
-    def named_argument_expression(self) -> Global___NamedArgumentExpression: ...
-    @_builtins.property
-    def merge_action(self) -> Global___MergeAction: ...
-    @_builtins.property
-    def typed_aggregate_expression(self) -> Global___TypedAggregateExpression: ...
-    @_builtins.property
-    def subquery_expression(self) -> Global___SubqueryExpression: ...
-    @_builtins.property
-    def direct_shuffle_partition_id(self) -> Global___Expression.DirectShufflePartitionID: ...
-    @_builtins.property
-    def extension(self) -> _any_pb2.Any:
+    ) -> global___Expression.UnresolvedNamedLambdaVariable: ...
+    @property
+    def common_inline_user_defined_function(self) -> global___CommonInlineUserDefinedFunction: ...
+    @property
+    def call_function(self) -> global___CallFunction: ...
+    @property
+    def named_argument_expression(self) -> global___NamedArgumentExpression: ...
+    @property
+    def merge_action(self) -> global___MergeAction: ...
+    @property
+    def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
+    @property
+    def subquery_expression(self) -> global___SubqueryExpression: ...
+    @property
+    def direct_shuffle_partition_id(self) -> global___Expression.DirectShufflePartitionID: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
         """
     def __init__(
         self,
         *,
-        common: Global___ExpressionCommon | None = ...,
-        literal: Global___Expression.Literal | None = ...,
-        unresolved_attribute: Global___Expression.UnresolvedAttribute | None = ...,
-        unresolved_function: Global___Expression.UnresolvedFunction | None = ...,
-        expression_string: Global___Expression.ExpressionString | None = ...,
-        unresolved_star: Global___Expression.UnresolvedStar | None = ...,
-        alias: Global___Expression.Alias | None = ...,
-        cast: Global___Expression.Cast | None = ...,
-        unresolved_regex: Global___Expression.UnresolvedRegex | None = ...,
-        sort_order: Global___Expression.SortOrder | None = ...,
-        lambda_function: Global___Expression.LambdaFunction | None = ...,
-        window: Global___Expression.Window | None = ...,
-        unresolved_extract_value: Global___Expression.UnresolvedExtractValue | None = ...,
-        update_fields: Global___Expression.UpdateFields | None = ...,
-        unresolved_named_lambda_variable: Global___Expression.UnresolvedNamedLambdaVariable
+        common: global___ExpressionCommon | None = ...,
+        literal: global___Expression.Literal | None = ...,
+        unresolved_attribute: global___Expression.UnresolvedAttribute | None = ...,
+        unresolved_function: global___Expression.UnresolvedFunction | None = ...,
+        expression_string: global___Expression.ExpressionString | None = ...,
+        unresolved_star: global___Expression.UnresolvedStar | None = ...,
+        alias: global___Expression.Alias | None = ...,
+        cast: global___Expression.Cast | None = ...,
+        unresolved_regex: global___Expression.UnresolvedRegex | None = ...,
+        sort_order: global___Expression.SortOrder | None = ...,
+        lambda_function: global___Expression.LambdaFunction | None = ...,
+        window: global___Expression.Window | None = ...,
+        unresolved_extract_value: global___Expression.UnresolvedExtractValue | None = ...,
+        update_fields: global___Expression.UpdateFields | None = ...,
+        unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
         | None = ...,
-        common_inline_user_defined_function: Global___CommonInlineUserDefinedFunction | None = ...,
-        call_function: Global___CallFunction | None = ...,
-        named_argument_expression: Global___NamedArgumentExpression | None = ...,
-        merge_action: Global___MergeAction | None = ...,
-        typed_aggregate_expression: Global___TypedAggregateExpression | None = ...,
-        subquery_expression: Global___SubqueryExpression | None = ...,
-        direct_shuffle_partition_id: Global___Expression.DirectShufflePartitionID | None = ...,
-        extension: _any_pb2.Any | None = ...,
+        common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
+        call_function: global___CallFunction | None = ...,
+        named_argument_expression: global___NamedArgumentExpression | None = ...,
+        merge_action: global___MergeAction | None = ...,
+        typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
+        subquery_expression: global___SubqueryExpression | None = ...,
+        direct_shuffle_partition_id: global___Expression.DirectShufflePartitionID | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "alias",
-        b"alias",
-        "call_function",
-        b"call_function",
-        "cast",
-        b"cast",
-        "common",
-        b"common",
-        "common_inline_user_defined_function",
-        b"common_inline_user_defined_function",
-        "direct_shuffle_partition_id",
-        b"direct_shuffle_partition_id",
-        "expr_type",
-        b"expr_type",
-        "expression_string",
-        b"expression_string",
-        "extension",
-        b"extension",
-        "lambda_function",
-        b"lambda_function",
-        "literal",
-        b"literal",
-        "merge_action",
-        b"merge_action",
-        "named_argument_expression",
-        b"named_argument_expression",
-        "sort_order",
-        b"sort_order",
-        "subquery_expression",
-        b"subquery_expression",
-        "typed_aggregate_expression",
-        b"typed_aggregate_expression",
-        "unresolved_attribute",
-        b"unresolved_attribute",
-        "unresolved_extract_value",
-        b"unresolved_extract_value",
-        "unresolved_function",
-        b"unresolved_function",
-        "unresolved_named_lambda_variable",
-        b"unresolved_named_lambda_variable",
-        "unresolved_regex",
-        b"unresolved_regex",
-        "unresolved_star",
-        b"unresolved_star",
-        "update_fields",
-        b"update_fields",
-        "window",
-        b"window",
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "alias",
-        b"alias",
-        "call_function",
-        b"call_function",
-        "cast",
-        b"cast",
-        "common",
-        b"common",
-        "common_inline_user_defined_function",
-        b"common_inline_user_defined_function",
-        "direct_shuffle_partition_id",
-        b"direct_shuffle_partition_id",
-        "expr_type",
-        b"expr_type",
-        "expression_string",
-        b"expression_string",
-        "extension",
-        b"extension",
-        "lambda_function",
-        b"lambda_function",
-        "literal",
-        b"literal",
-        "merge_action",
-        b"merge_action",
-        "named_argument_expression",
-        b"named_argument_expression",
-        "sort_order",
-        b"sort_order",
-        "subquery_expression",
-        b"subquery_expression",
-        "typed_aggregate_expression",
-        b"typed_aggregate_expression",
-        "unresolved_attribute",
-        b"unresolved_attribute",
-        "unresolved_extract_value",
-        b"unresolved_extract_value",
-        "unresolved_function",
-        b"unresolved_function",
-        "unresolved_named_lambda_variable",
-        b"unresolved_named_lambda_variable",
-        "unresolved_regex",
-        b"unresolved_regex",
-        "unresolved_star",
-        b"unresolved_star",
-        "update_fields",
-        b"update_fields",
-        "window",
-        b"window",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_expr_type: _TypeAlias = _typing.Literal[
-        "literal",
-        "unresolved_attribute",
-        "unresolved_function",
-        "expression_string",
-        "unresolved_star",
-        "alias",
-        "cast",
-        "unresolved_regex",
-        "sort_order",
-        "lambda_function",
-        "window",
-        "unresolved_extract_value",
-        "update_fields",
-        "unresolved_named_lambda_variable",
-        "common_inline_user_defined_function",
-        "call_function",
-        "named_argument_expression",
-        "merge_action",
-        "typed_aggregate_expression",
-        "subquery_expression",
-        "direct_shuffle_partition_id",
-        "extension",
-    ]  # noqa: Y015
-    _WhichOneofArgType_expr_type: _TypeAlias = _typing.Literal[
-        "expr_type", b"expr_type"
-    ]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "alias",
+            b"alias",
+            "call_function",
+            b"call_function",
+            "cast",
+            b"cast",
+            "common",
+            b"common",
+            "common_inline_user_defined_function",
+            b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
+            "expr_type",
+            b"expr_type",
+            "expression_string",
+            b"expression_string",
+            "extension",
+            b"extension",
+            "lambda_function",
+            b"lambda_function",
+            "literal",
+            b"literal",
+            "merge_action",
+            b"merge_action",
+            "named_argument_expression",
+            b"named_argument_expression",
+            "sort_order",
+            b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
+            "typed_aggregate_expression",
+            b"typed_aggregate_expression",
+            "unresolved_attribute",
+            b"unresolved_attribute",
+            "unresolved_extract_value",
+            b"unresolved_extract_value",
+            "unresolved_function",
+            b"unresolved_function",
+            "unresolved_named_lambda_variable",
+            b"unresolved_named_lambda_variable",
+            "unresolved_regex",
+            b"unresolved_regex",
+            "unresolved_star",
+            b"unresolved_star",
+            "update_fields",
+            b"update_fields",
+            "window",
+            b"window",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "alias",
+            b"alias",
+            "call_function",
+            b"call_function",
+            "cast",
+            b"cast",
+            "common",
+            b"common",
+            "common_inline_user_defined_function",
+            b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
+            "expr_type",
+            b"expr_type",
+            "expression_string",
+            b"expression_string",
+            "extension",
+            b"extension",
+            "lambda_function",
+            b"lambda_function",
+            "literal",
+            b"literal",
+            "merge_action",
+            b"merge_action",
+            "named_argument_expression",
+            b"named_argument_expression",
+            "sort_order",
+            b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
+            "typed_aggregate_expression",
+            b"typed_aggregate_expression",
+            "unresolved_attribute",
+            b"unresolved_attribute",
+            "unresolved_extract_value",
+            b"unresolved_extract_value",
+            "unresolved_function",
+            b"unresolved_function",
+            "unresolved_named_lambda_variable",
+            b"unresolved_named_lambda_variable",
+            "unresolved_regex",
+            b"unresolved_regex",
+            "unresolved_star",
+            b"unresolved_star",
+            "update_fields",
+            b"update_fields",
+            "window",
+            b"window",
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType_expr_type
-    ) -> _WhichOneofReturnType_expr_type | None: ...
+        self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
+    ) -> (
+        typing_extensions.Literal[
+            "literal",
+            "unresolved_attribute",
+            "unresolved_function",
+            "expression_string",
+            "unresolved_star",
+            "alias",
+            "cast",
+            "unresolved_regex",
+            "sort_order",
+            "lambda_function",
+            "window",
+            "unresolved_extract_value",
+            "update_fields",
+            "unresolved_named_lambda_variable",
+            "common_inline_user_defined_function",
+            "call_function",
+            "named_argument_expression",
+            "merge_action",
+            "typed_aggregate_expression",
+            "subquery_expression",
+            "direct_shuffle_partition_id",
+            "extension",
+        ]
+        | None
+    ): ...
 
-Global___Expression: _TypeAlias = Expression  # noqa: Y015
+global___Expression = Expression
 
-@_typing.final
-class ExpressionCommon(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class ExpressionCommon(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    ORIGIN_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def origin(self) -> _common_pb2.Origin:
+    ORIGIN_FIELD_NUMBER: builtins.int
+    @property
+    def origin(self) -> pyspark.sql.connect.proto.common_pb2.Origin:
         """(Required) Keep the information of the origin for this expression such as stacktrace."""
     def __init__(
         self,
         *,
-        origin: _common_pb2.Origin | None = ...,
+        origin: pyspark.sql.connect.proto.common_pb2.Origin | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["origin", b"origin"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["origin", b"origin"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["origin", b"origin"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["origin", b"origin"]) -> None: ...
 
-Global___ExpressionCommon: _TypeAlias = ExpressionCommon  # noqa: Y015
+global___ExpressionCommon = ExpressionCommon
 
-@_typing.final
-class CommonInlineUserDefinedFunction(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    FUNCTION_NAME_FIELD_NUMBER: _builtins.int
-    DETERMINISTIC_FIELD_NUMBER: _builtins.int
-    ARGUMENTS_FIELD_NUMBER: _builtins.int
-    PYTHON_UDF_FIELD_NUMBER: _builtins.int
-    SCALAR_SCALA_UDF_FIELD_NUMBER: _builtins.int
-    JAVA_UDF_FIELD_NUMBER: _builtins.int
-    IS_DISTINCT_FIELD_NUMBER: _builtins.int
-    function_name: _builtins.str
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    DETERMINISTIC_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    PYTHON_UDF_FIELD_NUMBER: builtins.int
+    SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
+    JAVA_UDF_FIELD_NUMBER: builtins.int
+    IS_DISTINCT_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
     """(Required) Name of the user-defined function."""
-    deterministic: _builtins.bool
+    deterministic: builtins.bool
     """(Optional) Indicate if the user-defined function is deterministic."""
-    is_distinct: _builtins.bool
-    """(Required) Indicate if this function should be applied on distinct values."""
-    @_builtins.property
-    def arguments(self) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) Function arguments. Empty arguments are allowed."""
-    @_builtins.property
-    def python_udf(self) -> Global___PythonUDF: ...
-    @_builtins.property
-    def scalar_scala_udf(self) -> Global___ScalarScalaUDF: ...
-    @_builtins.property
-    def java_udf(self) -> Global___JavaUDF: ...
+    @property
+    def python_udf(self) -> global___PythonUDF: ...
+    @property
+    def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
+    @property
+    def java_udf(self) -> global___JavaUDF: ...
+    is_distinct: builtins.bool
+    """(Required) Indicate if this function should be applied on distinct values."""
     def __init__(
         self,
         *,
-        function_name: _builtins.str = ...,
-        deterministic: _builtins.bool = ...,
-        arguments: _abc.Iterable[Global___Expression] | None = ...,
-        python_udf: Global___PythonUDF | None = ...,
-        scalar_scala_udf: Global___ScalarScalaUDF | None = ...,
-        java_udf: Global___JavaUDF | None = ...,
-        is_distinct: _builtins.bool = ...,
+        function_name: builtins.str = ...,
+        deterministic: builtins.bool = ...,
+        arguments: collections.abc.Iterable[global___Expression] | None = ...,
+        python_udf: global___PythonUDF | None = ...,
+        scalar_scala_udf: global___ScalarScalaUDF | None = ...,
+        java_udf: global___JavaUDF | None = ...,
+        is_distinct: builtins.bool = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "function",
-        b"function",
-        "java_udf",
-        b"java_udf",
-        "python_udf",
-        b"python_udf",
-        "scalar_scala_udf",
-        b"scalar_scala_udf",
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "arguments",
-        b"arguments",
-        "deterministic",
-        b"deterministic",
-        "function",
-        b"function",
-        "function_name",
-        b"function_name",
-        "is_distinct",
-        b"is_distinct",
-        "java_udf",
-        b"java_udf",
-        "python_udf",
-        b"python_udf",
-        "scalar_scala_udf",
-        b"scalar_scala_udf",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_function: _TypeAlias = _typing.Literal[
-        "python_udf", "scalar_scala_udf", "java_udf"
-    ]  # noqa: Y015
-    _WhichOneofArgType_function: _TypeAlias = _typing.Literal["function", b"function"]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function",
+            b"function",
+            "java_udf",
+            b"java_udf",
+            "python_udf",
+            b"python_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments",
+            b"arguments",
+            "deterministic",
+            b"deterministic",
+            "function",
+            b"function",
+            "function_name",
+            b"function_name",
+            "is_distinct",
+            b"is_distinct",
+            "java_udf",
+            b"java_udf",
+            "python_udf",
+            b"python_udf",
+            "scalar_scala_udf",
+            b"scalar_scala_udf",
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType_function
-    ) -> _WhichOneofReturnType_function | None: ...
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf"] | None: ...
 
-Global___CommonInlineUserDefinedFunction: _TypeAlias = CommonInlineUserDefinedFunction  # noqa: Y015
+global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
-@_typing.final
-class PythonUDF(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class PythonUDF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    OUTPUT_TYPE_FIELD_NUMBER: _builtins.int
-    EVAL_TYPE_FIELD_NUMBER: _builtins.int
-    COMMAND_FIELD_NUMBER: _builtins.int
-    PYTHON_VER_FIELD_NUMBER: _builtins.int
-    ADDITIONAL_INCLUDES_FIELD_NUMBER: _builtins.int
-    eval_type: _builtins.int
-    """(Required) EvalType of the Python UDF"""
-    command: _builtins.bytes
-    """(Required) The encoded commands of the Python UDF"""
-    python_ver: _builtins.str
-    """(Required) Python version being used in the client."""
-    @_builtins.property
-    def output_type(self) -> _types_pb2.DataType:
+    OUTPUT_TYPE_FIELD_NUMBER: builtins.int
+    EVAL_TYPE_FIELD_NUMBER: builtins.int
+    COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
+    ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
+    @property
+    def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
-    @_builtins.property
-    def additional_includes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+    eval_type: builtins.int
+    """(Required) EvalType of the Python UDF"""
+    command: builtins.bytes
+    """(Required) The encoded commands of the Python UDF"""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
+    @property
+    def additional_includes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Additional includes for the Python UDF."""
     def __init__(
         self,
         *,
-        output_type: _types_pb2.DataType | None = ...,
-        eval_type: _builtins.int = ...,
-        command: _builtins.bytes = ...,
-        python_ver: _builtins.str = ...,
-        additional_includes: _abc.Iterable[_builtins.str] | None = ...,
+        output_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        eval_type: builtins.int = ...,
+        command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
+        additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["output_type", b"output_type"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "additional_includes",
-        b"additional_includes",
-        "command",
-        b"command",
-        "eval_type",
-        b"eval_type",
-        "output_type",
-        b"output_type",
-        "python_ver",
-        b"python_ver",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["output_type", b"output_type"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "additional_includes",
+            b"additional_includes",
+            "command",
+            b"command",
+            "eval_type",
+            b"eval_type",
+            "output_type",
+            b"output_type",
+            "python_ver",
+            b"python_ver",
+        ],
+    ) -> None: ...
 
-Global___PythonUDF: _TypeAlias = PythonUDF  # noqa: Y015
+global___PythonUDF = PythonUDF
 
-@_typing.final
-class ScalarScalaUDF(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class ScalarScalaUDF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    PAYLOAD_FIELD_NUMBER: _builtins.int
-    INPUTTYPES_FIELD_NUMBER: _builtins.int
-    OUTPUTTYPE_FIELD_NUMBER: _builtins.int
-    NULLABLE_FIELD_NUMBER: _builtins.int
-    AGGREGATE_FIELD_NUMBER: _builtins.int
-    payload: _builtins.bytes
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    INPUTTYPES_FIELD_NUMBER: builtins.int
+    OUTPUTTYPE_FIELD_NUMBER: builtins.int
+    NULLABLE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
+    payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
-    nullable: _builtins.bool
-    """(Required) True if the UDF can return null value"""
-    aggregate: _builtins.bool
-    """(Required) Indicate if the UDF is an aggregate function"""
-    @_builtins.property
-    def inputTypes(self) -> _containers.RepeatedCompositeFieldContainer[_types_pb2.DataType]:
+    @property
+    def inputTypes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.types_pb2.DataType
+    ]:
         """(Optional) Input type(s) of the UDF"""
-    @_builtins.property
-    def outputType(self) -> _types_pb2.DataType:
+    @property
+    def outputType(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the UDF"""
+    nullable: builtins.bool
+    """(Required) True if the UDF can return null value"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the UDF is an aggregate function"""
     def __init__(
         self,
         *,
-        payload: _builtins.bytes = ...,
-        inputTypes: _abc.Iterable[_types_pb2.DataType] | None = ...,
-        outputType: _types_pb2.DataType | None = ...,
-        nullable: _builtins.bool = ...,
-        aggregate: _builtins.bool = ...,
+        payload: builtins.bytes = ...,
+        inputTypes: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType]
+        | None = ...,
+        outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        nullable: builtins.bool = ...,
+        aggregate: builtins.bool = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["outputType", b"outputType"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "aggregate",
-        b"aggregate",
-        "inputTypes",
-        b"inputTypes",
-        "nullable",
-        b"nullable",
-        "outputType",
-        b"outputType",
-        "payload",
-        b"payload",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["outputType", b"outputType"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "aggregate",
+            b"aggregate",
+            "inputTypes",
+            b"inputTypes",
+            "nullable",
+            b"nullable",
+            "outputType",
+            b"outputType",
+            "payload",
+            b"payload",
+        ],
+    ) -> None: ...
 
-Global___ScalarScalaUDF: _TypeAlias = ScalarScalaUDF  # noqa: Y015
+global___ScalarScalaUDF = ScalarScalaUDF
 
-@_typing.final
-class JavaUDF(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class JavaUDF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CLASS_NAME_FIELD_NUMBER: _builtins.int
-    OUTPUT_TYPE_FIELD_NUMBER: _builtins.int
-    AGGREGATE_FIELD_NUMBER: _builtins.int
-    class_name: _builtins.str
+    CLASS_NAME_FIELD_NUMBER: builtins.int
+    OUTPUT_TYPE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
+    class_name: builtins.str
     """(Required) Fully qualified name of Java class"""
-    aggregate: _builtins.bool
-    """(Required) Indicate if the Java user-defined function is an aggregate function"""
-    @_builtins.property
-    def output_type(self) -> _types_pb2.DataType:
+    @property
+    def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) Output type of the Java UDF"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the Java user-defined function is an aggregate function"""
     def __init__(
         self,
         *,
-        class_name: _builtins.str = ...,
-        output_type: _types_pb2.DataType | None = ...,
-        aggregate: _builtins.bool = ...,
+        class_name: builtins.str = ...,
+        output_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        aggregate: builtins.bool = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_output_type", b"_output_type", "output_type", b"output_type"
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_output_type",
-        b"_output_type",
-        "aggregate",
-        b"aggregate",
-        "class_name",
-        b"class_name",
-        "output_type",
-        b"output_type",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__output_type: _TypeAlias = _typing.Literal["output_type"]  # noqa: Y015
-    _WhichOneofArgType__output_type: _TypeAlias = _typing.Literal[
-        "_output_type", b"_output_type"
-    ]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_output_type", b"_output_type", "output_type", b"output_type"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_output_type",
+            b"_output_type",
+            "aggregate",
+            b"aggregate",
+            "class_name",
+            b"class_name",
+            "output_type",
+            b"output_type",
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__output_type
-    ) -> _WhichOneofReturnType__output_type | None: ...
+        self, oneof_group: typing_extensions.Literal["_output_type", b"_output_type"]
+    ) -> typing_extensions.Literal["output_type"] | None: ...
 
-Global___JavaUDF: _TypeAlias = JavaUDF  # noqa: Y015
+global___JavaUDF = JavaUDF
 
-@_typing.final
-class TypedAggregateExpression(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class TypedAggregateExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    SCALAR_SCALA_UDF_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def scalar_scala_udf(self) -> Global___ScalarScalaUDF:
+    SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
+    @property
+    def scalar_scala_udf(self) -> global___ScalarScalaUDF:
         """(Required) The aggregate function object packed into bytes."""
     def __init__(
         self,
         *,
-        scalar_scala_udf: Global___ScalarScalaUDF | None = ...,
+        scalar_scala_udf: global___ScalarScalaUDF | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "scalar_scala_udf", b"scalar_scala_udf"
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "scalar_scala_udf", b"scalar_scala_udf"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["scalar_scala_udf", b"scalar_scala_udf"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["scalar_scala_udf", b"scalar_scala_udf"]
+    ) -> None: ...
 
-Global___TypedAggregateExpression: _TypeAlias = TypedAggregateExpression  # noqa: Y015
+global___TypedAggregateExpression = TypedAggregateExpression
 
-@_typing.final
-class CallFunction(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class CallFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    FUNCTION_NAME_FIELD_NUMBER: _builtins.int
-    ARGUMENTS_FIELD_NUMBER: _builtins.int
-    function_name: _builtins.str
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
     """(Required) Unparsed name of the SQL function."""
-    @_builtins.property
-    def arguments(self) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) Function arguments. Empty arguments are allowed."""
     def __init__(
         self,
         *,
-        function_name: _builtins.str = ...,
-        arguments: _abc.Iterable[Global___Expression] | None = ...,
+        function_name: builtins.str = ...,
+        arguments: collections.abc.Iterable[global___Expression] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "arguments", b"arguments", "function_name", b"function_name"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments", b"arguments", "function_name", b"function_name"
+        ],
+    ) -> None: ...
 
-Global___CallFunction: _TypeAlias = CallFunction  # noqa: Y015
+global___CallFunction = CallFunction
 
-@_typing.final
-class NamedArgumentExpression(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class NamedArgumentExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    KEY_FIELD_NUMBER: _builtins.int
-    VALUE_FIELD_NUMBER: _builtins.int
-    key: _builtins.str
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    key: builtins.str
     """(Required) The key of the named argument."""
-    @_builtins.property
-    def value(self) -> Global___Expression:
+    @property
+    def value(self) -> global___Expression:
         """(Required) The value expression of the named argument."""
     def __init__(
         self,
         *,
-        key: _builtins.str = ...,
-        value: Global___Expression | None = ...,
+        key: builtins.str = ...,
+        value: global___Expression | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["value", b"value"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+    ) -> None: ...
 
-Global___NamedArgumentExpression: _TypeAlias = NamedArgumentExpression  # noqa: Y015
+global___NamedArgumentExpression = NamedArgumentExpression
 
-@_typing.final
-class MergeAction(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class MergeAction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class _ActionType:
-        ValueType = _typing.NewType("ValueType", _builtins.int)
-        V: _TypeAlias = ValueType  # noqa: Y015
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
 
     class _ActionTypeEnumTypeWrapper(
-        _enum_type_wrapper._EnumTypeWrapper[MergeAction._ActionType.ValueType], _builtins.type
-    ):
-        DESCRIPTOR: _descriptor.EnumDescriptor
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            MergeAction._ActionType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         ACTION_TYPE_INVALID: MergeAction._ActionType.ValueType  # 0
         ACTION_TYPE_DELETE: MergeAction._ActionType.ValueType  # 1
         ACTION_TYPE_INSERT: MergeAction._ActionType.ValueType  # 2
@@ -1947,91 +1957,91 @@ class MergeAction(_message.Message):
     ACTION_TYPE_UPDATE: MergeAction.ActionType.ValueType  # 4
     ACTION_TYPE_UPDATE_STAR: MergeAction.ActionType.ValueType  # 5
 
-    @_typing.final
-    class Assignment(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class Assignment(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        @_builtins.property
-        def key(self) -> Global___Expression:
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def key(self) -> global___Expression:
             """(Required) The key of the assignment."""
-        @_builtins.property
-        def value(self) -> Global___Expression:
+        @property
+        def value(self) -> global___Expression:
             """(Required) The value of the assignment."""
         def __init__(
             self,
             *,
-            key: Global___Expression | None = ...,
-            value: Global___Expression | None = ...,
+            key: global___Expression | None = ...,
+            value: global___Expression | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "key", b"key", "value", b"value"
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "key", b"key", "value", b"value"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
-    ACTION_TYPE_FIELD_NUMBER: _builtins.int
-    CONDITION_FIELD_NUMBER: _builtins.int
-    ASSIGNMENTS_FIELD_NUMBER: _builtins.int
-    action_type: Global___MergeAction.ActionType.ValueType
+    ACTION_TYPE_FIELD_NUMBER: builtins.int
+    CONDITION_FIELD_NUMBER: builtins.int
+    ASSIGNMENTS_FIELD_NUMBER: builtins.int
+    action_type: global___MergeAction.ActionType.ValueType
     """(Required) The action type of the merge action."""
-    @_builtins.property
-    def condition(self) -> Global___Expression:
+    @property
+    def condition(self) -> global___Expression:
         """(Optional) The condition expression of the merge action."""
-    @_builtins.property
+    @property
     def assignments(
         self,
-    ) -> _containers.RepeatedCompositeFieldContainer[Global___MergeAction.Assignment]:
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___MergeAction.Assignment
+    ]:
         """(Optional) The assignments of the merge action. Required for ActionTypes INSERT and UPDATE."""
     def __init__(
         self,
         *,
-        action_type: Global___MergeAction.ActionType.ValueType = ...,
-        condition: Global___Expression | None = ...,
-        assignments: _abc.Iterable[Global___MergeAction.Assignment] | None = ...,
+        action_type: global___MergeAction.ActionType.ValueType = ...,
+        condition: global___Expression | None = ...,
+        assignments: collections.abc.Iterable[global___MergeAction.Assignment] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_condition", b"_condition", "condition", b"condition"
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_condition",
-        b"_condition",
-        "action_type",
-        b"action_type",
-        "assignments",
-        b"assignments",
-        "condition",
-        b"condition",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__condition: _TypeAlias = _typing.Literal["condition"]  # noqa: Y015
-    _WhichOneofArgType__condition: _TypeAlias = _typing.Literal[
-        "_condition", b"_condition"
-    ]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_condition", b"_condition", "condition", b"condition"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_condition",
+            b"_condition",
+            "action_type",
+            b"action_type",
+            "assignments",
+            b"assignments",
+            "condition",
+            b"condition",
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__condition
-    ) -> _WhichOneofReturnType__condition | None: ...
+        self, oneof_group: typing_extensions.Literal["_condition", b"_condition"]
+    ) -> typing_extensions.Literal["condition"] | None: ...
 
-Global___MergeAction: _TypeAlias = MergeAction  # noqa: Y015
+global___MergeAction = MergeAction
 
-@_typing.final
-class SubqueryExpression(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class SubqueryExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class _SubqueryType:
-        ValueType = _typing.NewType("ValueType", _builtins.int)
-        V: _TypeAlias = ValueType  # noqa: Y015
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
 
     class _SubqueryTypeEnumTypeWrapper(
-        _enum_type_wrapper._EnumTypeWrapper[SubqueryExpression._SubqueryType.ValueType],
-        _builtins.type,
-    ):
-        DESCRIPTOR: _descriptor.EnumDescriptor
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            SubqueryExpression._SubqueryType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         SUBQUERY_TYPE_UNKNOWN: SubqueryExpression._SubqueryType.ValueType  # 0
         SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
         SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
@@ -2045,111 +2055,113 @@ class SubqueryExpression(_message.Message):
     SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression.SubqueryType.ValueType  # 3
     SUBQUERY_TYPE_IN: SubqueryExpression.SubqueryType.ValueType  # 4
 
-    @_typing.final
-    class TableArgOptions(_message.Message):
+    class TableArgOptions(google.protobuf.message.Message):
         """Nested message for table argument options."""
 
-        DESCRIPTOR: _descriptor.Descriptor
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTITION_SPEC_FIELD_NUMBER: _builtins.int
-        ORDER_SPEC_FIELD_NUMBER: _builtins.int
-        WITH_SINGLE_PARTITION_FIELD_NUMBER: _builtins.int
-        with_single_partition: _builtins.bool
-        """(Optional) Whether this is a single partition."""
-        @_builtins.property
+        PARTITION_SPEC_FIELD_NUMBER: builtins.int
+        ORDER_SPEC_FIELD_NUMBER: builtins.int
+        WITH_SINGLE_PARTITION_FIELD_NUMBER: builtins.int
+        @property
         def partition_spec(
             self,
-        ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression
+        ]:
             """(Optional) The way that input rows are partitioned."""
-        @_builtins.property
+        @property
         def order_spec(
             self,
-        ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression.SortOrder]:
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.SortOrder
+        ]:
             """(Optional) Ordering of rows in a partition."""
+        with_single_partition: builtins.bool
+        """(Optional) Whether this is a single partition."""
         def __init__(
             self,
             *,
-            partition_spec: _abc.Iterable[Global___Expression] | None = ...,
-            order_spec: _abc.Iterable[Global___Expression.SortOrder] | None = ...,
-            with_single_partition: _builtins.bool | None = ...,
+            partition_spec: collections.abc.Iterable[global___Expression] | None = ...,
+            order_spec: collections.abc.Iterable[global___Expression.SortOrder] | None = ...,
+            with_single_partition: builtins.bool | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal[
-            "_with_single_partition",
-            b"_with_single_partition",
-            "with_single_partition",
-            b"with_single_partition",
-        ]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "_with_single_partition",
-            b"_with_single_partition",
-            "order_spec",
-            b"order_spec",
-            "partition_spec",
-            b"partition_spec",
-            "with_single_partition",
-            b"with_single_partition",
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-        _WhichOneofReturnType__with_single_partition: _TypeAlias = _typing.Literal[
-            "with_single_partition"
-        ]  # noqa: Y015
-        _WhichOneofArgType__with_single_partition: _TypeAlias = _typing.Literal[
-            "_with_single_partition", b"_with_single_partition"
-        ]  # noqa: Y015
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "order_spec",
+                b"order_spec",
+                "partition_spec",
+                b"partition_spec",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> None: ...
         def WhichOneof(
-            self, oneof_group: _WhichOneofArgType__with_single_partition
-        ) -> _WhichOneofReturnType__with_single_partition | None: ...
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_with_single_partition", b"_with_single_partition"
+            ],
+        ) -> typing_extensions.Literal["with_single_partition"] | None: ...
 
-    PLAN_ID_FIELD_NUMBER: _builtins.int
-    SUBQUERY_TYPE_FIELD_NUMBER: _builtins.int
-    TABLE_ARG_OPTIONS_FIELD_NUMBER: _builtins.int
-    IN_SUBQUERY_VALUES_FIELD_NUMBER: _builtins.int
-    plan_id: _builtins.int
+    PLAN_ID_FIELD_NUMBER: builtins.int
+    SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
+    TABLE_ARG_OPTIONS_FIELD_NUMBER: builtins.int
+    IN_SUBQUERY_VALUES_FIELD_NUMBER: builtins.int
+    plan_id: builtins.int
     """(Required) The ID of the corresponding connect plan."""
-    subquery_type: Global___SubqueryExpression.SubqueryType.ValueType
+    subquery_type: global___SubqueryExpression.SubqueryType.ValueType
     """(Required) The type of the subquery."""
-    @_builtins.property
-    def table_arg_options(self) -> Global___SubqueryExpression.TableArgOptions:
+    @property
+    def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
         """(Optional) Options specific to table arguments."""
-    @_builtins.property
+    @property
     def in_subquery_values(
         self,
-    ) -> _containers.RepeatedCompositeFieldContainer[Global___Expression]:
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) IN subquery values."""
     def __init__(
         self,
         *,
-        plan_id: _builtins.int = ...,
-        subquery_type: Global___SubqueryExpression.SubqueryType.ValueType = ...,
-        table_arg_options: Global___SubqueryExpression.TableArgOptions | None = ...,
-        in_subquery_values: _abc.Iterable[Global___Expression] | None = ...,
+        plan_id: builtins.int = ...,
+        subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
+        table_arg_options: global___SubqueryExpression.TableArgOptions | None = ...,
+        in_subquery_values: collections.abc.Iterable[global___Expression] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_table_arg_options", b"_table_arg_options", "table_arg_options", b"table_arg_options"
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_table_arg_options",
-        b"_table_arg_options",
-        "in_subquery_values",
-        b"in_subquery_values",
-        "plan_id",
-        b"plan_id",
-        "subquery_type",
-        b"subquery_type",
-        "table_arg_options",
-        b"table_arg_options",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__table_arg_options: _TypeAlias = _typing.Literal[
-        "table_arg_options"
-    ]  # noqa: Y015
-    _WhichOneofArgType__table_arg_options: _TypeAlias = _typing.Literal[
-        "_table_arg_options", b"_table_arg_options"
-    ]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_table_arg_options", b"_table_arg_options", "table_arg_options", b"table_arg_options"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_table_arg_options",
+            b"_table_arg_options",
+            "in_subquery_values",
+            b"in_subquery_values",
+            "plan_id",
+            b"plan_id",
+            "subquery_type",
+            b"subquery_type",
+            "table_arg_options",
+            b"table_arg_options",
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__table_arg_options
-    ) -> _WhichOneofReturnType__table_arg_options | None: ...
+        self, oneof_group: typing_extensions.Literal["_table_arg_options", b"_table_arg_options"]
+    ) -> typing_extensions.Literal["table_arg_options"] | None: ...
 
-Global___SubqueryExpression: _TypeAlias = SubqueryExpression  # noqa: Y015
+global___SubqueryExpression = SubqueryExpression

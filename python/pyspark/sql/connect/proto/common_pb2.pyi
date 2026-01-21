@@ -33,737 +33,698 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
-from collections import abc as _abc
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
-from google.protobuf.internal import containers as _containers
-import builtins as _builtins
+import builtins
+import collections.abc
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.message
 import sys
-import typing as _typing
+import typing
 
-if sys.version_info >= (3, 10):
-    from typing import TypeAlias as _TypeAlias
+if sys.version_info >= (3, 8):
+    import typing as typing_extensions
 else:
-    from typing_extensions import TypeAlias as _TypeAlias
+    import typing_extensions
 
-DESCRIPTOR: _descriptor.FileDescriptor
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@_typing.final
-class StorageLevel(_message.Message):
+class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    USE_DISK_FIELD_NUMBER: _builtins.int
-    USE_MEMORY_FIELD_NUMBER: _builtins.int
-    USE_OFF_HEAP_FIELD_NUMBER: _builtins.int
-    DESERIALIZED_FIELD_NUMBER: _builtins.int
-    REPLICATION_FIELD_NUMBER: _builtins.int
-    use_disk: _builtins.bool
+    USE_DISK_FIELD_NUMBER: builtins.int
+    USE_MEMORY_FIELD_NUMBER: builtins.int
+    USE_OFF_HEAP_FIELD_NUMBER: builtins.int
+    DESERIALIZED_FIELD_NUMBER: builtins.int
+    REPLICATION_FIELD_NUMBER: builtins.int
+    use_disk: builtins.bool
     """(Required) Whether the cache should use disk or not."""
-    use_memory: _builtins.bool
+    use_memory: builtins.bool
     """(Required) Whether the cache should use memory or not."""
-    use_off_heap: _builtins.bool
+    use_off_heap: builtins.bool
     """(Required) Whether the cache should use off-heap or not."""
-    deserialized: _builtins.bool
+    deserialized: builtins.bool
     """(Required) Whether the cached data is deserialized or not."""
-    replication: _builtins.int
+    replication: builtins.int
     """(Required) The number of replicas."""
     def __init__(
         self,
         *,
-        use_disk: _builtins.bool = ...,
-        use_memory: _builtins.bool = ...,
-        use_off_heap: _builtins.bool = ...,
-        deserialized: _builtins.bool = ...,
-        replication: _builtins.int = ...,
+        use_disk: builtins.bool = ...,
+        use_memory: builtins.bool = ...,
+        use_off_heap: builtins.bool = ...,
+        deserialized: builtins.bool = ...,
+        replication: builtins.int = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "deserialized",
-        b"deserialized",
-        "replication",
-        b"replication",
-        "use_disk",
-        b"use_disk",
-        "use_memory",
-        b"use_memory",
-        "use_off_heap",
-        b"use_off_heap",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "deserialized",
+            b"deserialized",
+            "replication",
+            b"replication",
+            "use_disk",
+            b"use_disk",
+            "use_memory",
+            b"use_memory",
+            "use_off_heap",
+            b"use_off_heap",
+        ],
+    ) -> None: ...
 
-Global___StorageLevel: _TypeAlias = StorageLevel  # noqa: Y015
+global___StorageLevel = StorageLevel
 
-@_typing.final
-class ResourceInformation(_message.Message):
+class ResourceInformation(google.protobuf.message.Message):
     """ResourceInformation to hold information about a type of Resource.
     The corresponding class is 'org.apache.spark.resource.ResourceInformation'
     """
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    NAME_FIELD_NUMBER: _builtins.int
-    ADDRESSES_FIELD_NUMBER: _builtins.int
-    name: _builtins.str
+    NAME_FIELD_NUMBER: builtins.int
+    ADDRESSES_FIELD_NUMBER: builtins.int
+    name: builtins.str
     """(Required) The name of the resource"""
-    @_builtins.property
-    def addresses(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+    @property
+    def addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Required) An array of strings describing the addresses of the resource."""
     def __init__(
         self,
         *,
-        name: _builtins.str = ...,
-        addresses: _abc.Iterable[_builtins.str] | None = ...,
+        name: builtins.str = ...,
+        addresses: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "addresses", b"addresses", "name", b"name"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["addresses", b"addresses", "name", b"name"]
+    ) -> None: ...
 
-Global___ResourceInformation: _TypeAlias = ResourceInformation  # noqa: Y015
+global___ResourceInformation = ResourceInformation
 
-@_typing.final
-class ExecutorResourceRequest(_message.Message):
+class ExecutorResourceRequest(google.protobuf.message.Message):
     """An executor resource request."""
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    RESOURCE_NAME_FIELD_NUMBER: _builtins.int
-    AMOUNT_FIELD_NUMBER: _builtins.int
-    DISCOVERY_SCRIPT_FIELD_NUMBER: _builtins.int
-    VENDOR_FIELD_NUMBER: _builtins.int
-    resource_name: _builtins.str
+    RESOURCE_NAME_FIELD_NUMBER: builtins.int
+    AMOUNT_FIELD_NUMBER: builtins.int
+    DISCOVERY_SCRIPT_FIELD_NUMBER: builtins.int
+    VENDOR_FIELD_NUMBER: builtins.int
+    resource_name: builtins.str
     """(Required) resource name."""
-    amount: _builtins.int
+    amount: builtins.int
     """(Required) resource amount requesting."""
-    discovery_script: _builtins.str
+    discovery_script: builtins.str
     """Optional script used to discover the resources."""
-    vendor: _builtins.str
+    vendor: builtins.str
     """Optional vendor, required for some cluster managers."""
     def __init__(
         self,
         *,
-        resource_name: _builtins.str = ...,
-        amount: _builtins.int = ...,
-        discovery_script: _builtins.str | None = ...,
-        vendor: _builtins.str | None = ...,
+        resource_name: builtins.str = ...,
+        amount: builtins.int = ...,
+        discovery_script: builtins.str | None = ...,
+        vendor: builtins.str | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_discovery_script",
-        b"_discovery_script",
-        "_vendor",
-        b"_vendor",
-        "discovery_script",
-        b"discovery_script",
-        "vendor",
-        b"vendor",
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_discovery_script",
-        b"_discovery_script",
-        "_vendor",
-        b"_vendor",
-        "amount",
-        b"amount",
-        "discovery_script",
-        b"discovery_script",
-        "resource_name",
-        b"resource_name",
-        "vendor",
-        b"vendor",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__discovery_script: _TypeAlias = _typing.Literal[
-        "discovery_script"
-    ]  # noqa: Y015
-    _WhichOneofArgType__discovery_script: _TypeAlias = _typing.Literal[
-        "_discovery_script", b"_discovery_script"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__vendor: _TypeAlias = _typing.Literal["vendor"]  # noqa: Y015
-    _WhichOneofArgType__vendor: _TypeAlias = _typing.Literal["_vendor", b"_vendor"]  # noqa: Y015
-    @_typing.overload
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_discovery_script",
+            b"_discovery_script",
+            "_vendor",
+            b"_vendor",
+            "discovery_script",
+            b"discovery_script",
+            "vendor",
+            b"vendor",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_discovery_script",
+            b"_discovery_script",
+            "_vendor",
+            b"_vendor",
+            "amount",
+            b"amount",
+            "discovery_script",
+            b"discovery_script",
+            "resource_name",
+            b"resource_name",
+            "vendor",
+            b"vendor",
+        ],
+    ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__discovery_script
-    ) -> _WhichOneofReturnType__discovery_script | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_discovery_script", b"_discovery_script"]
+    ) -> typing_extensions.Literal["discovery_script"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__vendor
-    ) -> _WhichOneofReturnType__vendor | None: ...
+        self, oneof_group: typing_extensions.Literal["_vendor", b"_vendor"]
+    ) -> typing_extensions.Literal["vendor"] | None: ...
 
-Global___ExecutorResourceRequest: _TypeAlias = ExecutorResourceRequest  # noqa: Y015
+global___ExecutorResourceRequest = ExecutorResourceRequest
 
-@_typing.final
-class TaskResourceRequest(_message.Message):
+class TaskResourceRequest(google.protobuf.message.Message):
     """A task resource request."""
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    RESOURCE_NAME_FIELD_NUMBER: _builtins.int
-    AMOUNT_FIELD_NUMBER: _builtins.int
-    resource_name: _builtins.str
+    RESOURCE_NAME_FIELD_NUMBER: builtins.int
+    AMOUNT_FIELD_NUMBER: builtins.int
+    resource_name: builtins.str
     """(Required) resource name."""
-    amount: _builtins.float
+    amount: builtins.float
     """(Required) resource amount requesting as a double to support fractional
     resource requests.
     """
     def __init__(
         self,
         *,
-        resource_name: _builtins.str = ...,
-        amount: _builtins.float = ...,
+        resource_name: builtins.str = ...,
+        amount: builtins.float = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "amount", b"amount", "resource_name", b"resource_name"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "amount", b"amount", "resource_name", b"resource_name"
+        ],
+    ) -> None: ...
 
-Global___TaskResourceRequest: _TypeAlias = TaskResourceRequest  # noqa: Y015
+global___TaskResourceRequest = TaskResourceRequest
 
-@_typing.final
-class ResourceProfile(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class ResourceProfile(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @_typing.final
-    class ExecutorResourcesEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class ExecutorResourcesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___ExecutorResourceRequest: ...
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(self) -> global___ExecutorResourceRequest: ...
         def __init__(
             self,
             *,
-            key: _builtins.str = ...,
-            value: Global___ExecutorResourceRequest | None = ...,
+            key: builtins.str = ...,
+            value: global___ExecutorResourceRequest | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "key", b"key", "value", b"value"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
-    @_typing.final
-    class TaskResourcesEntry(_message.Message):
-        DESCRIPTOR: _descriptor.Descriptor
+    class TaskResourcesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        KEY_FIELD_NUMBER: _builtins.int
-        VALUE_FIELD_NUMBER: _builtins.int
-        key: _builtins.str
-        @_builtins.property
-        def value(self) -> Global___TaskResourceRequest: ...
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(self) -> global___TaskResourceRequest: ...
         def __init__(
             self,
             *,
-            key: _builtins.str = ...,
-            value: Global___TaskResourceRequest | None = ...,
+            key: builtins.str = ...,
+            value: global___TaskResourceRequest | None = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal[
-            "key", b"key", "value", b"value"
-        ]  # noqa: Y015
-        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
-    EXECUTOR_RESOURCES_FIELD_NUMBER: _builtins.int
-    TASK_RESOURCES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
+    EXECUTOR_RESOURCES_FIELD_NUMBER: builtins.int
+    TASK_RESOURCES_FIELD_NUMBER: builtins.int
+    @property
     def executor_resources(
         self,
-    ) -> _containers.MessageMap[_builtins.str, Global___ExecutorResourceRequest]:
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___ExecutorResourceRequest
+    ]:
         """(Optional) Resource requests for executors. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
-    @_builtins.property
-    def task_resources(self) -> _containers.MessageMap[_builtins.str, Global___TaskResourceRequest]:
+    @property
+    def task_resources(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___TaskResourceRequest]:
         """(Optional) Resource requests for tasks. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
     def __init__(
         self,
         *,
-        executor_resources: _abc.Mapping[_builtins.str, Global___ExecutorResourceRequest]
+        executor_resources: collections.abc.Mapping[builtins.str, global___ExecutorResourceRequest]
         | None = ...,
-        task_resources: _abc.Mapping[_builtins.str, Global___TaskResourceRequest] | None = ...,
+        task_resources: collections.abc.Mapping[builtins.str, global___TaskResourceRequest]
+        | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "executor_resources", b"executor_resources", "task_resources", b"task_resources"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "executor_resources", b"executor_resources", "task_resources", b"task_resources"
+        ],
+    ) -> None: ...
 
-Global___ResourceProfile: _TypeAlias = ResourceProfile  # noqa: Y015
+global___ResourceProfile = ResourceProfile
 
-@_typing.final
-class Origin(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Origin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    PYTHON_ORIGIN_FIELD_NUMBER: _builtins.int
-    JVM_ORIGIN_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def python_origin(self) -> Global___PythonOrigin: ...
-    @_builtins.property
-    def jvm_origin(self) -> Global___JvmOrigin: ...
+    PYTHON_ORIGIN_FIELD_NUMBER: builtins.int
+    JVM_ORIGIN_FIELD_NUMBER: builtins.int
+    @property
+    def python_origin(self) -> global___PythonOrigin: ...
+    @property
+    def jvm_origin(self) -> global___JvmOrigin: ...
     def __init__(
         self,
         *,
-        python_origin: Global___PythonOrigin | None = ...,
-        jvm_origin: Global___JvmOrigin | None = ...,
+        python_origin: global___PythonOrigin | None = ...,
+        jvm_origin: global___JvmOrigin | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_function: _TypeAlias = _typing.Literal[
-        "python_origin", "jvm_origin"
-    ]  # noqa: Y015
-    _WhichOneofArgType_function: _TypeAlias = _typing.Literal["function", b"function"]  # noqa: Y015
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
+        ],
+    ) -> None: ...
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType_function
-    ) -> _WhichOneofReturnType_function | None: ...
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["python_origin", "jvm_origin"] | None: ...
 
-Global___Origin: _TypeAlias = Origin  # noqa: Y015
+global___Origin = Origin
 
-@_typing.final
-class PythonOrigin(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class PythonOrigin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    FRAGMENT_FIELD_NUMBER: _builtins.int
-    CALL_SITE_FIELD_NUMBER: _builtins.int
-    fragment: _builtins.str
+    FRAGMENT_FIELD_NUMBER: builtins.int
+    CALL_SITE_FIELD_NUMBER: builtins.int
+    fragment: builtins.str
     """(Required) Name of the origin, for example, the name of the function"""
-    call_site: _builtins.str
+    call_site: builtins.str
     """(Required) Callsite to show to end users, for example, stacktrace."""
     def __init__(
         self,
         *,
-        fragment: _builtins.str = ...,
-        call_site: _builtins.str = ...,
+        fragment: builtins.str = ...,
+        call_site: builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "call_site", b"call_site", "fragment", b"fragment"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["call_site", b"call_site", "fragment", b"fragment"],
+    ) -> None: ...
 
-Global___PythonOrigin: _TypeAlias = PythonOrigin  # noqa: Y015
+global___PythonOrigin = PythonOrigin
 
-@_typing.final
-class JvmOrigin(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class JvmOrigin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    LINE_FIELD_NUMBER: _builtins.int
-    START_POSITION_FIELD_NUMBER: _builtins.int
-    START_INDEX_FIELD_NUMBER: _builtins.int
-    STOP_INDEX_FIELD_NUMBER: _builtins.int
-    SQL_TEXT_FIELD_NUMBER: _builtins.int
-    OBJECT_TYPE_FIELD_NUMBER: _builtins.int
-    OBJECT_NAME_FIELD_NUMBER: _builtins.int
-    STACK_TRACE_FIELD_NUMBER: _builtins.int
-    line: _builtins.int
+    LINE_FIELD_NUMBER: builtins.int
+    START_POSITION_FIELD_NUMBER: builtins.int
+    START_INDEX_FIELD_NUMBER: builtins.int
+    STOP_INDEX_FIELD_NUMBER: builtins.int
+    SQL_TEXT_FIELD_NUMBER: builtins.int
+    OBJECT_TYPE_FIELD_NUMBER: builtins.int
+    OBJECT_NAME_FIELD_NUMBER: builtins.int
+    STACK_TRACE_FIELD_NUMBER: builtins.int
+    line: builtins.int
     """(Optional) Line number in the source file."""
-    start_position: _builtins.int
+    start_position: builtins.int
     """(Optional) Start position in the source file."""
-    start_index: _builtins.int
+    start_index: builtins.int
     """(Optional) Start index in the source file."""
-    stop_index: _builtins.int
+    stop_index: builtins.int
     """(Optional) Stop index in the source file."""
-    sql_text: _builtins.str
+    sql_text: builtins.str
     """(Optional) SQL text."""
-    object_type: _builtins.str
+    object_type: builtins.str
     """(Optional) Object type."""
-    object_name: _builtins.str
+    object_name: builtins.str
     """(Optional) Object name."""
-    @_builtins.property
+    @property
     def stack_trace(
         self,
-    ) -> _containers.RepeatedCompositeFieldContainer[Global___StackTraceElement]:
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StackTraceElement
+    ]:
         """(Optional) Stack trace."""
     def __init__(
         self,
         *,
-        line: _builtins.int | None = ...,
-        start_position: _builtins.int | None = ...,
-        start_index: _builtins.int | None = ...,
-        stop_index: _builtins.int | None = ...,
-        sql_text: _builtins.str | None = ...,
-        object_type: _builtins.str | None = ...,
-        object_name: _builtins.str | None = ...,
-        stack_trace: _abc.Iterable[Global___StackTraceElement] | None = ...,
+        line: builtins.int | None = ...,
+        start_position: builtins.int | None = ...,
+        start_index: builtins.int | None = ...,
+        stop_index: builtins.int | None = ...,
+        sql_text: builtins.str | None = ...,
+        object_type: builtins.str | None = ...,
+        object_name: builtins.str | None = ...,
+        stack_trace: collections.abc.Iterable[global___StackTraceElement] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_line",
-        b"_line",
-        "_object_name",
-        b"_object_name",
-        "_object_type",
-        b"_object_type",
-        "_sql_text",
-        b"_sql_text",
-        "_start_index",
-        b"_start_index",
-        "_start_position",
-        b"_start_position",
-        "_stop_index",
-        b"_stop_index",
-        "line",
-        b"line",
-        "object_name",
-        b"object_name",
-        "object_type",
-        b"object_type",
-        "sql_text",
-        b"sql_text",
-        "start_index",
-        b"start_index",
-        "start_position",
-        b"start_position",
-        "stop_index",
-        b"stop_index",
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_line",
-        b"_line",
-        "_object_name",
-        b"_object_name",
-        "_object_type",
-        b"_object_type",
-        "_sql_text",
-        b"_sql_text",
-        "_start_index",
-        b"_start_index",
-        "_start_position",
-        b"_start_position",
-        "_stop_index",
-        b"_stop_index",
-        "line",
-        b"line",
-        "object_name",
-        b"object_name",
-        "object_type",
-        b"object_type",
-        "sql_text",
-        b"sql_text",
-        "stack_trace",
-        b"stack_trace",
-        "start_index",
-        b"start_index",
-        "start_position",
-        b"start_position",
-        "stop_index",
-        b"stop_index",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__line: _TypeAlias = _typing.Literal["line"]  # noqa: Y015
-    _WhichOneofArgType__line: _TypeAlias = _typing.Literal["_line", b"_line"]  # noqa: Y015
-    _WhichOneofReturnType__object_name: _TypeAlias = _typing.Literal["object_name"]  # noqa: Y015
-    _WhichOneofArgType__object_name: _TypeAlias = _typing.Literal[
-        "_object_name", b"_object_name"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__object_type: _TypeAlias = _typing.Literal["object_type"]  # noqa: Y015
-    _WhichOneofArgType__object_type: _TypeAlias = _typing.Literal[
-        "_object_type", b"_object_type"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__sql_text: _TypeAlias = _typing.Literal["sql_text"]  # noqa: Y015
-    _WhichOneofArgType__sql_text: _TypeAlias = _typing.Literal[
-        "_sql_text", b"_sql_text"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__start_index: _TypeAlias = _typing.Literal["start_index"]  # noqa: Y015
-    _WhichOneofArgType__start_index: _TypeAlias = _typing.Literal[
-        "_start_index", b"_start_index"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__start_position: _TypeAlias = _typing.Literal[
-        "start_position"
-    ]  # noqa: Y015
-    _WhichOneofArgType__start_position: _TypeAlias = _typing.Literal[
-        "_start_position", b"_start_position"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__stop_index: _TypeAlias = _typing.Literal["stop_index"]  # noqa: Y015
-    _WhichOneofArgType__stop_index: _TypeAlias = _typing.Literal[
-        "_stop_index", b"_stop_index"
-    ]  # noqa: Y015
-    @_typing.overload
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_line",
+            b"_line",
+            "_object_name",
+            b"_object_name",
+            "_object_type",
+            b"_object_type",
+            "_sql_text",
+            b"_sql_text",
+            "_start_index",
+            b"_start_index",
+            "_start_position",
+            b"_start_position",
+            "_stop_index",
+            b"_stop_index",
+            "line",
+            b"line",
+            "object_name",
+            b"object_name",
+            "object_type",
+            b"object_type",
+            "sql_text",
+            b"sql_text",
+            "start_index",
+            b"start_index",
+            "start_position",
+            b"start_position",
+            "stop_index",
+            b"stop_index",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_line",
+            b"_line",
+            "_object_name",
+            b"_object_name",
+            "_object_type",
+            b"_object_type",
+            "_sql_text",
+            b"_sql_text",
+            "_start_index",
+            b"_start_index",
+            "_start_position",
+            b"_start_position",
+            "_stop_index",
+            b"_stop_index",
+            "line",
+            b"line",
+            "object_name",
+            b"object_name",
+            "object_type",
+            b"object_type",
+            "sql_text",
+            b"sql_text",
+            "stack_trace",
+            b"stack_trace",
+            "start_index",
+            b"start_index",
+            "start_position",
+            b"start_position",
+            "stop_index",
+            b"stop_index",
+        ],
+    ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__line
-    ) -> _WhichOneofReturnType__line | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_line", b"_line"]
+    ) -> typing_extensions.Literal["line"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__object_name
-    ) -> _WhichOneofReturnType__object_name | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_object_name", b"_object_name"]
+    ) -> typing_extensions.Literal["object_name"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__object_type
-    ) -> _WhichOneofReturnType__object_type | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_object_type", b"_object_type"]
+    ) -> typing_extensions.Literal["object_type"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__sql_text
-    ) -> _WhichOneofReturnType__sql_text | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
+    ) -> typing_extensions.Literal["sql_text"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__start_index
-    ) -> _WhichOneofReturnType__start_index | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_start_index", b"_start_index"]
+    ) -> typing_extensions.Literal["start_index"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__start_position
-    ) -> _WhichOneofReturnType__start_position | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_start_position", b"_start_position"]
+    ) -> typing_extensions.Literal["start_position"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__stop_index
-    ) -> _WhichOneofReturnType__stop_index | None: ...
+        self, oneof_group: typing_extensions.Literal["_stop_index", b"_stop_index"]
+    ) -> typing_extensions.Literal["stop_index"] | None: ...
 
-Global___JvmOrigin: _TypeAlias = JvmOrigin  # noqa: Y015
+global___JvmOrigin = JvmOrigin
 
-@_typing.final
-class StackTraceElement(_message.Message):
+class StackTraceElement(google.protobuf.message.Message):
     """A message to hold a [[java.lang.StackTraceElement]]."""
 
-    DESCRIPTOR: _descriptor.Descriptor
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CLASS_LOADER_NAME_FIELD_NUMBER: _builtins.int
-    MODULE_NAME_FIELD_NUMBER: _builtins.int
-    MODULE_VERSION_FIELD_NUMBER: _builtins.int
-    DECLARING_CLASS_FIELD_NUMBER: _builtins.int
-    METHOD_NAME_FIELD_NUMBER: _builtins.int
-    FILE_NAME_FIELD_NUMBER: _builtins.int
-    LINE_NUMBER_FIELD_NUMBER: _builtins.int
-    class_loader_name: _builtins.str
+    CLASS_LOADER_NAME_FIELD_NUMBER: builtins.int
+    MODULE_NAME_FIELD_NUMBER: builtins.int
+    MODULE_VERSION_FIELD_NUMBER: builtins.int
+    DECLARING_CLASS_FIELD_NUMBER: builtins.int
+    METHOD_NAME_FIELD_NUMBER: builtins.int
+    FILE_NAME_FIELD_NUMBER: builtins.int
+    LINE_NUMBER_FIELD_NUMBER: builtins.int
+    class_loader_name: builtins.str
     """(Optional) Class loader name"""
-    module_name: _builtins.str
+    module_name: builtins.str
     """(Optional) Module name"""
-    module_version: _builtins.str
+    module_version: builtins.str
     """(Optional) Module version"""
-    declaring_class: _builtins.str
+    declaring_class: builtins.str
     """(Required) Declaring class"""
-    method_name: _builtins.str
+    method_name: builtins.str
     """(Required) Method name"""
-    file_name: _builtins.str
+    file_name: builtins.str
     """(Optional) File name"""
-    line_number: _builtins.int
+    line_number: builtins.int
     """(Required) Line number"""
     def __init__(
         self,
         *,
-        class_loader_name: _builtins.str | None = ...,
-        module_name: _builtins.str | None = ...,
-        module_version: _builtins.str | None = ...,
-        declaring_class: _builtins.str = ...,
-        method_name: _builtins.str = ...,
-        file_name: _builtins.str | None = ...,
-        line_number: _builtins.int = ...,
+        class_loader_name: builtins.str | None = ...,
+        module_name: builtins.str | None = ...,
+        module_version: builtins.str | None = ...,
+        declaring_class: builtins.str = ...,
+        method_name: builtins.str = ...,
+        file_name: builtins.str | None = ...,
+        line_number: builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal[
-        "_class_loader_name",
-        b"_class_loader_name",
-        "_file_name",
-        b"_file_name",
-        "_module_name",
-        b"_module_name",
-        "_module_version",
-        b"_module_version",
-        "class_loader_name",
-        b"class_loader_name",
-        "file_name",
-        b"file_name",
-        "module_name",
-        b"module_name",
-        "module_version",
-        b"module_version",
-    ]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "_class_loader_name",
-        b"_class_loader_name",
-        "_file_name",
-        b"_file_name",
-        "_module_name",
-        b"_module_name",
-        "_module_version",
-        b"_module_version",
-        "class_loader_name",
-        b"class_loader_name",
-        "declaring_class",
-        b"declaring_class",
-        "file_name",
-        b"file_name",
-        "line_number",
-        b"line_number",
-        "method_name",
-        b"method_name",
-        "module_name",
-        b"module_name",
-        "module_version",
-        b"module_version",
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType__class_loader_name: _TypeAlias = _typing.Literal[
-        "class_loader_name"
-    ]  # noqa: Y015
-    _WhichOneofArgType__class_loader_name: _TypeAlias = _typing.Literal[
-        "_class_loader_name", b"_class_loader_name"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__file_name: _TypeAlias = _typing.Literal["file_name"]  # noqa: Y015
-    _WhichOneofArgType__file_name: _TypeAlias = _typing.Literal[
-        "_file_name", b"_file_name"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__module_name: _TypeAlias = _typing.Literal["module_name"]  # noqa: Y015
-    _WhichOneofArgType__module_name: _TypeAlias = _typing.Literal[
-        "_module_name", b"_module_name"
-    ]  # noqa: Y015
-    _WhichOneofReturnType__module_version: _TypeAlias = _typing.Literal[
-        "module_version"
-    ]  # noqa: Y015
-    _WhichOneofArgType__module_version: _TypeAlias = _typing.Literal[
-        "_module_version", b"_module_version"
-    ]  # noqa: Y015
-    @_typing.overload
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_class_loader_name",
+            b"_class_loader_name",
+            "_file_name",
+            b"_file_name",
+            "_module_name",
+            b"_module_name",
+            "_module_version",
+            b"_module_version",
+            "class_loader_name",
+            b"class_loader_name",
+            "file_name",
+            b"file_name",
+            "module_name",
+            b"module_name",
+            "module_version",
+            b"module_version",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_class_loader_name",
+            b"_class_loader_name",
+            "_file_name",
+            b"_file_name",
+            "_module_name",
+            b"_module_name",
+            "_module_version",
+            b"_module_version",
+            "class_loader_name",
+            b"class_loader_name",
+            "declaring_class",
+            b"declaring_class",
+            "file_name",
+            b"file_name",
+            "line_number",
+            b"line_number",
+            "method_name",
+            b"method_name",
+            "module_name",
+            b"module_name",
+            "module_version",
+            b"module_version",
+        ],
+    ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__class_loader_name
-    ) -> _WhichOneofReturnType__class_loader_name | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_class_loader_name", b"_class_loader_name"]
+    ) -> typing_extensions.Literal["class_loader_name"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__file_name
-    ) -> _WhichOneofReturnType__file_name | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
+    ) -> typing_extensions.Literal["file_name"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__module_name
-    ) -> _WhichOneofReturnType__module_name | None: ...
-    @_typing.overload
+        self, oneof_group: typing_extensions.Literal["_module_name", b"_module_name"]
+    ) -> typing_extensions.Literal["module_name"] | None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: _WhichOneofArgType__module_version
-    ) -> _WhichOneofReturnType__module_version | None: ...
+        self, oneof_group: typing_extensions.Literal["_module_version", b"_module_version"]
+    ) -> typing_extensions.Literal["module_version"] | None: ...
 
-Global___StackTraceElement: _TypeAlias = StackTraceElement  # noqa: Y015
+global___StackTraceElement = StackTraceElement
 
-@_typing.final
-class ResolvedIdentifier(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class ResolvedIdentifier(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CATALOG_NAME_FIELD_NUMBER: _builtins.int
-    NAMESPACE_FIELD_NUMBER: _builtins.int
-    TABLE_NAME_FIELD_NUMBER: _builtins.int
-    catalog_name: _builtins.str
-    table_name: _builtins.str
-    @_builtins.property
-    def namespace(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    CATALOG_NAME_FIELD_NUMBER: builtins.int
+    NAMESPACE_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    catalog_name: builtins.str
+    @property
+    def namespace(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    table_name: builtins.str
     def __init__(
         self,
         *,
-        catalog_name: _builtins.str = ...,
-        namespace: _abc.Iterable[_builtins.str] | None = ...,
-        table_name: _builtins.str = ...,
+        catalog_name: builtins.str = ...,
+        namespace: collections.abc.Iterable[builtins.str] | None = ...,
+        table_name: builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal[
-        "catalog_name", b"catalog_name", "namespace", b"namespace", "table_name", b"table_name"
-    ]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "catalog_name", b"catalog_name", "namespace", b"namespace", "table_name", b"table_name"
+        ],
+    ) -> None: ...
 
-Global___ResolvedIdentifier: _TypeAlias = ResolvedIdentifier  # noqa: Y015
+global___ResolvedIdentifier = ResolvedIdentifier
 
-@_typing.final
-class Bools(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Bools(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.bool]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bool]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.bool] | None = ...,
+        values: collections.abc.Iterable[builtins.bool] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Bools: _TypeAlias = Bools  # noqa: Y015
+global___Bools = Bools
 
-@_typing.final
-class Ints(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Ints(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.int] | None = ...,
+        values: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Ints: _TypeAlias = Ints  # noqa: Y015
+global___Ints = Ints
 
-@_typing.final
-class Longs(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Longs(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.int] | None = ...,
+        values: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Longs: _TypeAlias = Longs  # noqa: Y015
+global___Longs = Longs
 
-@_typing.final
-class Floats(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Floats(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.float]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.float] | None = ...,
+        values: collections.abc.Iterable[builtins.float] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Floats: _TypeAlias = Floats  # noqa: Y015
+global___Floats = Floats
 
-@_typing.final
-class Doubles(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Doubles(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.float]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.float] | None = ...,
+        values: collections.abc.Iterable[builtins.float] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Doubles: _TypeAlias = Doubles  # noqa: Y015
+global___Doubles = Doubles
 
-@_typing.final
-class Strings(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
+class Strings(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    VALUES_FIELD_NUMBER: _builtins.int
-    @_builtins.property
-    def values(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
     def __init__(
         self,
         *,
-        values: _abc.Iterable[_builtins.str] | None = ...,
+        values: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["values", b"values"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
 
-Global___Strings: _TypeAlias = Strings  # noqa: Y015
+global___Strings = Strings
