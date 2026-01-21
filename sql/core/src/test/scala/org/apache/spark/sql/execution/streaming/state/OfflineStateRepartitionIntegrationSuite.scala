@@ -16,13 +16,18 @@
  */
 package org.apache.spark.sql.execution.streaming.state
 
+import java.sql.Timestamp
+import java.time.Duration
+
 import org.apache.spark.sql.{Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
+import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
+import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, StreamManualClock, TimerTestUtils, TTLProcessorUtils}
 
 /**
  * Integration test suite helper class for OfflineStateRepartitionRunner with stateful operators.
@@ -91,6 +96,70 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
     rows
       .map(row => (row.get(0).toString, row.get(1).toString))
       .sortBy(_._1)
+  }
+
+  /**
+   * Helper to build state source options for timer column families.
+   * Used by transformWithState tests with event/processing time timers.
+   */
+  def buildTimerStateSourceOptions(
+      columnFamilyNames: Seq[String],
+      timeMode: TimeMode): Map[String, Map[String, String]] = {
+    val (keyToTimestampCF, timestampToKeyCF) =
+      TimerStateUtils.getTimerStateVarNames(timeMode.toString)
+
+    columnFamilyNames.map { cfName =>
+      val options: Map[String, String] = if (cfName == keyToTimestampCF ||
+          cfName == timestampToKeyCF) {
+        Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
+      } else if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+        Map.empty[String, String]
+      } else {
+        Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+      }
+      cfName -> options
+    }.toMap
+  }
+
+  /**
+   * Helper to build state source options for TTL column families.
+   * Used by transformWithState tests with TTL configuration.
+   */
+  def buildTTLStateSourceOptions(
+      colFamilyNames: Seq[String],
+      listStateName: Option[String] = None): Map[String, Map[String, String]] = {
+    colFamilyNames.map { cfName =>
+      val base: Map[String, String] = if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+        Map.empty[String, String]
+      } else {
+        Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+      }
+
+      // Add FLATTEN_COLLECTION_TYPES for list state
+      val withFlatten = listStateName match {
+        case Some(lsName) if cfName == lsName =>
+          base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+        case _ => base
+      }
+
+      cfName -> withFlatten
+    }.toMap
+  }
+
+  /**
+   * Helper to build state source options for basic transformWithState tests.
+   * Used for tests with multiple state variables but no timers/TTL.
+   */
+  def buildBasicStateSourceOptions(
+      columnFamilyNames: Seq[String]): Map[String, Map[String, String]] = {
+    columnFamilyNames.map { cfName =>
+      val options: Map[String, String] = if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+        Map.empty[String, String]
+      } else {
+        Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+      }
+      cfName -> options
+    }.toMap
   }
 
   /**
@@ -526,6 +595,326 @@ class OfflineStateRepartitionCkptV1IntegrationSuite
         )
       }
     )
+  }
+
+  def testWithDifferentEncodingType(testNamePrefix: String)
+      (testFun: Int => Unit): Unit = {
+    Seq("unsaferow", "avro").foreach { encodingFormat =>
+      testWithAllRepartitionOperations(
+        s"$testNamePrefix (encoding = $encodingFormat)") { newPartitions =>
+        withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
+          testFun(newPartitions)
+        }
+      }
+    }
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with multiple column families") {
+    newPartitions =>
+      val allColFamilyNames = MultiStateVarProcessorTestUtils.ALL_COLUMN_FAMILIES.toList
+      val stateSourceOptions = buildBasicStateSourceOptions(allColFamilyNames)
+
+      testRepartitionWorkflow[String](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, _) => {
+            val query = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new MultiStateVarProcessor(),
+                TimeMode.None(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir),
+              // Batch 1: Creates state in all column families
+              AddData(inputData, "a", "b", "c"),
+              CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+              // Batch 2: Adds more state
+              AddData(inputData, "a", "b", "d"),
+              CheckNewAnswer(("a", "2"), ("b", "2"), ("d", "1")),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, _) => {
+            val query = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new MultiStateVarProcessor(),
+                TimeMode.None(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir),
+              // Batch 3: Resume with new data after repartition
+              AddData(inputData, "a", "c", "e"),
+              CheckNewAnswer(("a", "3"), ("c", "2"), ("e", "1"))
+            )
+          },
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with eventTime timers") {
+    newPartitions =>
+      val columnFamilies = TimerTestUtils
+        .getTimerConfigsForCountState(TimeMode.EventTime()).keys.toSeq
+      val stateSourceOptions = buildTimerStateSourceOptions(
+        columnFamilies, TimeMode.EventTime())
+
+        testRepartitionWorkflow[(String, Long)](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, _) => {
+            val query = inputData.toDS()
+              .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+              .withWatermark("eventTime", "10 seconds")
+              .as[(String, Timestamp)]
+              .groupByKey(_._1)
+              .transformWithState(
+                new EventTimeTimerProcessor(),
+                TimeMode.EventTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir),
+              // Batch 1: Creates state with event time timers
+              AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+              ProcessAllAvailable(),
+              // Batch 2: More data
+              AddData(inputData, ("a", 5L), ("d", 6L)),
+              ProcessAllAvailable(),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, _) => {
+            val query = inputData.toDS()
+              .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+              .withWatermark("eventTime", "10 seconds")
+              .as[(String, Timestamp)]
+              .groupByKey(_._1)
+              .transformWithState(
+                new EventTimeTimerProcessor(),
+                TimeMode.EventTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir),
+              // Batch 3: Resume with new data after repartition
+              AddData(inputData, ("a", 10L), ("e", 11L)),
+              ProcessAllAvailable()
+            )
+          },
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with processing time timers") {
+    newPartitions =>
+      val schemas = TimerTestUtils.getTimerConfigsForCountState(TimeMode.ProcessingTime())
+      val stateSourceOptions = buildTimerStateSourceOptions(
+        schemas.keys.toSeq, TimeMode.ProcessingTime())
+
+        testRepartitionWorkflow[String](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val query = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, "a", "b"),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(("a", "1"), ("b", "1")),
+              AddData(inputData, "a", "c"),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(("a", "2"), ("c", "1")),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val query = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, "a", "d"),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(("a", "3"), ("d", "1"))
+            )
+          },
+          useManualClock = true,
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with list and TTL") {
+    newPartitions =>
+      val schemas = TTLProcessorUtils.getListStateTTLSchemasWithMetadata()
+      val stateSourceOptions = buildTTLStateSourceOptions(
+        schemas.keys.toSeq, listStateName = Some(TTLProcessorUtils.LIST_STATE))
+
+        testRepartitionWorkflow[InputEvent](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ListStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k1", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              AddData(inputData, InputEvent("k2", "put", 2)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ListStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k1", "append", 3)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer()
+            )
+          },
+          useManualClock = true,
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with map and TTL") {
+    newPartitions =>
+      val schemas = TTLProcessorUtils.getMapStateTTLSchemasWithMetadata()
+      val stateSourceOptions = buildTTLStateSourceOptions(schemas.keys.toSeq)
+
+        testRepartitionWorkflow[MapInputEvent](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new MapStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              AddData(inputData, MapInputEvent("b", "key2", "put", 2)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new MapStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, MapInputEvent("a", "key3", "put", 3)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer()
+            )
+          },
+          useManualClock = true,
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
+  }
+
+  testWithDifferentEncodingType(
+    "transformWithState with value and TTL") {
+    newPartitions =>
+      val schemas = TTLProcessorUtils.getValueStateTTLSchemasWithMetadata()
+      val stateSourceOptions = buildTTLStateSourceOptions(schemas.keys.toSeq)
+
+        testRepartitionWorkflow[InputEvent](
+          newPartitions = newPartitions,
+          setupInitialState = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k1", "put", 1)),
+              AddData(inputData, InputEvent("k2", "put", 2)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+          },
+          verifyResumedQuery = (inputData, checkpointDir, clockOpt) => {
+            val clock = clockOpt.get
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val query = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+            testStream(query)(
+              StartStream(checkpointLocation = checkpointDir,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k3", "put", 3)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer()
+            )
+          },
+          useManualClock = true,
+          storeToColumnFamilyToStateSourceOptions = Map(
+            StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
+          )
+        )
   }
 }
 
