@@ -227,8 +227,11 @@ case class EnsureRequirements(
 
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
-                ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case _ => ShuffleExchangeExec(newPartitioning, child)
+                val newChild = disableKeyGroupingIfNotNeeded(c)
+                ShuffleExchangeExec(newPartitioning, newChild, so, ps)
+              case _ =>
+                val newChild = disableKeyGroupingIfNotNeeded(child)
+                ShuffleExchangeExec(newPartitioning, newChild)
             }
           }
       }

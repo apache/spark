@@ -2114,7 +2114,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               assert(scans == Seq(2, 2))
             case (_, _) =>
               assert(shuffles.nonEmpty, "SPJ should not be triggered")
-              assert(scans == Seq(3, 2))
+              assert(scans == Seq(3, 3))
           }
 
           checkAnswer(df, Seq(
@@ -2850,6 +2850,21 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         "items scan should group as it is the driver of SPJ")
       assert(scans(1).inputRDD.partitions.length === 2,
         "purchases scan should not group as SPJ can't leverage it")
+
+      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
+    }
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false") {
+      val df = createJoinTestDF(Seq("id" -> "item_id"), extraColumns = Seq("year(p.time)"))
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 2, "only shuffle one side not report partitioning")
+
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans(0).inputRDD.partitions.length === 3,
+        "items scan should not group as it is shuffled")
+      assert(scans(1).inputRDD.partitions.length === 2,
+        "purchases scan should not group as it is shuffled")
 
       checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0, 2020)))
     }
