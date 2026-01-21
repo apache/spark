@@ -405,12 +405,36 @@ table t
 table st
 |> drop col.i1;
 
+-- Dropping multiple struct fields using qualified names.
+table st
+|> drop col.i1, col.i2;
+
+-- Dropping a column using table alias qualified name.
+table t
+|> as u
+|> drop u.x;
+
+-- Dropping a column when the table has a column with the same name as the alias.
+-- This tests the ambiguity: is col.x dropping field x from struct column col,
+-- or dropping column x from table alias col?
+select 1 as x, named_struct('x', 2, 'y', 3) as col
+|> as col
+|> drop col.x;
+
+-- Multi-level nested struct field drop.
+select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
+|> drop outer.middle.inner;
+
 -- DROP operators: negative tests.
 ----------------------------------
 
 -- Dropping a column that is not present in the input relation.
 table t
 |> drop z;
+
+-- Dropping a non-existent qualified path (struct field that doesn't exist).
+table st
+|> drop col.nonexistent;
 
 -- Attempting to drop a column using a backquoted name with dot (looks for a literal column name).
 table st

@@ -1031,6 +1031,45 @@ struct<x:int,col:struct<i2:int>>
 
 
 -- !query
+table st
+|> drop col.i1, col.i2
+-- !query schema
+struct<x:int,col:struct<>>
+-- !query output
+1	{}
+
+
+-- !query
+table t
+|> as u
+|> drop u.x
+-- !query schema
+struct<y:string>
+-- !query output
+abc
+def
+
+
+-- !query
+select 1 as x, named_struct('x', 2, 'y', 3) as col
+|> as col
+|> drop col.x
+-- !query schema
+struct<col:struct<x:int,y:int>>
+-- !query output
+{"x":2,"y":3}
+
+
+-- !query
+select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
+|> drop outer.middle.inner
+-- !query schema
+struct<x:int,outer:struct<middle:struct<>>>
+-- !query output
+1	{"middle":{}}
+
+
+-- !query
 table t
 |> drop z
 -- !query schema
@@ -1050,6 +1089,30 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 1,
     "stopIndex" : 17,
     "fragment" : "table t\n|> drop z"
+  } ]
+}
+
+
+-- !query
+table st
+|> drop col.nonexistent
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "FIELD_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "fieldName" : "`nonexistent`",
+    "fields" : "`i1`, `i2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "table st\n|> drop col.nonexistent"
   } ]
 }
 
