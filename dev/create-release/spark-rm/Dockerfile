@@ -82,10 +82,13 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf texlive-latex-extra && \
   $APT_INSTALL libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libwebp-dev && \
-  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
-  Rscript -e "devtools::install_github('jimhester/lintr')" && \
-  Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
+  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
+  # See more in SPARK-39959, roxygen2 < 7.2.1
+  Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
+  Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
   Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" && \
+  # See more in SPARK-54371, pkgdown should be installed at the end to avoid version upgrade
+  Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.7 ruby2.7-dev && \
   gem install --no-document $GEM_PKGS
