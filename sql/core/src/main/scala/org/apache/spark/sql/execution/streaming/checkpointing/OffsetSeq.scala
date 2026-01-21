@@ -362,6 +362,48 @@ object OffsetSeqControlBatchInfo {
 }
 
 /**
+ * An offset type for Sequential Union operations, stored directly in the offset log.
+ * Sequential Union enables seamless backfill-to-live streaming scenarios by processing multiple
+ * sources sequentially rather than concurrently.
+ *
+ * This is stored as an entry in the offset map (just like source offsets), allowing multiple
+ * sequential unions per query to each track their own state.
+ *
+ * All source tracking is name-based (not index-based) to ensure stability across query restarts
+ * and to integrate with the query evolution feature.
+ *
+ * @param activeSourceName The name of the currently active source being processed.
+ * @param completedSources Set of source names that have finished processing.
+ * @param sourceNames All source names in the order they should be processed.
+ * @param version Format version for future compatibility.
+ */
+case class SequentialUnionOffset(
+    activeSourceName: String,
+    completedSources: Set[String],
+    sourceNames: Seq[String],
+    version: Int = 1) extends OffsetV2 {
+
+  // Validate on construction
+  require(sourceNames.nonEmpty, "sourceNames must not be empty")
+  require(sourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' must be in sourceNames: ${sourceNames.mkString(", ")}")
+  require(completedSources.subsetOf(sourceNames.toSet),
+    s"completedSources must be a subset of sourceNames")
+  require(!completedSources.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' cannot be in completedSources")
+
+  override def json(): String = Serialization.write(this)(SequentialUnionOffset.format)
+}
+
+object SequentialUnionOffset {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): SequentialUnionOffset = {
+    Serialization.read[SequentialUnionOffset](json)
+  }
+}
+
+/**
  * Contains metadata associated with a [[OffsetMap]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetMap]] metadata field.
  *
