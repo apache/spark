@@ -41,7 +41,8 @@ private case class PostgresDialect()
   extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
-    url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql") || 
+      url.toLowerCase(Locale.ROOT).startsWith("jdbc:aws-wrapper:postgresql")
 
   // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
