@@ -32,7 +32,7 @@ import unittest
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 
 
-def _get_float_to_int_boundary_expected(float_val, float_type, int_max, int_type):
+def _get_float_to_int_boundary_expected(int_type):
     """
     Get the expected result for float-to-int boundary cast.
 
@@ -47,6 +47,13 @@ def _get_float_to_int_boundary_expected(float_val, float_type, int_max, int_type
 
     system = platform.system()
     machine = platform.machine()
+
+    # Calculate int max based on type
+    int_max_values = {
+        pa.int32(): 2**31 - 1,  # 2147483647
+        pa.int64(): 2**63 - 1,  # 9223372036854775807
+    }
+    int_max = int_max_values[int_type]
 
     # macOS arm64 rounds to int max; Linux x86_64 raises ArrowInvalid
     if system == "Darwin" and machine == "arm64":
@@ -2012,9 +2019,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # float32 2147483648.0 boundary: behavior varies across environments
                 (
                     pa.array([2147483648.0], pa.float32()),
-                    _get_float_to_int_boundary_expected(
-                        2147483648.0, pa.float32(), 2147483647, pa.int32()
-                    ),
+                    _get_float_to_int_boundary_expected(pa.int32()),
                 ),
                 (
                     pa.array([1.5, 3e9, float("nan")], pa.float32()),
@@ -2268,9 +2273,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # float64 9223372036854775808.0 boundary: behavior varies across environments
                 (
                     pa.array([9223372036854775808.0], pa.float64()),
-                    _get_float_to_int_boundary_expected(
-                        9223372036854775808.0, pa.float64(), 9223372036854775807, pa.int64()
-                    ),
+                    _get_float_to_int_boundary_expected(pa.int64()),
                 ),
                 # truly overflow - values beyond int64 range
                 (pa.array([1e19], pa.float64()), pa.lib.ArrowInvalid),
