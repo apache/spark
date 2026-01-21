@@ -1555,34 +1555,28 @@ private[spark] class DAGScheduler(
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
 
-    // Before find missing partition, do the intermediate state clean work first.
-    // The operation here can make sure for the partially completed intermediate stage,
-    // `findMissingPartitions()` returns all partitions every time.
+    // For statically indeterminate stages being retried, we trigger rollback BEFORE task
+    // submission. This is more efficient than deferring to task completion because:
+    // 1. It avoids submitting a partial stage that would need to be cancelled
+    // 2. It ensures findMissingPartitions() returns ALL partitions for the retry
+    //
+    // For runtime detection (checksum mismatch), we must defer to task completion because
+    // we don't know the stage is indeterminate until we see the checksum differ.
     stage match {
       case sms: ShuffleMapStage if !sms.isAvailable =>
-        if (!sms.shuffleDep.checksumMismatchFullRetryEnabled && stage.isIndeterminate) {
-          // already executed at least once
-          if (sms.getNextAttemptId > 0) {
-            // While we previously validated possible rollbacks during the handling of a FetchFailure,
-            // where we were fetching from an indeterminate source map stages, this later check
-            // covers additional cases like recalculating an indeterminate stage after an executor
-            // loss. Moreover, because this check occurs later in the process, if a result stage task
-            // has successfully completed, we can detect this and abort the job, as rolling back a
-            // result stage is not possible.
-            val stagesToRollback = collectSucceedingStages(sms)
-            filterAndAbortUnrollbackableStages(stagesToRollback)
-            // stages which cannot be rolled back were aborted which leads to removing the
-            // the dependant job(s) from the active jobs set
-            val numActiveJobsWithStageAfterRollback =
-              activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-            if (numActiveJobsWithStageAfterRollback == 0) {
-              logInfo(log"All jobs depending on the indeterminate stage " +
-                log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
-              return
-            }
+        if (sms.isStaticallyIndeterminate &&
+            !sms.shuffleDep.checksumMismatchFullRetryEnabled &&
+            sms.getNextAttemptId > 0) {
+          // The `rollbackCurrentStage = true` parameter ensures the current submitting stage
+          // is included in the cleanup for a fresh start: clearing its shuffle outputs, marking
+          // old task results to be ignored, and creating a new shuffle merge state for the
+          // upcoming retry.
+          rollbackSucceedingStages(sms, rollbackCurrentStage = true)
+          if (!stageIdToStage.contains(stage.id)) {
+            logInfo(log"All jobs depending on the indeterminate stage " +
+              log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
+            return
           }
-          mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
-          sms.shuffleDep.newShuffleMergeState()
         }
       case _ =>
     }
@@ -1880,7 +1874,9 @@ private[spark] class DAGScheduler(
         if (shuffleStage.isAvailable) {
           computedTotalSize
         } else {
-          if (shuffleStage.isIndeterminate) {
+          // For indeterminate stages, don't use partial merge results as the stage output
+          // may change on retry
+          if (shuffleStage.isStaticallyIndeterminate) {
             0L
           } else {
             computedTotalSize
@@ -1903,8 +1899,14 @@ private[spark] class DAGScheduler(
    * the map tasks are re-tried. For stages where rollback and retry all tasks are not possible,
    * we will need to abort the stages.
    */
-  private[scheduler] def rollbackSucceedingStages(mapStage: ShuffleMapStage): Unit = {
-    val stagesToRollback = collectSucceedingStages(mapStage).filterNot(_ == mapStage)
+  private[scheduler] def rollbackSucceedingStages(
+      mapStage: ShuffleMapStage,
+      rollbackCurrentStage: Boolean = false): Unit = {
+    val stagesToRollback = if (rollbackCurrentStage) {
+      collectSucceedingStages(mapStage)
+    } else {
+      collectSucceedingStages(mapStage).filterNot(_ == mapStage)
+    }
     val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
@@ -1920,9 +1922,15 @@ private[spark] class DAGScheduler(
       // Rollback the running stages first to avoid triggering more fetch failures.
       stagesToRollback.toSeq.sortBy(!runningStages.contains(_)).foreach {
         case sms: ShuffleMapStage =>
-          rollbackShuffleMapStage(sms, "rolling back due to indeterminate " +
-            s"output of shuffle map stage $mapStage")
-          sms.markAsRollingBack()
+          // Iterate over the stages to rollback and checking whether the stage has been rolled back
+          // for the current attempt to avoid rolling back the same stage attempt multiple times.
+          val alreadyRollingBack =
+            sms.maxAttemptIdToIgnore.contains(sms.latestInfo.attemptNumber())
+          if (sms.getNextAttemptId > 0 && !alreadyRollingBack) {
+            rollbackShuffleMapStage(sms, "rolling back due to indeterminate " +
+              s"output of shuffle map stage $mapStage")
+            sms.markAsRollingBack()
+          }
 
         case rs: ResultStage =>
           rs.markAsRollingBack()
@@ -2086,19 +2094,11 @@ private[spark] class DAGScheduler(
         // tasks complete, they still count and we can mark the corresponding partitions as
         // finished if the stage is determinate. Here we notify the task scheduler to skip running
         // tasks for the same partition to save resource.
-        def stageWithChecksumMismatchFullRetryEnabled(stage: Stage): Boolean = {
-          stage match {
-            case s: ShuffleMapStage => s.shuffleDep.checksumMismatchFullRetryEnabled
-            case _ => stage.parents.exists(stageWithChecksumMismatchFullRetryEnabled)
-          }
-        }
 
-        // Ignore task completion for old attempt of indeterminate stage
-        val ignoreOldTaskAttempts = if (stageWithChecksumMismatchFullRetryEnabled(stage)) {
+        // Ignore task completion for old attempt of stages with nondeterministic output.
+        // This is tracked via maxAttemptIdToIgnore which is set when a stage is rolled back.
+        val ignoreOldTaskAttempts =
           stage.maxAttemptIdToIgnore.exists(_ >= task.stageAttemptId)
-        } else {
-          stage.isIndeterminate && task.stageAttemptId < stage.latestInfo.attemptNumber()
-        }
 
         if (!ignoreOldTaskAttempts && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
@@ -2179,18 +2179,16 @@ private[spark] class DAGScheduler(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
                 if (isChecksumMismatched) {
                   shuffleStage.isChecksumMismatched = isChecksumMismatched
-                  // There could be multiple checksum mismatches detected for a single stage attempt.
-                  // We check for stage abortion once and only once when we first detect checksum
-                  // mismatch for each stage attempt. For example, assume that we have
-                  // stage1 -> stage2, and we encounter checksum mismatch during the retry of stage1.
-                  // In this case, we need to call abortUnrollbackableStages() for the succeeding
-                  // stages. Assume that when stage2 is retried, some tasks finish and some tasks
-                  // failed again with FetchFailed. In case that we encounter checksum mismatch again
-                  // during the retry of stage1, we need to call abortUnrollbackableStages() again.
-                  if (shuffleStage.maxChecksumMismatchedId < smt.stageAttemptId) {
-                    shuffleStage.maxChecksumMismatchedId = smt.stageAttemptId
-                    if (shuffleStage.shuffleDep.checksumMismatchFullRetryEnabled
-                      && shuffleStage.isStageIndeterminate) {
+                  // Runtime detection of nondeterministic output via checksum mismatch.
+                  // This is the trigger point for runtime detection - we only know the stage
+                  // is indeterminate when we see different checksums from different attempts.
+                  //
+                  // Note: Static detection (isStaticallyIndeterminate) is triggered earlier
+                  // in FetchFailed handler and submitMissingTasks for efficiency.
+                  if (shuffleStage.shuffleDep.checksumMismatchFullRetryEnabled
+                      && shuffleStage.isRuntimeIndeterminate) {
+                    if (shuffleStage.maxChecksumMismatchedId < smt.stageAttemptId) {
+                      shuffleStage.maxChecksumMismatchedId = smt.stageAttemptId
                       rollbackSucceedingStages(shuffleStage)
                     }
                   }
@@ -2312,19 +2310,20 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
-              // If the map stage is INDETERMINATE, which means the map tasks may return
-              // different result when re-try, we need to re-try all the tasks of the failed
-              // stage and its succeeding stages, because the input data will be changed after the
-              // map tasks are re-tried.
-              // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
-              // guaranteed to be determinate, so the input data of the reducers will not change
-              // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate && !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
-                val stagesToRollback = collectSucceedingStages(mapStage)
-                val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
-                logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output " +
-                  log"was failed, we will roll back and rerun below stages which include itself and all " +
-                  log"its indeterminate child stages: ${MDC(STAGES, stagesCanRollback)}")
+              // For statically indeterminate stages, trigger rollback early (here and in
+              // submitMissingTasks) rather than deferring to task completion. This is more
+              // efficient because it clears shuffle outputs before the retry is submitted,
+              // ensuring findMissingPartitions() returns all partitions.
+              //
+              // For runtime detection (checksum mismatch), rollback is triggered at task
+              // completion when the mismatch is discovered.
+              //
+              // The `rollbackCurrentStage = true` parameter ensures the failed map stage is
+              // included in the cleanup: clearing its shuffle outputs, marking old task results
+              // to be ignored, and creating a new shuffle merge state for the upcoming retry.
+              if (mapStage.isStaticallyIndeterminate &&
+                  !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
+                rollbackSucceedingStages(mapStage, rollbackCurrentStage = true)
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
@@ -2535,7 +2534,12 @@ private[spark] class DAGScheduler(
               "shuffle block fetching protocol. Please check the config " +
               "'spark.shuffle.useOldFetchProtocol', see more detail in " +
               "SPARK-27665 and SPARK-25341."
-            abortStage(mapStage, reason, None)
+            // We should abort the final stages to make sure the job fails. Otherwise, nothing
+            // would happen if the shuffle output are available since the job would be considered
+            // as no longer depending on the stage.
+            mapStage.jobIds.flatMap(jobIdToActiveJob.get)
+              .map(_.finalStage)
+              .foreach(abortStage(_, reason, None))
           } else {
             rollingBackStages += mapStage
           }
@@ -2819,11 +2823,11 @@ private[spark] class DAGScheduler(
       if (stage.pendingPartitions.isEmpty)
         if (runningStages.contains(stage)) {
           processShuffleMapStageCompletion(stage)
-        } else if (stage.isIndeterminate) {
+        } else if (stage.isStaticallyIndeterminate) {
           // There are 2 possibilities here - stage is either cancelled or it will be resubmitted.
-          // If this is an indeterminate stage which is cancelled, we unregister all its merge
-          // results here just to free up some memory. If the indeterminate stage is resubmitted,
-          // merge results are cleared again when the newer attempt is submitted.
+          // If this is a statically indeterminate stage which is cancelled, we unregister all its
+          // merge results here just to free up some memory. If the indeterminate stage is
+          // resubmitted, merge results are cleared again when the newer attempt is submitted.
           mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
           // For determinate stages, which have completed merge finalization, we don't need to
           // unregister merge results - since the stage retry, or any other stage computing the
