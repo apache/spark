@@ -985,7 +985,8 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
 
       new MethodVisitor(Opcodes.ASM9) {
         override def visitTypeInsn(op: Int, tp: String): Unit = {
-          if (op == Opcodes.NEW && tp.contains("scala/runtime/NonLocalReturnControl") && isTargetMethod) {
+          if (op == Opcodes.NEW && tp.contains("scala/runtime/NonLocalReturnControl") &&
+              isTargetMethod) {
             throw new ReturnStatementInClosureException
           }
         }
