@@ -334,4 +334,22 @@ class OptimizerSuite extends PlanTest {
     assert(optimized2.schema ===
       StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
   }
+
+  test("SPARK-55110:order of optimizer rule to achieve optimal idempotency") {
+    val testRelation = LocalRelation($"a".int, $"b".int, $"c".boolean)
+    withSQLConf(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> "1",
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        s"${PropagateEmptyRelation.ruleName}, ${ConvertToLocalRelation.ruleName}") {
+      val analyzed = testRelation.where($"a" > 1000 && $"c" =!= false).analyze
+      val optimizer = new SimpleTestOptimizer() {
+        override def defaultBatches: Seq[Batch] = {
+          super.defaultBatches.filter(_.name ==
+            "Operator Optimization before Inferring Filters")
+        }
+      }
+      val optimized = optimizer.execute(analyzed)
+      val expectedOptimized = testRelation.where($"a" > 1000 && $"c").analyze
+      comparePlans(optimized, expectedOptimized)
+    }
+  }
 }
