@@ -24,7 +24,7 @@ import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 
@@ -58,6 +58,14 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
 
+private[spark] object IsolatedSessionState {
+  // Authoritative store for all isolated sessions. Sessions are put here when created
+  // and removed when cleanup runs. The Guava cache just tracks which sessions are
+  // "active" for LRU eviction policy, but this map is the source of truth.
+  // This ensures there's only ONE IsolatedSessionState per UUID at any time.
+  val sessions = new ConcurrentHashMap[String, IsolatedSessionState]()
+}
+
 private[spark] class IsolatedSessionState(
     val sessionUUID: String,
     var urlClassLoader: MutableURLClassLoader,
@@ -68,29 +76,62 @@ private[spark] class IsolatedSessionState(
     val replClassDirUri: Option[String]) extends Logging {
 
   // Reference count for the number of running tasks using this session.
-  private val refCount: AtomicInteger = new AtomicInteger(0)
+  // Access is synchronized via `lock`.
+  private var refCount: Int = 0
 
   // Whether this session has been evicted from the cache.
-  @volatile private var evicted: Boolean = false
+  // Access is synchronized via `lock`.
+  private var evicted: Boolean = false
 
-  /** Increment the reference count, indicating a task is using this session. */
-  def acquire(): Unit = refCount.incrementAndGet()
+  // Lock to synchronize all state changes.
+  private val lock = new Object
+
+  /**
+   * Increment the reference count, indicating a task is using this session.
+   * @return true if the session was successfully acquired, false if it was already evicted
+   */
+  def acquire(): Boolean = lock.synchronized {
+    if (evicted) {
+      false
+    } else {
+      refCount += 1
+      true
+    }
+  }
+
+  /**
+   * Try to un-evict this session so it can be reused.
+   * This is called from the cache loader to reuse a deferred session.
+   * The caller should call acquire() separately after the session is in cache.
+   * @return true if successfully un-evicted, false if already cleaned up or refCount is 0
+   */
+  def tryUnEvict(): Boolean = lock.synchronized {
+    if (evicted && refCount > 0) {
+      evicted = false
+      logInfo(log"Session ${MDC(SESSION_ID, sessionUUID)} un-evicted, " +
+        log"still in use by ${MDC(LogKeys.COUNT, refCount)} task(s)")
+      true
+    } else {
+      false
+    }
+  }
 
   /** Decrement the reference count. If evicted and no more tasks, clean up. */
-  def release(): Unit = {
-    if (refCount.decrementAndGet() == 0 && evicted) {
+  def release(): Unit = lock.synchronized {
+    refCount -= 1
+    if (refCount == 0 && evicted) {
       cleanup()
     }
   }
 
-  /** Mark this session as evicted. If no tasks are using it, clean up immediately. */
-  def markEvicted(): Unit = {
+  /** Mark this session as evicted. Cleans up immediately if refCount is 0. */
+  def markEvicted(): Unit = lock.synchronized {
     evicted = true
-    if (refCount.get() == 0) {
+    if (refCount == 0) {
       cleanup()
     } else {
       logInfo(log"Session ${MDC(SESSION_ID, sessionUUID)} evicted but still in use by " +
-        log"${MDC(LogKeys.COUNT, refCount.get())} task(s), deferring cleanup")
+        log"${MDC(LogKeys.COUNT, refCount)} task(s), deferring cleanup")
     }
   }
 
@@ -108,11 +149,15 @@ private[spark] class IsolatedSessionState(
         logWarning(log"Failed to close urlClassLoader for session " +
           log"${MDC(SESSION_ID, sessionUUID)}", e)
     }
+
     // Delete session files.
     val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), sessionUUID)
     if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
       Utils.deleteRecursively(sessionBasedRoot)
     }
+
+    // Remove from authoritative sessions map after cleanup
+    IsolatedSessionState.sessions.remove(sessionUUID)
     logInfo(log"Session cleaned up: ${MDC(SESSION_ID, sessionUUID)}")
   }
 }
@@ -241,13 +286,17 @@ private[spark] class Executor(
         isDefaultState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
       urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
-    new IsolatedSessionState(
+    val state = new IsolatedSessionState(
       jobArtifactState.uuid, urlClassLoader, replClassLoader,
       currentFiles,
       currentJars,
       currentArchives,
       jobArtifactState.replClassDirUri
     )
+    // Store in the authoritative sessions map immediately.
+    // This ensures there's only one session per UUID at any time.
+    IsolatedSessionState.sessions.put(jobArtifactState.uuid, state)
+    state
   }
 
   private def isStubbingEnabledForState(name: String) = {
@@ -258,7 +307,7 @@ private[spark] class Executor(
   private def isDefaultState(name: String) = name == "default"
 
   // Classloader isolation
-  // The default isolation group
+  // The default isolation group. Not in the cache, never evicted.
   val defaultSessionState: IsolatedSessionState = newSessionState(JobArtifactState("default", None))
 
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
@@ -270,8 +319,8 @@ private[spark] class Executor(
         val state = notification.getValue
         // Cache is always used for isolated sessions.
         assert(!isDefaultState(state.sessionUUID))
-        // Mark evicted - cleanup will happen immediately if no tasks are using it,
-        // or when the last task releases it.
+        // Mark evicted. The session stays in the authoritative sessions map until cleanup.
+        // If refCount > 0, cleanup is deferred until all tasks release.
         state.markEvicted()
       }
     })
@@ -628,14 +677,36 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
+      // We need to retry the cache lookup if the session was evicted between get() and acquire().
+      // This can happen when the cache is full and another task triggers eviction.
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
-          isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
-        case _ => defaultSessionState
+          var session: IsolatedSessionState = null
+          var acquired = false
+          while (!acquired) {
+            // Get or create session. The loader uses sessions map as the authoritative store.
+            // This ensures there's only one IsolatedSessionState per UUID at any time.
+            session = isolatedSessionCache.get(jobArtifactState.uuid, () => {
+              // Check the authoritative sessions map first. tryUnEvict() will block if
+              // cleanup is in progress, so when it returns false, the session is already
+              // removed from the map and it's safe to create a new one.
+              val existingSession = IsolatedSessionState.sessions.get(jobArtifactState.uuid)
+              if (existingSession != null && existingSession.tryUnEvict()) {
+                existingSession
+              } else {
+                newSessionState(jobArtifactState)
+              }
+            })
+            // acquire() can return false if session was evicted between get() and now.
+            // In that case, retry - the session is already removed from cache.
+            acquired = session.acquire()
+          }
+          session
+        case _ =>
+          // The default session is never in the cache and never evicted,
+          // so no need to acquire/release.
+          defaultSessionState
       }
-
-      // Pin the session to prevent its class loader from being closed while this task is running.
-      isolatedSession.acquire()
 
       setMDCForTask(taskName, mdcProperties)
       threadId = Thread.currentThread.getId
@@ -943,7 +1014,10 @@ private[spark] class Executor(
           metricsPoller.onTaskCompletion(taskId, task.stageId, task.stageAttemptId)
         }
         // Release the session reference. If evicted and this was the last task, cleanup happens.
-        isolatedSession.release()
+        // Skip for defaultSessionState since it's never evicted.
+        if (isolatedSession ne defaultSessionState) {
+          isolatedSession.release()
+        }
         Thread.currentThread().setName(s"$IDLE_TASK_THREAD_NAME#$threadId" )
       }
     }
