@@ -14,3 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from pyspark.pandas.tests.test_arrow_interface import ArrowInterfaceTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+
+
+class ArrowInterfaceParityTests(
+    ArrowInterfaceTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
+
+
+if __name__ == "__main__":
+    from pyspark.testing import main
+
+    main()
