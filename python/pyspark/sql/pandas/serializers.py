@@ -1084,15 +1084,11 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
     def __init__(
         self,
-        timezone,
         safecheck,
-        assign_cols_by_name,
         arrow_cast,
     ):
         super().__init__(
-            timezone=timezone,
             safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
             arrow_cast=arrow_cast,
         )
 
