@@ -555,7 +555,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_job_cancellation",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
-        "pyspark.sql.tests.arrow.test_arrow_c_stream",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
@@ -828,6 +827,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
         # unittests
+        "pyspark.pandas.tests.test_arrow_interface",
         "pyspark.pandas.tests.test_categorical",
         "pyspark.pandas.tests.test_config",
         "pyspark.pandas.tests.test_extension",
@@ -1273,6 +1273,7 @@ pyspark_pandas_connect = Module(
         # unittests dedicated for Spark Connect
         "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.test_parity_arrow_interface",
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",
         "pyspark.pandas.tests.connect.test_parity_extension",
