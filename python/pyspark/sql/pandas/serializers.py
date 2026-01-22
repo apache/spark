@@ -727,15 +727,11 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __init__(
         self,
-        timezone,
         safecheck,
-        assign_cols_by_name,
         arrow_cast,
     ):
         super().__init__()
-        self._timezone = timezone
         self._safecheck = safecheck
-        self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
 
     def _create_array(self, arr, arrow_type, arrow_cast):
@@ -794,8 +790,6 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
     Parameters
     ----------
-    timezone : str
-        A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
     input_types : list
@@ -809,16 +803,13 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
     def __init__(
         self,
-        timezone,
         safecheck,
         input_types,
         int_to_decimal_coercion_enabled,
         binary_as_bytes,
     ):
         super().__init__(
-            timezone=timezone,
             safecheck=safecheck,
-            assign_cols_by_name=False,
             arrow_cast=True,
         )
         self._input_types = input_types
@@ -1093,15 +1084,11 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
     def __init__(
         self,
-        timezone,
         safecheck,
-        assign_cols_by_name,
         arrow_cast,
     ):
         super().__init__(
-            timezone=timezone,
             safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
             arrow_cast=arrow_cast,
         )
 
