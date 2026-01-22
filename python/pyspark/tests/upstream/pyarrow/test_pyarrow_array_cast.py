@@ -3282,7 +3282,6 @@ class PyArrowNumericalCastTests(unittest.TestCase):
     def test_fixed_size_binary_16_casts(self):
         """Test fixed_size_binary(16) -> all scalar types."""
         import pyarrow as pa
-        from decimal import Decimal
 
         # 16-byte binary values
         val16 = b"0123456789abcdef"
@@ -4773,7 +4772,6 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         import pyarrow as pa
         import datetime
 
-        ts = datetime.datetime(2022, 1, 1, 12, 30, 45)
         epoch_s = 1641040245
 
         casts = {
