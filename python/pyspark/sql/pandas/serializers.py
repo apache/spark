@@ -32,13 +32,16 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark.sql import Row
-from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
+from pyspark.sql.conversion import (
+    LocalDataToArrowConversion,
+    ArrowTableToRowsConversion,
+    ArrowArrayToPandasConversion,
+)
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
-    _create_converter_to_pandas,
 )
 from pyspark.sql.types import (
     DataType,
@@ -358,27 +361,13 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
     ):
-        # If the given column is a date type column, creates a series of datetime.date directly
-        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-        # datetime64[ns] type handling.
-        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        pandas_options = {
-            "date_as_object": True,
-            "coerce_temporal_nanoseconds": True,
-            "integer_object_nulls": True,
-        }
-        s = arrow_column.to_pandas(**pandas_options)
-
-        converter = _create_converter_to_pandas(
-            data_type=spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
-            nullable=True,
+        return ArrowArrayToPandasConversion.convert_legacy(
+            arrow_column,
+            spark_type or from_arrow_type(arrow_column.type),
             timezone=self._timezone,
             struct_in_pandas=struct_in_pandas,
-            error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
-            integer_object_nulls=True,
         )
-        return converter(s)
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
