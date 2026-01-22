@@ -620,7 +620,7 @@ private[spark] object ClosureCleaner extends Logging {
       System.getProperty("spark.closureCleaner.cloneIndyLambda")).getOrElse("true").toBoolean
     val javaVersion = Runtime.version().feature()
 
-    if (javaVersion >= 18 && useClone || javaVersion >= 22) {
+    if (useClone || javaVersion >= 22) {
       val factory = makeClonedIndyLambdaFacory(indyLambda.getClass, lambdaProxy)
 
       val argsBuffer = new ArrayBuffer[Object]()
