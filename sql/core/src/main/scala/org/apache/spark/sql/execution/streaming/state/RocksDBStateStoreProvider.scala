@@ -521,7 +521,7 @@ private[sql] class RocksDBStateStoreProvider
 
         if (storeConf.rowChecksumEnabled) {
           // multiGet provides better perf for row checksum, since it avoids copying values
-          val encodedValuesIterator = rocksDB.multiGet(
+          val encodedValuesIterator = rocksDB.getMergedValues(
             keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName)
           valueEncoder.decodeValues(encodedValuesIterator)
         } else {
