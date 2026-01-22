@@ -202,23 +202,9 @@ struct<>
 -- !query
 SELECT abs(-5)
 -- !query schema
-struct<>
+struct<abs(-5):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_SCALAR_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`abs`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 14,
-    "fragment" : "abs(-5)"
-  } ]
-}
+5
 
 
 -- !query
@@ -238,6 +224,14 @@ struct<abs(-5):int>
 
 
 -- !query
+SELECT * FROM session.abs()
+-- !query schema
+struct<val:int>
+-- !query output
+42
+
+
+-- !query
 DROP TEMPORARY FUNCTION abs
 -- !query schema
 struct<>
@@ -254,33 +248,23 @@ struct<>
 
 
 -- !query
+SELECT * FROM range(5)
+-- !query schema
+struct<id:bigint>
+-- !query output
+0
+1
+2
+3
+4
+
+
+-- !query
 SELECT range()
 -- !query schema
 struct<range():int>
 -- !query output
 999
-
-
--- !query
-SELECT * FROM range(5)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_TABLE_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "range(5)"
-  } ]
-}
 
 
 -- !query
@@ -293,6 +277,14 @@ struct<id:bigint>
 2
 3
 4
+
+
+-- !query
+SELECT session.range()
+-- !query schema
+struct<range():int>
+-- !query output
+999
 
 
 -- !query
@@ -818,50 +810,19 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
+CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "0",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "1",
-    "functionName" : "`abs`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 45,
-    "stopIndex" : 49,
-    "fragment" : "abs()"
-  } ]
-}
+
 
 
 -- !query
 SELECT * FROM shadow_view
 -- !query schema
-struct<>
+struct<result:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`shadow_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 25,
-    "fragment" : "shadow_view"
-  } ]
-}
+777
 
 
 -- !query
@@ -885,14 +846,7 @@ DROP VIEW shadow_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`shadow_view`"
-  }
-}
+
 
 
 -- !query

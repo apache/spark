@@ -176,21 +176,8 @@ CreateSQLFunctionCommand abs, val INT, SELECT 42, true, true, false, false
 -- !query
 SELECT abs(-5)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_SCALAR_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`abs`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 14,
-    "fragment" : "abs(-5)"
-  } ]
-}
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
 
 
 -- !query
@@ -212,6 +199,17 @@ Project [abs(-5) AS abs(-5)#x]
 
 
 -- !query
+SELECT * FROM session.abs()
+-- !query analysis
+Project [val#x]
++- SQLFunctionNode abs
+   +- SubqueryAlias abs
+      +- Project [cast(42#x as int) AS val#x]
+         +- Project [42 AS 42#x]
+            +- OneRowRelation
+
+
+-- !query
 DROP TEMPORARY FUNCTION abs
 -- !query analysis
 DropFunctionCommand abs, false, true
@@ -224,6 +222,13 @@ CreateSQLFunctionCommand range, INT, 999, false, true, false, false
 
 
 -- !query
+SELECT * FROM range(5)
+-- !query analysis
+Project [id#xL]
++- Range (0, 5, step=1)
+
+
+-- !query
 SELECT range()
 -- !query analysis
 Project [range() AS range()#x]
@@ -232,30 +237,18 @@ Project [range() AS range()#x]
 
 
 -- !query
-SELECT * FROM range(5)
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_TABLE_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "range(5)"
-  } ]
-}
-
-
--- !query
 SELECT * FROM builtin.range(5)
 -- !query analysis
 Project [id#xL]
 +- Range (0, 5, step=1)
+
+
+-- !query
+SELECT session.range()
+-- !query analysis
+Project [range() AS range()#x]
++- Project
+   +- OneRowRelation
 
 
 -- !query
@@ -710,46 +703,24 @@ CreateSQLFunctionCommand abs, INT, 777, false, true, false, false
 
 
 -- !query
-CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
+CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "0",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "1",
-    "functionName" : "`abs`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 45,
-    "stopIndex" : 49,
-    "fragment" : "abs()"
-  } ]
-}
+CreateViewCommand `shadow_view`, SELECT session.abs() as result, false, false, LocalTempView, UNSUPPORTED, true, [abs]
+   +- Project [abs() AS result#x]
+      +- Project
+         +- OneRowRelation
 
 
 -- !query
 SELECT * FROM shadow_view
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`shadow_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 25,
-    "fragment" : "shadow_view"
-  } ]
-}
+Project [result#x]
++- SubqueryAlias shadow_view
+   +- View (`shadow_view`, [result#x])
+      +- Project [cast(result#x as int) AS result#x]
+         +- Project [abs() AS result#x]
+            +- Project
+               +- OneRowRelation
 
 
 -- !query
@@ -774,14 +745,7 @@ Project [result#x]
 -- !query
 DROP VIEW shadow_view
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`shadow_view`"
-  }
-}
+DropTempViewCommand shadow_view
 
 
 -- !query

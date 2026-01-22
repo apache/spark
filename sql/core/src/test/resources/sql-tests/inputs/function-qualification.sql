@@ -66,26 +66,32 @@ DROP TEMPORARY FUNCTION abs;
 SELECT abs(-5);
 
 --
--- SECTION 4: Cross-Type Shadowing (Scalar vs Table Functions)
+-- SECTION 4: Cross-Type Shadowing (Scalar vs Table Functions) - Post-Security Fix
 --
 
--- Temp table function shadows builtin scalar function
+-- NOTE: With security fix (extension -> builtin -> session), built-ins now WIN over temps.
+-- Cross-type errors only occur when NO function type exists in built-ins.
+
+-- Test 1: Temp table function + builtin scalar function (NO conflict - builtin wins!)
 CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 42;
--- Error: abs is now a table function, cannot use in scalar context
+-- Builtin scalar abs still works unqualified (builtin resolves before temp table)
 SELECT abs(-5);
--- Works in table context
+-- Temp table function works in table context
 SELECT * FROM abs();
--- Builtin scalar still accessible with qualification
+-- Both accessible with explicit qualification
 SELECT builtin.abs(-5);
+SELECT * FROM session.abs();
 DROP TEMPORARY FUNCTION abs;
 
--- Temp scalar function shadows builtin table function
+-- Test 2: Temp scalar function + builtin table function (NO conflict - builtin wins!)
 CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999;
-SELECT range();
--- Error: range is now scalar, cannot use in table context
+-- Builtin table range still works unqualified in table context (builtin resolves before temp scalar)
 SELECT * FROM range(5);
--- Builtin table function accessible with qualification
+-- Temp scalar function works in scalar context
+SELECT range();
+-- Both accessible with explicit qualification
 SELECT * FROM builtin.range(5);
+SELECT session.range();
 DROP TEMPORARY FUNCTION range;
 
 --
@@ -180,9 +186,10 @@ SELECT * FROM temp_view;
 DROP VIEW temp_view;
 DROP TEMPORARY FUNCTION view_func;
 
--- View with temp function shadowing builtin
+-- View referencing temp function with same name as builtin (no shadowing - builtin wins!)
 CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777;
-CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result;
+-- View must use qualified name to access temp function (builtin abs requires argument)
+CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result;
 SELECT * FROM shadow_view;
 -- Builtin accessible with qualification in view
 CREATE TEMPORARY VIEW builtin_view AS SELECT builtin.abs(-10) as result;

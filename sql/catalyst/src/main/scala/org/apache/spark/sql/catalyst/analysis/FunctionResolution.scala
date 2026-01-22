@@ -230,16 +230,18 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
-      // For unqualified names, check cross-type shadowing before resolving
-      // If a temp table function exists with this name, it shadows any builtin scalar function
+      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
+      // This ensures built-in functions take precedence over temp functions (security fix)
+      // Cross-type checking: If only a temp table function exists (no scalar version),
+      // throw error when used in scalar context
       val funcName = name.head
-      if (v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
-        // Temp table function exists - throw error
+      val scalarResult = v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
+
+      if (scalarResult.isEmpty && v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
+        // No scalar function found (neither builtin nor temp), but temp table function exists
         throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
       } else {
-        // No temp table function - safe to resolve as scalar
-        // This will use the PATH resolution order: extension -> builtin -> session
-        v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
+        scalarResult
       }
     } else {
       None
@@ -273,28 +275,19 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempTableFunction(name.last, arguments)
     } else if (name.length == 1) {
-      // For unqualified names, check cross-type shadowing before resolving
-      // If a temp scalar function exists with this name, it shadows any builtin table function
+      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
+      // This ensures built-in table functions take precedence over temp functions (security fix)
+      // Cross-type checking: If only a temp scalar function exists (no table version),
+      // throw error when used in table context (checked below in Step 2)
       val funcName = name.head
-      if (v1SessionCatalog.lookupTempFunction(funcName).isDefined) {
-        // Temp scalar function exists - will throw error below
-        None
-      } else {
-        // No temp scalar function - safe to resolve as table function
-        // This will use the PATH resolution order: extension -> builtin -> session
-        v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
-      }
+      v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
     } else {
       None
     }
 
     // Step 2: Fallback to scalar registry for type mismatch detection
-    // Architecture: Generators are one-way (table-to-scalar extraction). If a function exists
-    // ONLY as a scalar function and is used in table context, throw specific error.
-    //
-    // Note: This also handles cross-type shadowing. If a temp scalar function shadows a builtin
-    // table function, the check above returns None, and we fall through here to detect
-    // it's a scalar-only function and throw NOT_A_TABLE_FUNCTION.
+    // If no table function was found (neither builtin nor temp), check if a scalar function exists.
+    // If yes, this is a cross-type error - scalar function used in table context.
     if (tableFunctionResult.isEmpty && name.length == 1) {
       if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
         throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
