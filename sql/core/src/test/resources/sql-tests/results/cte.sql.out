@@ -290,20 +290,27 @@ struct<c1:int>
 
 
 -- !query
+SELECT ( WITH cte(foo) AS ( SELECT id )
+         SELECT (SELECT foo FROM cte) )
+FROM t
+-- !query schema
+struct<scalarsubquery(id):int>
+-- !query output
+0
+1
+2
+
+
+-- !query
 SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t
 -- !query schema
-struct<>
+struct<scalarsubquery(id):int>
 -- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_2172",
-  "messageParameters" : {
-    "batchName" : "Pullup Correlated Expressions",
-    "plan" : "!Project [scalar-subquery#x [] AS scalarsubquery()#x AS scalarsubquery(id)#x]   Project [id#x AS foo#x AS scalarsubquery()#x AS scalarsubquery(id)#x]\n!:  +- Project [foo#x]                                                              +- Project [cast(id#x as int) AS id#x]\n!:     +- Project [col1#x AS foo#x]                                                  +- LocalRelation [id#x]\n!:        +- Project [outer(id#x) AS col1#x]                                      \n!:           +- OneRowRelation                                                        \n!+- Project [cast(id#x as int) AS id#x]                                           \n!   +- LocalRelation [id#x]                                                         "
-  }
-}
+0
+1
+2
 
 
 -- !query

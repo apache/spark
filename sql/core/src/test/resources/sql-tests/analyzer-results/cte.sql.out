@@ -393,6 +393,31 @@ WithCTE
 
 
 -- !query
+SELECT ( WITH cte(foo) AS ( SELECT id )
+         SELECT (SELECT foo FROM cte) )
+FROM t
+-- !query analysis
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [id#x AS foo#x]
+:     :        +- Project [outer(id#x)]
+:     :           +- OneRowRelation
+:     +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:        :  +- Project [foo#x]
+:        :     +- SubqueryAlias cte
+:        :        +- CTERelationRef xxxx, true, [foo#x], false, false, 1
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- View (`t`, [id#x])
+      +- Project [cast(id#x as int) AS id#x]
+         +- Project [id#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x]
+
+
+-- !query
 SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t
