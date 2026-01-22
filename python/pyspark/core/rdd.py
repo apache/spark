@@ -1659,9 +1659,16 @@ class RDD(Generic[T_co]):
         """
 
         def func(it: Iterable[T]) -> Iterable[Any]:
+            # Officially, our type hint suggests that f should be a function
+            # that returns None. However, historically, we supported f as
+            # a generator, so it could return an iterator that we need to
+            # go through. We check the common case first, then deal with
+            # the undocumented behavior.
             r = f(it)
+            if r is None:
+                return iter([])
             try:
-                return iter(r)  # type: ignore[call-overload]
+                return iter(r)
             except TypeError:
                 return iter([])
 
@@ -1698,7 +1705,8 @@ class RDD(Generic[T_co]):
         with SCCallSiteSync(self.context):
             assert self.ctx._jvm is not None
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def collectWithJobGroup(
         self: "RDD[T]", groupId: str, description: str, interruptOnCancel: bool = False
@@ -1741,7 +1749,8 @@ class RDD(Generic[T_co]):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def reduce(self: "RDD[T]", f: Callable[[T, T], T]) -> T:
         """
@@ -5380,7 +5389,7 @@ def _test() -> None:
 
         if Version(np.__version__) >= Version("2"):
             # `legacy="1.25"` only available in `nump>=2`
-            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
     except (ModuleNotFoundError, TypeError):
         pass
 

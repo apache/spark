@@ -94,7 +94,9 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
    */
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -173,7 +175,9 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
 
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
@@ -242,7 +246,11 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
 
   override def close(): Unit = {}
 
-  override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
+  override def getStore(
+    version: Long,
+    uniqueId: Option[String],
+    forceSnapshotOnCommit: Boolean = false,
+    loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -947,7 +955,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 1.minute
+    val timeoutDuration = 2.minutes
 
     quietly {
       withSpark(SparkContext.getOrCreate(conf)) { sc =>
@@ -1433,6 +1441,26 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
+  test("SPARK-54420: HDFSBackedStateStoreProvider does not support loading empty store") {
+    val provider = new HDFSBackedStateStoreProvider()
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+    provider.init(
+      StateStoreId(newDir(), Random.nextInt(), 0),
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      new StateStoreConf(),
+      hadoopConf)
+
+    val e = intercept[StateStoreUnsupportedOperationException] {
+      provider.getStore(0, loadEmpty = true)
+    }
+    assert(e.getMessage.contains(
+      "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty"))
+  }
+
   test("Auto snapshot repair") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
@@ -1717,6 +1745,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "b", 0, 2)
       put(store, "aa", 0, 3)
       remove(store, _._1.startsWith("a"))
+      if (colFamiliesEnabled) {
+        assert(store.allColumnFamilyNames == Set(StateStore.DEFAULT_COL_FAMILY_NAME))
+      }
       assert(store.commit() === 1)
 
       assert(store.hasCommitted)
@@ -1833,6 +1864,41 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
         assert(reloadedStore.commit() === 2)
         assert(reloadedStore.metrics.numKeys === 4)
+      }
+    }
+  }
+
+  testWithAllCodec("multiGet - batch retrieval of multiple keys") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put multiple key-value pairs
+        put(store, "a", 1, 10)
+        put(store, "b", 2, 20)
+        put(store, "c", 3, 30)
+        put(store, "d", 4, 40)
+
+        // Create keys array for multiGet
+        val keys = Array(
+          dataToKeyRow("a", 1),
+          dataToKeyRow("b", 2),
+          dataToKeyRow("c", 3),
+          dataToKeyRow("nonexistent", 999) // Key that doesn't exist
+        )
+
+        // Perform multiGet
+        // Note: multiGet returns an iterator, we copy rows when collecting
+        val results = store.multiGet(keys, StateStore.DEFAULT_COL_FAMILY_NAME)
+          .map(row => if (row != null) row.copy() else null).toArray
+
+        // Verify results
+        assert(results.length === 4)
+        assert(valueRowToData(results(0)) === 10)
+        assert(valueRowToData(results(1)) === 20)
+        assert(valueRowToData(results(2)) === 30)
+        assert(results(3) === null) // Non-existent key should return null
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
@@ -2728,6 +2794,21 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-54063: forceSnapshot metric populated when shouldForceSnapshotOnCommit is true") {
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val store = provider.getStore(0, forceSnapshotOnCommit = true)
+      put(store, "a", 0, 1)
+      store.commit()
+      // Verify that a snapshot file was created for version 1
+      val metricPair = store.metrics.customMetrics.find { case (metric, _) =>
+        metric.name.contains("rocksdbForceSnapshotCount") ||
+        metric.name.contains("forceSnapshotCount")
+      }
+      assert(metricPair.isDefined)
+      assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
+    }
   }
 
   /** Return a new provider with a random id */

@@ -47,6 +47,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 * **IF NOT EXISTS**
 
     Creates a view if it does not exist.
+    This clause is not supported for `TEMPORARY` views yet.
 
 * **view_identifier**
 
@@ -86,8 +87,8 @@ CREATE OR REPLACE VIEW experienced_employee
     AS SELECT id, name FROM all_employee
         WHERE working_years > 5;
 
--- Create a global temporary view `subscribed_movies` if it does not exist.
-CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies 
+-- Create a global temporary view `subscribed_movies`.
+CREATE GLOBAL TEMPORARY VIEW subscribed_movies 
     AS SELECT mo.member_id, mb.full_name, mo.movie_title
         FROM movies AS mo INNER JOIN members AS mb 
         ON mo.member_id = mb.id;

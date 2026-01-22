@@ -35,7 +35,6 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     _schema: StructType,
     _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
-    protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
@@ -60,6 +59,8 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
@@ -84,12 +85,11 @@ abstract class RowInputArrowPythonRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
-    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
   extends BaseArrowPythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput
@@ -104,17 +104,18 @@ class ArrowPythonRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
-    workerConf: Map[String, String],
+    pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends RowInputArrowPythonRunner(
-    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
 
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
 }
 
 /**
@@ -128,20 +129,21 @@ class ArrowPythonWithNamedArgumentRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
-    workerConf: Map[String, String],
+    pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends RowInputArrowPythonRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
+    funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
+
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       PythonWorkerUtils.writeUTF(schema.json, dataOut)
     }
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
   }
 }
 
@@ -170,9 +172,12 @@ object ArrowPythonRunner {
     val binaryAsBytes = Seq(
       SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
       conf.pysparkBinaryAsBytes.toString)
+    val profiler = conf.pythonUDFProfiler.map(p =>
+      Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
+    ).getOrElse(Seq.empty)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
-      legacyPandasConversion ++ legacyPandasConversionUDF: _*)
+      legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler: _*)
   }
 }

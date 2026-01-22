@@ -34,6 +34,7 @@ import platform
 import urllib.parse
 import uuid
 import sys
+import time
 from typing import (
     Iterable,
     Iterator,
@@ -98,8 +99,9 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, _has_type
+from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
@@ -111,6 +113,19 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
+
+
+def _import_zstandard_if_available() -> Optional[Any]:
+    """
+    Import zstandard if available, otherwise return None.
+    This is used to handle the case when zstandard is not installed.
+    """
+    try:
+        import zstandard
+
+        return zstandard
+    except ImportError:
+        return None
 
 
 class ChannelBuilder:
@@ -487,6 +502,20 @@ class PlanObservedMetrics(ObservedMetrics):
     def keys(self) -> List[str]:
         return self._keys
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this observed metrics.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'keys', and 'pairs'.
+        """
+        return {
+            "name": self._name,
+            "keys": self._keys,
+            "pairs": self.pairs,
+        }
+
 
 class AnalyzeResult:
     def __init__(
@@ -706,8 +735,15 @@ class SparkConnectClient(object):
 
         self._progress_handlers: List[ProgressHandler] = []
 
+        self._zstd_module = _import_zstandard_if_available()
+        self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
+        self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
+
+        self.global_user_context_extensions: List[Tuple[str, any_pb2.Any]] = []
+        self.global_user_context_extensions_lock = threading.Lock()
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
@@ -951,7 +987,7 @@ class SparkConnectClient(object):
         return table, schema, ei
 
     def to_pandas(
-        self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs: Any
     ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
@@ -966,16 +1002,20 @@ class SparkConnectClient(object):
         # Get all related configs in a batch
         (
             timezone,
-            struct_in_pandas,
-            self_destruct,
+            structHandlingMode,
+            selfDestruct,
         ) = self.get_configs(
             "spark.sql.session.timeZone",
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
 
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            structHandlingMode = str(kwargs["pandasStructHandlingMode"])
+
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct == "true"
+            req, observations, selfDestruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -983,52 +1023,14 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-        # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
-        # DataFrame manually with the correct schema.
-        if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names, index=range(0))
-        else:
-            # Rename columns to avoid duplicated column names.
-            renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
-
-            pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct == "true":
-                # Configure PyArrow to use as little memory as possible:
-                # self_destruct - free columns as they are converted
-                # split_blocks - create a separate Pandas block for each column
-                # use_threads - convert one column at a time
-                pandas_options.update(
-                    {
-                        "self_destruct": True,
-                        "split_blocks": True,
-                        "use_threads": False,
-                    }
-                )
-            pdf = renamed_table.to_pandas(**pandas_options)
-            pdf.columns = schema.names
-
-        if len(pdf.columns) > 0:
-            error_on_duplicated_field_names: bool = False
-            if struct_in_pandas == "legacy" and any(
-                _has_type(f.dataType, StructType) for f in schema.fields
-            ):
-                error_on_duplicated_field_names = True
-                struct_in_pandas = "dict"
-
-            pdf = pd.concat(
-                [
-                    _create_converter_to_pandas(
-                        field.dataType,
-                        field.nullable,
-                        timezone=timezone,
-                        struct_in_pandas=struct_in_pandas,
-                        error_on_duplicated_field_names=error_on_duplicated_field_names,
-                    )(pser)
-                    for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
-                ],
-                axis="columns",
-            )
+        pdf = _convert_arrow_table_to_pandas(
+            arrow_table=table,
+            schema=schema,
+            timezone=timezone,
+            struct_handling_mode=structHandlingMode,
+            date_as_object=False,
+            self_destruct=selfDestruct == "true",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -1156,7 +1158,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
         )
@@ -1182,7 +1184,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
                 yield response
@@ -1240,6 +1242,24 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
+    def _update_request_with_user_context_extensions(
+        self,
+        req: Union[
+            pb2.AnalyzePlanRequest,
+            pb2.ConfigRequest,
+            pb2.ExecutePlanRequest,
+            pb2.FetchErrorDetailsRequest,
+            pb2.InterruptRequest,
+        ],
+    ) -> None:
+        with self.global_user_context_extensions_lock:
+            for _, extension in self.global_user_context_extensions:
+                req.user_context.extensions.append(extension)
+        if not hasattr(self.thread_local, "user_context_extensions"):
+            return
+        for _, extension in self.thread_local.user_context_extensions:
+            req.user_context.extensions.append(extension)
+
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None
     ) -> pb2.ExecutePlanRequest:
@@ -1270,6 +1290,7 @@ class SparkConnectClient(object):
                     messageParameters={"arg_name": "operation_id", "origin": str(ve)},
                 )
             req.operation_id = operation_id
+        self._update_request_with_user_context_extensions(req)
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1280,6 +1301,7 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
         return req
 
     def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
@@ -1694,6 +1716,7 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
@@ -1770,6 +1793,7 @@ class SparkConnectClient(object):
             )
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
         return req
 
     def interrupt_all(self) -> Optional[List[str]]:
@@ -1868,6 +1892,38 @@ class SparkConnectClient(object):
                 messageParameters={"arg_name": "Spark Connect tag", "arg_value": tag},
             )
 
+    def add_threadlocal_user_context_extension(self, extension: any_pb2.Any) -> str:
+        if not hasattr(self.thread_local, "user_context_extensions"):
+            self.thread_local.user_context_extensions = list()
+        extension_id = "threadlocal_" + str(uuid.uuid4())
+        self.thread_local.user_context_extensions.append((extension_id, extension))
+        return extension_id
+
+    def add_global_user_context_extension(self, extension: any_pb2.Any) -> str:
+        extension_id = "global_" + str(uuid.uuid4())
+        with self.global_user_context_extensions_lock:
+            self.global_user_context_extensions.append((extension_id, extension))
+        return extension_id
+
+    def remove_user_context_extension(self, extension_id: str) -> None:
+        if extension_id.find("threadlocal_") == 0:
+            if not hasattr(self.thread_local, "user_context_extensions"):
+                return
+            self.thread_local.user_context_extensions = list(
+                filter(lambda ex: ex[0] != extension_id, self.thread_local.user_context_extensions)
+            )
+        elif extension_id.find("global_") == 0:
+            with self.global_user_context_extensions_lock:
+                self.global_user_context_extensions = list(
+                    filter(lambda ex: ex[0] != extension_id, self.global_user_context_extensions)
+                )
+
+    def clear_user_context_extensions(self) -> None:
+        if hasattr(self.thread_local, "user_context_extensions"):
+            self.thread_local.user_context_extensions = list()
+        with self.global_user_context_extensions_lock:
+            self.global_user_context_extensions = list()
+
     def _handle_error(self, error: Exception) -> NoReturn:
         """
         Handle errors that occur during RPC calls.
@@ -1908,7 +1964,7 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
-
+        self._update_request_with_user_context_extensions(req)
         try:
             return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
@@ -1962,6 +2018,17 @@ class SparkConnectClient(object):
 
                     if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
+
+                    if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
+                        # Disable plan compression if the server fails to interpret the plan.
+                        logger.info(
+                            "Disabling plan compression for the session due to "
+                            "CONNECT_INVALID_PLAN.CANNOT_PARSE error."
+                        )
+                        self._plan_compression_threshold, self._plan_compression_algorithm = (
+                            -1,
+                            "NONE",
+                        )
 
                     raise convert_exception(
                         info,
@@ -2111,6 +2178,104 @@ class SparkConnectClient(object):
 
         ml_command_result = properties["ml_command_result"]
         return ml_command_result.param.long
+
+    def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+        """Sets the relation in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=relation,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION,
+        )
+
+    def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+        """Sets the command in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=command,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND,
+        )
+
+    def _try_compress_and_set_plan(
+        self,
+        plan: pb2.Plan,
+        message: google.protobuf.message.Message,
+        op_type: pb2.Plan.CompressedOperation.OpType.ValueType,
+    ) -> None:
+        """
+        Tries to compress a protobuf message and sets it on the plan.
+        If compression is not enabled, not effective, or not available,
+        it falls back to the original message.
+        """
+        (
+            plan_compression_threshold,
+            plan_compression_algorithm,
+        ) = self._get_plan_compression_threshold_and_algorithm()
+        plan_compression_enabled = (
+            plan_compression_threshold is not None
+            and plan_compression_threshold >= 0
+            and plan_compression_algorithm is not None
+            and plan_compression_algorithm != "NONE"
+        )
+        if plan_compression_enabled:
+            serialized_msg = message.SerializeToString()
+            original_size = len(serialized_msg)
+            if (
+                original_size > plan_compression_threshold
+                and plan_compression_algorithm == "ZSTD"
+                and self._zstd_module
+            ):
+                start_time = time.time()
+                compressed_operation = pb2.Plan.CompressedOperation(
+                    data=self._zstd_module.compress(serialized_msg),
+                    op_type=op_type,
+                    compression_codec=pb2.CompressionCodec.COMPRESSION_CODEC_ZSTD,
+                )
+                duration = time.time() - start_time
+                compressed_size = len(compressed_operation.data)
+                logger.debug(
+                    f"Plan compression: original_size={original_size}, "
+                    f"compressed_size={compressed_size}, "
+                    f"saving_ratio={1 - compressed_size / original_size:.2f}, "
+                    f"duration_s={duration:.1f}"
+                )
+                if compressed_size < original_size:
+                    plan.compressed_operation.CopyFrom(compressed_operation)
+                    return
+                else:
+                    logger.debug("Plan compression not effective. Using original plan.")
+
+        if op_type == pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION:
+            plan.root.CopyFrom(message)  # type: ignore[arg-type]
+        else:
+            plan.command.CopyFrom(message)  # type: ignore[arg-type]
+
+    def _get_plan_compression_threshold_and_algorithm(self) -> Tuple[int, str]:
+        if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
+            try:
+                (
+                    plan_compression_threshold_str,
+                    self._plan_compression_algorithm,
+                ) = self.get_configs(
+                    "spark.connect.session.planCompression.threshold",
+                    "spark.connect.session.planCompression.defaultAlgorithm",
+                )
+                self._plan_compression_threshold = (
+                    int(plan_compression_threshold_str) if plan_compression_threshold_str else -1
+                )
+                logger.debug(
+                    f"Plan compression threshold: {self._plan_compression_threshold}, "
+                    f"algorithm: {self._plan_compression_algorithm}"
+                )
+            except Exception as e:
+                self._plan_compression_threshold = -1
+                self._plan_compression_algorithm = "NONE"
+                logger.debug(
+                    "Plan compression is disabled because the server does not support it.", e
+                )
+        return (
+            self._plan_compression_threshold,
+            self._plan_compression_algorithm,
+        )  # type: ignore[return-value]
 
     def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
         """

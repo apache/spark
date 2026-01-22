@@ -20,7 +20,6 @@ import tempfile
 import time
 import unittest
 import logging
-from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
@@ -43,7 +42,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MapInPandasTestsMixin:
     spark: SparkSession
@@ -510,20 +509,20 @@ class MapInPandasTestsMixin:
                 [Row(id=i) for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas map: {lst}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_map",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas map: {lst}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_map",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
@@ -550,12 +549,6 @@ class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

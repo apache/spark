@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
@@ -192,7 +193,10 @@ class InMemoryCatalog(
   override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot create table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
@@ -235,7 +239,13 @@ class InMemoryCatalog(
       table: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = synchronized {
-    requireDbExists(db)
+    if (!databaseExists(db)) {
+      if (ignoreIfNotExists) {
+        return
+      } else {
+        throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
+      }
+    }
     if (tableExists(db, table)) {
       val tableMeta = getTable(db, table)
       if (tableMeta.tableType == CatalogTableType.MANAGED) {
@@ -268,7 +278,7 @@ class InMemoryCatalog(
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new NoSuchTableException(db = db, table = table)
+        throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
       }
     }
   }
@@ -313,7 +323,10 @@ class InMemoryCatalog(
   }
 
   override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot alter table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
@@ -356,6 +369,7 @@ class InMemoryCatalog(
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
+    requireDbExists(db)
     requireTableExists(db, table)
     catalog(db).tables(table).table
   }

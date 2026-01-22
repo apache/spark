@@ -27,7 +27,6 @@ import scala.io.{Codec, Source}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -104,7 +103,6 @@ trait TestPrematureExit {
 class SparkSubmitSuite
   extends SparkSubmitTestUtils
   with Matchers
-  with BeforeAndAfterEach
   with ResetSystemProperties
   with TestPrematureExit {
 
@@ -1816,6 +1814,87 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-54313: handle multiple --extra-properties-file options") {
+    withPropertyFile("base.properties", Map.empty) { baseFile =>
+      withPropertyFile("extra1.properties", Map.empty) { extra1File =>
+        withPropertyFile("extra2.properties", Map.empty) { extra2File =>
+          val clArgs = Seq(
+            "--class", "org.SomeClass",
+            "--properties-file", baseFile,
+            "--extra-properties-file", extra1File,
+            "--extra-properties-file", extra2File,
+            "--master", "yarn",
+            "thejar.jar")
+
+          val appArgs = new SparkSubmitArguments(clArgs)
+          appArgs.propertiesFile should be (baseFile)
+          appArgs.extraPropertiesFiles should be (Seq(extra1File, extra2File))
+        }
+      }
+    }
+  }
+
+  test("SPARK-54313: extra properties files override base properties") {
+    val baseProps = Map("spark.executor.memory" -> "1g", "spark.driver.memory" -> "512m")
+    val extraProps = Map("spark.executor.memory" -> "2g")
+
+    withPropertyFile("base.properties", baseProps) { baseFile =>
+      withPropertyFile("extra.properties", extraProps) { extraFile =>
+        val clArgs = Seq(
+          "--class", "org.SomeClass",
+          "--properties-file", baseFile,
+          "--extra-properties-file", extraFile,
+          "--master", "local",
+          "thejar.jar")
+
+        val appArgs = new SparkSubmitArguments(clArgs)
+        val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+        conf.get("spark.executor.memory") should be ("2g") // Overridden
+        conf.get("spark.driver.memory") should be ("512m") // From base
+      }
+    }
+  }
+
+  test("SPARK-54313: later extra properties files override earlier ones") {
+    val extra1Props = Map("spark.executor.memory" -> "1g")
+    val extra2Props = Map("spark.executor.memory" -> "3g")
+
+    withPropertyFile("extra1.properties", extra1Props) { extra1File =>
+      withPropertyFile("extra2.properties", extra2Props) { extra2File =>
+        val clArgs = Seq(
+          "--class", "org.SomeClass",
+          "--extra-properties-file", extra1File,
+          "--extra-properties-file", extra2File,
+          "--master", "local",
+          "thejar.jar")
+
+        val appArgs = new SparkSubmitArguments(clArgs)
+        val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+        conf.get("spark.executor.memory") should be ("3g") // Last wins
+      }
+    }
+  }
+
+  test("SPARK-54313: --conf overrides extra properties files") {
+    val extraProps = Map("spark.executor.memory" -> "2g")
+
+    withPropertyFile("extra.properties", extraProps) { extraFile =>
+      val clArgs = Seq(
+        "--class", "org.SomeClass",
+        "--extra-properties-file", extraFile,
+        "--conf", "spark.executor.memory=4g",
+        "--master", "local",
+        "thejar.jar")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+      conf.get("spark.executor.memory") should be ("4g") // --conf wins
+    }
+  }
+
   test("get a Spark configuration from arguments") {
     val testConf = "spark.test.hello" -> "world"
     val masterConf = "spark.master" -> "yarn"
@@ -1843,6 +1922,48 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
     assert(classpath.contains("."))
+  }
+
+  test("SPARK-52334: Update all files, jars, and pyFiles to" +
+    "reference the working directory after they are downloaded") {
+    withTempDir { dir =>
+      val text1 = File.createTempFile("test1_", ".txt", dir)
+      val zipFile1 = File.createTempFile("test1_", ".zip", dir)
+      TestUtils.createJar(Seq(text1), zipFile1)
+      val testFile = "test_metrics_config.properties"
+      val testPyFile = "test_metrics_system.properties"
+      val testJar = "TestUDTF.jar"
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--executor-memory", "5g",
+        "--class", "org.SomeClass",
+        "--driver-memory", "4g",
+        "--conf", "spark.kubernetes.namespace=spark",
+        "--conf", "spark.kubernetes.driver.container.image=bar",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--files", s"src/test/resources/$testFile",
+        "--py-files", s"src/test/resources/$testPyFile",
+        "--jars", s"src/test/resources/$testJar",
+        "--archives", s"${zipFile1.getAbsolutePath}#test_archives",
+        "/home/thejar.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val _ = submit.prepareSubmitEnvironment(appArgs)
+
+      appArgs.files should be (Utils.resolveURIs(s"$testFile,$testPyFile"))
+      appArgs.pyFiles should be (Utils.resolveURIs(testPyFile))
+      appArgs.jars should be (Utils.resolveURIs(testJar))
+      appArgs.archives should be (Utils.resolveURIs(s"${zipFile1.getAbsolutePath}#test_archives"))
+
+      Files.isDirectory(Paths.get("test_archives")) should be(true)
+      Files.delete(Paths.get(testFile))
+      Files.delete(Paths.get(testPyFile))
+      Files.delete(Paths.get(testJar))
+      Files.delete(Paths.get(s"test_archives/${text1.getName}"))
+      Files.delete(Paths.get("test_archives/META-INF/MANIFEST.MF"))
+    }
   }
 
   // Requires Python dependencies for Spark Connect. Should be enabled by default.

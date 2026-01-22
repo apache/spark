@@ -60,7 +60,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.config.LoggerConfig
-import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
@@ -248,6 +247,22 @@ private[spark] object Utils
     val dir = createDirectory(root, namePrefix)
     ShutdownHookManager.registerShutdownDeleteDir(dir)
     dir
+  }
+
+  /**
+   * Create a temporary directy that will always be cleaned up when the executor stops,
+   * even in the case of a hard shutdown when the shutdown hooks don't get run.
+   *
+   * Currently this only provides special behavior on YARN, where the local dirs are not
+   * guaranteed to be cleaned up on executors hard shutdown.
+   */
+  def createExecutorLocalTempDir(conf: SparkConf, namePrefix: String): File = {
+    if (Utils.isRunningInYarnContainer(conf)) {
+      // Just use the default Java tmp dir which is set to inside the container directory on YARN
+      createTempDir(namePrefix = namePrefix)
+    } else {
+      createTempDir(getLocalDir(conf), namePrefix)
+    }
   }
 
   /**
@@ -1856,16 +1871,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying Java version is at most 17.
-   */
-  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
-
-  /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -2089,7 +2094,7 @@ private[spark] object Utils
 
   val CONNECT_EXECUTE_THREAD_PREFIX = "SparkConnectExecuteThread"
 
-  private val threadInfoOrdering = Ordering.fromLessThan {
+  private[spark] val threadInfoOrdering = Ordering.fromLessThan {
     (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
       def priority(ti: ThreadInfo): Int = ti.getThreadName match {
         case name if name.startsWith(TASK_THREAD_NAME_PREFIX) => 100
@@ -2312,8 +2317,6 @@ private[spark] object Utils
           return true
         }
         isBindCollision(e.getCause)
-      case e: MultiException =>
-        e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.matches("bind.*failed.*")) ||
           isBindCollision(e.getCause)
@@ -2878,7 +2881,7 @@ private[spark] object Utils
    * in canCreate to determine if the KubernetesClusterManager should be used.
    */
   def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
-    require(rawMasterURL.startsWith("k8s://"),
+    require(SparkMasterRegex.isK8s(rawMasterURL),
       "Kubernetes master URL must start with k8s://.")
     val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
 

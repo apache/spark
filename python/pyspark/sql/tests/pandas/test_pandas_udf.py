@@ -17,7 +17,6 @@
 
 import unittest
 import datetime
-from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import (
@@ -41,7 +40,7 @@ from pyspark.testing.sqlutils import (
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):
@@ -170,13 +169,13 @@ class PandasUDFTestsMixin:
             with self.assertRaises(ParseException):
 
                 @pandas_udf("blah")
-                def foo(x):
+                def _(x):
                     return x
 
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(returnType="double", functionType=PandasUDFType.GROUPED_MAP)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -193,14 +192,14 @@ class PandasUDFTestsMixin:
             with self.assertRaisesRegex(ValueError, "Invalid function"):
 
                 @pandas_udf(returnType="k int, v double", functionType=PandasUDFType.GROUPED_MAP)
-                def foo(k, v, w):
+                def _(k, v, w):
                     return k
 
     def check_udf_wrong_arg(self):
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf(functionType=PandasUDFType.SCALAR)
-            def foo(x):
+            def _(x):
                 return x
 
         self.check_error(
@@ -212,7 +211,7 @@ class PandasUDFTestsMixin:
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf("double", 100)
-            def foo(x):
+            def _(x):
                 return x
 
         self.check_error(
@@ -227,20 +226,20 @@ class PandasUDFTestsMixin:
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
 
             @pandas_udf(LongType(), PandasUDFType.SCALAR)
-            def zero_with_type():
+            def _():
                 return 1
 
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
 
             @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
-            def zero_with_type():
+            def _():
                 yield 1
                 yield 2
 
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
-            def foo(df):
+            def _(df):
                 return df
 
         self.check_error(
@@ -460,18 +459,30 @@ class PandasUDFTestsMixin:
         result = empty_df.select(add1("id"))
         self.assertEqual(result.collect(), [])
 
+    def test_pandas_udf_nullable_large_integers(self):
+        import pandas as pd
+
+        @pandas_udf("long")
+        def identity(s: pd.Series) -> pd.Series:
+            return s
+
+        query = """
+            SELECT * FROM VALUES
+            (9223372036854775707, 1), (NULL, 2)
+            AS tab(a, b)
+            """
+
+        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+        expected = df.select("a").collect()
+        results = df.select(identity("a").alias("a")).collect()
+        self.assertEqual(results, expected)
+
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

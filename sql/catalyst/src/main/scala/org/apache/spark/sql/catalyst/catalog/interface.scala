@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.streaming.StreamingSourceIdentifyingName
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -442,7 +443,9 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) extends MetadataMapSupport {
+    viewOriginalText: Option[String] = None,
+    streamingSourceIdentifyingName: Option[StreamingSourceIdentifyingName] = None)
+  extends MetadataMapSupport {
 
   import CatalogTable._
 
@@ -722,6 +725,18 @@ object CatalogTable {
 
   val VIEW_CATALOG_AND_NAMESPACE = VIEW_PREFIX + "catalogAndNamespace.numParts"
   val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
+
+  // Property to indicate that a VIEW is actually a METRIC VIEW
+  val VIEW_WITH_METRICS = VIEW_PREFIX + "viewWithMetrics"
+
+  /**
+   * Check if a CatalogTable is a metric view by looking at its properties.
+   */
+  def isMetricView(table: CatalogTable): Boolean = {
+    table.tableType == CatalogTableType.VIEW &&
+      table.properties.get(VIEW_WITH_METRICS).contains("true")
+  }
+
   // Convert the current catalog and namespace to properties.
   def catalogAndNamespaceToProps(
       currentCatalog: String,
@@ -1070,7 +1085,9 @@ case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "UnresolvedCatalogRelation requires a fully qualified table identifier with database.")
 }
 
 /**
@@ -1097,7 +1114,9 @@ case class HiveTableRelation(
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "HiveTableRelation requires a fully qualified table identifier with database.")
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 

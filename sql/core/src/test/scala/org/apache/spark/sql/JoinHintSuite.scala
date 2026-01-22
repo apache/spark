@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, EliminateResolvedHint}
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -28,7 +27,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class JoinHintSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   lazy val df = spark.range(10)

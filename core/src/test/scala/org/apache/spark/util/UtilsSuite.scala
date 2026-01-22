@@ -38,8 +38,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
-import org.mockito.Mockito.doReturn
-import org.scalatest.PrivateMethodTester
+import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -51,7 +50,7 @@ import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
-class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMethodTester {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("timeConversion") {
     // Test -1
@@ -135,10 +134,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMe
 
     assert(Utils.byteStringAsBytes("1") === 1)
     assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ki") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KB") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KiB") === ByteUnit.KiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mi") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mb") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1MiB") === ByteUnit.MiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1g") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1GI") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1gb") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1giB") === ByteUnit.GiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ti") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1tb") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Tib") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pi") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pb") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pib") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
     // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
@@ -1132,37 +1146,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMe
 
   test("ThreadInfoOrdering") {
     val task1T = mock[ThreadInfo]
-    doReturn(11L).when(task1T).getThreadId
-    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
-      .when(task1T).getThreadName
-    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
-      .when(task1T).toString
+    when(task1T.getThreadId).thenReturn(11L)
+    when(task1T.getThreadName)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+    when(task1T.toString)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
 
     val task2T = mock[ThreadInfo]
-    doReturn(12L).when(task2T).getThreadId
-    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
-      .when(task2T).getThreadName
-    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
-      .when(task2T).toString
+    when(task2T.getThreadId).thenReturn(12L)
+    when(task2T.getThreadName)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+    when(task2T.toString)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
 
     val connectExecuteOp1T = mock[ThreadInfo]
-    doReturn(21L).when(connectExecuteOp1T).getThreadId
-    doReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
-      .when(connectExecuteOp1T).getThreadName
-    doReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
-      .when(connectExecuteOp1T).toString
+    when(connectExecuteOp1T.getThreadId).thenReturn(21L)
+    when(connectExecuteOp1T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+    when(connectExecuteOp1T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
 
     val connectExecuteOp2T = mock[ThreadInfo]
-    doReturn(22L).when(connectExecuteOp2T).getThreadId
-    doReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
-      .when(connectExecuteOp2T).getThreadName
-    doReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
-      .when(connectExecuteOp2T).toString
+    when(connectExecuteOp2T.getThreadId).thenReturn(22L)
+    when(connectExecuteOp2T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+    when(connectExecuteOp2T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
 
-    val threadInfoOrderingMethod =
-      PrivateMethod[Ordering[ThreadInfo]](Symbol("threadInfoOrdering"))
     val sorted = Seq(connectExecuteOp1T, connectExecuteOp2T, task1T, task2T)
-      .sorted(Utils.invokePrivate(threadInfoOrderingMethod()))
+      .sorted(Utils.threadInfoOrdering)
     assert(sorted === Seq(task1T, task2T, connectExecuteOp1T, connectExecuteOp2T))
   }
 

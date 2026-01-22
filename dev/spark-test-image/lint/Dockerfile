@@ -80,10 +80,12 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install \
     'black==23.12.1' \
     'flake8==3.9.0' \
+    'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
     'grpcio-status==1.76.0' \
     'grpcio==1.76.0' \
+    'zstandard==0.25.0' \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \
@@ -92,11 +94,13 @@ RUN python3.11 -m pip install \
     'numpy==2.0.2' \
     'numpydoc' \
     'pandas' \
-    'pandas-stubs==1.2.0.53' \
+    'pandas-stubs' \
     'plotly>=4.8' \
     'pyarrow>=22.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
+    'scipy>=1.8.0' \
+    'scipy-stubs' \
     && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && python3.11 -m pip install torcheval \
     && python3.11 -m pip cache purge

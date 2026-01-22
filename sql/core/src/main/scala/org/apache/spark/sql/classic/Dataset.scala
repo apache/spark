@@ -121,7 +121,7 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode): DataFrame =
     sparkSession.withActive {
       val qe = new QueryExecution(
-        sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
+        sparkSession, logicalPlan, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
@@ -134,7 +134,7 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup)
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
-      sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
+      sparkSession, logicalPlan, tracker, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
     if (!qe.isLazyAnalysis) qe.assertAnalyzed()
     new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
@@ -2340,14 +2340,13 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of serialized ArrowRecordBatches. */
-  private[sql] def toArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
+  private def toArrowBatchRddImpl(
+      plan: SparkPlan,
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
-    val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
-    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val errorOnDuplicatedFieldNames =
-      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    val largeVarTypes =
-      sparkSession.sessionState.conf.arrowUseLargeVarTypes
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toBatchIterator(
@@ -2361,8 +2360,25 @@ class Dataset[T] private[sql](
     }
   }
 
-  // This is only used in tests, for now.
-  private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
+  private[sql] def toArrowBatchRdd(
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): RDD[Array[Byte]] = {
+    toArrowBatchRddImpl(queryExecution.executedPlan,
+      maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+  }
+
+  private[sql] def toArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
+    toArrowBatchRddImpl(
+      plan,
+      sparkSession.sessionState.conf.arrowMaxRecordsPerBatch,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy",
+      sparkSession.sessionState.conf.arrowUseLargeVarTypes)
+  }
+
+  private[spark] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
   }
 }

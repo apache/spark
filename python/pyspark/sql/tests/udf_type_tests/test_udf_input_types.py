@@ -70,10 +70,10 @@ if have_numpy:
 class UDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFInputTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFInputTypeTests, self).setUp()
+        super().setUp()
 
     def test_udf_input_types_arrow_disabled(self):
         golden_file = os.path.join(
@@ -415,10 +415,6 @@ class UDFInputTypeTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    try:
-        import xmlrunner
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -212,15 +212,24 @@ object Randn {
   """,
   since = "4.0.0",
   group = "math_funcs")
-case class Uniform(min: Expression, max: Expression, seedExpression: Expression, hideSeed: Boolean)
-  extends RuntimeReplaceable with TernaryLike[Expression] with RDG with ExpectsInputTypes {
+case class Uniform(
+    min: Expression,
+    max: Expression,
+    seedExpression: Expression,
+    hideSeed: Boolean,
+    timeZoneId: Option[String] = None)
+  extends RuntimeReplaceable
+    with TernaryLike[Expression]
+    with RDG
+    with ExpectsInputTypes
+    with TimeZoneAwareExpression {
   def this(min: Expression, max: Expression) =
     this(min, max, UnresolvedSeed, hideSeed = true)
   def this(min: Expression, max: Expression, seedExpression: Expression) =
     this(min, max, seedExpression, hideSeed = false)
 
   final override lazy val deterministic: Boolean = false
-  override val nodePatterns: Seq[TreePattern] =
+  override def nodePatternsInternal(): Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -286,7 +295,9 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
       Literal(null)
     } else {
-      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+      def cast(e: Expression, to: DataType): Expression = {
+        if (e.dataType == to) e else Cast(e, to, timeZoneId)
+      }
       cast(Add(
         cast(min, DoubleType),
         Multiply(
@@ -296,6 +307,11 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
           Rand(seed))),
         dataType)
     }
+  }
+
+  /** Returns a copy of this expression with the specified timeZoneId. */
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    copy(timeZoneId = Some(timeZoneId))
   }
 }
 

@@ -29,6 +29,7 @@ from threading import RLock
 from typing import (
     Optional,
     Any,
+    Iterator,
     Union,
     Dict,
     List,
@@ -45,10 +46,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from pandas.api.types import (  # type: ignore[attr-defined]
-    is_datetime64_dtype,
-    is_timedelta64_dtype,
-)
+from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
 import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
@@ -97,6 +95,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
+    AnalysisException,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -535,8 +534,10 @@ class SparkSession:
             "spark.sql.timestampType",
             "spark.sql.session.timeZone",
             "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationSizeLimit",
             "spark.sql.session.localRelationChunkSizeRows",
             "spark.sql.session.localRelationChunkSizeBytes",
+            "spark.sql.session.localRelationBatchOfChunksSizeBytes",
             "spark.sql.execution.pandas.convertToArrowArraySafely",
             "spark.sql.execution.pandas.inferPandasDictAsMap",
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
@@ -545,10 +546,8 @@ class SparkSession:
             "spark.sql.execution.arrow.useLargeVarTypes",
         )
         timezone = configs["spark.sql.session.timeZone"]
-        prefer_timestamp = configs["spark.sql.timestampType"]
-        prefers_large_types: bool = (
-            cast(str, configs["spark.sql.execution.arrow.useLargeVarTypes"]).lower() == "true"
-        )
+        prefer_timestamp_ntz = configs["spark.sql.timestampType"] == "TIMESTAMP_NTZ"
+        prefers_large_types = configs["spark.sql.execution.arrow.useLargeVarTypes"] == "true"
 
         _table: Optional[pa.Table] = None
 
@@ -580,9 +579,12 @@ class SparkSession:
                                     messageParameters={},
                                 )
                             arrow_type = field_type.field(0).type
-                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
+                            spark_type = MapType(
+                                StringType(),
+                                from_arrow_type(arrow_type, prefer_timestamp_ntz),
+                            )
                         else:
-                            spark_type = from_arrow_type(field_type)
+                            spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                         struct.add(field.name, spark_type, nullable=field.nullable)
                     schema = struct
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
@@ -598,7 +600,9 @@ class SparkSession:
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema, prefers_large_types=prefers_large_types
+                    deduped_schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_types,
                 )
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
@@ -618,7 +622,7 @@ class SparkSession:
                     for t in data.dtypes
                 ]
                 arrow_types = [
-                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
+                    to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
                     if dt is not None
                     else None
                     for dt in spark_types
@@ -655,9 +659,7 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             if not isinstance(schema, StructType):
-                schema = from_arrow_schema(
-                    data.schema, prefer_timestamp_ntz=prefer_timestamp == "TIMESTAMP_NTZ"
-                )
+                schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
@@ -665,6 +667,7 @@ class SparkSession:
                     to_arrow_schema(
                         schema,
                         error_on_duplicated_field_names_in_struct=True,
+                        timezone="UTC",
                         prefers_large_types=prefers_large_types,
                     )
                 )
@@ -766,16 +769,26 @@ class SparkSession:
         cache_threshold = int(
             configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
         )
+        local_relation_size_limit = int(
+            configs["spark.sql.session.localRelationSizeLimit"]  # type: ignore[arg-type]
+        )
         max_chunk_size_rows = int(
             configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
         )
         max_chunk_size_bytes = int(
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
+        max_batch_of_chunks_size_bytes = int(
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+        )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
             plan = self._cache_local_relation(
-                local_relation, max_chunk_size_rows, max_chunk_size_bytes
+                local_relation,
+                local_relation_size_limit,
+                max_chunk_size_rows,
+                max_chunk_size_bytes,
+                max_batch_of_chunks_size_bytes,
             )
 
         df = DataFrame(plan, self)
@@ -1052,32 +1065,78 @@ class SparkSession:
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,
+        local_relation_size_limit: int,
         max_chunk_size_rows: int,
         max_chunk_size_bytes: int,
+        max_batch_of_chunks_size_bytes: int,
     ) -> ChunkedCachedLocalRelation:
         """
         Cache the local relation at the server side if it has not been cached yet.
 
-        Should only be called on LocalRelations with _table set.
+        This method serializes the input local relation into multiple data chunks and
+        a schema chunk (if the schema is available) and uploads these chunks as artifacts
+        to the server.
+
+        The method collects a batch of chunks of size up to max_batch_of_chunks_size_bytes and
+        uploads them together to the server.
+        Uploading each chunk separately would require an additional RPC call for each chunk.
+        Uploading all chunks together would require materializing all chunks in memory which
+        may cause high memory usage on the client.
+        Uploading batches of chunks is the middle-ground solution.
+
+        Should only be called on a LocalRelation with a non-empty _table.
         """
-        assert local_relation._table is not None
+        assert local_relation._table is not None, "table cannot be None"
         has_schema = local_relation._schema is not None
 
-        # Serialize table into chunks
-        data_chunks = local_relation._serialize_table_chunks(
-            max_chunk_size_rows, max_chunk_size_bytes
+        hashes = []
+        current_batch = []
+        current_batch_size = 0
+        total_size = 0
+        if has_schema:
+            schema_chunk = local_relation._serialize_schema()
+            current_batch.append(schema_chunk)
+            current_batch_size += len(schema_chunk)
+            total_size += len(schema_chunk)
+
+        data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
+            max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
         )
-        blobs = data_chunks.copy()  # Start with data chunks
+
+        for chunk in data_chunks:
+            chunk_size = len(chunk)
+            total_size += chunk_size
+
+            # Check if total size exceeds the limit
+            if total_size > local_relation_size_limit:
+                raise AnalysisException(
+                    errorClass="LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+                    messageParameters={
+                        "actualSize": str(total_size),
+                        "sizeLimit": str(local_relation_size_limit),
+                    },
+                )
+
+            # Check if adding this chunk would exceed batch size
+            if (
+                len(current_batch) > 0
+                and current_batch_size + chunk_size > max_batch_of_chunks_size_bytes
+            ):
+                hashes += self._client.cache_artifacts(current_batch)
+                # start a new batch
+                current_batch = []
+                current_batch_size = 0
+
+            current_batch.append(chunk)
+            current_batch_size += chunk_size
+        hashes += self._client.cache_artifacts(current_batch)
 
         if has_schema:
-            blobs.append(local_relation._serialize_schema())
-
-        hashes = self._client.cache_artifacts(blobs)
-
-        # Extract data hashes and schema hash
-        data_hashes = hashes[: len(data_chunks)]
-        schema_hash = hashes[len(data_chunks)] if has_schema else None
-
+            schema_hash = hashes[0]
+            data_hashes = hashes[1:]
+        else:
+            schema_hash = None
+            data_hashes = hashes
         return ChunkedCachedLocalRelation(data_hashes, schema_hash)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:

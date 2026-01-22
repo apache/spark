@@ -17,7 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
 from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
@@ -48,7 +47,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class WindowPandasUDFTestsMixin:
     @property
@@ -186,6 +185,32 @@ class WindowPandasUDFTestsMixin:
             df.withColumn("mean_v", sf.mean(df["v"]).over(w))
             .withColumn("max_v", sf.max(df["v"]).over(w))
             .withColumn("min_w", sf.min(df["w"]).over(w))
+        )
+
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+
+    def test_multiple_udfs_in_single_projection(self):
+        """
+        Test multiple window aggregate pandas UDFs in a single select/projection.
+        """
+        df = self.data
+        w = self.unbounded_window
+
+        # Use select() with multiple window UDFs in the same projection
+        result1 = df.select(
+            df["id"],
+            df["v"],
+            self.pandas_agg_mean_udf(df["v"]).over(w).alias("mean_v"),
+            self.pandas_agg_max_udf(df["v"]).over(w).alias("max_v"),
+            self.pandas_agg_min_udf(df["w"]).over(w).alias("min_w"),
+        )
+
+        expected1 = df.select(
+            df["id"],
+            df["v"],
+            sf.mean(df["v"]).over(w).alias("mean_v"),
+            sf.max(df["v"]).over(w).alias("max_v"),
+            sf.min(df["w"]).over(w).alias("min_w"),
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
@@ -411,7 +436,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -439,7 +464,7 @@ class WindowPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -507,7 +532,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -664,20 +689,20 @@ class WindowPandasUDFTestsMixin:
                 ],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"window pandas udf: {lst}",
-                    context={"func_name": my_window_pandas_udf.__name__},
-                    logger="test_window_pandas",
-                )
-                for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"window pandas udf: {lst}",
+                        context={"func_name": my_window_pandas_udf.__name__},
+                        logger="test_window_pandas",
+                    )
+                    for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
+                ],
+            )
 
 
 class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):
@@ -685,12 +710,6 @@ class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_window import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

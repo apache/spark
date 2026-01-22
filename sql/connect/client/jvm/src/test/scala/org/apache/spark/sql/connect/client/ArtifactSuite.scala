@@ -27,7 +27,6 @@ import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.sql.Artifact
@@ -36,7 +35,7 @@ import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.IvyTestUtils
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
-class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class ArtifactSuite extends ConnectFunSuite {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _

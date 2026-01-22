@@ -25,7 +25,7 @@ import scala.io.Source
 
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
@@ -234,7 +234,7 @@ class UISuite extends SparkFunSuite {
     val targetUri = URI.create(s"http://$localhost:4040")
     when(clientRequest.getScheme()).thenReturn("http")
     when(clientRequest.getHeader("host")).thenReturn(s"$localhost:8080")
-    when(clientRequest.getPathInfo()).thenReturn("/proxy/worker-id/jobs")
+    when(clientRequest.getPathInfo()).thenReturn("/worker-id/jobs")
     var newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
     assert(newHeader.toString() === s"http://$localhost:8080/proxy/worker-id/jobs")
     headerValue = s"http://$localhost:4041/jobs"
@@ -368,8 +368,11 @@ class UISuite extends SparkFunSuite {
       serverInfo.addHandler(redirect, securityMgr)
 
       // Test Jetty's built-in redirect to add the trailing slash to the context path.
+      // As of `Jetty 12`, when asking for the root of a servlet context without the trailing
+      // slash, status code 301 is returned.
       TestUtils.withHttpConnection(new URI(s"$serverAddr/ctx1").toURL) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        conn.setInstanceFollowRedirects(false)
+        assert(conn.getResponseCode() === HttpServletResponse.SC_MOVED_PERMANENTLY)
         val location = Option(conn.getHeaderFields().get("Location"))
           .map(_.get(0)).orNull
         assert(location === s"$proxyRoot/ctx1/")
@@ -400,7 +403,7 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-45522: Jetty 10 and above shouuld return status code 302 with correct redirect url" +
+  test("SPARK-47086: Jetty 12 and above should return status code 301 with correct redirect url" +
     " when request URL ends with a context path without trailing '/'") {
     val proxyRoot = "https://proxy.example.com:443/prefix"
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
@@ -415,9 +418,10 @@ class UISuite extends SparkFunSuite {
       assert(TestUtils.httpResponseCode(new URI(urlStr + "/").toURL) === HttpServletResponse.SC_OK)
 
       // In the case of trailing slash,
-      // 302 should be return and the redirect URL shouuld be part of the header.
-      assert(TestUtils.redirectUrl(new URI(urlStr).toURL) === proxyRoot + "/ctx/");
-      assert(TestUtils.httpResponseCode(new URI(urlStr).toURL) === HttpServletResponse.SC_FOUND)
+      // 301 should be return and the redirect URL should be part of the header.
+      assert(TestUtils.redirectUrl(new URI(urlStr).toURL) === proxyRoot + "/ctx/")
+      assert(TestUtils.httpResponseCode(
+        new URI(urlStr).toURL) === HttpServletResponse.SC_MOVED_PERMANENTLY)
     } finally {
       stopServer(serverInfo)
     }
@@ -460,6 +464,37 @@ class UISuite extends SparkFunSuite {
       sparkUI.attachAllHandlers()
       assert(TestUtils.httpResponseMessage(url).contains(sc.appName))
       sparkUI.stop()
+    }
+  }
+
+  test("SPARK-54563: Jetty sanitizes newlines in X-Frame-Options header") {
+    val valueWithNewlines = "example.com\nmalicious\nheader"
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    // Set the config value directly to bypass validation, simulating what could happen
+    // if someone bypasses the config validation (e.g., through direct property setting)
+    conf.set("spark.ui.allowFramingFrom", valueWithNewlines)
+
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val (_, ctx) = newContext("/test")
+      serverInfo.addHandler(ctx, securityMgr)
+
+      val url = new URI(s"http://$localhost:${serverInfo.boundPort}/test/root").toURL
+      TestUtils.withHttpConnection(url) { conn =>
+        val xFrameOptions = conn.getHeaderField("X-Frame-Options")
+        // Jetty should sanitize newlines by replacing them with spaces
+        assert(xFrameOptions !== null, "X-Frame-Options header should be present")
+        assert(!xFrameOptions.contains("\n"),
+          "X-Frame-Options header should not contain newlines")
+        assert(!xFrameOptions.contains("\r"),
+          "X-Frame-Options header should not contain carriage returns")
+        // The header value should have newlines replaced with spaces
+        val expectedValue = "ALLOW-FROM " + valueWithNewlines.replaceAll("[\r\n]+", " ")
+        assert(xFrameOptions === expectedValue,
+          s"X-Frame-Options header should have newlines replaced with spaces")
+      }
+    } finally {
+      stopServer(serverInfo)
     }
   }
 

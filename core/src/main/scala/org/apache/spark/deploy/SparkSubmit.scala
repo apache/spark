@@ -170,7 +170,7 @@ private[spark] class SparkSubmit extends Logging {
         // Here we are checking for client mode because when job is sumbitted in cluster
         // deploy mode with k8s resource manager, the spark submit in the driver container
         // is done in client mode.
-        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+        val isKubernetesClusterModeDriver = SparkMasterRegex.isK8s(args.master) &&
           "client".equals(args.deployMode) &&
           sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
@@ -257,7 +257,7 @@ private[spark] class SparkSubmit extends Logging {
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
-          case m if m.startsWith("k8s") => KUBERNETES
+          case m if SparkMasterRegex.isK8s(m) => KUBERNETES
           case m if m.startsWith("local") => LOCAL
           case _ =>
             error("Master must either be yarn or start with spark, k8s, or local")
@@ -448,14 +448,16 @@ private[spark] class SparkSubmit extends Logging {
                 log" from ${MDC(LogKeys.SOURCE_PATH, source)}" +
                 log" to ${MDC(LogKeys.DESTINATION_PATH, dest)}")
               Utils.deleteRecursively(dest)
-              if (isArchive) {
+              val resourceUri = if (isArchive) {
                 Utils.unpack(source, dest)
+                localResources
               } else {
                 Files.copy(source.toPath, dest.toPath)
+                dest.toURI
               }
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
-                localResources).fragment(resolvedUri.getFragment).build().toString
+                resourceUri).fragment(resolvedUri.getFragment).build().toString
           } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
 
@@ -1041,7 +1043,7 @@ private[spark] class SparkSubmit extends Logging {
         }
         throw cause
     } finally {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
+      if (SparkMasterRegex.isK8s(args.master) && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {

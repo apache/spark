@@ -65,7 +65,7 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     @classmethod
     def setUpClass(cls):
-        super(SparkConnectSQLTestCase, cls).setUpClass()
+        super().setUpClass()
 
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
@@ -88,7 +88,7 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
         try:
             cls.spark_connect_clean_up_test_data()
         finally:
-            super(SparkConnectSQLTestCase, cls).tearDownClass()
+            super().tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls):
@@ -127,6 +127,14 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_toJSON(self):
+        sdf = self.spark.range(10).withColumn("s", SF.col("id").cast("string"))
+        cdf = self.connect.range(10).withColumn("s", CF.col("id").cast("string"))
+
+        str1 = sdf.toJSON().collect()
+        str2 = [row.value for row in cdf.toJSON().collect()]
+        self.assertEqual(str1, str2)
+
     def test_serialization(self):
         from pyspark.cloudpickle import dumps, loads
 
@@ -769,7 +777,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_create_global_temp_view(self):
         # SPARK-41127: test global temp view creation.
-        with self.tempView("view_1"):
+        with self.temp_view("view_1"):
             self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
             self.connect.sql("SELECT 2 AS X LIMIT 1").createOrReplaceGlobalTempView("view_1")
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
@@ -781,7 +789,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_create_session_local_temp_view(self):
         # SPARK-41372: test session local temp view creation.
-        with self.tempView("view_local_temp"):
+        with self.temp_view("view_local_temp"):
             self.connect.sql("SELECT 1 AS X").createTempView("view_local_temp")
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 1)
             self.connect.sql("SELECT 1 AS X LIMIT 0").createOrReplaceTempView("view_local_temp")
@@ -1447,17 +1455,44 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
         self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
 
+    def test_plan_compression(self):
+        self.assertTrue(self.connect._client._zstd_module is not None)
+        self.connect.range(1).count()
+        default_plan_compression_threshold = self.connect._client._plan_compression_threshold
+        self.assertTrue(default_plan_compression_threshold > 0)
+        self.assertTrue(self.connect._client._plan_compression_algorithm == "ZSTD")
+        try:
+            self.connect._client._plan_compression_threshold = 1000
+
+            # Small plan should not be compressed
+            cdf1 = self.connect.range(1).select(CF.lit("Apache Spark"))
+            plan1 = cdf1._plan.to_proto(self.connect._client)
+            self.assertTrue(plan1.root is not None)
+            self.assertTrue(cdf1.count() == 1)
+
+            # Large plan should be compressed
+            cdf2 = self.connect.range(1).select(CF.lit("Apache Spark" * 1000))
+            plan2 = cdf2._plan.to_proto(self.connect._client)
+            self.assertTrue(plan2.compressed_operation is not None)
+            # Test compressed relation
+            self.assertTrue(cdf2.count() == 1)
+            # Test compressed command
+            cdf2.createOrReplaceTempView("temp_view_cdf2")
+            self.assertTrue(self.connect.sql("SELECT * FROM temp_view_cdf2").count() == 1)
+        finally:
+            self.connect._client._plan_compression_threshold = default_plan_compression_threshold
+
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
     def setUpClass(cls):
         cls.origin = os.getenv("USER", None)
         os.environ["USER"] = "SparkConnectGCTests"
-        super(SparkConnectGCTests, cls).setUpClass()
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
-        super(SparkConnectGCTests, cls).tearDownClass()
+        super().tearDownClass()
         if cls.origin is not None:
             os.environ["USER"] = cls.origin
         else:
@@ -1604,13 +1639,6 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

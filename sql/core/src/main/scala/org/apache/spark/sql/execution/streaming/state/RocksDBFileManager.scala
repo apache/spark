@@ -132,6 +132,7 @@ class RocksDBFileManager(
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "",
+    storeConf: StateStoreConf = StateStoreConf.empty,
     fileChecksumEnabled: Boolean = false,
     fileChecksumThreadPoolSize: Option[Int] = None)
   extends Logging {
@@ -149,7 +150,9 @@ class RocksDBFileManager(
         mgr,
         // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
         allowConcurrentDelete = true,
-        numThreads = fileChecksumThreadPoolSize.get)
+        numThreads = fileChecksumThreadPoolSize.get,
+        skipCreationIfFileMissingChecksum
+          = storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {
       mgr
     }
@@ -198,6 +201,14 @@ class RocksDBFileManager(
     }
   }
 
+  private def createDfsRootDirIfNotExist(): Unit = {
+    if (!rootDirChecked) {
+      val rootDir = new Path(dfsRootDir)
+      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+      rootDirChecked = true
+    }
+  }
+
   def getChangeLogWriter(
       version: Long,
       useColumnFamilies: Boolean = false,
@@ -206,11 +217,7 @@ class RocksDBFileManager(
     ): StateStoreChangelogWriter = {
     try {
       val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-      if (!rootDirChecked) {
-        val rootDir = new Path(dfsRootDir)
-        if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-        rootDirChecked = true
-      }
+      createDfsRootDirIfNotExist()
 
       val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
       val changelogVersion = getChangelogWriterVersion(
@@ -329,11 +336,7 @@ class RocksDBFileManager(
         // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
         // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
         // still need to create the initial dfs root directory anyway.
-        if (!rootDirChecked) {
-          val path = new Path(dfsRootDir)
-          if (!fm.exists(path)) fm.mkdirs(path)
-          rootDirChecked = true
-        }
+        createDfsRootDirIfNotExist()
       }
       zipToDfsFile(localOtherFiles :+ metadataFile,
         dfsBatchZipFile(version, checkpointUniqueId), verifyNonEmptyFilesInZip)
@@ -369,8 +372,11 @@ class RocksDBFileManager(
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       Utils.createDirectory(localDir)
+      createDfsRootDirIfNotExist()
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
+      // Set empty metrics since we're not loading any files from DFS
+      loadCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
       RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
@@ -401,11 +407,7 @@ class RocksDBFileManager(
   // Return if there is a snapshot file at the corresponding version
   // and optionally with checkpointunique id, e.g. version.zip or version_uniqueId.zip
   def existsSnapshotFile(version: Long, checkpointUniqueId: Option[String] = None): Boolean = {
-    if (!rootDirChecked) {
-      val path = new Path(dfsRootDir)
-      if (!fm.exists(path)) fm.mkdirs(path)
-      rootDirChecked = true
-    }
+    createDfsRootDirIfNotExist()
     fm.exists(dfsBatchZipFile(version, checkpointUniqueId))
   }
 

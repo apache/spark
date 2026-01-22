@@ -17,8 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
-
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -52,7 +50,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property
@@ -660,21 +658,19 @@ class CogroupedApplyInPandasTestsMixin:
             self.__test_merge(left, right, by, fn, output_schema)
 
     def test_arrow_batch_slicing(self):
-        df1 = self.spark.range(10000000).select(
-            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-        )
+        m, n = 100000, 10000
+
+        df1 = self.spark.range(m).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(10)}
         df1 = df1.withColumns(cols)
 
-        df2 = self.spark.range(100000).select(
-            (sf.col("id") % 4).alias("key"), sf.col("id").alias("v")
-        )
+        df2 = self.spark.range(n).select((sf.col("id") % 4).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
         df2 = df2.withColumns(cols)
 
         def summarize(key, left, right):
-            assert len(left) == 10000000 / 2 or len(left) == 0, len(left)
-            assert len(right) == 100000 / 4, len(right)
+            assert len(left) == m / 2 or len(left) == 0, len(left)
+            assert len(right) == n / 4, len(right)
             return pd.DataFrame(
                 {
                     "key": [key[0]],
@@ -688,13 +684,13 @@ class CogroupedApplyInPandasTestsMixin:
         schema = "key long, left_rows long, left_columns long, right_rows long, right_columns long"
 
         expected = [
-            Row(key=0, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=1, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=2, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=3, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
+            Row(key=0, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=1, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=2, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=3, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
         ]
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -744,20 +740,20 @@ class CogroupedApplyInPandasTestsMixin:
                 + [Row(id=2, v1=20, v2=200)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas cogrouped map: {dict(v1=v1, v2=v2)}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_cogrouped_map",
-                )
-                for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas cogrouped map: {dict(v1=v1, v2=v2)}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_cogrouped_map",
+                    )
+                    for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+                ],
+            )
 
 
 class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
@@ -765,12 +761,6 @@ class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTes
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_cogrouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

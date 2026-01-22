@@ -90,7 +90,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val mapSideCombine: Boolean = false,
     val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
     val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
-    val checksumMismatchFullRetryEnabled: Boolean = false)
+    private val _checksumMismatchFullRetryEnabled: Boolean = false)
   extends Dependency[Product2[K, V]] with Logging {
 
   def this(
@@ -127,14 +127,14 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleId: Int = _rdd.context.newShuffleId()
 
-  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
-    shuffleId, this)
-
   private[this] val numPartitions = rdd.partitions.length
 
   // By default, shuffle merge is allowed for ShuffleDependency if push based shuffle
   // is enabled
   private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
+
+  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
+    shuffleId, this)
 
   private[spark] def setShuffleMergeAllowed(shuffleMergeAllowed: Boolean): Unit = {
     _shuffleMergeAllowed = shuffleMergeAllowed
@@ -143,6 +143,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeEnabled : Boolean = shuffleMergeAllowed && mergerLocs.nonEmpty
 
   def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
+
+  def checksumMismatchFullRetryEnabled: Boolean =
+    _checksumMismatchFullRetryEnabled && !canShuffleMergeBeEnabled()
 
   /**
    * Stores the location of the list of chosen external shuffle services for handling the

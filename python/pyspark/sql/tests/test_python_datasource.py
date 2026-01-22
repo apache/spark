@@ -16,12 +16,10 @@
 #
 import os
 import platform
-import sys
 import tempfile
 import unittest
 import logging
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -258,7 +256,6 @@ class BasePythonDataSourceTestsMixin:
         with self.assertRaisesRegex(PythonException, "DATA_SOURCE_INVALID_RETURN_TYPE"):
             df.collect()
 
-    @unittest.skipIf(sys.version_info > (3, 13), "SPARK-54065")
     def test_in_memory_data_source(self):
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3
@@ -854,9 +851,9 @@ class BasePythonDataSourceTestsMixin:
                             return "x string"
 
                         def reader(self, schema):
-                            return TestReader()
+                            return TestReader2()
 
-                    class TestReader(DataSourceReader):
+                    class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
                             yield "x",
@@ -896,9 +893,9 @@ class BasePythonDataSourceTestsMixin:
                             return "test"
 
                         def writer(self, schema, overwrite):
-                            return TestWriter()
+                            return TestWriter2()
 
-                    class TestWriter(DataSourceWriter):
+                    class TestWriter2(DataSourceWriter):
                         def write(self, iterator):
                             return WriterCommitMessage()
 
@@ -967,49 +964,49 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=msg,
-                    context=context,
-                    logger="test_data_source_reader",
-                )
-                for msg, context in [
-                    (
-                        "TestJsonDataSource.__init__: ['path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                    ),
-                    (
-                        "TestJsonDataSource.name",
-                        {"class_name": "TestJsonDataSource", "func_name": "name"},
-                    ),
-                    (
-                        "TestJsonDataSource.schema",
-                        {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                    ),
-                    (
-                        "TestJsonDataSource.reader: ['name', 'age']",
-                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                    ),
-                    (
-                        "TestJsonReader.__init__: ['path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                    ),
-                    (
-                        "TestJsonReader.partitions",
-                        {"class_name": "TestJsonReader", "func_name": "partitions"},
-                    ),
-                    (
-                        "TestJsonReader.read: None",
-                        {"class_name": "TestJsonReader", "func_name": "read"},
-                    ),
-                ]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=msg,
+                        context=context,
+                        logger="test_data_source_reader",
+                    )
+                    for msg, context in [
+                        (
+                            "TestJsonDataSource.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                        ),
+                        (
+                            "TestJsonDataSource.name",
+                            {"class_name": "TestJsonDataSource", "func_name": "name"},
+                        ),
+                        (
+                            "TestJsonDataSource.schema",
+                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                        ),
+                        (
+                            "TestJsonDataSource.reader: ['name', 'age']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.partitions",
+                            {"class_name": "TestJsonReader", "func_name": "partitions"},
+                        ),
+                        (
+                            "TestJsonReader.read: None",
+                            {"class_name": "TestJsonReader", "func_name": "read"},
+                        ),
+                    ]
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_pushdown_with_logging(self):
@@ -1074,53 +1071,53 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=msg,
-                    context=context,
-                    logger="test_data_source_reader_pushdown",
-                )
-                for msg, context in [
-                    (
-                        "TestJsonDataSource.__init__: ['path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                    ),
-                    (
-                        "TestJsonDataSource.name",
-                        {"class_name": "TestJsonDataSource", "func_name": "name"},
-                    ),
-                    (
-                        "TestJsonDataSource.schema",
-                        {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                    ),
-                    (
-                        "TestJsonDataSource.reader: ['name', 'age']",
-                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                    ),
-                    (
-                        "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
-                        {"class_name": "TestJsonReader", "func_name": "pushFilters"},
-                    ),
-                    (
-                        "TestJsonReader.__init__: ['path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                    ),
-                    (
-                        "TestJsonReader.partitions",
-                        {"class_name": "TestJsonReader", "func_name": "partitions"},
-                    ),
-                    (
-                        "TestJsonReader.read: None",
-                        {"class_name": "TestJsonReader", "func_name": "read"},
-                    ),
-                ]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=msg,
+                        context=context,
+                        logger="test_data_source_reader_pushdown",
+                    )
+                    for msg, context in [
+                        (
+                            "TestJsonDataSource.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                        ),
+                        (
+                            "TestJsonDataSource.name",
+                            {"class_name": "TestJsonDataSource", "func_name": "name"},
+                        ),
+                        (
+                            "TestJsonDataSource.schema",
+                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                        ),
+                        (
+                            "TestJsonDataSource.reader: ['name', 'age']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
+                            {"class_name": "TestJsonReader", "func_name": "pushFilters"},
+                        ),
+                        (
+                            "TestJsonReader.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.partitions",
+                            {"class_name": "TestJsonReader", "func_name": "partitions"},
+                        ),
+                        (
+                            "TestJsonReader.read: None",
+                            {"class_name": "TestJsonReader", "func_name": "read"},
+                        ),
+                    ]
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_writer_with_logging(self):
@@ -1199,69 +1196,69 @@ class BasePythonDataSourceTestsMixin:
                 with self.assertRaises(Exception, msg="abort test"):
                     df.write.format("my-json").mode("append").option("abort", "true").save(d)
 
-        logs = self.spark.table("system.session.python_worker_logs")
+                logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=msg,
-                    context=context,
-                    logger="test_datasource_writer",
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_datasource_writer",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.writer: (['name', 'age'], {True})",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.commit: 2",
+                                {"class_name": "TestJsonWriter", "func_name": "commit"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.writer: (['name', 'age'], {False})",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.__init__: ['abort', 'path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.write: abort test",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.write: abort test",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.abort",
+                                {"class_name": "TestJsonWriter", "func_name": "abort"},
+                            ),
+                        ]
+                    ],
                 )
-                for msg, context in [
-                    (
-                        "TestJsonDataSource.name",
-                        {"class_name": "TestJsonDataSource", "func_name": "name"},
-                    ),
-                    (
-                        "TestJsonDataSource.writer: (['name', 'age'], {True})",
-                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                    ),
-                    (
-                        "TestJsonWriter.__init__: ['path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                    ),
-                    (
-                        "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
-                        {"class_name": "TestJsonWriter", "func_name": "write"},
-                    ),
-                    (
-                        "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
-                        {"class_name": "TestJsonWriter", "func_name": "write"},
-                    ),
-                    (
-                        "TestJsonWriter.commit: 2",
-                        {"class_name": "TestJsonWriter", "func_name": "commit"},
-                    ),
-                    (
-                        "TestJsonDataSource.name",
-                        {"class_name": "TestJsonDataSource", "func_name": "name"},
-                    ),
-                    (
-                        "TestJsonDataSource.writer: (['name', 'age'], {False})",
-                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                    ),
-                    (
-                        "TestJsonWriter.__init__: ['abort', 'path']",
-                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                    ),
-                    (
-                        "TestJsonWriter.write: abort test",
-                        {"class_name": "TestJsonWriter", "func_name": "write"},
-                    ),
-                    (
-                        "TestJsonWriter.write: abort test",
-                        {"class_name": "TestJsonWriter", "func_name": "write"},
-                    ),
-                    (
-                        "TestJsonWriter.abort",
-                        {"class_name": "TestJsonWriter", "func_name": "abort"},
-                    ),
-                ]
-            ],
-        )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
@@ -1269,12 +1266,6 @@ class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_python_datasource import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

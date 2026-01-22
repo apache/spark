@@ -51,8 +51,16 @@ class InitCLITests(ReusedConnectTestCase):
                 spec_path = find_pipeline_spec(Path.cwd())
                 spec = load_pipeline_spec(spec_path)
                 assert spec.name == project_name
+
+                # Verify that the storage path is an absolute URI with file scheme
+                expected_storage_path = f"file://{Path.cwd() / 'pipeline-storage'}"
+                self.assertEqual(spec.storage, expected_storage_path)
+
+                # Verify that the storage directory was created
+                self.assertTrue((Path.cwd() / "pipeline-storage").exists())
+
                 registry = LocalGraphElementRegistry()
-                register_definitions(spec_path, registry, spec)
+                register_definitions(spec_path, registry, spec, self.spark, "test_graph_id")
                 self.assertEqual(len(registry.outputs), 1)
                 self.assertEqual(registry.outputs[0].name, "example_python_materialized_view")
                 self.assertEqual(len(registry.flows), 1)
@@ -64,12 +72,23 @@ class InitCLITests(ReusedConnectTestCase):
                     Path("transformations") / "example_sql_materialized_view.sql",
                 )
 
+    def test_init_existing_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_name = "test_project"
+            with change_dir(Path(temp_dir)):
+                init(project_name)
+
+                with self.assertRaises(FileExistsError) as context:
+                    init(project_name)
+
+                expected_message = (
+                    f"Directory '{project_name}' already exists. "
+                    "Please choose a different name or remove the existing directory."
+                )
+                self.assertEqual(str(context.exception), expected_message)
+
 
 if __name__ == "__main__":
-    try:
-        import xmlrunner  # type: ignore
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

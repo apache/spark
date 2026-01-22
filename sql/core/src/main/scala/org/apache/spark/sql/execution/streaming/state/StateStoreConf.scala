@@ -40,6 +40,12 @@ class StateStoreConf(
    */
   val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
 
+  /**
+   * Timeout to wait for tasks to respond to cancellation after force shutdown is initiated
+   */
+  val stateStoreMaintenanceForceShutdownTimeout: Long =
+    sqlConf.stateStoreMaintenanceForceShutdownTimeout
+
   val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
@@ -124,6 +130,20 @@ class StateStoreConf(
    */
   val enableStateStoreCheckpointIds =
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
+
+  /**
+   * Whether to skip checksum creation if file missing checksum.
+   *
+   * Consider the case using STATE_STORE_CHECKPOINT_FORMAT_VERSION = 1 when a batch fails but state
+   * files are written. If on the next run, we try to upload both a new state file and a file
+   * checksum, the file could fail to be uploaded but the file checksum is uploaded successfully.
+   * This would lead to a situation where the old file could be loaded and compared with the new
+   * file checksum, which would fail the checksum verification. This issue does not happen when
+   * STATE_STORE_CHECKPOINT_FORMAT_VERSION = 2 since each batch run unique ids will be created.
+   */
+  val checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
+    sqlConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum &&
+    !enableStateStoreCheckpointIds
 
   /**
    * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.

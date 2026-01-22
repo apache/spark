@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -63,6 +62,29 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
         self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
+        # Test axis=1
+        self.assert_eq(psdf.all(axis=1), pdf.all(axis=1))
+        self.assert_eq(psdf.all(axis=1, bool_only=True), pdf.all(axis=1, bool_only=True))
+        self.assert_eq(psdf.all(axis=1, bool_only=False), pdf.all(axis=1, bool_only=False))
+
+        # Test axis='index'
+        self.assert_eq(psdf.all(axis="index"), pdf.all(axis="index"))
+        self.assert_eq(
+            psdf.all(axis="index", bool_only=True), pdf.all(axis="index", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.all(axis="index", bool_only=False), pdf.all(axis="index", bool_only=False)
+        )
+
+        # Test axis='columns'
+        self.assert_eq(psdf.all(axis="columns"), pdf.all(axis="columns"))
+        self.assert_eq(
+            psdf.all(axis="columns", bool_only=True), pdf.all(axis="columns", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.all(axis="columns", bool_only=False), pdf.all(axis="columns", bool_only=False)
+        )
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
@@ -71,16 +93,19 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
         self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, 'axis should be either 0 or "index" currently.'
-        ):
-            psdf.all(axis=1)
+        # Test axis=1
+        self.assert_eq(psdf.all(axis=1), pdf.all(axis=1))
+        self.assert_eq(psdf.all(axis=1, bool_only=True), pdf.all(axis=1, bool_only=True))
+        self.assert_eq(psdf.all(axis=1, bool_only=False), pdf.all(axis=1, bool_only=False))
 
         # Test skipna
         pdf = pd.DataFrame({"A": [True, True], "B": [1, np.nan], "C": [True, None]})
         pdf.name = "x"
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf[["A", "B"]].all(skipna=False), pdf[["A", "B"]].all(skipna=False))
+        self.assert_eq(
+            psdf[["A", "B"]].all(axis=1, skipna=False), pdf[["A", "B"]].all(axis=1, skipna=False)
+        )
         self.assert_eq(psdf[["A", "C"]].all(skipna=False), pdf[["A", "C"]].all(skipna=False))
         self.assert_eq(psdf[["B", "C"]].all(skipna=False), pdf[["B", "C"]].all(skipna=False))
         self.assert_eq(psdf.all(skipna=False), pdf.all(skipna=False))
@@ -135,6 +160,34 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
         self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
+        # Test axis=1
+        self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
+        self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
+        self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test axis='index'
+        self.assert_eq(psdf.any(axis="index"), pdf.any(axis="index"))
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=True), pdf.any(axis="index", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=False), pdf.any(axis="index", bool_only=False)
+        )
+
+        # Test axis='columns'
+        self.assert_eq(psdf.any(axis="columns"), pdf.any(axis="columns"))
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=True), pdf.any(axis="columns", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=False), pdf.any(axis="columns", bool_only=False)
+        )
+
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
@@ -143,10 +196,15 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
         self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, 'axis should be either 0 or "index" currently.'
-        ):
-            psdf.any(axis=1)
+        # Test axis=1
+        self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
+        self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
+        self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
 
         # Test skipna parameter
         pdf = pd.DataFrame(
@@ -156,12 +214,16 @@ class FrameAnyAllMixin:
 
         # bools and np.nan
         self.assert_eq(psdf[["A", "B"]].any(skipna=False), pdf[["A", "B"]].any(skipna=False))
+        self.assert_eq(
+            psdf[["A", "B"]].any(axis=1, skipna=False), pdf[["A", "B"]].any(axis=1, skipna=False)
+        )
         # bools and None
         self.assert_eq(psdf[["A", "C"]].any(skipna=False), pdf[["A", "C"]].any(skipna=False))
         # bools, np.nan, and None
         self.assert_eq(psdf[["B", "C"]].any(skipna=False), pdf[["B", "C"]].any(skipna=False))
         # np.nan, and None
         self.assert_eq(psdf[["D"]].any(skipna=False), pdf[["D"]].any(skipna=False))
+        self.assert_eq(psdf[["D"]].any(axis=1, skipna=False), pdf[["D"]].any(axis=1, skipna=False))
 
         # np.nan only
         self.assert_eq(
@@ -169,11 +231,21 @@ class FrameAnyAllMixin:
             pd.DataFrame([np.nan]).any(skipna=False),
             almost=True,
         )
+        self.assert_eq(
+            ps.DataFrame([np.nan]).any(axis=1, skipna=False),
+            pd.DataFrame([np.nan]).any(axis=1, skipna=False),
+            almost=True,
+        )
 
         # None only
         self.assert_eq(
             ps.DataFrame([None]).any(skipna=True),
             pd.DataFrame([None]).any(skipna=True),
+            almost=True,
+        )
+        self.assert_eq(
+            ps.DataFrame([None]).any(axis=1, skipna=True),
+            pd.DataFrame([None]).any(axis=1, skipna=True),
             almost=True,
         )
 
@@ -187,12 +259,6 @@ class FrameAnyAllTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_any_all import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -21,8 +21,12 @@ pandas instances during the type conversion.
 """
 import datetime
 import itertools
-from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
+import functools
+import json
+from decimal import Decimal
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -56,8 +60,6 @@ from pyspark.sql.types import (
     Geography,
     _create_row,
 )
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
-from pyspark.loose_version import LooseVersion
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -68,10 +70,29 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
+metadata_key = b"SPARK::metadata::json"
+
+
+def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
+    if metadata is not None and len(metadata) > 0:
+        return {metadata_key: json.dumps(metadata).encode("utf-8")}
+    else:
+        return None
+
+
+def from_arrow_metadata(metadata: Optional[Dict[bytes, bytes]]) -> Optional[Dict[str, Any]]:
+    if metadata is not None and metadata_key in metadata:
+        return json.loads(metadata[metadata_key].decode("utf-8"))
+    else:
+        return None
+
+
 def to_arrow_type(
     dt: DataType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
-    timestamp_utc: bool = True,
+    timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.DataType":
     """
@@ -84,12 +105,8 @@ def to_arrow_type(
     error_on_duplicated_field_names_in_struct: bool, default False
         Whether to raise an exception when there are duplicated field names in a
         :class:`pyspark.sql.types.StructType`. (default ``False``)
-    timestamp_utc : bool, default True
-        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
-        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
-        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
-        except in special cases, such as when this function is used in a test.
+    timezone : str, default None
+        timeZone required for TimestampType
 
     Returns
     -------
@@ -113,21 +130,15 @@ def to_arrow_type(
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
         arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif type(dt) == StringType and prefers_large_types:
-        arrow_type = pa.large_string()
     elif type(dt) == StringType:
-        arrow_type = pa.string()
-    elif type(dt) == BinaryType and prefers_large_types:
-        arrow_type = pa.large_binary()
+        arrow_type = pa.large_string() if prefers_large_types else pa.string()
     elif type(dt) == BinaryType:
-        arrow_type = pa.binary()
+        arrow_type = pa.large_binary() if prefers_large_types else pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
-    elif type(dt) == TimestampType and timestamp_utc:
-        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
-        arrow_type = pa.timestamp("us", tz="UTC")
     elif type(dt) == TimestampType:
-        arrow_type = pa.timestamp("us", tz=None)
+        assert timezone is not None
+        arrow_type = pa.timestamp("us", tz=timezone)
     elif type(dt) == TimestampNTZType:
         arrow_type = pa.timestamp("us", tz=None)
     elif type(dt) == DayTimeIntervalType:
@@ -139,9 +150,9 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
         )
@@ -151,9 +162,9 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=False,
         )
@@ -161,9 +172,9 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
         )
@@ -180,11 +191,12 @@ def to_arrow_type(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct,
-                    timestamp_utc,
-                    prefers_large_types,
+                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                    timezone=timezone,
+                    prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
+                metadata=to_arrow_metadata(field.metadata),
             )
             for field in dt
         ]
@@ -194,9 +206,9 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct,
-            timestamp_utc,
-            prefers_large_types,
+            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+            timezone=timezone,
+            prefers_large_types=prefers_large_types,
         )
     elif type(dt) == VariantType:
         fields = [
@@ -238,8 +250,9 @@ def to_arrow_type(
 
 def to_arrow_schema(
     schema: StructType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
-    timestamp_utc: bool = True,
+    timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.Schema":
     """
@@ -252,12 +265,8 @@ def to_arrow_schema(
     error_on_duplicated_field_names_in_struct: bool, default False
         Whether to raise an exception when there are duplicated field names in an inner
         :class:`pyspark.sql.types.StructType`. (default ``False``)
-    timestamp_utc : bool, default True
-        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
-        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
-        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
-        except in special cases, such as when this function is used in a test
+    timezone : str, default None
+        timeZone required for TimestampType
 
     Returns
     -------
@@ -270,11 +279,12 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
+            metadata=to_arrow_metadata(field.metadata),
         )
         for field in schema
     ]
@@ -330,8 +340,32 @@ def is_geography(at: "pa.DataType") -> bool:
     ) and any(field.name == "srid" for field in at)
 
 
-def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
-    """Convert pyarrow type to Spark data type."""
+def from_arrow_type(
+    at: "pa.DataType",
+    prefer_timestamp_ntz: bool = True,
+) -> DataType:
+    """Convert pyarrow type to Spark data type.
+
+    Parameters
+    ----------
+    at : :class:`pyarrow.DataType`
+        pyarrow data type
+    prefer_timestamp_ntz: bool, default True
+        When the input timezone is None, whether to convert it to timezone-naive TimestampNTZType.
+        The to_arrow_type always convert timezone-naive TimestampNTZType to pa.timestamp
+        without timezone. The default value is True, so that
+        from_arrow_type(to_arrow_type(TimestampNTZType)) returns TimestampNTZType.
+        It only makes sense to explicitly set it in case like creating dataframe
+        from arrow/pandas data according to config `spark.sql.timestampType`.
+
+    Notes
+    -----
+    Different from JVM side ArrowUtils.fromArrowType, the unit ('ns'/'us'/etc) in types
+    pa.timestamp/pa.duration/pa.time64 is ignored in this function.
+    That is because this function is also used in data type inference in creating dataframe
+    from arrow/pandas data, in which the input data may use a different unit.
+    """
+
     import pyarrow.types as types
 
     spark_type: DataType
@@ -365,10 +399,11 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DateType()
     elif types.is_time64(at):
         spark_type = TimeType()
-    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
-        spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
-        spark_type = TimestampType()
+        if at.tz is None and prefer_timestamp_ntz:
+            spark_type = TimestampNTZType()
+        else:
+            spark_type = TimestampType()
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
@@ -413,6 +448,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
                     field.name,
                     from_arrow_type(field.type, prefer_timestamp_ntz),
                     nullable=field.nullable,
+                    metadata=from_arrow_metadata(field.metadata),
                 )
                 for field in at
             ]
@@ -429,7 +465,10 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
+def from_arrow_schema(
+    arrow_schema: "pa.Schema",
+    prefer_timestamp_ntz: bool = True,
+) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
@@ -437,6 +476,7 @@ def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = Fa
                 field.name,
                 from_arrow_type(field.type, prefer_timestamp_ntz),
                 nullable=field.nullable,
+                metadata=from_arrow_metadata(field.metadata),
             )
             for field in arrow_schema
         ]
@@ -537,9 +577,7 @@ def _check_arrow_array_timestamps_localize(
                 a.items, mt.valueType, truncate, timezone
             ),
         }
-        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
-        # version 17.0.0
-        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+        if a.null_count:
             params["mask"] = a.is_null()
 
         return pa.MapArray.from_arrays(**params)
@@ -670,9 +708,7 @@ def _check_series_convert_timestamps_internal(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
+    from pandas.api.types import is_datetime64_dtype
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
@@ -738,9 +774,7 @@ def _check_series_convert_timestamps_localize(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64_dtype,
-    )
+    from pandas.api.types import is_datetime64_dtype
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
@@ -810,7 +844,7 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of lists of (key, value) pairs
     :return: pandas.Series of dictionaries
     """
-    return cast("PandasSeriesLike", s.apply(lambda m: None if m is None else {k: v for k, v in m}))
+    return s.apply(lambda m: None if m is None else {k: v for k, v in m})
 
 
 def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -820,7 +854,7 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of dictionaries
     :return: pandas.Series of lists of (key, value) pairs
     """
-    return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+    return s.apply(lambda d: list(d.items()) if d is not None else None)
 
 
 def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
@@ -855,6 +889,33 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
         return None
 
 
+def _to_corrected_pandas_ext_type(dt: DataType) -> Optional[Any]:
+    """
+    Convert spark datatype to a Pandas extension type which support nullable data.
+    """
+    import pandas as pd
+
+    if isinstance(dt, ByteType):
+        return pd.Int8Dtype()
+    elif isinstance(dt, ShortType):
+        return pd.Int16Dtype()
+    elif isinstance(dt, IntegerType):
+        return pd.Int32Dtype()
+    elif isinstance(dt, LongType):
+        return pd.Int64Dtype()
+    elif isinstance(dt, FloatType):
+        return pd.Float32Dtype()
+    elif isinstance(dt, DoubleType):
+        return pd.Float64Dtype()
+    elif isinstance(dt, BooleanType):
+        return pd.BooleanDtype()
+    elif isinstance(dt, StringType):
+        return pd.StringDtype()
+    else:
+        return None
+
+
+@functools.lru_cache(maxsize=64)
 def _create_converter_to_pandas(
     data_type: DataType,
     nullable: bool = True,
@@ -864,6 +925,7 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
     ndarray_as_list: bool = False,
+    integer_object_nulls: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -892,6 +954,9 @@ def _create_converter_to_pandas(
         whereas the ones from `df.collect()` are localized to the local timezone.
     ndarray_as_list : bool, optional
         Whether `np.ndarray` is converted to a list or not (default ``False``).
+    integer_object_nulls : bool, optional
+        When True, means input series containing integers with nulls is cast to
+        objects. It is usually generated by pa.Array.to_pandas(integer_object_nulls=Ture).
 
     Returns
     -------
@@ -903,16 +968,17 @@ def _create_converter_to_pandas(
     pandas_type = _to_corrected_pandas_type(data_type)
 
     if pandas_type is not None:
-        # SPARK-21766: if an integer field is nullable and has null values, it can be
-        # inferred by pandas as a float column. If we convert the column with NaN back
-        # to integer type e.g., np.int16, we will hit an exception. So we use the
-        # pandas-inferred float type, rather than the corrected type from the schema
-        # in this case.
         if isinstance(data_type, IntegralType) and nullable:
+            if integer_object_nulls:
+                # pandas_type like np.int64 doesn't support nullable data
+                # use Pandas extension type instead
+                nullable_type = _to_corrected_pandas_ext_type(data_type)
+            else:
+                nullable_type = np.float64
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
-                    return pser.astype(np.float64, copy=False)
+                    return pser.astype(nullable_type, copy=False)  # type: ignore[arg-type]
                 else:
                     return pser.astype(pandas_type, copy=False)
 
@@ -1157,6 +1223,8 @@ def _create_converter_to_pandas(
         elif isinstance(dt, VariantType):
 
             def convert_variant(value: Any) -> Any:
+                if isinstance(value, VariantVal):
+                    return value
                 if (
                     isinstance(value, dict)
                     and all(key in value for key in ["value", "metadata"])
@@ -1207,19 +1275,19 @@ def _create_converter_to_pandas(
 
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_from_pandas(
     data_type: DataType,
     *,
     timezone: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
+    int_to_decimal_coercion_enabled: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -1258,6 +1326,27 @@ def _create_converter_from_pandas(
             return _check_series_convert_timestamps_internal(pser, timezone)
 
         return correct_timestamp
+
+    elif isinstance(data_type, DecimalType):
+        if int_to_decimal_coercion_enabled:
+            # For decimal with low precision, e.g. pa.decimal128(1)
+            # pa.Array.from_pandas(pd.Series([1,2,3])).cast(pa.decimal128(1)) fails with
+            # ArrowInvalid: Precision is not great enough for the result.
+            # It should be at least 19.
+            # Here change it to
+            # pa.Array.from_pandas(pd.Series([1,2,3]).apply(
+            #     lambda x: Decimal(x))).cast(pa.decimal128(1))
+
+            def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
+                if pd.api.types.is_integer_dtype(pser):
+                    return pser.apply(lambda x: Decimal(x) if pd.notna(x) else None)
+                else:
+                    return pser
+
+            return convert_int_to_decimal
+
+        else:
+            return lambda pser: pser
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
         if isinstance(dt, ArrayType):
@@ -1484,9 +1573,7 @@ def _create_converter_from_pandas(
 
     conv = _converter(data_type)
     if conv is not None:
-        return lambda pser: pser.apply(  # type: ignore[return-value]
-            lambda x: conv(x) if x is not None else None
-        )
+        return lambda pser: pser.apply(lambda x: conv(x) if x is not None else None)
     else:
         return lambda pser: pser
 
@@ -1580,5 +1667,5 @@ def convert_pandas_using_numpy_type(
             ),
         ):
             np_type = _to_numpy_type(field.dataType)
-            df[field.name] = df[field.name].astype(np_type)
+            df[field.name] = df[field.name].astype(np_type)  # type: ignore[arg-type]
     return df

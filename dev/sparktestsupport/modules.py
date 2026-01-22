@@ -475,7 +475,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_profiler",
@@ -490,6 +489,13 @@ pyspark_core = Module(
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
+        # unittests for upstream projects
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_type_coercion",
     ],
 )
 
@@ -590,6 +596,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_connect_compatibility",
         "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
         "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
+        "pyspark.sql.tests.coercion.test_python_udf_return_type",
     ],
 )
 
@@ -774,6 +781,18 @@ pyspark_ml = Module(
     ],
 )
 
+pyspark_install = Module(
+    name="pyspark-install",
+    dependencies=[core],
+    source_file_regexes=[
+        "python/pyspark/install.py",
+        "python/pyspark/tests/test_install_spark.py",
+    ],
+    python_test_goals=[
+        "pyspark.tests.test_install_spark",
+    ],
+)
+
 pyspark_pandas = Module(
     name="pyspark-pandas",
     dependencies=[pyspark_core, pyspark_sql],
@@ -808,6 +827,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
         # unittests
+        "pyspark.pandas.tests.test_arrow_interface",
         "pyspark.pandas.tests.test_categorical",
         "pyspark.pandas.tests.test_config",
         "pyspark.pandas.tests.test_extension",
@@ -1222,6 +1242,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
+        "pyspark.ml.tests.connect.test_connect_model_offloading",
         "pyspark.ml.tests.connect.test_parity_als",
         "pyspark.ml.tests.connect.test_parity_fpm",
         "pyspark.ml.tests.connect.test_parity_classification",
@@ -1252,6 +1273,7 @@ pyspark_pandas_connect = Module(
         # unittests dedicated for Spark Connect
         "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.test_parity_arrow_interface",
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",
         "pyspark.pandas.tests.connect.test_parity_extension",
@@ -1555,12 +1577,13 @@ pyspark_pipelines = Module(
     dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
-        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",
         "pyspark.pipelines.tests.test_graph_element_registry",
         "pyspark.pipelines.tests.test_init_cli",
+        "pyspark.pipelines.tests.test_spark_connect",
     ],
 )
 

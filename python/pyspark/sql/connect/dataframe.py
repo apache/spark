@@ -19,7 +19,6 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
@@ -619,7 +618,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -649,7 +648,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -675,7 +674,7 @@ class DataFrame(ParentDataFrame):
                 if isinstance(c, Column):
                     gset.append(c)
                 elif isinstance(c, str):
-                    gset.append(self[c])
+                    gset.append(F.col(c))
                 else:
                     raise PySparkTypeError(
                         errorClass="NOT_COLUMN_OR_STR",
@@ -691,7 +690,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 gcols.append(c)
             elif isinstance(c, str):
-                gcols.append(self[c])
+                gcols.append(F.col(c))
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_STR",
@@ -1732,7 +1731,7 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -1841,13 +1840,20 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
+        return self._to_pandas()
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
         return pdf
 
@@ -2069,6 +2075,7 @@ class DataFrame(ParentDataFrame):
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
+        binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
         for schema_or_table in self._session.client.to_table_as_iterator(
@@ -2083,7 +2090,7 @@ class DataFrame(ParentDataFrame):
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(
-                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                    table, schema, binary_as_bytes=binary_as_bytes
                 )
 
     def pandas_api(
@@ -2255,13 +2262,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -2363,11 +2367,19 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
 
     if not have_pandas or not have_pyarrow:
-        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
-        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
         del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+    else:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

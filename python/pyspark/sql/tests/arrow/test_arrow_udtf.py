@@ -1721,20 +1721,20 @@ class ArrowUDTFTestsMixin:
                 [Row(id=i, doubled=i * 2) for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"arrow udtf: {dict(id=lst)}",
-                    context={"class_name": "TestArrowUDTFWithLogging", "func_name": "eval"},
-                    logger="test_arrow_udtf",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"arrow udtf: {dict(id=lst)}",
+                        context={"class_name": "TestArrowUDTFWithLogging", "func_name": "eval"},
+                        logger="test_arrow_udtf",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
@@ -1742,12 +1742,6 @@ class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udtf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

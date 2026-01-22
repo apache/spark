@@ -960,6 +960,43 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-54971: INSERT WITH SCHEMA EVOLUTION is currently unsupported") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", LongType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a'")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a', 2")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+    }
+  }
+
   test("Allow user to insert specified columns into insertable view") {
     sql("INSERT OVERWRITE TABLE jsonTable SELECT a, DEFAULT FROM jt")
     checkAnswer(
@@ -1202,29 +1239,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
-    // The default value references columns.
+    // The default value references a non-existing column, which is not a constant.
     withTable("t") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
           "defaultValue" -> "badvalue"))
     }
     try {
-      // The default value references session variables.
+      // The default value references a session variable, which is not a constant.
       sql("DECLARE test_var INT")
       withTable("t") {
         checkError(
           exception = intercept[AnalysisException] {
             sql("create table t(i boolean, s int default test_var) using parquet")
           },
-          // V1 command still use the fake Analyzer which can't resolve session variables and we
-          // can only report UNRESOLVED_EXPRESSION error.
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`s`",
@@ -1235,8 +1270,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(s"create table t(i int, j int default test_var) using $v2Source")
           },
-          // V2 command uses the actual analyzer and can resolve session variables. We can report
-          // a more accurate NOT_CONSTANT error.
           condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
@@ -1671,14 +1704,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
-    // The default value fails to analyze.
+    // The default value references a non-existing column, which is not a constant.
     withTable("t") {
       sql("create table t(i boolean) using parquet")
       checkError(
         exception = intercept[AnalysisException] {
           sql("alter table t add column s bigint default badvalue")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "ALTER TABLE ADD COLUMNS",
           "colName" -> "`s`",
@@ -1773,12 +1806,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     val createTable = "create table t(i boolean, s bigint) using parquet"
     withTable("t") {
       sql(createTable)
-      // The default value fails to analyze.
+      // The default value references a non-existing column, which is not a constant.
       checkError(
         exception = intercept[AnalysisException] {
           sql("alter table t alter column s set default badvalue")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "ALTER TABLE ALTER COLUMN",
           "colName" -> "`s`",

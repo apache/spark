@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util.Locale
 
 import scala.util.Random
 
@@ -3348,7 +3349,7 @@ class DataFrameAggregateSuite extends QueryTest
     val result = sketchDf.select(kll_sketch_to_string_bigint($"sketch")).collect()(0)(0)
     assert(result != null)
     assert(result.asInstanceOf[String].length > 0)
-    assert(result.asInstanceOf[String].contains("Kll"))
+    assert(result.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
   }
 
   test("kll_sketch_get_n functions") {
@@ -3402,7 +3403,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Test to_string
     val str = sketchDf.select(kll_sketch_to_string_float($"sketch")).collect()(0)(0)
-    assert(str.asInstanceOf[String].contains("Kll"))
+    assert(str.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
 
     // Test get_n
     val n = sketchDf.select(kll_sketch_get_n_float($"sketch")).collect()(0)(0)
@@ -3433,7 +3434,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Test to_string
     val str = sketchDf.select(kll_sketch_to_string_double($"sketch")).collect()(0)(0)
-    assert(str.asInstanceOf[String].contains("Kll"))
+    assert(str.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
 
     // Test get_n
     val n = sketchDf.select(kll_sketch_get_n_double($"sketch")).collect()(0)(0)
@@ -3465,6 +3466,110 @@ class DataFrameAggregateSuite extends QueryTest
     val n = sketchDf.select(kll_sketch_get_n_bigint($"sketch")).collect()(0)(0)
     // Should only count non-null values
     assert(n == 3L)
+  }
+
+  test("kll_merge_agg_bigint basic functionality") {
+    // Create two separate sketches
+    val df1 = Seq(1, 2, 3).toDF("value")
+    val df2 = Seq(4, 5, 6).toDF("value")
+
+    val sketch1 = df1.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+    val sketch2 = df2.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    // Union the sketches and merge them
+    val merged = sketch1.union(sketch2)
+      .agg(kll_merge_agg_bigint($"sketch").alias("merged_sketch"))
+
+    // Verify the merged sketch contains all values
+    val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
+    assert(n == 6L)
+
+    // Test with explicit k parameter
+    val mergedWithK = sketch1.union(sketch2)
+      .agg(kll_merge_agg_bigint($"sketch", 400).alias("merged_sketch"))
+    assert(mergedWithK.collect()(0)(0) != null)
+
+    // Test with column name
+    val mergedWithName = sketch1.union(sketch2)
+      .agg(kll_merge_agg_bigint("sketch").alias("merged_sketch"))
+    val n2 = mergedWithName.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
+    assert(n2 == 6L)
+  }
+
+  test("kll_merge_agg_float basic functionality") {
+    // Create two separate sketches
+    val df1 = Seq(1.0f, 2.0f, 3.0f).toDF("value")
+    val df2 = Seq(4.0f, 5.0f, 6.0f).toDF("value")
+
+    val sketch1 = df1.agg(kll_sketch_agg_float($"value").alias("sketch"))
+    val sketch2 = df2.agg(kll_sketch_agg_float($"value").alias("sketch"))
+
+    // Union the sketches and merge them
+    val merged = sketch1.union(sketch2)
+      .agg(kll_merge_agg_float($"sketch").alias("merged_sketch"))
+
+    // Verify the merged sketch contains all values
+    val n = merged.select(kll_sketch_get_n_float($"merged_sketch")).collect()(0)(0)
+    assert(n == 6L)
+
+    // Test with explicit k parameter
+    val mergedWithK = sketch1.union(sketch2)
+      .agg(kll_merge_agg_float($"sketch", 300).alias("merged_sketch"))
+    assert(mergedWithK.collect()(0)(0) != null)
+  }
+
+  test("kll_merge_agg_double basic functionality") {
+    // Create two separate sketches
+    val df1 = Seq(1.0, 2.0, 3.0).toDF("value")
+    val df2 = Seq(4.0, 5.0, 6.0).toDF("value")
+
+    val sketch1 = df1.agg(kll_sketch_agg_double($"value").alias("sketch"))
+    val sketch2 = df2.agg(kll_sketch_agg_double($"value").alias("sketch"))
+
+    // Union the sketches and merge them
+    val merged = sketch1.union(sketch2)
+      .agg(kll_merge_agg_double($"sketch").alias("merged_sketch"))
+
+    // Verify the merged sketch contains all values
+    val n = merged.select(kll_sketch_get_n_double($"merged_sketch")).collect()(0)(0)
+    assert(n == 6L)
+
+    // Test quantile on merged sketch
+    val quantile = merged.select(
+      kll_sketch_get_quantile_double($"merged_sketch", lit(0.5))
+    ).collect()(0)(0)
+    assert(quantile != null)
+  }
+
+  test("kll_merge_agg with different k values") {
+    // Create sketches with different k values
+    val df1 = Seq(1, 2, 3).toDF("value")
+    val df2 = Seq(4, 5, 6).toDF("value")
+
+    val sketch1 = df1.agg(kll_sketch_agg_bigint($"value", 200).alias("sketch"))
+    val sketch2 = df2.agg(kll_sketch_agg_bigint($"value", 400).alias("sketch"))
+
+    // Merge sketches with different k values (should adopt from first sketch)
+    val merged = sketch1.union(sketch2)
+      .agg(kll_merge_agg_bigint($"sketch").alias("merged_sketch"))
+
+    val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
+    assert(n == 6L)
+  }
+
+  test("kll_merge_agg with null values") {
+    val df1 = Seq(1, 2, 3).toDF("value")
+    val dfNull = Seq(Some(4), None, Some(6)).toDF("value")
+
+    val sketch1 = df1.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+    val sketchNull = dfNull.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    // Merge sketch with null - null should be ignored
+    val merged = sketch1.union(sketchNull)
+      .agg(kll_merge_agg_bigint($"sketch").alias("merged_sketch"))
+
+    val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
+    assert(n == 5L)
   }
 }
 

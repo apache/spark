@@ -25,7 +25,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.{mutable, Map}
-import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
+import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, ListHasAsScala}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -69,7 +69,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = Utils.createTempDir(),
+    val localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
@@ -150,20 +150,29 @@ class RocksDB(
       localTempDir: File,
       hadoopConf: Configuration,
       codecName: String,
-      loggingId: String): RocksDBFileManager = {
+      loggingId: String,
+      storeConf: StateStoreConf): RocksDBFileManager = {
     new RocksDBFileManager(
       dfsRootDir,
       localTempDir,
       hadoopConf,
       codecName,
       loggingId = loggingId,
+      storeConf,
       fileChecksumEnabled = conf.fileChecksumEnabled,
       fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
-  private[spark] val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+  private[spark] val fileManager = createFileManager(
+    dfsRootDir,
+    createTempDir("fileManager"),
+    hadoopConf,
+    conf.compressionCodec,
+    loggingId = loggingId,
+    storeConf = conf.stateStoreConf
+  )
+
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
@@ -171,7 +180,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
-  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
+  @volatile private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // Can be updated by whichever thread uploaded a snapshot, which could be either task,
@@ -327,6 +336,14 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
+  /**
+   * Returns all column family names currently registered in RocksDB.
+   * This includes column families loaded from checkpoint metadata.
+   */
+  def allColumnFamilyNames: scala.collection.immutable.Set[String] = {
+    colFamilyNameToInfoMap.asScala.keySet.toSet
+  }
+
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -426,13 +443,26 @@ class RocksDB(
   private def loadWithCheckpointId(
       version: Long,
       stateStoreCkptId: Option[String],
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
     // An array contains lineage information from [snapShotVersion, version]
     // (inclusive in both ends)
     var currVersionLineage: Array[LineageItem] = lineageManager.getLineageForCurrVersion()
     try {
-      if (loadedVersion != version || (loadedStateStoreCkptId.isEmpty ||
-          stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
+      if (loadEmpty) {
+        // Handle empty store loading separately for clarity
+        require(stateStoreCkptId.isEmpty,
+          "stateStoreCkptId should be empty when loadEmpty is true")
+        closeDB(ignoreException = false)
+        loadEmptyStore(version)
+        lineageManager.clear()
+        // After loading empty store, set the key counts and metrics
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+      } else if (loadedVersion != version || loadedStateStoreCkptId.isEmpty ||
+        stateStoreCkptId.get != loadedStateStoreCkptId.get) {
+        // Handle normal checkpoint loading
         closeDB(ignoreException = false)
 
         val (latestSnapshotVersion, latestSnapshotUniqueId) = {
@@ -491,9 +521,9 @@ class RocksDB(
 
         if (loadedVersion != version) {
           val versionsAndUniqueIds = currVersionLineage.collect {
-              case i if i.version > loadedVersion && i.version <= version =>
-                (i.version, Option(i.checkpointUniqueId))
-            }
+            case i if i.version > loadedVersion && i.version <= version =>
+              (i.version, Option(i.checkpointUniqueId))
+          }
           replayChangelog(versionsAndUniqueIds)
           loadedVersion = version
           lineageManager.resetLineage(currVersionLineage)
@@ -513,9 +543,13 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
-        log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"with empty uniqueId")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -526,39 +560,62 @@ class RocksDB(
         lineageManager.clear()
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      // Initialize the changelog writer with lineage info
-      // The lineage stored in changelog files should normally start with
-      // the version of a snapshot, except for the first few versions.
-      // Because they are solely loaded from changelog file.
-      // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
-      // It should end with exactly one version before the change log's version.
-      changelogWriter = Some(fileManager.getChangeLogWriter(
-        version + 1,
-        useColumnFamilies,
-        sessionStateStoreCkptId,
-        Some(currVersionLineage)))
+      if (loadEmpty) {
+        // We don't want to write changelog file when loadEmpty is true
+        changelogWriter = None
+      } else {
+        // Initialize the changelog writer with lineage info
+        // The lineage stored in changelog files should normally start with
+        // the version of a snapshot, except for the first few versions.
+        // Because they are solely loaded from changelog file.
+        // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
+        // It should end with exactly one version before the change log's version.
+        changelogWriter = Some(fileManager.getChangeLogWriter(
+          version + 1,
+          useColumnFamilies,
+          sessionStateStoreCkptId,
+          Some(currVersionLineage)))
+      }
     }
     this
   }
 
+  private def loadEmptyStore(version: Long): Unit = {
+    // Use version 0 logic to create empty directory with no SST files
+    val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
+    loadedVersion = version
+    fileManager.setMaxSeenVersion(version)
+    openLocalRocksDB(metadata)
+  }
+
   private def loadWithoutCheckpointId(
       version: Long,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
+
     try {
-      if (loadedVersion != version) {
+      // For loadEmpty, always proceed; otherwise, only if version changed
+      if (loadEmpty || loadedVersion != version) {
         closeDB(ignoreException = false)
 
-        // load the latest snapshot
-        loadSnapshotWithoutCheckpointId(version)
+        if (loadEmpty) {
+          loadEmptyStore(version)
+        } else {
+          // load the latest snapshot
+          loadSnapshotWithoutCheckpointId(version)
 
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds: Array[(Long, Option[String])] =
-            (loadedVersion + 1 to version).map((_, None)).toArray
-          replayChangelog(versionsAndUniqueIds)
-          loadedVersion = version
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds: Array[(Long, Option[String])] =
+              (loadedVersion + 1 to version).map((_, None)).toArray
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -569,16 +626,27 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      if (loadEmpty) {
+        changelogWriter = None
+      } else {
+        changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      }
     }
     this
   }
@@ -694,7 +762,8 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
@@ -705,10 +774,14 @@ class RocksDB(
 
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
-    if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
-      loadWithCheckpointId(version, stateStoreCkptId, readOnly)
+    // If loadEmpty is true, we will not generate a changelog but only a snapshot file to prevent
+    // mistakenly applying new changelog to older state version
+    enableChangelogCheckpointing = if (loadEmpty) false else conf.enableChangelogCheckpointing
+    if (stateStoreCkptId.isDefined ||
+      enableStateStoreCheckpointIds && (version == 0 || loadEmpty)) {
+      loadWithCheckpointId(version, stateStoreCkptId, readOnly, loadEmpty)
     } else {
-      loadWithoutCheckpointId(version, readOnly)
+      loadWithoutCheckpointId(version, readOnly, loadEmpty)
     }
 
     // Record the metrics after loading
@@ -975,15 +1048,72 @@ class RocksDB(
   }
 
   /**
-   * Get the values for a given key if present, that were merged (via merge).
+   * Get the values for multiple keys in a single batch operation.
+   * Uses RocksDB's native multiGet for efficient batch lookups.
+   *
+   * @param keys   Array of keys to look up
+   * @param cfName The column family name
+   * @return Array of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(
+      keys: Array[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]] = {
+    updateMemoryUsageIfNeeded()
+    // Prepare keys
+    val finalKeys = if (useColumnFamilies) {
+      keys.map(encodeStateRowWithPrefix(_, cfName))
+    } else {
+      keys
+    }
+
+    val keysList = java.util.Arrays.asList(finalKeys: _*)
+
+    // Call RocksDB multiGetAsList
+    val valuesList = db.multiGetAsList(readOptions, keysList)
+
+    // Decode and verify checksums if enabled, then return iterator
+    if (conf.rowChecksumEnabled) {
+      valuesList.asScala.iterator.zipWithIndex.map {
+        case (value, idx) if value != null =>
+          KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+            readVerifier, finalKeys(idx), value)
+        case _ => null
+      }
+    } else {
+      valuesList.asScala.iterator
+    }
+  }
+
+  /**
+   * This method should gives a 100% guarantee of a correct result, whether the key exists or
+   * not.
+   *
+   * @param key The key to check
+   * @param cfName The column family name
+   * @return true if the key exists, false otherwise
+   */
+  def keyExists(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+    db.keyExists(keyWithPrefix)
+  }
+
+  /**
+   * Get multiple values for a given key that were stored via merge operation.
    * This returns the values as an iterator of index range, to allow inline access
    * of each value bytes without copying, for better performance.
    * Note: This method is currently only supported when row checksum is enabled.
    * */
-  def multiGet(
+  def getMergedValues(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ArrayIndexRange[Byte]] = {
-    assert(conf.rowChecksumEnabled, "multiGet is only allowed when row checksum is enabled")
+    assert(conf.rowChecksumEnabled, "getMergedValues is only allowed when row checksum is enabled")
     updateMemoryUsageIfNeeded()
 
     val (finalKey, value) = getValue(key, cfName)
@@ -1290,6 +1420,35 @@ class RocksDB(
   }
 
   /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @param beginKey The start key of the range (inclusive)
+   * @param endKey   The end key of the range (exclusive)
+   * @param cfName   The column family name
+   */
+  def deleteRange(
+      beginKey: Array[Byte],
+      endKey: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    updateMemoryUsageIfNeeded()
+
+    val beginKeyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(beginKey, cfName)
+    } else {
+      beginKey
+    }
+
+    val endKeyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(endKey, cfName)
+    } else {
+      endKey
+    }
+
+    db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
+  }
+
+  /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
   def iterator(): NextIterator[ByteArrayPair] = {
@@ -1440,12 +1599,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshot: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshot) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
@@ -1617,17 +1780,23 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    lineageManager.clear()
-    changelogWriter.foreach(_.abort())
-    // Make sure changelogWriter gets recreated next time.
-    changelogWriter = None
+    logInfo(
+      log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      lineageManager.clear()
+      changelogWriter.foreach(_.abort())
+    } finally {
+      // Make sure changelogWriter gets recreated next time even if the changelogWriter aborts with
+      // an exception.
+      changelogWriter = None
+    }
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 

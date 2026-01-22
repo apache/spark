@@ -2568,7 +2568,8 @@ class SparkContext:
         mappedRDD = rdd.mapPartitions(partitionFunc)
         assert self._jvm is not None
         sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        with _load_from_socket(sock_info, mappedRDD._jrdd_deserializer) as stream:
+            return list(stream)
 
     def show_profiles(self) -> None:
         """Print the profile stats to stdout

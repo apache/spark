@@ -1120,10 +1120,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def ddlUnsupportedTemporarilyError(ddl: String): SparkUnsupportedOperationException = {
+  def ddlUnsupportedTemporarilyError(
+      ddl: String,
+      tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2096",
-      messageParameters = Map("ddl" -> ddl))
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map("tableName" -> toSQLId(tableName), "operation" -> ddl))
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1173,13 +1175,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2105",
       messageParameters = Map.empty,
-      cause = null)
-  }
-
-  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2106",
-      messageParameters = Map("size" -> size.toString(), "got" -> got.toString()),
       cause = null)
   }
 
@@ -1634,17 +1629,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def serDeInterfaceNotFoundError(e: NoClassDefFoundError): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2186",
-      messageParameters = Map.empty,
+      errorClass = "INTERNAL_ERROR_SERDE_INTERFACE_NOT_FOUND",
+      messageParameters = Map.empty[String, String],
       cause = e)
   }
 
   def convertHiveTableToCatalogTableError(
       e: SparkException, dbName: String, tableName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2187",
+      errorClass = "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
       messageParameters = Map(
-        "message" -> e.getMessage,
         "dbName" -> dbName,
         "tableName" -> tableName),
       cause = e)
@@ -1666,13 +1660,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidPartitionFilterError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2192")
+    new SparkUnsupportedOperationException("INTERNAL_ERROR_INVALID_PARTITION_FILTER_VALUE")
   }
 
   def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2193",
+      errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
       messageParameters = Map(
         "hiveMetastorePartitionPruningFallbackOnException" ->
           SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key),
@@ -2491,12 +2484,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2277",
+      errorClass = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
       messageParameters = Map(
-        "numWrittenParts" -> numWrittenParts.toString(),
+        "numWrittenParts" -> numWrittenParts.toString,
         "maxDynamicPartitionsKey" -> maxDynamicPartitionsKey,
-        "maxDynamicPartitions" -> maxDynamicPartitions.toString(),
-        "numWrittenParts" -> numWrittenParts.toString()),
+        "maxDynamicPartitions" -> maxDynamicPartitions.toString),
       cause = null)
   }
 
@@ -2824,6 +2816,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
+  def kllInvalidInputSketchBuffer(function: String, reason: String = ""): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
       messageParameters = Map(
         "function" -> toSQLId(function)))
   }
@@ -3193,28 +3192,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+  def kllSketchInvalidQuantileRangeError(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "quantile" -> toSQLValue(quantile, DoubleType)))
-  }
-
-  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INVALID_INPUT",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
-  }
-
-  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
+        "functionName" -> toSQLId(function)))
   }
 
   def kllSketchKMustBeConstantError(function: String): Throwable = {
@@ -3229,5 +3211,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def vectorDimensionMismatchError(
+    function: String,
+    leftDim: Int,
+    rightDim: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "VECTOR_DIMENSION_MISMATCH",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "leftDim" -> leftDim.toString,
+        "rightDim" -> rightDim.toString))
   }
 }

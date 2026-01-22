@@ -965,8 +965,14 @@ class DataSourceV2SQLSuiteV1Filter
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
           val oldView = spark.table(view)
+          assert(spark.sharedState.cacheManager.numCachedEntries == 1)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+          // it is no longer valid to materialize oldView as underlying
+          // query execution captured original table before replace
+          // yet cache invalidation must work correctly
+          val e = intercept[AnalysisException] { oldView.collect() }
+          assert(e.message.contains("Table ID has changed"))
+          assert(spark.sharedState.cacheManager.isEmpty)
         }
       }
     }
@@ -1322,8 +1328,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v2 catalog, command not supported.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM testcat"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2312,8 +2318,10 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "UPDATE TABLE")
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "operation" -> "UPDATE TABLE")
       )
     }
   }
@@ -2418,8 +2426,10 @@ class DataSourceV2SQLSuiteV1Filter
                |WHEN MATCHED AND (target.p > 0) THEN UPDATE SET *
                |WHEN NOT MATCHED THEN INSERT *""".stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "MERGE INTO TABLE"))
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`target`",
+          "operation" -> "MERGE INTO TABLE"))
     }
   }
 
@@ -2517,8 +2527,8 @@ class DataSourceV2SQLSuiteV1Filter
     val v = "testcat.ns1.ns2.v"
     checkError(
       exception = analysisException(s"CREATE VIEW $v AS SELECT 1"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2727,8 +2737,35 @@ class DataSourceV2SQLSuiteV1Filter
     // Session catalog is used.
     withTable("t") {
       sql("CREATE TABLE t(k int) USING json")
+
+      // Verify no comment initially
+      val noCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows1.isEmpty || noCommentRows1.head.getString(1).isEmpty,
+        "Expected no comment initially")
+
+      // Set a comment
       checkTableComment("t", "minor revision")
+
+      // Verify comment is set
+      val commentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows1.nonEmpty && commentRows1.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision'")
+
+      // Remove comment by setting to NULL
       checkTableComment("t", null)
+
+      // Verify comment is removed
+      val removedCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows1.isEmpty || removedCommentRows1.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+
+      // Set comment to literal "NULL" string
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
@@ -2741,8 +2778,35 @@ class DataSourceV2SQLSuiteV1Filter
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
       sql("CREATE TABLE testcat.ns1.ns2.t(k int) USING foo")
+
+      // Verify no comment initially
+      val noCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows2.isEmpty || noCommentRows2.head.getString(1).isEmpty,
+        "Expected no comment initially for testcat table")
+
+      // Set a comment
       checkTableComment("testcat.ns1.ns2.t", "minor revision")
+
+      // Verify comment is set
+      val commentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows2.nonEmpty && commentRows2.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision' for testcat table")
+
+      // Remove comment by setting to NULL
       checkTableComment("testcat.ns1.ns2.t", null)
+
+      // Verify comment is removed
+      val removedCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows2.isEmpty || removedCommentRows2.head.getString(1).isEmpty,
+        "Expected comment to be removed from testcat table")
+
+      // Set comment to literal "NULL" string
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
     val sql2 = "COMMENT ON TABLE testcat.abc IS NULL"
@@ -2768,10 +2832,19 @@ class DataSourceV2SQLSuiteV1Filter
 
   private def checkTableComment(tableName: String, comment: String): Unit = {
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
-    val expectedComment = Option(comment).getOrElse("")
-    assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
-      .head().getString(1) === expectedComment)
+    if (comment == null) {
+      // When comment is NULL, the property should be removed completely
+      val commentRows = sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows.isEmpty || commentRows.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+    } else {
+      val expectedComment = comment
+      assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .head().getString(1) === expectedComment)
+    }
   }
 
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
@@ -3168,13 +3241,16 @@ class DataSourceV2SQLSuiteV1Filter
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val ts1InSeconds = MICROSECONDS.toSeconds(ts1).toString
     val ts2InSeconds = MICROSECONDS.toSeconds(ts2).toString
+
+    val t = "testcat.t"
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
-
-    withTable(t3, t4) {
+    withTable(t, t3, t4) {
+      sql(s"CREATE TABLE $t (ts STRING) USING foo")
       sql(s"CREATE TABLE $t3 (id int) USING foo")
       sql(s"CREATE TABLE $t4 (id int) USING foo")
 
+      sql(s"INSERT INTO $t VALUES ('2019-01-29 00:37:58')")
       sql(s"INSERT INTO $t3 VALUES (5)")
       sql(s"INSERT INTO $t3 VALUES (6)")
       sql(s"INSERT INTO $t4 VALUES (7)")
@@ -3209,6 +3285,9 @@ class DataSourceV2SQLSuiteV1Filter
       val res10 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))")
         .collect()
       assert(res10 === Array(Row(7), Row(8)))
+      // Subquery with table reference
+      val res11 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT MIN(ts) FROM t)").collect()
+      assert(res11 === Array(Row(5), Row(6)))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -3233,6 +3312,11 @@ class DataSourceV2SQLSuiteV1Filter
         exception = analysisException("SELECT * FROM t TIMESTAMP AS OF 'abc'"),
         condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
         parameters = Map("expr" -> "\"abc\""))
+
+      checkError(
+        exception = analysisException(s"SELECT * FROM $t TIMESTAMP AS OF NULL"),
+        condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+        parameters = Map("expr" -> "\"NULL\""))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -3461,6 +3545,106 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t BY NAME REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - positional matching") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_names_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_names_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - different column order between 2 tables, " +
+    "compatible types") {
+    val df = spark.createDataFrame(Seq((1L, 11L), (2L, 12L), (3L, 13L))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((14L, 4L), (15L, 5L), (16L, 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data bigint) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, 11L), Row(2L, 12L), Row(3L, 13L)))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, 11L), Row(2L, 12L), Row(14L, 4L), Row(15L, 5L), Row(16L, 6L)))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - incompatible types") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "colName" -> "`id`",
+          "srcType" -> "\"STRING\"",
+          "targetType" -> "\"BIGINT\"")
+      )
+    }
+  }
+
   test("SPARK-46144: Fail overwrite statement if the condition contains subquery") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -3609,12 +3793,12 @@ class DataSourceV2SQLSuiteV1Filter
   test("CREATE TABLE with invalid default value") {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"create table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`s`",
@@ -3627,13 +3811,12 @@ class DataSourceV2SQLSuiteV1Filter
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
         sql(s"create table t(i boolean) using $v2Format")
-
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"replace table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "REPLACE TABLE",
             "colName" -> "`s`",
@@ -3913,6 +4096,19 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54491: insert into temp view on DSv2 table") {
+    val t = s"testcat.default.t"
+    val v = "v"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TABLE $t (id INT) USING foo")
+        spark.table(t).createOrReplaceTempView(v)
+        sql(s"INSERT INTO v VALUES (1)")
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3972,6 +4168,12 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       tracksPartitionsInCatalog = false
     )
     V1Table(sparkTable)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

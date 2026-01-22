@@ -100,7 +100,7 @@ class ConnectCompatibilityTestsMixin:
             connect_signature = inspect.signature(connect_methods[method])
 
             # Cannot support RDD arguments from Spark Connect
-            has_rdd_arguments = ("createDataFrame", "xml", "json")
+            has_rdd_arguments = ("createDataFrame", "xml", "json", "toJSON")
             if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
@@ -522,12 +522,6 @@ class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, ReusedSQLTestCas
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_connect_compatibility import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

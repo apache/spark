@@ -2401,6 +2401,44 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("deleteRange - bulk deletion of keys in range") {
+    tryWithProviderResource(
+      newStoreProvider(
+        keySchemaWithRangeScan,
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put keys with timestamps that will be ordered
+        // Keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10))
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20))
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30))
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40))
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50))
+
+        // Verify all keys exist
+        assert(store.iterator().toSeq.length === 5)
+
+        // Delete range [2, 4) - should delete keys with timestamps 2 and 3
+        val beginKey = dataToKeyRowWithRangeScan(2L, "")
+        val endKey = dataToKeyRowWithRangeScan(4L, "")
+        store.deleteRange(beginKey, endKey)
+
+        // Verify remaining keys
+        val remainingKeys = store.iterator().map { kv =>
+          keyRowWithRangeScanToData(kv.key)
+        }.toSeq
+
+        // Keys 1, 4, 5 should remain; keys 2, 3 should be deleted
+        assert(remainingKeys.length === 3)
+        assert(remainingKeys.map(_._1).toSet === Set(1L, 4L, 5L))
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
   test("Rocks DB task completion listener does not double unlock acquireThread") {
     // This test verifies that a thread that locks then unlocks the db and then
     // fires a completion listener (Thread 1) does not unlock the lock validly
@@ -2560,6 +2598,82 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val stamp = stateMachineObj.asInstanceOf[RocksDBStateMachine].currentValidStamp.get()
       assert(stamp == -1,
         s"state machine stamp should be -1 (unlocked) but was $stamp")
+    }
+  }
+
+  test("SPARK-54389: State store loading fails when TaskContext has failed") {
+    // Timeline of this test (* means thread is active):
+    // STATE | MAIN THREAD            | STATE STORE THREAD          |
+    // ------| ---------------------- | --------------------------- |
+    // 1.    | wait for s2            | *set task context           |
+    //       |                        | *signal s2                  |
+    // ------| ---------------------- | --------------------------- |
+    // 2.    | *mark task failed      | wait for s3                 |
+    //       | *signal s3             |                             |
+    // ------| ---------------------- | --------------------------- |
+    // 3.    | wait thread return     | *call getStore().iterator() |
+    //       |                        | *exception thrown           |
+    // ------| ---------------------- | --------------------------- |
+    // 4.    | *verify exception, END |                             |
+
+    // Create a custom ExecutionContext with 2 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(2, "pool-thread-executor"))
+    val stateLock = new Object()
+    var state = 1
+    val timeout = 10.seconds
+
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val taskContext = TaskContext.empty()
+
+      val stateStoreFuture = Future { // STATE STORE THREAD
+        stateLock.synchronized {
+          // -------------------- STATE 1 --------------------
+          // Set the task context for this thread
+          TaskContext.setTaskContext(taskContext)
+
+          // Signal that we have entered state 2
+          state = 2
+          stateLock.notifyAll()
+
+          // -------------------- STATE 3 --------------------
+          // Wait until we have entered state 3 (main thread marked task as failed)
+          while (state != 3) {
+            stateLock.wait()
+          }
+
+          // Try to call getStore().iterator() which should trigger the error handling
+          provider.getStore(0).iterator()
+        }
+      }
+
+      val ex = new IllegalStateException("failure")
+      stateLock.synchronized {
+        // -------------------- STATE 2 --------------------
+        // Wait until we have entered state 2 (state store thread set task context)
+        while (state != 2) {
+          stateLock.wait()
+        }
+
+        // Mark the task as failed
+        taskContext.markTaskFailed(ex)
+
+        // Signal that we have entered state 3
+        state = 3
+        stateLock.notifyAll()
+      }
+
+      // Wait for the future to complete and verify the exception
+      val thrown = intercept[SparkException] {
+        ThreadUtils.awaitResult(stateStoreFuture, timeout)
+      }.getCause.asInstanceOf[SparkException]
+
+      checkError(
+        thrown,
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        parameters = Map.empty
+      )
+      assert(thrown.getCause == ex)
     }
   }
 

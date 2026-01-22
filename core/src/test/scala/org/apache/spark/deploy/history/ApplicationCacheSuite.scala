@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.codahale.metrics.Counter
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.apache.hadoop.conf.Configuration
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock

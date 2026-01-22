@@ -46,6 +46,40 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, parameter markers are allowed everywhere a literal is supported.
    */
   public boolean parameter_substitution_enabled = true;
+
+  /**
+   * When false (default), IDENTIFIER('literal') is resolved to an identifier at parse time (identifier-lite).
+   * When true, only the legacy IDENTIFIER(expression) function syntax is allowed.
+   * Controlled by spark.sql.legacy.identifierClause configuration.
+   */
+  public boolean legacy_identifier_clause_only = false;
+
+  /**
+   * When true, the single character pipe token '|' can be used as an alternative to '|>' for
+   * SQL pipe operators. When false, only '|>' is recognized as a pipe operator.
+   */
+  public boolean single_character_pipe_operator_enabled = true;
+
+  /**
+   * Checks if the next token after PIPE can start an operator pipe right side.
+   * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
+   * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
+   * Only applies when single_character_pipe_operator_enabled is true.
+   */
+  public boolean isOperatorPipeStart() {
+    if (!single_character_pipe_operator_enabled) {
+      return false;
+    }
+    int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
+    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+           la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
+           la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
+           la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
+           la == AGGREGATE || la == WINDOW || la == LATERAL;
+  }
 }
 
 compoundOrSingleStatement
@@ -92,7 +126,7 @@ sqlStateValue
     ;
 
 declareConditionStatement
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    : DECLARE strictIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
     ;
 
 conditionValue
@@ -125,11 +159,11 @@ repeatStatement
     ;
 
 leaveStatement
-    : LEAVE multipartIdentifier
+    : LEAVE strictIdentifier
     ;
 
 iterateStatement
-    : ITERATE multipartIdentifier
+    : ITERATE strictIdentifier
     ;
 
 caseStatement
@@ -144,7 +178,7 @@ loopStatement
     ;
 
 forStatement
-    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
+    : beginLabel? FOR (strictIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement
@@ -152,11 +186,11 @@ singleStatement
     ;
 
 beginLabel
-    : multipartIdentifier COLON
+    : strictIdentifier COLON
     ;
 
 endLabel
-    : multipartIdentifier
+    : strictIdentifier
     ;
 
 singleExpression
@@ -225,9 +259,9 @@ statement
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (simpleIdentifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ANALYZE TABLES ((FROM | IN) identifierReference)? COMPUTE STATISTICS
-        (identifier)?                                                  #analyzeTables
+        (simpleIdentifier)?                                            #analyzeTables
     | ALTER TABLE identifierReference
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -289,6 +323,14 @@ statement
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
+    | CREATE (OR REPLACE)?
+        VIEW (IF errorCapturingNot EXISTS)? identifierReference
+        identifierCommentList?
+        ((WITH METRICS) |
+         routineLanguage |
+         commentSpec |
+         (TBLPROPERTIES propertyList))*
+        AS codeLiteral                                                 #createMetricView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
@@ -321,7 +363,7 @@ statement
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
-    | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
+    | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
@@ -349,7 +391,7 @@ statement
     | TRUNCATE TABLE identifierReference partitionSpec?                #truncateTable
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) simpleIdentifier .*?                             #manageResource
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -382,10 +424,14 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? watermarkClause?
-      tableAlias                                                       #streamTableName
+    : STREAM multipartIdentifier optionsClause?
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? watermarkClause? tableAlias                       #streamTableName
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
+    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
+    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -518,9 +564,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
+    : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -653,7 +699,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=stringLit OUTPUTFORMAT outFmt=stringLit    #tableFileFormat
-    | identifier                                             #genericFileFormat
+    | simpleIdentifier                                             #genericFileFormat
     ;
 
 storageHandler
@@ -661,7 +707,7 @@ storageHandler
     ;
 
 resource
-    : identifier stringLit
+    : simpleIdentifier stringLit
     ;
 
 dmlStatementNoWith
@@ -712,6 +758,7 @@ queryTerm
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
+    | left=queryTerm {isOperatorPipeStart()}? PIPE operatorPipeRightSide                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -833,8 +880,8 @@ hint
     ;
 
 hintStatement
-    : hintName=identifier
-    | hintName=identifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
+    : hintName=simpleIdentifier
+    | hintName=simpleIdentifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
     ;
 
 fromClause
@@ -1024,11 +1071,16 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
-    | functionTable                                         #tableValuedFunction
+    | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
     ;
 
 optionsClause
     : WITH options=propertyList
+    ;
+
+// Clause for naming streaming sources with IDENTIFIED BY
+identifiedByClause
+    : IDENTIFIED BY sourceName=errorCapturingIdentifier
     ;
 
 // Unlike all other types of expression for relation, we do not support watermarkClause for
@@ -1069,13 +1121,19 @@ functionTableArgument
     | functionArgument
     ;
 
-// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
-// referred by other clause, please check wheter watermarkClause makes sense to the clause.
-// If not, consider separate this rule.
-functionTable
+// A table function call including opening and closing parentheses.
+tableFunctionCall
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN watermarkClause? tableAlias
+      RIGHT_PAREN
+    ;
+
+// A table function call with optional trailing clauses for streaming and aliasing.
+// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
+// the AST builder will reject it with an error. The clause must come before watermarkClause
+// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+tableFunctionCallWithTrailingClauses
+    : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
 
 tableAlias
@@ -1171,7 +1229,7 @@ booleanExpression
 
 predicate
     : errorCapturingNot? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | errorCapturingNot? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    | errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
     | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
@@ -1194,7 +1252,7 @@ valueExpression
     | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
-    | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression {!isOperatorPipeStart()}? operator=PIPE right=valueExpression     #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
@@ -1241,7 +1299,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression DOT fieldName=identifier                                          #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
-    | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
+    | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
@@ -1297,7 +1355,7 @@ constant
     ;
 
 namedParameterMarker
-    : COLON identifier
+    : COLON simpleIdentifier
     ;
 comparisonOperator
     : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
@@ -1364,8 +1422,8 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
@@ -1488,6 +1546,17 @@ complexColType
     : errorCapturingIdentifier COLON? dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
+// The code literal is defined as a dollar quoted string.
+// A dollar quoted string consists of
+// - a begin tag which contains a dollar sign, an optional tag, and another dollar sign,
+// - a string literal that is made up of arbitrary sequence of characters, and
+// - an end tag which has to be exact the same as the begin tag.
+// As the string literal can contain dollar signs, we add + to DOLLAR_QUOTED_STRING_BODY to avoid
+// the parser eagarly matching END_DOLLAR_QUOTED_STRING when seeing a dollar sign.
+codeLiteral
+    : BEGIN_DOLLAR_QUOTED_STRING DOLLAR_QUOTED_STRING_BODY+ END_DOLLAR_QUOTED_STRING
+    ;
+
 routineCharacteristics
     : (routineLanguage
     | specificName
@@ -1599,11 +1668,30 @@ identifier
     | {!SQL_standard_keyword_behavior}? strictNonReserved
     ;
 
+// simpleIdentifier: like identifier but without IDENTIFIER('literal') support
+// Use this for contexts where IDENTIFIER() syntax is not appropriate:
+//   - Named parameters (:param_name)
+//   - Extract field names (EXTRACT(field FROM ...))
+//   - Other keyword-like or string-like uses
+simpleIdentifier
+    : simpleStrictIdentifier
+    | {!SQL_standard_keyword_behavior}? strictNonReserved
+    ;
+
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
+    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
     | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
     | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
+    ;
+
+// simpleStrictIdentifier: like strictIdentifier but without IDENTIFIER('literal') support
+simpleStrictIdentifier
+    : IDENTIFIER              #simpleUnquotedIdentifier
+    | quotedIdentifier        #simpleQuotedIdentifierAlternative
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #simpleUnquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #simpleUnquotedIdentifier
     ;
 
 quotedIdentifier
@@ -1739,10 +1827,10 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause windowClause?
+    : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
-    | DROP identifierSeq
+    | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
@@ -1898,6 +1986,7 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -1943,7 +2032,9 @@ ansiNonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -2283,6 +2374,7 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -2333,7 +2425,9 @@ nonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND

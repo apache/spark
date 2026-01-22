@@ -24,13 +24,16 @@ from threading import RLock
 from types import TracebackType
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     Iterable,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
     Union,
     Set,
     cast,
@@ -52,7 +55,6 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
     DataType,
-    StructField,
     StructType,
     VariantVal,
     _make_type_verifier,
@@ -60,11 +62,9 @@ from pyspark.sql.types import (
     _has_nulltype,
     _merge_type,
     _create_converter,
-    _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
-    is_timestamp_ntz_preferred,
     to_str,
     try_remote_session_classmethod,
     remote_only,
@@ -139,7 +139,10 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-class classproperty(property):
+T = TypeVar("T")
+
+
+class classproperty(Generic[T]):
     """Same as Python's @property decorator, but for class attributes.
 
     Examples
@@ -164,12 +167,13 @@ class classproperty(property):
     True
     """
 
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+    def __init__(self, fget: Callable[[type], T]) -> None:
+        self.fget = fget
+
+    def __get__(self, instance: Any, owner: Optional[type]) -> T:
+        if owner is None:
+            owner = type(instance)
+        return self.fget(owner)
 
 
 class SparkSession(SparkConversionMixin):
@@ -606,12 +610,14 @@ class SparkSession(SparkConversionMixin):
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
-    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    @classproperty
+    def builder(cls: Type["SparkSession"]) -> "Builder":  # type: ignore[misc]
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-    """
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -1050,10 +1056,25 @@ class SparkSession(SparkConversionMixin):
                 errorClass="CANNOT_INFER_EMPTY_SCHEMA",
                 messageParameters={},
             )
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()
-        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
-        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+
+        (
+            timestampType,
+            inferDictAsStruct,
+            legacyInferArrayTypeFromFirstElement,
+            legacyInferMapStructTypeFromFirstItem,
+        ) = self._jconf.getConfs(
+            [
+                "spark.sql.timestampType",
+                "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+                "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+                "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+            ]
+        )
+        prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
+        infer_dict_as_struct = inferDictAsStruct == "true"
+        infer_array_from_first_element = legacyInferArrayTypeFromFirstElement == "true"
+        infer_map_from_first_pair = legacyInferMapStructTypeFromFirstItem == "true"
+
         schema = reduce(
             _merge_type,
             (
@@ -1103,10 +1124,24 @@ class SparkSession(SparkConversionMixin):
                 messageParameters={},
             )
 
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()
-        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
-        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        (
+            timestampType,
+            inferDictAsStruct,
+            legacyInferArrayTypeFromFirstElement,
+            legacyInferMapStructTypeFromFirstItem,
+        ) = self._jconf.getConfs(
+            [
+                "spark.sql.timestampType",
+                "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+                "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+                "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+            ]
+        )
+        prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
+        infer_dict_as_struct = inferDictAsStruct == "true"
+        infer_array_from_first_element = legacyInferArrayTypeFromFirstElement == "true"
+        infer_map_from_first_pair = legacyInferMapStructTypeFromFirstItem == "true"
+
         if samplingRatio is None:
             schema = _infer_schema(
                 first,
@@ -1565,41 +1600,45 @@ class SparkSession(SparkConversionMixin):
             has_pyarrow = False
 
         if has_numpy and isinstance(data, np.ndarray):
-            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
-            # so pandas is required.
-            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+            # `data` of numpy.ndarray type will be converted to an arrow Table,
+            # so pyarrow is required.
+            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
-            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
             if data.ndim not in [1, 2]:
                 raise PySparkValueError(
                     errorClass="INVALID_NDARRAY_DIMENSION",
                     messageParameters={"dimensions": "1 or 2"},
                 )
 
-            if data.ndim == 1 or data.shape[1] == 1:
-                column_names = ["value"]
+            col_names: list[str] = []
+            if isinstance(schema, StructType):
+                col_names = schema.names
+            elif isinstance(schema, list):
+                col_names = schema
+            elif data.ndim == 1 or data.shape[1] == 1:
+                col_names = ["value"]
             else:
-                column_names = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+                col_names = [f"_{i + 1}" for i in range(0, data.shape[1])]
 
-            if schema is None and not self._jconf.arrowPySparkEnabled():
-                # Construct `schema` from `np.dtype` of the input NumPy array
-                # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
-                spark_type = _from_numpy_type(data.dtype)
-                if spark_type is not None:
-                    schema = StructType(
-                        [StructField(name, spark_type, nullable=True) for name in column_names]
-                    )
-
-            data = pd.DataFrame(data, columns=column_names)
+            if data.ndim == 1:
+                data = pa.Table.from_arrays(arrays=[pa.array(data)], names=col_names)
+            elif data.shape[1] == 1:
+                data = pa.Table.from_arrays(arrays=[pa.array(data.squeeze())], names=col_names)
+            else:
+                data = pa.Table.from_arrays(
+                    arrays=[pa.array(data[::, i]) for i in range(0, data.shape[1])],
+                    names=col_names,
+                )
 
         if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
-            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+            return super().createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
         if has_pyarrow and isinstance(data, pa.Table):
             # Create a DataFrame from PyArrow Table.
-            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+            return super().createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
         return self._create_dataframe(

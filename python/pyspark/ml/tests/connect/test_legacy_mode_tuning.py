@@ -48,7 +48,7 @@ if should_test_connect:
 
     class HasInducedError(Params):
         def __init__(self):
-            super(HasInducedError, self).__init__()
+            super().__init__()
             self.inducedError = Param(
                 self, "inducedError", "Uniformly-distributed error added to feature"
             )
@@ -58,7 +58,7 @@ if should_test_connect:
 
     class InducedErrorModel(Model, HasInducedError):
         def __init__(self):
-            super(InducedErrorModel, self).__init__()
+            super().__init__()
 
         def _transform(self, dataset):
             return dataset.withColumn(
@@ -67,7 +67,7 @@ if should_test_connect:
 
     class InducedErrorEstimator(Estimator, HasInducedError):
         def __init__(self, inducedError=1.0):
-            super(InducedErrorEstimator, self).__init__()
+            super().__init__()
             self._set(inducedError=inducedError)
 
         def _fit(self, dataset):
@@ -309,12 +309,6 @@ class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_legacy_mode_tuning import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

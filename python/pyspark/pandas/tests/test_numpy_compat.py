@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 import numpy as np
 import pandas as pd
 
@@ -28,7 +27,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 class NumPyCompatTestsMixin:
     @classmethod
     def setUpClass(cls):
-        super(NumPyCompatTestsMixin, cls).setUpClass()
+        super().setUpClass()
         # Some nanosecond->microsecond conversions throw loss of precision errors
         cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
 
@@ -198,13 +197,6 @@ class NumPyCompatTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -164,13 +164,13 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(ParseException):
 
                 @arrow_udf("blah")
-                def foo(x):
+                def _(x):
                     return x
 
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(returnType="double", functionType=PandasUDFType.SCALAR)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -185,7 +185,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(functionType=ArrowUDFType.SCALAR)
-                def foo(x):
+                def _(x):
                     return x
 
             self.check_error(
@@ -197,7 +197,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf("double", 100)
-                def foo(x):
+                def _(x):
                     return x
 
             self.check_error(
@@ -209,7 +209,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(returnType=PandasUDFType.GROUPED_MAP)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -224,13 +224,13 @@ class ArrowUDFTestsMixin:
             with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
 
                 @arrow_udf(LongType(), ArrowUDFType.SCALAR)
-                def zero_with_type():
+                def _():
                     return 1
 
             with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
 
                 @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
-                def zero_with_type():
+                def _():
                     yield 1
                     yield 2
 
@@ -316,12 +316,6 @@ class ArrowUDFTests(ArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()
