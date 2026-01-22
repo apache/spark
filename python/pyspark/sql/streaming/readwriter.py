@@ -278,6 +278,12 @@ class DataStreamReader(OptionUtils):
                 },
             )
 
+        if not source_name or len(source_name.strip()) == 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_NON_EMPTY_STR",
+                messageParameters={"arg_name": "source_name", "arg_value": str(source_name)},
+            )
+
         # Validate that source_name contains only ASCII letters, digits, and underscores
         if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
             raise PySparkValueError(
