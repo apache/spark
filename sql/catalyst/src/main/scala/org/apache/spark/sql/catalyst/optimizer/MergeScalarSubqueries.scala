@@ -101,7 +101,7 @@ import org.apache.spark.sql.types.DataType
  * :  +- ReusedSubquery Subquery scalar-subquery#242, [id=#125]
  * +- *(1) Scan OneRowRelation[]
  */
-object MergeScalarSubqueries extends Rule[LogicalPlan] {
+object MergeScalarSubqueries extends Rule[LogicalPlan] with MergeScalarSubqueriesHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan match {
       // Subquery reuse needs to be enabled for this optimization.
@@ -213,16 +213,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
     }
   }
 
-  // If 2 plans are identical return the attribute mapping from the new to the cached version.
-  private def checkIdenticalPlans(
-      newPlan: LogicalPlan,
-      cachedPlan: LogicalPlan): Option[AttributeMap[Attribute]] = {
-    if (newPlan.canonicalized == cachedPlan.canonicalized) {
-      Some(AttributeMap(newPlan.output.zip(cachedPlan.output)))
-    } else {
-      None
-    }
-  }
 
   /**
    * Recursively traverse down and try merging 2 plans.
@@ -607,12 +597,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         CreateNamedStruct(attributes.flatMap(a => Seq(Literal(a.name), a))),
         "mergedValue")()),
       plan)
-  }
-
-  private def mapAttributes[T <: Expression](expr: T, outputMap: AttributeMap[Attribute]) = {
-    expr.transform {
-      case a: Attribute => outputMap.getOrElse(a, a)
-    }.asInstanceOf[T]
   }
 
   /**

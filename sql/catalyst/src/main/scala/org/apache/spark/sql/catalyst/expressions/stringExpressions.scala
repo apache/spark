@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{STRING_PREDICATE, TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -691,6 +691,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   def this(srcExpr: Expression, searchExpr: Expression) = {
     this(srcExpr, searchExpr, Literal(""))
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(STRING_PREDICATE)
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
     srcEval.asInstanceOf[UTF8String].replace(

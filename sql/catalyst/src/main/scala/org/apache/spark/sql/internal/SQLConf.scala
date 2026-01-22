@@ -4522,6 +4522,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COMBINE_JOINED_AGGREGATES_ENABLED =
+    buildConf("spark.sql.ibm.optimizer.combineJoinedAggregates.enabled")
+      .doc("When true, we attempt to eliminate join by combine aggregates " +
+        "to reduce the scan times and avoid shuffle.")
+      .version("3.4.2")
+      .booleanConf
+      .createWithDefault(true)
+
+  val MAX_TREE_NODE_NUM_OF_PREDICATE =
+    buildConf("spark.sql.ibm.optimizer.combineJoinedAggregates.maxTreeNodeNumOfPredicate")
+      .doc("Maximum tree node number of predicate. If tree node number of predicate exceeds the" +
+        "limit, CombineJoinedAggregates will not merging the aggregates connected with join.")
+      .version("3.4.2")
+      .intConf
+      .checkValue(_ > 0, "The threshold of tree node numbers should be positive")
+      .createWithDefault(10)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5598,4 +5615,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isModifiable(key: String): Boolean = {
     containsConfigKey(key) && !isStaticConfigKey(key)
   }
+
+  def combineJoinedAggregatesEnabled: Boolean =
+    getConf(SQLConf.COMBINE_JOINED_AGGREGATES_ENABLED)
+
+  def maxTreeNodeNumOfPredicate: Int = getConf(SQLConf.MAX_TREE_NODE_NUM_OF_PREDICATE)
 }

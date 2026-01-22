@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAY_CONTAINS, ARRAYS_OVERLAP, ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1489,6 +1489,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
     case failure => failure
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_CONTAINS)
+
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(elementType)
 
@@ -2778,6 +2780,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_OVERLAP)
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: ArrayType, _) =>
