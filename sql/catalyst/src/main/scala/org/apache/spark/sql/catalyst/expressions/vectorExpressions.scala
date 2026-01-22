@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, FloatType, StringType}
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.types.{ArrayType, FloatType, StringType}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
