@@ -1562,12 +1562,12 @@ class InternalFrame:
         pdf = pdf.copy()
 
         data_columns = [name_like_string(col) for col in pdf.columns]
-        pdf.columns = data_columns
+        pdf.columns = pd.Index(data_columns)
 
         if retain_index:
             index_nlevels = pdf.index.nlevels
             index_columns = [SPARK_INDEX_NAME_FORMAT(i) for i in range(index_nlevels)]
-            pdf.index.names = index_columns
+            pdf.index.names = index_columns  # type: ignore[assignment]
             reset_index = pdf.reset_index()
         else:
             index_nlevels = 0

@@ -22,7 +22,6 @@ import sys
 import tempfile
 
 import unittest
-from typing import cast
 from decimal import Decimal
 
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
@@ -52,7 +51,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class GroupedApplyInPandasWithStateTestsMixin:
     @classmethod

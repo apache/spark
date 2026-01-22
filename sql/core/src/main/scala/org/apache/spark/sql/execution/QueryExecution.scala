@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
@@ -66,7 +67,7 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
+    val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
     val refreshPhaseEnabled: Boolean = true,
     val queryId: UUID = UUIDv7Generator.generate()) extends Logging {
 
@@ -467,6 +468,32 @@ class QueryExecution(
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
   }
 
+  /**
+   * Determine the shuffle cleanup mode, based on the following order:
+   * 1. input arg when constructing this QueryExecution
+   * 2. the cleanup mode of the root execution
+   * 3. SQLConf from SparkSession
+   */
+  lazy val shuffleCleanupMode: ShuffleCleanupMode =
+    shuffleCleanupModeOpt.getOrElse(
+      getShuffleCleanupModeFromRootExecution.getOrElse(
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
+
+  private def getShuffleCleanupModeFromRootExecution: Option[ShuffleCleanupMode] = {
+    val rootExecutionIdStr = sparkSession.sparkContext.getLocalProperty(EXECUTION_ROOT_ID_KEY)
+    if (rootExecutionIdStr != null) {
+      val rootExecutionId = rootExecutionIdStr.toLong
+      val rootExecution = SQLExecution.getQueryExecution(rootExecutionId)
+      if (rootExecution != null) {
+        rootExecution.shuffleCleanupModeOpt
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
+
   def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
     val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
       .getOrElse(Seq.empty)
@@ -581,7 +608,7 @@ object QueryExecution {
       sparkSession,
       logical,
       mode = CommandExecutionMode.ALL,
-      shuffleCleanupMode = determineShuffleCleanupMode(sparkSession.sessionState.conf),
+      shuffleCleanupModeOpt = Some(determineShuffleCleanupMode(sparkSession.sessionState.conf)),
       refreshPhaseEnabled = refreshPhaseEnabled)
   }
 
@@ -771,13 +798,11 @@ object QueryExecution {
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None)
     : (QueryExecution, Array[InternalRow]) = {
-    val shuffleCleanupMode = shuffleCleanupModeOpt.getOrElse(
-      determineShuffleCleanupMode(sparkSession.sessionState.conf))
     val qe = new QueryExecution(
       sparkSession,
       command,
       mode = mode,
-      shuffleCleanupMode = shuffleCleanupMode,
+      shuffleCleanupModeOpt = shuffleCleanupModeOpt,
       refreshPhaseEnabled = refreshPhaseEnabled)
     val result = QueryExecution.withInternalError(s"Executed $name failed.") {
       SQLExecution.withNewExecutionId(qe, Some(name)) {

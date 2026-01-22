@@ -20,7 +20,6 @@ import tempfile
 import time
 import unittest
 import logging
-from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
@@ -43,7 +42,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MapInPandasTestsMixin:
     spark: SparkSession

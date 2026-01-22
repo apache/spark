@@ -171,6 +171,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
         from pyspark.core.rdd import RDD
 
+        warnings.warn(
+            "The return type of DataFrame.toJSON will be changed from RDD to DataFrame "
+            "in future releases."
+        )
+
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 

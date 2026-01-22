@@ -17,8 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
-
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -52,7 +50,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property

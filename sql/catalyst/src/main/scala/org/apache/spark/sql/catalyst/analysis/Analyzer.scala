@@ -504,9 +504,9 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
-      Seq(ResolveUpdateEventTimeWatermarkColumn,
-        NameStreamingSources) ++
-      extendedResolutionRules : _*),
+      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      extendedResolutionRules ++
+      Seq(NameStreamingSources) : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
@@ -997,27 +997,30 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+      // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
+      // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
+      // as it stores resolved plans directly.
+      case view: View if view.isTempViewStoringAnalyzedPlan =>
+        view.copy(child = resolveTableReferences(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
     }
 
+    // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
-        case v: View if v.isTempViewStoringAnalyzedPlan => v.child
+        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferences(v.child)
         case other => other
       }
     }
 
-    private def resolveAsV2Relation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
-      plan match {
-        case ref: V2TableReference =>
-          EliminateSubqueryAliases(relationResolution.resolveReference(ref)) match {
-            case r: DataSourceV2Relation => Some(r)
-            case _ => None
-          }
-        case r: DataSourceV2Relation => Some(r)
-        case _ => None
+    // Resolve V2TableReference nodes in a plan. V2TableReference is only created for temp views
+    // (via V2TableReference.createForTempView), so we only need to resolve it when returning
+    // the plan of temp views (in resolveViews and unwrapRelationPlan).
+    private def resolveTableReferences(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUp {
+        case r: V2TableReference => relationResolution.resolveReference(r)
       }
     }
 
@@ -1027,14 +1030,13 @@ class Analyzer(
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
-          case r: V2TableReference =>
-            relationResolution.resolveReference(r)
           case other => other
         }
 
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
@@ -1051,11 +1053,10 @@ class Analyzer(
               case u: UnresolvedCatalogRelation =>
                 throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                   u.tableMeta.identifier, write)
-              case plan =>
-                resolveAsV2Relation(plan).map(write.withNewTable).getOrElse {
-                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                    u.multipartIdentifier.quoted)
-                }
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case _ =>
+                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                  u.multipartIdentifier.quoted)
             }.getOrElse(write)
           case _ => write
         }

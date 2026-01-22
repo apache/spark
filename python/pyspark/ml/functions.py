@@ -241,7 +241,7 @@ def _validate_and_transform_single_input(
         # tensor columns
         if len(batch.columns) == 1:
             # one tensor column and one expected input, vstack rows
-            single_input = np.vstack(batch.iloc[:, 0])
+            single_input = np.vstack(batch.iloc[:, 0])  # type: ignore[call-overload]
         else:
             raise ValueError(
                 "Multiple input columns found, but model expected a single "

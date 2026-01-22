@@ -584,6 +584,130 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       assert(decodedValue.getBoolean(2) === true)
     }
   }
+
+  test("verify PrefixKeyScanStateEncoder full encode/decode cycle with multi-key session window") {
+    // Simulate session window state with multiple grouping keys
+    // Key schema: [userId, deviceId, sessionStartTime] - mimics session window with 2 grouping keys
+    val keySchema = StructType(Seq(
+      StructField("userId", IntegerType),
+      StructField("deviceId", StringType),
+      StructField("sessionStartTime", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("count", LongType)
+    ))
+
+    // Session window uses first N columns as prefix (the grouping keys)
+    val numColsPrefixKey = 2
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+    val dataEncoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
+    val keyEncoder = new PrefixKeyScanStateEncoder(
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies = false)
+
+    // Create a full key row
+    val keyProj = UnsafeProjection.create(keySchema)
+    val fullKey = keyProj.apply(InternalRow(123, UTF8String.fromString("device1"), 1000000L))
+
+    // Encode the full key (this is what happens when putting to state store)
+    val encodedKey = keyEncoder.encodeKey(fullKey)
+
+    // Decode the key (this is what happens during prefix scan)
+    val decodedKey = keyEncoder.decodeKey(encodedKey)
+
+    // Verify the decoded key matches the original
+    assert(decodedKey.numFields === 3,
+      s"Expected 3 fields in decoded key, but got ${decodedKey.numFields}")
+    assert(decodedKey.getInt(0) === 123, "userId not preserved")
+    assert(decodedKey.getString(1) === "device1", "deviceId not preserved")
+    assert(decodedKey.getLong(2) === 1000000L, "sessionStartTime not preserved")
+  }
+
+  test("verify decodeRemainingKey correctly decodes with fix") {
+    // This test verifies the fix prevents garbage data reads
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", StringType),
+      StructField("k3", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
+
+    // Create and encode a remaining key with just the last column (k3)
+    val remainingKeySchema = StructType(Seq(StructField("k3", LongType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(999999L))
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // With the FIX: numFields should be keySchema.length - numColsPrefixKey = 3 - 2 = 1
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field but got ${decodedRemainingKey.numFields}")
+
+    // Field 0 should read correctly
+    assert(decodedRemainingKey.getLong(0) === 999999L,
+      "Field 0 value incorrect")
+
+    // Trying to read field 1 should throw exception (doesn't exist)
+    intercept[AssertionError] {
+      decodedRemainingKey.getLong(1)
+    }
+  }
+
+  test("verify AvroStateEncoder decodeRemainingKey with PrefixKeyScanStateEncoder") {
+    // This test verifies that AvroStateEncoder correctly decodes remaining keys
+    // AvroStateEncoder uses remainingKeySchema = keySchema.drop(numColsPrefixKey)
+    // which is the correct calculation (unlike the bug in UnsafeRowDataEncoder)
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", StringType),
+      StructField("k3", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 0,
+      valueSchemaId = 0
+    )
+
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
+      StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    // Create and encode a remaining key with just the last column (k3)
+    val remainingKeySchema = StructType(Seq(StructField("k3", LongType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(999999L))
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // Should have 1 field (keySchema.length - numColsPrefixKey = 3 - 2 = 1)
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field but got ${decodedRemainingKey.numFields}")
+
+    // Field 0 should read correctly
+    assert(decodedRemainingKey.getLong(0) === 999999L,
+      "Field 0 value incorrect")
+
+    // Trying to read field 1 should throw exception (doesn't exist)
+    intercept[AssertionError] {
+      decodedRemainingKey.getLong(1)
+    }
+  }
 }
 
 @SlowSQLTest
@@ -3943,48 +4067,68 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
-  test("SPARK-54420: load with createEmpty creates empty store") {
-    val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()
+  testWithStateStoreCheckpointIds(
+    "SPARK-54420: load with createEmpty creates empty store") { enableCkptId =>
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete()
+      var lastVersion = 0L
+      var lastCheckpointInfo: Option[StateStoreCheckpointInfo] = None
 
-    withDB(remoteDir) { db =>
-      // loading batch 0 with loadEmpty = true
-      db.load(0, None, loadEmpty = true)
-      assert(iterator(db).isEmpty)
-      db.put("a", "1")
-      val (version1, _) = db.commit()
-      assert(toStr(db.get("a")) === "1")
+      withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+        // loading batch 0 with loadEmpty = true
+        db.load(0, None, loadEmpty = true)
+        assert(iterator(db).isEmpty)
+        db.put("a", "1")
+        val (version1, checkpointInfoV1) = db.commit()
+        assert(toStr(db.get("a")) === "1")
 
-      // check we can load store normally even the previous one loadEmpty = true
-      db.load(version1)
-      db.put("b", "2")
-      val (version2, _) = db.commit()
-      assert(version2 === version1 + 1)
-      assert(toStr(db.get("b")) === "2")
-      assert(toStr(db.get("a")) === "1")
+        // check we can load store normally even the previous one loadEmpty = true
+        db.load(version1, checkpointInfoV1.stateStoreCkptId)
+        db.put("b", "2")
+        val (version2, _) = db.commit()
+        assert(version2 === version1 + 1)
+        assert(toStr(db.get("b")) === "2")
+        assert(toStr(db.get("a")) === "1")
 
-      // load an empty store
-      db.load(version2, loadEmpty = true)
-      db.put("c", "3")
-      val (version3, _) = db.commit()
-      assert(db.get("b") === null)
-      assert(db.get("a") === null)
-      assert(toStr(db.get("c")) === "3")
-      assert(version3 === version2 + 1)
+        // load an empty store
+        db.load(version2, loadEmpty = true)
+        db.put("c", "3")
+        val (version3, _) = db.commit()
+        assert(db.get("b") === null)
+        assert(db.get("a") === null)
+        assert(toStr(db.get("c")) === "3")
+        assert(version3 === version2 + 1)
 
-      // load 2 empty store in a row
-      db.load(version3, loadEmpty = true)
-      db.put("d", "4")
-      val (version4, _) = db.commit()
-      assert(db.get("c") === null)
-      assert(toStr(db.get("d")) === "4")
-      assert(version4 === version3 + 1)
+        // load 2 empty store in a row
+        db.load(version3, loadEmpty = true)
+        db.put("d", "4")
 
-      db.load(version4)
-      db.put("e", "5")
-      db.commit()
-      assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
-    }
+        val (version4, checkpointV4) = db.commit()
+        assert(db.get("c") === null)
+        assert(toStr(db.get("d")) === "4")
+        lastVersion = version4
+        lastCheckpointInfo = Option(checkpointV4)
+        assert(lastVersion === version3 + 1)
+      }
+
+      withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+        db.load(lastVersion, lastCheckpointInfo.map(_.stateStoreCkptId).orNull)
+        db.put("e", "5")
+        db.commit()
+        assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
+      }
+
+      if (enableCkptId) {
+        withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+          val ex = intercept[IllegalArgumentException] {
+            db.load(
+              lastVersion,
+              lastCheckpointInfo.map(_.stateStoreCkptId).orNull,
+              loadEmpty = true)
+          }
+          assert(ex.getMessage.contains("stateStoreCkptId should be empty when loadEmpty is true"))
+        }
+      }
   }
 
   test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
@@ -4027,13 +4171,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         version: Long,
         ckptId: Option[String] = None,
         readOnly: Boolean = false,
-        createEmpty: Boolean = false): RocksDB = {
+        loadEmpty: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get
       ckptId match {
-        case Some(_) => super.load(version, ckptId, readOnly)
-        case None => super.load(version, versionToUniqueId.get(version), readOnly)
+        case Some(_) => super.load(version, ckptId, readOnly, loadEmpty)
+        case None => super.load(version, versionToUniqueId.get(version), readOnly, loadEmpty)
       }
     }
 

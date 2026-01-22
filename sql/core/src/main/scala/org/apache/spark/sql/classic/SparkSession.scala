@@ -126,7 +126,7 @@ class SparkSession private(
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sqlConf)
       .getOrElse(SQLConf.getFallbackConf)
   })
 
@@ -176,6 +176,29 @@ class SparkSession private(
     existingSharedState.getOrElse(new SharedState(sparkContext, initialSessionOptions))
   }
 
+  /**
+   * SQL-specific key-value configurations.
+   *
+   * This is initialized before sessionState to avoid recursive access during sessionState
+   * initialization when SQLConf.get is called.
+   */
+  @transient
+  private[sql] lazy val sqlConf: SQLConf = {
+    parentSessionState.map { s =>
+      val cloned = s.conf.clone()
+      if (sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        SQLConf.mergeSparkConf(cloned, sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
+      val conf = new SQLConf
+      SQLConf.mergeSparkConf(conf, sharedState.conf)
+      SQLConf.mergeNonStaticSQLConfigs(conf, sparkContext.conf.getAll.toMap)
+      SQLConf.mergeNonStaticSQLConfigs(conf, initialSessionOptions)
+      conf
+    }
+  }
+
   /** @inheritdoc */
   @Unstable
   @transient
@@ -195,7 +218,7 @@ class SparkSession private(
   val sqlContext: SQLContext = new SQLContext(this)
 
   /** @inheritdoc */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sqlConf)
 
   /** @inheritdoc */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager

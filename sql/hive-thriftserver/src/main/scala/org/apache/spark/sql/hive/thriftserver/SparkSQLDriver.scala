@@ -80,7 +80,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
       val execution = new QueryExecution(
         sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
         logicalPlan,
-        shuffleCleanupMode = shuffleCleanupMode)
+        shuffleCleanupModeOpt = Some(shuffleCleanupMode))
 
       // the above execution already has an execution ID, therefore we don't need to
       // wrap it again with a new execution ID when getting Hive result.
