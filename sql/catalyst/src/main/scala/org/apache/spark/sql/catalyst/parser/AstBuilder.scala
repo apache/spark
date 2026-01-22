@@ -2416,25 +2416,26 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a table-valued function call with arguments, e.g. range(1000)
+   * Build an UnresolvedTableValuedFunction from a tableFunctionCall context.
+   * Used by both visitTableValuedFunction and stream TVF visitors.
    */
-  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
-      : LogicalPlan = withOrigin(ctx) {
-    val func = ctx.functionTable
-    val aliases = if (func.tableAlias.identifierList != null) {
-      visitIdentifierList(func.tableAlias.identifierList)
+  private def buildTvfFromTableFunctionCall(
+      funcCallCtx: TableFunctionCallContext,
+      tableAliasCtx: TableAliasContext,
+      watermarkClauseCtx: WatermarkClauseContext): LogicalPlan = {
+    val aliases = if (tableAliasCtx != null && tableAliasCtx.identifierList != null) {
+      visitIdentifierList(tableAliasCtx.identifierList)
     } else {
       Seq.empty
     }
-
     withFuncIdentClause(
-      func.functionName,
+      funcCallCtx.funcName,
       Nil,
       (ident, _) => {
         // Allow qualified table-valued function names (e.g., builtin.range, system.session.my_tvf)
         // Removed artificial restriction on multi-part identifiers
-        val funcName = func.functionName.getText
-        val args = func.functionTableArgument.asScala.map { e =>
+        val funcName = funcCallCtx.funcName.getText
+        val args = funcCallCtx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))
             .getOrElse {
               extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
@@ -2444,11 +2445,34 @@ class AstBuilder extends DataTypeAstBuilder
         val tvf = UnresolvedTableValuedFunction(ident, args)
 
         val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+        val tvfWithWatermark = tvfAliases.optionalMap(watermarkClauseCtx)(withWatermark)
+        Option(tableAliasCtx).map { c =>
+          tvfWithWatermark.optionalMap(c.strictIdentifier)(aliasPlan)
+        }.getOrElse {
+          tvfWithWatermark
+        }
+      }
+    )
+  }
 
-        val watermarkClause = func.watermarkClause()
-        val tvfWithWatermark = tvfAliases.optionalMap(watermarkClause)(withWatermark)
-        tvfWithWatermark.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
-      })
+  /**
+   * Create a table-valued function call with arguments, e.g. range(1000)
+   */
+  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
+      : LogicalPlan = withOrigin(ctx) {
+    // IDENTIFIED BY is only valid for streaming TVFs
+    if (ctx.tableFunctionCallWithTrailingClauses.identifiedByClause != null) {
+      operationNotAllowed("IDENTIFIED BY clause is only supported for streaming sources", ctx)
+    }
+    visitTableFunctionCallWithTrailingClauses(ctx.tableFunctionCallWithTrailingClauses)
+  }
+
+  /**
+   * Create a table-valued function call with optional trailing clauses.
+   */
+  override def visitTableFunctionCallWithTrailingClauses(
+      ctx: TableFunctionCallWithTrailingClausesContext): LogicalPlan = withOrigin(ctx) {
+    buildTvfFromTableFunctionCall(ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
   }
 
   override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {

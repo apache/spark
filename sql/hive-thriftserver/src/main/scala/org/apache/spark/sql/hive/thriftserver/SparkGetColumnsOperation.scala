@@ -135,7 +135,7 @@ private[hive] class SparkGetColumnsOperation(
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
                CalendarIntervalType | NullType | _: AnsiIntervalType) =>
       Some(dt.defaultSize)
-    case CharType(n) => Some(n)
+    case c: CharType => Some(c.length)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -178,8 +178,8 @@ private[hive] class SparkGetColumnsOperation(
     case FloatType => java.sql.Types.FLOAT
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
-    case VarcharType(_) => java.sql.Types.VARCHAR
-    case CharType(_) => java.sql.Types.CHAR
+    case _: VarcharType => java.sql.Types.VARCHAR
+    case _: CharType => java.sql.Types.CHAR
     case _: StringType => java.sql.Types.VARCHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE

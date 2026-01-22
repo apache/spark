@@ -16,13 +16,21 @@
 #
 import ctypes
 import unittest
-import pyarrow as pa
+from pyspark.testing.utils import (
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
+from pyspark import pandas as ps
+from pyspark.testing.sqlutils import SQLTestUtils
+
 import pandas as pd
-import pyspark.pandas as ps
 
 
-class TestSparkArrowCStreamer(unittest.TestCase):
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowInterfaceTestsMixin:
     def test_spark_arrow_c_streamer_arrow_consumer(self):
+        import pyarrow as pa
+
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
 
@@ -52,13 +60,11 @@ class TestSparkArrowCStreamer(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
+class ArrowInterfaceTests(ArrowInterfaceTestsMixin, SQLTestUtils):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_c_stream import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        test_runner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        test_runner = None
-    unittest.main(testRunner=test_runner, verbosity=2)
+    main()

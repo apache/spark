@@ -143,16 +143,18 @@ class NameStreamingSourcesSuite extends AnalysisTest {
   }
 
   test("propagates name to StreamingRelationV2") {
-    val streamingV2 = createStreamingRelationV2()
-    val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case s: StreamingRelationV2 =>
-        assert(s.sourceIdentifyingName == UserProvided("my_source"))
-      case other =>
-        fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      result match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == UserProvided("my_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
     }
   }
 
@@ -175,31 +177,35 @@ class NameStreamingSourcesSuite extends AnalysisTest {
   }
 
   test("propagates FlowAssigned name to StreamingRelationV2") {
-    val streamingV2 = createStreamingRelationV2()
-    val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case s: StreamingRelationV2 =>
-        assert(s.sourceIdentifyingName == FlowAssigned("flow_source"))
-      case other =>
-        fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      result match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == FlowAssigned("flow_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
     }
   }
 
   test("propagates name through SubqueryAlias") {
-    val streamingV2 = createStreamingRelationV2()
-    val aliased = SubqueryAlias("my_alias", streamingV2)
-    val wrapped = NamedStreamingRelation(aliased, UserProvided("aliased_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val aliased = SubqueryAlias("my_alias", streamingV2)
+      val wrapped = NamedStreamingRelation(aliased, UserProvided("aliased_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case SubqueryAlias(_, inner: StreamingRelationV2) =>
-        assert(inner.sourceIdentifyingName == UserProvided("aliased_source"))
-      case other =>
-        fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
+      result match {
+        case SubqueryAlias(_, inner: StreamingRelationV2) =>
+          assert(inner.sourceIdentifyingName == UserProvided("aliased_source"))
+        case other =>
+          fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
+      }
     }
   }
 
@@ -298,5 +304,91 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       case _: NamedStreamingRelation => true
     }.nonEmpty
     assert(!hasNamedRelation)
+  }
+
+  // ===================================
+  // Tests for config disabled behavior
+  // ===================================
+
+  test("config disabled - unwraps Unassigned NamedStreamingRelation") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, Unassigned)
+
+      val result = NameStreamingSources.apply(wrapped)
+
+      // Should unwrap without error when name is Unassigned
+      result match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == Unassigned)
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
+    }
+  }
+
+  test("config disabled - throws error for UserProvided name") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources.apply(wrapped)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+        parameters = Map("name" -> "my_source"))
+    }
+  }
+
+  test("config disabled - throws error for FlowAssigned name") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources.apply(wrapped)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+        parameters = Map("name" -> "flow_source"))
+    }
+  }
+
+  test("config disabled - no enforcement error even with unnamed sources") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val source = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val streamingPlan = Project(source.output, source)
+
+      // Should NOT throw - feature is disabled so enforcement is skipped
+      val result = NameStreamingSources.apply(streamingPlan)
+      assert(!result.isInstanceOf[NamedStreamingRelation])
+    }
+  }
+
+  test("config disabled - unwraps all Unassigned NamedStreamingRelation nodes") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val source1 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val source2 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val streamingPlan = Union(Seq(source1, source2))
+
+      val result = NameStreamingSources.apply(streamingPlan)
+
+      // All NamedStreamingRelation nodes should be unwrapped
+      val hasNamedRelation = result.collect {
+        case _: NamedStreamingRelation => true
+      }.nonEmpty
+      assert(!hasNamedRelation, "All NamedStreamingRelation nodes should be unwrapped")
+    }
   }
 }

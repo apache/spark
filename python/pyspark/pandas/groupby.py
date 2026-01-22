@@ -44,8 +44,8 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
-from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
+from pandas.api.types import is_number, is_hashable, is_list_like
+from pandas.core.common import _builtin_table  # type: ignore[import-untyped]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.internal import InternalFunction as SF
@@ -2179,7 +2179,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if is_series_groupby:
 
             def pandas_filter(pdf: pd.DataFrame) -> pd.DataFrame:
-                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))
+                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))  # type: ignore[arg-type]
 
         else:
             f = _builtin_table.get(func, func)
@@ -2260,7 +2260,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
             # Just positionally map the column names to given schema's.
-            pdf.columns = return_schema.names
+            pdf.columns = pd.Index(return_schema.names)
 
             return pdf
 

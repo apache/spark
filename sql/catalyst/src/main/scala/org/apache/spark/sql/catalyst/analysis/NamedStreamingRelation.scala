@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, UserProvided}
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{NAMED_STREAMING_RELATION, TreePattern}
 
 /**
@@ -44,6 +44,24 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{NAMED_STREAMING_RELATION
  * @param sourceIdentifyingName The source identifying name (UserProvided, FlowAssigned,
  *                              or Unassigned)
  */
+object NamedStreamingRelation {
+  /**
+   * Factory method that creates a NamedStreamingRelation with an optional user-provided name.
+   * If nameOpt is Some(name), creates with UserProvided(name).
+   * If nameOpt is None, creates with Unassigned.
+   *
+   * @param child The underlying streaming relation
+   * @param nameOpt Optional user-provided source name
+   * @return A NamedStreamingRelation with the appropriate name
+   */
+  def withUserProvidedName(
+      child: LogicalPlan,
+      nameOpt: Option[String]): NamedStreamingRelation = {
+    val name = nameOpt.map(UserProvided(_)).getOrElse(Unassigned)
+    NamedStreamingRelation(child, name)
+  }
+}
+
 case class NamedStreamingRelation(
     child: LogicalPlan,
     sourceIdentifyingName: StreamingSourceIdentifyingName)

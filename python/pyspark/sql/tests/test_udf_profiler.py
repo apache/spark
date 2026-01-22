@@ -23,7 +23,7 @@ import os
 import sys
 import warnings
 from io import StringIO
-from typing import Iterator, cast
+from typing import Iterator
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
@@ -261,7 +261,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_udf_with_arrow(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
@@ -303,7 +303,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf(self):
         @pandas_udf("long")
@@ -350,7 +350,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_iterator(self):
         import pandas as pd
@@ -389,7 +389,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_map_in_pandas(self):
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age")).repartition(1)
@@ -426,7 +426,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_window(self):
         # WindowInPandasExec
@@ -472,7 +472,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_aggregate_in_pandas(self):
         # AggregateInPandasExec
@@ -539,7 +539,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_pandas_udf_grouped_agg_iter(self):
         import pandas as pd
@@ -566,7 +566,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_group_apply_in_pandas(self):
         # FlatMapGroupsInBatchExec
@@ -588,7 +588,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
@@ -617,7 +617,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_group_apply_in_arrow(self):
         # FlatMapGroupsInBatchExec
@@ -642,7 +642,7 @@ class UDFProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_perf_profiler_cogroup_apply_in_arrow(self):
         import pyarrow as pa

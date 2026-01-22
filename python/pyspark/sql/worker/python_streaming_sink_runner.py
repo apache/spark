@@ -16,10 +16,8 @@
 #
 
 import os
-import sys
 from typing import IO
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -27,33 +25,22 @@ from pyspark.serializers import (
     read_int,
     read_long,
     write_int,
-    SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource, WriterCommitMessage
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
 )
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
-    check_python_version,
     read_command,
     pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
     utf8_deserializer,
 )
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for committing or aborting a data source streaming write operation.
 
@@ -62,89 +49,67 @@ def main(infile: IO, outfile: IO) -> None:
     responsible for invoking either the `commit` or the `abort` method on a data source
     writer instance, given a list of commit messages.
     """
-    try:
-        check_python_version(infile)
+    # Receive the data source instance.
+    data_source = read_command(pickleSer, infile)
 
-        start_faulthandler_periodic_traceback()
+    if not isinstance(data_source, DataSource):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "a Python data source instance of type 'DataSource'",
+                "actual": f"'{type(data_source).__name__}'",
+            },
+        )
+    # Receive the data source output schema.
+    schema_json = utf8_deserializer.loads(infile)
+    schema = _parse_datatype_json_string(schema_json)
+    if not isinstance(schema, StructType):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "an output schema of type 'StructType'",
+                "actual": f"'{type(schema).__name__}'",
+            },
+        )
+    # Receive the `overwrite` flag.
+    overwrite = read_bool(infile)
 
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
+    with capture_outputs():
+        # Create the data source writer instance.
+        writer = data_source.streamWriter(schema=schema, overwrite=overwrite)
+        # Receive the commit messages.
+        num_messages = read_int(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
+        commit_messages = []
+        for _ in range(num_messages):
+            message = pickleSer._read_with_length(infile)
+            if message is not None and not isinstance(message, WriterCommitMessage):
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "an instance of WriterCommitMessage",
+                        "actual": f"'{type(message).__name__}'",
+                    },
+                )
+            commit_messages.append(message)
 
-        _accumulatorRegistry.clear()
+        batch_id = read_long(infile)
+        abort = read_bool(infile)
 
-        # Receive the data source instance.
-        data_source = read_command(pickleSer, infile)
+        # Commit or abort the Python data source write.
+        # Note the commit messages can be None if there are failed tasks.
+        if abort:
+            writer.abort(commit_messages, batch_id)
+        else:
+            writer.commit(commit_messages, batch_id)
 
-        if not isinstance(data_source, DataSource):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "a Python data source instance of type 'DataSource'",
-                    "actual": f"'{type(data_source).__name__}'",
-                },
-            )
-        # Receive the data source output schema.
-        schema_json = utf8_deserializer.loads(infile)
-        schema = _parse_datatype_json_string(schema_json)
-        if not isinstance(schema, StructType):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "an output schema of type 'StructType'",
-                    "actual": f"'{type(schema).__name__}'",
-                },
-            )
-        # Receive the `overwrite` flag.
-        overwrite = read_bool(infile)
+    # Send a status code back to JVM.
+    write_int(0, outfile)
+    outfile.flush()
 
-        with capture_outputs():
-            # Create the data source writer instance.
-            writer = data_source.streamWriter(schema=schema, overwrite=overwrite)
-            # Receive the commit messages.
-            num_messages = read_int(infile)
 
-            commit_messages = []
-            for _ in range(num_messages):
-                message = pickleSer._read_with_length(infile)
-                if message is not None and not isinstance(message, WriterCommitMessage):
-                    raise PySparkAssertionError(
-                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                        messageParameters={
-                            "expected": "an instance of WriterCommitMessage",
-                            "actual": f"'{type(message).__name__}'",
-                        },
-                    )
-                commit_messages.append(message)
-
-            batch_id = read_long(infile)
-            abort = read_bool(infile)
-
-            # Commit or abort the Python data source write.
-            # Note the commit messages can be None if there are failed tasks.
-            if abort:
-                writer.abort(commit_messages, batch_id)
-            else:
-                writer.commit(commit_messages, batch_id)
-
-        # Send a status code back to JVM.
-        write_int(0, outfile)
-        outfile.flush()
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
-
-    send_accumulator_updates(outfile)
-
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":
