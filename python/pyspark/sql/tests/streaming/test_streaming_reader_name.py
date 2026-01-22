@@ -18,7 +18,7 @@
 import tempfile
 import time
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -81,54 +81,33 @@ class DataStreamReaderNameTests(ReusedSQLTestCase):
 
             self.assertTrue(df.isStreaming, "DataFrame should be streaming")
 
-    def test_invalid_name_with_hyphen(self):
-        """Test that source name with hyphen is rejected."""
-        with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
-            self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
-            with self.assertRaises(Exception) as context:
-                self.spark.readStream.format("parquet").schema("id LONG").name("my-source").load(
-                    tmpdir
-                )
+    def test_invalid_names(self):
+        """Test that various invalid source names are rejected."""
+        invalid_names = [
+            "my-source",      # hyphen
+            "my source",      # space
+            "my.source",      # dot
+            "my@source",      # special char
+            "my$source",      # dollar sign
+            "my#source",      # hash
+            "my!source",      # exclamation
+        ]
 
-            # The error message should contain information about invalid name
-            self.assertIn("source", str(context.exception).lower())
+        for invalid_name in invalid_names:
+            with self.subTest(name=invalid_name):
+                with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
+                    self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                    with self.assertRaises(PySparkValueError) as context:
+                        self.spark.readStream.format("parquet").schema("id LONG").name(
+                            invalid_name
+                        ).load(tmpdir)
 
-    def test_invalid_name_with_space(self):
-        """Test that source name with space is rejected."""
-        with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
-            self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
-            with self.assertRaises(Exception) as context:
-                self.spark.readStream.format("parquet").schema("id LONG").name("my source").load(
-                    tmpdir
-                )
-
-            self.assertIn("source", str(context.exception).lower())
-
-    def test_invalid_name_with_dot(self):
-        """Test that source name with dot is rejected."""
-        with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
-            self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
-            with self.assertRaises(Exception) as context:
-                self.spark.readStream.format("parquet").schema("id LONG").name("my.source").load(
-                    tmpdir
-                )
-
-            self.assertIn("source", str(context.exception).lower())
-
-    def test_invalid_name_with_special_chars(self):
-        """Test that source name with special characters is rejected."""
-        with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
-            self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
-            with self.assertRaises(Exception) as context:
-                self.spark.readStream.format("parquet").schema("id LONG").name("my@source").load(
-                    tmpdir
-                )
-
-            self.assertIn("source", str(context.exception).lower())
+                    # The error message should contain information about invalid name
+                    self.assertIn("source", str(context.exception).lower())
 
     def test_invalid_name_empty_string(self):
         """Test that empty string is rejected."""
-        with self.assertRaises(PySparkTypeError):
+        with self.assertRaises(PySparkValueError):
             self.spark.readStream.format("rate").name("").load()
 
     def test_invalid_name_none(self):
