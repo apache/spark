@@ -64,7 +64,7 @@ if have_pandas:
 # If you need to re-generate the golden files, you need to set the
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
 # e.g.:
-# PARK_GENERATE_GOLDEN_FILES=1 python/run-tests -k
+# SPARK_GENERATE_GOLDEN_FILES=1 python/run-tests -k
 # --testnames 'pyspark.sql.tests.coercion.test_python_udf_return_type'
 # If package tabulate https://pypi.org/project/tabulate/ is installed,
 # it will also re-generate the Markdown files.
