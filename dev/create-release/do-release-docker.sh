@@ -45,7 +45,7 @@ Options are:
   -n          : dry run mode. Performs checks and local builds, but do not upload anything.
   -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
   -j [path]   : path to local JDK installation to use for building. By default the script will
-                use openjdk17 installed in the docker image.
+                use openjdk8 installed in the docker image.
   -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish, finalize
 EOF
 }
@@ -120,6 +120,11 @@ GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
 $GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
+# Build base image first (contains common tools shared across all branches)
+run_silent "Building spark-rm-base image..." "docker-build-base.log" \
+  docker build -t "spark-rm-base:latest" -f "$SELF/spark-rm/Dockerfile.base" "$SELF/spark-rm"
+
+# Build branch-specific image (extends base with Java/Python versions for this branch)
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"
 
@@ -146,6 +151,7 @@ RELEASE_TAG=$RELEASE_TAG
 GIT_REF=$GIT_REF
 SPARK_PACKAGE_VERSION=$SPARK_PACKAGE_VERSION
 ASF_USERNAME=$ASF_USERNAME
+ASF_NEXUS_TOKEN=$ASF_NEXUS_TOKEN
 GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
