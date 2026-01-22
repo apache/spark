@@ -490,6 +490,7 @@ pyspark_core = Module(
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
         # unittests for upstream projects
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
@@ -596,6 +597,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_connect_compatibility",
         "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
         "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
+        "pyspark.sql.tests.coercion.test_python_udf_return_type",
     ],
 )
 

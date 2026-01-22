@@ -350,10 +350,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // SPARK-35009: avoid creating multiple monitor threads for the same python worker
       // and task context
       if (PythonRunner.runningMonitorThreads.add(key)) {
-        new MonitorThread(SparkEnv.get, worker, context).start()
+        new MonitorThread(SparkEnv.get, worker, context, releasedOrClosed).start()
       }
     } else {
-      new MonitorThread(SparkEnv.get, worker, context).start()
+      new MonitorThread(SparkEnv.get, worker, context, releasedOrClosed).start()
     }
 
     // Return an iterator that read lines from the process's stdout
@@ -481,6 +481,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }.start()
         }
+        var boundPort: Int = -1
         if (isBarrier) {
           // Close ServerSocket on task completion.
           serverSocketChannel.foreach { server =>
@@ -491,42 +492,24 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
           if (isUnixDomainSock) {
             logDebug(s"Started ServerSocket on with Unix Domain Socket $sockPath.")
-            dataOut.writeBoolean(/* isBarrier = */true)
-            dataOut.writeInt(-1)
-            PythonRDD.writeUTF(sockPath.getPath, dataOut)
           } else {
-            val boundPort: Int = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
+            boundPort = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
             if (boundPort == -1) {
               val message = "ServerSocket failed to bind to Java side."
               logError(message)
               throw new SparkException(message)
             }
             logDebug(s"Started ServerSocket on port $boundPort.")
-            dataOut.writeBoolean(/* isBarrier = */true)
-            dataOut.writeInt(boundPort)
-            PythonRDD.writeUTF(authHelper.secret, dataOut)
           }
-        } else {
-          dataOut.writeBoolean(/* isBarrier = */false)
         }
+
         // Write out the TaskContextInfo
-        dataOut.writeInt(context.stageId())
-        dataOut.writeInt(context.partitionId())
-        dataOut.writeInt(context.attemptNumber())
-        dataOut.writeLong(context.taskAttemptId())
-        dataOut.writeInt(context.cpus())
-        val resources = context.resources()
-        dataOut.writeInt(resources.size)
-        resources.foreach { case (k, v) =>
-          PythonRDD.writeUTF(k, dataOut)
-          PythonRDD.writeUTF(v.name, dataOut)
-          dataOut.writeInt(v.addresses.length)
-          v.addresses.foreach { case addr =>
-            PythonRDD.writeUTF(addr, dataOut)
-          }
-        }
-        val localProps = context.getLocalProperties.asScala
-        PythonWorkerUtils.writeConf(localProps.toMap, dataOut)
+        PythonWorkerUtils.writeTaskContext(
+          context,
+          if (isUnixDomainSock) Left(sockPath.getPath) else Right(boundPort),
+          if (isUnixDomainSock) None else Some(authHelper.secret),
+          dataOut
+        )
 
         PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
@@ -725,7 +708,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
    * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
    * threads can block indefinitely.
    */
-  class MonitorThread(env: SparkEnv, worker: PythonWorker, context: TaskContext)
+  class MonitorThread(
+      env: SparkEnv,
+      worker: PythonWorker,
+      context: TaskContext,
+      releasedOrClosed: AtomicBoolean)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
@@ -741,7 +728,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
       if (!context.isCompleted()) {
         Thread.sleep(taskKillTimeout)
-        if (!context.isCompleted()) {
+        if (!context.isCompleted() && releasedOrClosed.compareAndSet(false, true)) {
           try {
             logWarning(log"Incomplete task interrupted: Attempting to kill Python Worker - " +
               log"${MDC(TASK_NAME, taskIdentifier(context))}")
