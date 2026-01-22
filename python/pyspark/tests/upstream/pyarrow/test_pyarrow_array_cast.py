@@ -18,12 +18,25 @@
 """
 Tests for PyArrow's pa.Array.cast() method with default parameters only.
 
-## Numerical Type Conversion Matrix (pa.Array.cast with default safe=True)
+## Scalar Type Conversion Matrix (pa.Array.cast with default safe=True)
 
 ### Covered Types:
 - **Signed Integers**: int8, int16, int32, int64
 - **Unsigned Integers**: uint8, uint16, uint32, uint64
 - **Floats**: float16, float32, float64
+
+## Nested Type Conversion Matrix
+
+### Covered Types:
+- **List variants**: list, large_list, fixed_size_list
+- **Map**: map<key, value>
+- **Struct**: struct<fields...>
+
+### Container Cast Rules:
+- List variants (list, large_list, fixed_size_list) can cast to each other
+- Map can cast to list<struct<key, value>> (but not vice versa)
+- Cross-container casts (list<->map, list<->struct, map<->struct) are not supported
+- Nested types cannot cast to scalar types
 """
 
 import platform
@@ -7142,6 +7155,423 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             ],
         }
         self._run_cast_tests(casts, "time64_ns")
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PyArrowNestedTypeCastTests(unittest.TestCase):
+    """
+    Tests for PyArrow nested type casts (list, map, struct) with safe=True.
+
+    This class tests container-level type conversions:
+    1. List variants: list <-> large_list <-> fixed_size_list
+    2. Map <-> List<Struct>: map<K,V> -> list<struct<key:K, value:V>>
+    3. Cross-container failures: list<->map, list<->struct, map<->struct
+    """
+
+    def _run_nested_cast_test(self, src_arr, tgt_type, expected, case_id):
+        """Run a single nested type cast test."""
+        import pyarrow as pa
+
+        if isinstance(expected, type) and issubclass(expected, Exception):
+            with self.assertRaises(expected, msg=f"{case_id}: expected {expected.__name__}"):
+                src_arr.cast(tgt_type)
+        elif isinstance(expected, pa.Array):
+            result = src_arr.cast(tgt_type)
+            self.assertEqual(
+                result.to_pylist(),
+                expected.to_pylist(),
+                f"{case_id}: mismatch, expected {expected.to_pylist()}, got {result.to_pylist()}",
+            )
+        else:
+            self.fail(f"{case_id}: invalid expected type: {type(expected)}")
+
+    # =========================================================================
+    # SECTION 1: List Variants Cast Tests
+    # =========================================================================
+
+    def test_list_to_large_list(self):
+        """Test list -> large_list cast."""
+        import pyarrow as pa
+
+        # Basic cast
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        tgt = pa.large_list(pa.int32())
+        expected = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "list<int32> -> large_list<int32>")
+
+        # With nulls
+        src = pa.array([[1, None], None, [3]], type=pa.list_(pa.int32()))
+        tgt = pa.large_list(pa.int32())
+        expected = pa.array([[1, None], None, [3]], type=pa.large_list(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "list<int32> with nulls -> large_list<int32>")
+
+        # Empty list
+        src = pa.array([[], [1]], type=pa.list_(pa.int32()))
+        tgt = pa.large_list(pa.int32())
+        expected = pa.array([[], [1]], type=pa.large_list(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "list<int32> with empty -> large_list<int32>")
+
+        # String elements
+        src = pa.array([["a", "b"], ["c"]], type=pa.list_(pa.string()))
+        tgt = pa.large_list(pa.string())
+        expected = pa.array([["a", "b"], ["c"]], type=pa.large_list(pa.string()))
+        self._run_nested_cast_test(src, tgt, expected, "list<string> -> large_list<string>")
+
+    def test_large_list_to_list(self):
+        """Test large_list -> list cast."""
+        import pyarrow as pa
+
+        # Basic cast
+        src = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32()))
+        tgt = pa.list_(pa.int32())
+        expected = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "large_list<int32> -> list<int32>")
+
+        # With nulls
+        src = pa.array([[1, None], None, [3]], type=pa.large_list(pa.int32()))
+        tgt = pa.list_(pa.int32())
+        expected = pa.array([[1, None], None, [3]], type=pa.list_(pa.int32()))
+        self._run_nested_cast_test(
+            src, tgt, expected, "large_list<int32> with nulls -> list<int32>"
+        )
+
+    def test_list_to_fixed_size_list(self):
+        """Test list -> fixed_size_list cast."""
+        import pyarrow as pa
+
+        # Matching size - success
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        tgt = pa.list_(pa.int32(), 2)
+        expected = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        self._run_nested_cast_test(src, tgt, expected, "list<int32> -> fixed_list<int32,2>")
+
+        # With nulls (null elements ok, null values in list ok)
+        src = pa.array([[1, None], None], type=pa.list_(pa.int32()))
+        tgt = pa.list_(pa.int32(), 2)
+        expected = pa.array([[1, None], None], type=pa.list_(pa.int32(), 2))
+        self._run_nested_cast_test(
+            src, tgt, expected, "list<int32> with nulls -> fixed_list<int32,2>"
+        )
+
+        # Mismatched size - failure
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        tgt = pa.list_(pa.int32(), 3)
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowInvalid, "list<int32>[2 elements] -> fixed_list<int32,3>"
+        )
+
+        # Variable length lists - failure
+        src = pa.array([[1, 2], [3, 4, 5]], type=pa.list_(pa.int32()))
+        tgt = pa.list_(pa.int32(), 2)
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowInvalid, "list<int32>[variable] -> fixed_list<int32,2>"
+        )
+
+    def test_fixed_size_list_to_list(self):
+        """Test fixed_size_list -> list cast."""
+        import pyarrow as pa
+
+        # Basic cast
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        tgt = pa.list_(pa.int32())
+        expected = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "fixed_list<int32,2> -> list<int32>")
+
+        # With nulls
+        src = pa.array([[1, None], None], type=pa.list_(pa.int32(), 2))
+        tgt = pa.list_(pa.int32())
+        expected = pa.array([[1, None], None], type=pa.list_(pa.int32()))
+        self._run_nested_cast_test(
+            src, tgt, expected, "fixed_list<int32,2> with nulls -> list<int32>"
+        )
+
+    def test_fixed_size_list_to_large_list(self):
+        """Test fixed_size_list -> large_list cast."""
+        import pyarrow as pa
+
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        tgt = pa.large_list(pa.int32())
+        expected = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32()))
+        self._run_nested_cast_test(src, tgt, expected, "fixed_list<int32,2> -> large_list<int32>")
+
+    def test_large_list_to_fixed_size_list(self):
+        """Test large_list -> fixed_size_list cast."""
+        import pyarrow as pa
+
+        # Matching size - success
+        src = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32()))
+        tgt = pa.list_(pa.int32(), 2)
+        expected = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        self._run_nested_cast_test(src, tgt, expected, "large_list<int32> -> fixed_list<int32,2>")
+
+        # Mismatched size - failure
+        src = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32()))
+        tgt = pa.list_(pa.int32(), 3)
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowInvalid, "large_list<int32>[2 elements] -> fixed_list<int32,3>"
+        )
+
+    def test_fixed_size_list_to_fixed_size_list(self):
+        """Test fixed_size_list -> fixed_size_list cast."""
+        import pyarrow as pa
+
+        # Same size - success
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        tgt = pa.list_(pa.int64(), 2)  # different element type, same size
+        expected = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int64(), 2))
+        self._run_nested_cast_test(
+            src, tgt, expected, "fixed_list<int32,2> -> fixed_list<int64,2>"
+        )
+
+        # Different size - failure
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2))
+        tgt = pa.list_(pa.int32(), 3)
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowTypeError, "fixed_list<int32,2> -> fixed_list<int32,3>"
+        )
+
+    # =========================================================================
+    # SECTION 2: Map <-> List<Struct> Cast Tests
+    # =========================================================================
+
+    def test_map_to_list_struct(self):
+        """Test map -> list<struct<key, value>> cast."""
+        import pyarrow as pa
+
+        # Basic cast - map<string, int32> -> list<struct<key:string, value:int32>>
+        src = pa.array(
+            [[("a", 1), ("b", 2)], [("c", 3)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        tgt = pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())]))
+        expected = pa.array(
+            [[{"key": "a", "value": 1}, {"key": "b", "value": 2}], [{"key": "c", "value": 3}]],
+            type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+        )
+        self._run_nested_cast_test(
+            src, tgt, expected, "map<str,int32> -> list<struct<key,value>>"
+        )
+
+        # With null values
+        src = pa.array(
+            [[("a", 1), ("b", None)], None],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        tgt = pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())]))
+        expected = pa.array(
+            [[{"key": "a", "value": 1}, {"key": "b", "value": None}], None],
+            type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+        )
+        self._run_nested_cast_test(
+            src, tgt, expected, "map<str,int32> with nulls -> list<struct<key,value>>"
+        )
+
+        # Empty map
+        src = pa.array(
+            [[], [("a", 1)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        tgt = pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())]))
+        expected = pa.array(
+            [[], [{"key": "a", "value": 1}]],
+            type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+        )
+        self._run_nested_cast_test(
+            src, tgt, expected, "map<str,int32> with empty -> list<struct<key,value>>"
+        )
+
+        # Different key/value types
+        src = pa.array(
+            [[(1, "x"), (2, "y")]],
+            type=pa.map_(pa.int64(), pa.string()),
+        )
+        tgt = pa.list_(pa.struct([("key", pa.int64()), ("value", pa.string())]))
+        expected = pa.array(
+            [[{"key": 1, "value": "x"}, {"key": 2, "value": "y"}]],
+            type=pa.list_(pa.struct([("key", pa.int64()), ("value", pa.string())])),
+        )
+        self._run_nested_cast_test(
+            src, tgt, expected, "map<int64,str> -> list<struct<key,value>>"
+        )
+
+    def test_map_to_list_struct_custom_field_names(self):
+        """Test map -> list<struct> with custom field names succeeds."""
+        import pyarrow as pa
+
+        # Custom field names - PyArrow allows any field names, not just "key"/"value"
+        src = pa.array(
+            [[("a", 1), ("b", 2)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        # Using "k" and "v" instead of "key" and "value" - this works!
+        tgt = pa.list_(pa.struct([("k", pa.string()), ("v", pa.int32())]))
+        expected = pa.array(
+            [[{"k": "a", "v": 1}, {"k": "b", "v": 2}]],
+            type=pa.list_(pa.struct([("k", pa.string()), ("v", pa.int32())])),
+        )
+        self._run_nested_cast_test(
+            src, tgt, expected, "map<str,int32> -> list<struct<k,v>> (custom names)"
+        )
+
+    def test_list_struct_to_map(self):
+        """Test list<struct<key, value>> -> map cast (should fail)."""
+        import pyarrow as pa
+
+        # This direction is NOT supported
+        src = pa.array(
+            [[{"key": "a", "value": 1}, {"key": "b", "value": 2}]],
+            type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+        )
+        tgt = pa.map_(pa.string(), pa.int32())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "list<struct<key,value>> -> map<str,int32>"
+        )
+
+    # =========================================================================
+    # SECTION 3: Cross-Container Cast Failures
+    # =========================================================================
+
+    def test_list_to_map_fails(self):
+        """Test list -> map cast fails."""
+        import pyarrow as pa
+
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        tgt = pa.map_(pa.string(), pa.int32())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "list<int32> -> map<str,int32>"
+        )
+
+    def test_list_to_struct_fails(self):
+        """Test list -> struct cast fails."""
+        import pyarrow as pa
+
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+        tgt = pa.struct([("x", pa.int32()), ("y", pa.int32())])
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "list<int32> -> struct<x,y>"
+        )
+
+    def test_struct_to_list_fails(self):
+        """Test struct -> list cast fails."""
+        import pyarrow as pa
+
+        src = pa.array(
+            [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
+            type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+        )
+        tgt = pa.list_(pa.int32())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "struct<x,y> -> list<int32>"
+        )
+
+    def test_struct_to_map_fails(self):
+        """Test struct -> map cast fails."""
+        import pyarrow as pa
+
+        src = pa.array(
+            [{"x": 1, "y": 2}],
+            type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+        )
+        tgt = pa.map_(pa.string(), pa.int32())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "struct<x,y> -> map<str,int32>"
+        )
+
+    def test_map_to_struct_fails(self):
+        """Test map -> struct cast fails."""
+        import pyarrow as pa
+
+        src = pa.array(
+            [[("x", 1), ("y", 2)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        tgt = pa.struct([("x", pa.int32()), ("y", pa.int32())])
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowNotImplementedError, "map<str,int32> -> struct<x,y>"
+        )
+
+    def test_map_to_list_scalar_fails(self):
+        """Test map -> list<scalar> cast fails (not list<struct>)."""
+        import pyarrow as pa
+
+        # map -> list<key_type> fails
+        src = pa.array(
+            [[("a", 1), ("b", 2)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+        tgt = pa.list_(pa.string())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowTypeError, "map<str,int32> -> list<str>"
+        )
+
+        # map -> list<value_type> fails
+        tgt = pa.list_(pa.int32())
+        self._run_nested_cast_test(
+            src, tgt, pa.lib.ArrowTypeError, "map<str,int32> -> list<int32>"
+        )
+
+    # =========================================================================
+    # SECTION 4: Nested -> Scalar Cast Failures
+    # =========================================================================
+
+    def test_list_to_scalar_fails(self):
+        """Test list -> scalar cast fails."""
+        import pyarrow as pa
+
+        src = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32()))
+
+        # list -> string
+        self._run_nested_cast_test(
+            src, pa.string(), pa.lib.ArrowNotImplementedError, "list<int32> -> string"
+        )
+
+        # list -> int
+        self._run_nested_cast_test(
+            src, pa.int64(), pa.lib.ArrowNotImplementedError, "list<int32> -> int64"
+        )
+
+        # list -> binary
+        self._run_nested_cast_test(
+            src, pa.binary(), pa.lib.ArrowNotImplementedError, "list<int32> -> binary"
+        )
+
+    def test_map_to_scalar_fails(self):
+        """Test map -> scalar cast fails."""
+        import pyarrow as pa
+
+        src = pa.array(
+            [[("a", 1), ("b", 2)]],
+            type=pa.map_(pa.string(), pa.int32()),
+        )
+
+        # map -> string
+        self._run_nested_cast_test(
+            src, pa.string(), pa.lib.ArrowNotImplementedError, "map<str,int32> -> string"
+        )
+
+        # map -> int
+        self._run_nested_cast_test(
+            src, pa.int64(), pa.lib.ArrowNotImplementedError, "map<str,int32> -> int64"
+        )
+
+    def test_struct_to_scalar_fails(self):
+        """Test struct -> scalar cast fails."""
+        import pyarrow as pa
+
+        src = pa.array(
+            [{"x": 1, "y": 2}],
+            type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+        )
+
+        # struct -> string
+        self._run_nested_cast_test(
+            src, pa.string(), pa.lib.ArrowNotImplementedError, "struct<x,y> -> string"
+        )
+
+        # struct -> int
+        self._run_nested_cast_test(
+            src, pa.int64(), pa.lib.ArrowNotImplementedError, "struct<x,y> -> int64"
+        )
 
 
 if __name__ == "__main__":
