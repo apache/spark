@@ -202,6 +202,24 @@ class RunnerConf:
 
 
 def report_times(outfile, boot, init, finish):
+    """
+    Report timing data to the output file.
+
+    Parameters
+    ----------
+    outfile : file-like object
+        The output file to write timing data to.
+    boot : float
+        Boot time in seconds.
+    init : float
+        Initialization time in seconds.
+    finish : float
+        Finish time in seconds.
+
+    Notes
+    -----
+    Times are converted to milliseconds (multiplied by 1000) before writing.
+    """
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
     write_long(int(1000 * init), outfile)
@@ -1302,6 +1320,28 @@ def wrap_bounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_ty
 
 
 def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
+    """
+    Wrap a function to support keyword arguments from positional arguments.
+
+    This function creates a wrapper that converts positional arguments into
+    keyword arguments based on the provided offsets.
+
+    Parameters
+    ----------
+    f : callable
+        The function to wrap.
+    args_offsets : list
+        List of offsets for positional arguments.
+    kwargs_offsets : dict
+        Dictionary mapping keyword argument names to their offsets.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - The wrapped function (or original function if no kwargs)
+        - Combined list of argument offsets (args + kwargs offsets)
+    """
     if len(kwargs_offsets):
         keys = list(kwargs_offsets.keys())
 
@@ -1322,6 +1362,24 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
 
 
 def _is_iter_based(eval_type: int) -> bool:
+    """
+    Check if the evaluation type is iterator-based.
+
+    Parameters
+    ----------
+    eval_type : int
+        The Python evaluation type constant.
+
+    Returns
+    -------
+    bool
+        True if the evaluation type is iterator-based, False otherwise.
+
+    Notes
+    -----
+    Iterator-based UDFs process data in batches using iterators rather than
+    processing all data at once.
+    """
     return eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
