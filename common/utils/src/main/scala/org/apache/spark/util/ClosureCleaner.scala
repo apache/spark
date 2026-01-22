@@ -617,7 +617,7 @@ private[spark] object ClosureCleaner extends Logging {
       outerThis: AnyRef,
       lambdaProxy: SerializedLambda): Option[F] = {
     val useClone = Option(
-      System.getProperty("spark.closureCleaner.cloneIndyLambda")).getOrElse("true").toBoolean
+      System.getProperty("spark.closureCleaner.cloneIndyLambda")).getOrElse("false").toBoolean
     val javaVersion = Runtime.version().feature()
 
     if (useClone || javaVersion >= 22) {
