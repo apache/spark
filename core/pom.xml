@@ -189,6 +189,11 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.compression</groupId>
+      <artifactId>jetty-compression-common</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.compression</groupId>
       <artifactId>jetty-compression-gzip</artifactId>
       <scope>compile</scope>
     </dependency>
@@ -551,7 +556,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-gzip
+                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-common,jetty-compression-gzip
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
@@ -579,6 +584,7 @@
               <include>org.eclipse.jetty:jetty-server</include>
               <include>org.eclipse.jetty:jetty-session</include>
               <include>org.eclipse.jetty.compression:jetty-compression-server</include>
+              <include>org.eclipse.jetty.compression:jetty-compression-common</include>
               <include>org.eclipse.jetty.compression:jetty-compression-gzip</include>
               <include>com.google.guava:guava</include>
               <include>com.google.guava:failureaccess</include>
