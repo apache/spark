@@ -61,9 +61,6 @@ private[spark] object ClosureCleaner extends Logging {
     cls.getName.contains("$anonfun$")
   }
 
-  private val useCloneBasedClosureCleaner =
-    sys.env.get("SPARK_CLONE_BASED_CLOSURE_CLEANER").isDefined || Runtime.version().feature() >= 22
-
   // Get a list of the outer objects and their classes of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
   // possibly the class that the outermost closure is in, if any. We stop searching
@@ -619,7 +616,11 @@ private[spark] object ClosureCleaner extends Logging {
       indyLambda: F,
       outerThis: AnyRef,
       lambdaProxy: SerializedLambda): Option[F] = {
-    if (useCloneBasedClosureCleaner) {
+    val javaVersion = Runtime.version().feature()
+    val useClone = System.getProperty("spark.cloneBasedClosureCleaner.enabled") == "true" ||
+      System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22
+
+    if (useClone) {
       val factory = makeClonedIndyLambdaFacory(indyLambda.getClass, lambdaProxy)
 
       val argsBuffer = new ArrayBuffer[Object]()
