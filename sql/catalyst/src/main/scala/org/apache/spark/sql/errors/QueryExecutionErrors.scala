@@ -3224,4 +3224,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "leftDim" -> leftDim.toString,
         "rightDim" -> rightDim.toString))
   }
+
+  def invalidVectorNormDegreeError(
+    function: String,
+    degree: Float): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VECTOR_NORM_DEGREE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "degree" -> degree.toString))
+  }
 }
