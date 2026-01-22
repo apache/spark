@@ -341,7 +341,8 @@
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
     <postgresql.version>42.7.10</postgresql.version>
-    <db2.jcc.version>11.5.9.0</db2.jcc.version>
+    <!-- A special version that bundles lz4-java 1.10.1 -->
+    <db2.jcc.version>12.1.3.0_special_74723</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
