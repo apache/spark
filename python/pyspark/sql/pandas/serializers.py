@@ -1050,11 +1050,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
 
 class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
-    def __init__(self, assign_cols_by_name):
-        super().__init__(
-            assign_cols_by_name=assign_cols_by_name,
-        )
-
     def load_stream(self, stream):
         """
         Flatten the struct into Arrow's record batches.
@@ -1091,20 +1086,6 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 # Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF,
 # and SQL_GROUPED_AGG_ARROW_ITER_UDF
 class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
-    def __init__(
-        self,
-        timezone,
-        safecheck,
-        assign_cols_by_name,
-        arrow_cast,
-    ):
-        super().__init__(
-            timezone=timezone,
-            safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
-            arrow_cast=arrow_cast,
-        )
-
     def load_stream(self, stream):
         """
         Yield an iterator that produces one tuple of column arrays per batch.
@@ -1276,9 +1257,6 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     assign_cols_by_name : bool
         If True, then DataFrames will get columns by name
     """
-
-    def __init__(self, assign_cols_by_name):
-        super().__init__(assign_cols_by_name)
 
     def load_stream(self, stream):
         """
