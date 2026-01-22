@@ -146,8 +146,13 @@ class FunctionResolution(
       nameParts: Seq[String],
       node: Option[UnresolvedFunction] = None): FunctionType = {
 
-    // Check if it's explicitly qualified as builtin or temp
-    if (maybeBuiltinFunctionName(nameParts)) {
+    // Check if it's explicitly qualified as extension, builtin, or temp
+    if (maybeExtensionFunctionName(nameParts)) {
+      // Explicitly qualified as extension (e.g., extension.func or system.extension.func)
+      if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
+        return FunctionType.Builtin  // Extensions are treated as builtin for resolution purposes
+      }
+    } else if (maybeBuiltinFunctionName(nameParts)) {
       // Explicitly qualified as builtin (e.g., builtin.abs or system.builtin.abs)
       if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
         return FunctionType.Builtin
@@ -163,10 +168,11 @@ class FunctionResolution(
       val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, node)
       funcInfoOpt match {
         case Some(info) =>
-          // Determine if it's temp or builtin from the ExpressionInfo
-          // Internal and temp functions have database set to SESSION_NAMESPACE
-          // Note: Internal functions also use SESSION_NAMESPACE but are from internal registry
-          if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
+          // Determine if it's extension, temp, or builtin from the ExpressionInfo
+          if (info.getDb == CatalogManager.EXTENSION_NAMESPACE) {
+            // Extensions are treated as builtin for resolution purposes
+            return FunctionType.Builtin
+          } else if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
             // Could be temp or internal - check if it's in the internal registry
             if (nameParts.size == 1 && node.exists(_.isInternal)) {
               return FunctionType.Builtin  // Internal functions are treated as builtins
@@ -204,6 +210,9 @@ class FunctionResolution(
     // Step 1: Try to resolve as scalar function
     val expression = if (name.size == 1 && u.isInternal) {
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
+    } else if (maybeExtensionFunctionName(name)) {
+      // Explicitly qualified as extension - resolve only extension
+      v1SessionCatalog.resolveExtensionFunction(name.last, arguments)
     } else if (maybeBuiltinFunctionName(name)) {
       // Explicitly qualified as builtin - resolve only builtin
       v1SessionCatalog.resolveBuiltinFunction(name.last, arguments)
@@ -219,6 +228,7 @@ class FunctionResolution(
         throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
       } else {
         // No temp table function - safe to resolve as scalar
+        // This will use the PATH resolution order: extension -> builtin -> session
         v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
       }
     } else {
@@ -272,6 +282,14 @@ class FunctionResolution(
     }
 
     tableFunctionResult
+  }
+
+  /**
+   * Check if a function name is qualified as an extension function.
+   * Valid forms: extension.func or system.extension.func
+   */
+  private def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
+    FunctionResolution.maybeExtensionFunctionName(nameParts)
   }
 
   /**
@@ -532,6 +550,14 @@ class FunctionResolution(
  */
 object FunctionResolution {
   /**
+   * Check if a function name is qualified as an extension function.
+   * Valid forms: extension.func or system.extension.func
+   */
+  def maybeExtensionFunctionName(nameParts: Seq[String]): Boolean = {
+    isQualifiedWithNamespace(nameParts, CatalogManager.EXTENSION_NAMESPACE)
+  }
+
+  /**
    * Check if a function name is qualified as a builtin function.
    * Valid forms: builtin.func or system.builtin.func
    */
@@ -552,7 +578,7 @@ object FunctionResolution {
    * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
    *
    * @param nameParts The multi-part name to check
-   * @param namespace The namespace to check for (e.g., "builtin", "session")
+   * @param namespace The namespace to check for (e.g., "extension", "builtin", "session")
    * @return true if qualified with the given namespace
    */
   def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {

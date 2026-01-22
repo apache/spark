@@ -89,10 +89,22 @@ class SessionCatalog(
    * Database qualifier used to store temporary functions in the function registry.
    * Temporary functions use composite keys to coexist with builtin functions of the same name:
    * - Builtin functions: FunctionIdentifier(name, None)
+   * - Extension functions: FunctionIdentifier(name, Some(CatalogManager.EXTENSION_NAMESPACE))
    * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
-   * This allows both to exist in the same registry without conflicts.
+   * This allows all three to exist in the same registry without conflicts.
    */
   private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
+  private val EXTENSION_FUNCTION_DB = CatalogManager.EXTENSION_NAMESPACE
+
+  /**
+   * Creates a FunctionIdentifier for an extension function with the EXTENSION_FUNCTION_DB database
+   * qualifier. This enables extension functions to coexist with builtin and temp functions.
+   *
+   * @param name The function name (unqualified)
+   * @return FunctionIdentifier with database = EXTENSION_FUNCTION_DB
+   */
+  private def extensionFunctionIdentifier(name: String): FunctionIdentifier =
+    FunctionIdentifier(format(name), Some(EXTENSION_FUNCTION_DB))
 
   /**
    * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
@@ -103,6 +115,16 @@ class SessionCatalog(
    */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
     FunctionIdentifier(format(name), Some(TEMP_FUNCTION_DB))
+
+  /**
+   * Checks if a FunctionIdentifier represents an extension function by checking for the
+   * EXTENSION_FUNCTION_DB database qualifier.
+   *
+   * @param identifier The FunctionIdentifier to check
+   * @return true if this is an extension function identifier
+   */
+  private def isExtensionFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
+    identifier.database.contains(EXTENSION_FUNCTION_DB)
 
   /**
    * Checks if a FunctionIdentifier represents a temporary function by checking for the
@@ -125,9 +147,15 @@ class SessionCatalog(
    * Each entry is a FunctionIdentifier representing a namespace (catalog + database).
    * The funcName field is unused (empty string) as these represent namespace templates.
    *
-   * Resolution order:
-   * 1. system.session (temporary functions)
-   * 2. system.builtin (built-in functions)
+   * Resolution order (CRITICAL FOR SECURITY):
+   * 1. system.extension (extension functions - can shadow built-ins)
+   * 2. system.builtin (built-in functions - protected from user shadowing)
+   * 3. system.session (temporary functions - CANNOT shadow built-ins)
+   *
+   * This order ensures that:
+   * - Extensions (admin-installed, trusted) can shadow built-ins if needed
+   * - Built-ins are resolved BEFORE user temp functions, preventing security exploits
+   * - Users cannot shadow security-critical functions like current_user()
    *
    * When resolving a view, the system.session namespace is included in the path, but
    * handleViewContext filters to only return temporary functions that were referred to
@@ -135,6 +163,11 @@ class SessionCatalog(
    *
    * These identifiers are cached for performance since they're accessed frequently.
    */
+  private val EXTENSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
+    funcName = "",
+    database = Some(CatalogManager.EXTENSION_NAMESPACE),
+    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
+
   private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
     funcName = "",
     database = Some(CatalogManager.SESSION_NAMESPACE),
@@ -145,8 +178,12 @@ class SessionCatalog(
     database = Some(CatalogManager.BUILTIN_NAMESPACE),
     catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
-  // The resolution path always includes both session and builtin namespaces.
-  private val RESOLUTION_PATH = Seq(SESSION_NAMESPACE_TEMPLATE, BUILTIN_NAMESPACE_TEMPLATE)
+  // The resolution path: extension -> builtin -> session (security-focused order)
+  private val RESOLUTION_PATH = Seq(
+    EXTENSION_NAMESPACE_TEMPLATE,
+    BUILTIN_NAMESPACE_TEMPLATE,
+    SESSION_NAMESPACE_TEMPLATE
+  )
 
   /**
    * Returns the resolution path for function lookup.
@@ -156,10 +193,11 @@ class SessionCatalog(
 
   /**
    * Maps a namespace template to an actual storage identifier for a specific function.
-   * This handles the asymmetry between how builtins and temp functions are stored.
+   * This handles the asymmetry between how builtins, extensions, and temp functions are stored.
    *
    * Storage conventions:
    * - Builtin functions: FunctionIdentifier(name, None, None)
+   * - Extension functions: FunctionIdentifier(name, Some("extension"), None)
    * - Temp functions: FunctionIdentifier(name, Some("session"), None)
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
    *
@@ -171,6 +209,10 @@ class SessionCatalog(
       namespace: FunctionIdentifier,
       name: String): FunctionIdentifier = {
     namespace.database match {
+      case Some(CatalogManager.EXTENSION_NAMESPACE) =>
+        // Extension functions: stored with database="extension", no catalog
+        extensionFunctionIdentifier(name)
+
       case Some(CatalogManager.SESSION_NAMESPACE) =>
         // Temp functions: stored with database="session", no catalog
         tempFunctionIdentifier(name)
@@ -187,6 +229,13 @@ class SessionCatalog(
         }
         FunctionIdentifier(name, namespace.database, namespace.catalog)
     }
+  }
+
+  /**
+   * Checks if a namespace represents extension functions.
+   */
+  private def isExtensionNamespace(namespace: FunctionIdentifier): Boolean = {
+    namespace.database.contains(CatalogManager.EXTENSION_NAMESPACE)
   }
 
   /**
@@ -2252,12 +2301,12 @@ class SessionCatalog(
     } else {
       // Persistent function - the metastore already enforces cross-type uniqueness,
       // so we only check the target registry here.
-      if (registry.functionExists(function.name) && !overrideIfExists) {
-        throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
-      }
+    if (registry.functionExists(function.name) && !overrideIfExists) {
+      throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+    }
 
-      val info = function.toExpressionInfo
-      registry.registerFunction(function.name, info, functionBuilder)
+    val info = function.toExpressionInfo
+    registry.registerFunction(function.name, info, functionBuilder)
     }
   }
 
@@ -2319,7 +2368,7 @@ class SessionCatalog(
 
       hasTemp || hasBuiltin
     } else {
-      functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
     }
   }
 
@@ -2422,16 +2471,21 @@ class SessionCatalog(
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or temp function.
+   * Look up the `ExpressionInfo` of the given function by name.
+   * Searches through extension, built-in, and temp functions in that order.
    * This only supports scalar functions.
+   *
+   * Resolution order: extension -> builtin -> session (temp)
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     lookupFunctionWithShadowing(name, functionRegistry, checkBuiltinOperators = true)
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or
-   * temp table function.
+   * Look up the `ExpressionInfo` of the given function by name.
+   * Searches through extension, built-in, and temp table functions in that order.
+   *
+   * Resolution order: extension -> builtin -> session (temp)
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
@@ -2478,6 +2532,22 @@ class SessionCatalog(
   }
 
   /**
+   * Look up only extension function (no builtin or temp).
+   */
+  def lookupExtensionFunction(name: String): Option[ExpressionInfo] = {
+    val extensionIdentifier = extensionFunctionIdentifier(name)
+    functionRegistry.lookupFunction(extensionIdentifier)
+  }
+
+  /**
+   * Look up only extension table function (no builtin or temp).
+   */
+  def lookupExtensionTableFunction(name: String): Option[ExpressionInfo] = {
+    val extensionIdentifier = extensionFunctionIdentifier(name)
+    tableFunctionRegistry.lookupFunction(extensionIdentifier)
+  }
+
+  /**
    * Resolve only builtin function.
    */
   def resolveBuiltinFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
@@ -2496,7 +2566,7 @@ class SessionCatalog(
     val tempIdentifier = tempFunctionIdentifier(name)
     synchronized {
       if (functionRegistry.functionExists(tempIdentifier)) {
-        lookupTempFuncWithViewContext(
+    lookupTempFuncWithViewContext(
           name,
           // Return false if temp exists (not builtin)
           ident => !functionRegistry.functionExists(tempIdentifier),
@@ -2508,15 +2578,31 @@ class SessionCatalog(
   }
 
   /**
-   * Look up a built-in or temp scalar function by name and resolves it to an Expression if such
-   * a function exists.
+   * Resolve only extension function.
+   */
+  def resolveExtensionFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
+    val extensionIdentifier = extensionFunctionIdentifier(name)
+    if (functionRegistry.functionExists(extensionIdentifier)) {
+      Option(functionRegistry.lookupFunction(extensionIdentifier, arguments))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Look up a scalar function by name and resolve it to an Expression.
+   * Searches through extension, built-in, and temp functions in that order.
+   *
+   * Resolution order: extension -> builtin -> session (temp)
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
     resolveFunctionWithFallback(name, arguments, functionRegistry)
 
   /**
-   * Look up a built-in or temp table function by name and resolves it to a LogicalPlan if such
-   * a function exists.
+   * Look up a table function by name and resolve it to a LogicalPlan.
+   * Searches through extension, built-in, and temp functions in that order.
+   *
+   * Resolution order: extension -> builtin -> session (temp)
    */
   def resolveBuiltinOrTempTableFunction(
       name: String,
@@ -2585,7 +2671,7 @@ class SessionCatalog(
         val funcMetadata = fetchCatalogFunction(qualifiedIdent)
         if (funcMetadata.isUserDefinedFunction) {
           UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-        } else {
+          } else {
           makeExprInfoForHiveFunction(funcMetadata)
         }
       }
@@ -2626,13 +2712,13 @@ class SessionCatalog(
               registerUserDefinedFunction[Expression](
                 udf,
                 overrideIfExists = false,
-                functionRegistry,
+      functionRegistry,
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
-              registerFunction(
+        registerFunction(
                 funcMetadata,
-                overrideIfExists = false,
+          overrideIfExists = false,
                 functionRegistry,
                 makeFunctionBuilder(funcMetadata),
                 useCompositeKey = false)  // Persistent functions don't use composite keys
@@ -2663,9 +2749,9 @@ class SessionCatalog(
         failFunctionLookup(qualifiedIdent)
       }
       val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
-      registerUserDefinedFunction[LogicalPlan](
+        registerUserDefinedFunction[LogicalPlan](
         udf,
-        overrideIfExists = false,
+          overrideIfExists = false,
         tableFunctionRegistry,
         makeUserDefinedTableFuncBuilder(udf))
       tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
@@ -2676,8 +2762,8 @@ class SessionCatalog(
    * Fetch a catalog function from the external catalog.
    */
   private def fetchCatalogFunction(qualifiedIdent: FunctionIdentifier): CatalogFunction = {
-    val db = qualifiedIdent.database.get
-    val funcName = qualifiedIdent.funcName
+      val db = qualifiedIdent.database.get
+      val funcName = qualifiedIdent.funcName
     requireDbExists(db)
     try {
       // Please note that qualifiedIdent is provided by the user. However,
@@ -2686,7 +2772,7 @@ class SessionCatalog(
       // catalogFunction.identifier (difference is on case-sensitivity).
       // At here, we preserve the input from the user.
       externalCatalog.getFunction(db, funcName).copy(identifier = qualifiedIdent)
-    } catch {
+        } catch {
       case _: NoSuchPermanentFunctionException | _: NoSuchFunctionException =>
         failFunctionLookup(qualifiedIdent)
     }
@@ -2726,12 +2812,20 @@ class SessionCatalog(
   }
 
   /**
-   * List all built-in and temporary functions with the given pattern.
+   * List all built-in, extension, and temporary functions with the given pattern.
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(f => f.database.isEmpty || isTempFunctionIdentifier(f))
-      .map(f => if (isTempFunctionIdentifier(f)) FunctionIdentifier(f.funcName) else f)
+      .filter(f =>
+        f.database.isEmpty ||
+        isTempFunctionIdentifier(f) ||
+        isExtensionFunctionIdentifier(f))
+      .map(f => if (isTempFunctionIdentifier(f) || isExtensionFunctionIdentifier(f)) {
+        // Strip namespace qualifier for temp and extension functions
+        FunctionIdentifier(f.funcName)
+      } else {
+        f
+      })
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {

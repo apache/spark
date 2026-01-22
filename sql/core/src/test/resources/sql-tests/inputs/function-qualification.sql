@@ -250,3 +250,50 @@ SELECT builtin.count(count_test_view.*) FROM count_test_view;
 SELECT system.builtin.count(count_test_view.*) FROM count_test_view;
 
 DROP VIEW count_test_view;
+
+--
+-- SECTION 11: Security Tests - Built-in Function Protection
+--
+-- CRITICAL: Built-ins resolve BEFORE user temp functions (security feature)
+-- This prevents users from shadowing security-critical functions like current_user()
+
+-- Test 1: User cannot shadow current_user()
+-- Baseline: current_user() works (returns actual user)
+SELECT current_user() IS NOT NULL;
+
+-- User creates temp function trying to shadow current_user
+CREATE TEMPORARY FUNCTION current_user() RETURNS STRING RETURN 'hacker';
+
+-- CRITICAL: Unqualified name still resolves to builtin (NOT the temp function)
+-- Resolution order: extension -> builtin -> session
+-- So builtin wins over session (temp)
+SELECT current_user() IS NOT NULL;
+
+-- User's shadowed function only accessible via explicit qualification
+SELECT session.current_user();
+
+DROP TEMPORARY FUNCTION current_user;
+
+-- Test 2: User cannot shadow abs() with temp function
+-- Built-in abs works
+SELECT builtin.abs(-5);
+
+-- Create temp abs
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999;
+
+-- Unqualified abs still resolves to builtin (security-focused order)
+SELECT abs(-5);
+
+-- Temp abs only accessible with qualification
+SELECT session.abs();
+
+DROP TEMPORARY FUNCTION abs;
+
+-- Test 3: Security functions that should never be shadowable
+CREATE TEMPORARY FUNCTION session_user() RETURNS STRING RETURN 'fake_user';
+SELECT session_user() IS NOT NULL;  -- Should be builtin, not temp
+DROP TEMPORARY FUNCTION session_user;
+
+CREATE TEMPORARY FUNCTION current_database() RETURNS STRING RETURN 'fake_db';
+SELECT current_database() IS NOT NULL;  -- Should be builtin, not temp
+DROP TEMPORARY FUNCTION current_database;

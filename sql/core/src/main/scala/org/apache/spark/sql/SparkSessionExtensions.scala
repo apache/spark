@@ -366,28 +366,31 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      // Extension functions are session-scoped temporaries, so qualify them with
-      // CatalogManager.SESSION_NAMESPACE to enable coexistence with builtin functions
-      val sessionQualifiedName = if (name.database.isEmpty) {
-        FunctionIdentifier(name.funcName, Some(CatalogManager.SESSION_NAMESPACE))
+      // Extension functions use EXTENSION_NAMESPACE to:
+      // 1. Allow trusted extensions (Sedona, Delta) to shadow/augment built-ins
+      // 2. Ensure extension functions resolve BEFORE built-ins (extension → builtin → session)
+      // 3. Prevent untrusted user temp functions from shadowing security-critical built-ins
+      //    (builtin resolves before session, blocking attacks like shadowing current_user())
+      val extensionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some(CatalogManager.EXTENSION_NAMESPACE))
       } else {
         name
       }
-      functionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
+      functionRegistry.registerFunction(extensionQualifiedName, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      // Extension table functions are session-scoped temporaries, so qualify them with
-      // CatalogManager.SESSION_NAMESPACE to enable coexistence with builtin functions
-      val sessionQualifiedName = if (name.database.isEmpty) {
-        FunctionIdentifier(name.funcName, Some(CatalogManager.SESSION_NAMESPACE))
+      // Extension table functions use EXTENSION_NAMESPACE for the same reasons as scalar functions:
+      // resolution order extension → builtin → session protects security-critical built-ins
+      val extensionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some(CatalogManager.EXTENSION_NAMESPACE))
       } else {
         name
       }
-      tableFunctionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
+      tableFunctionRegistry.registerFunction(extensionQualifiedName, expressionInfo, function)
     }
     tableFunctionRegistry
   }
