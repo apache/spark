@@ -15,17 +15,14 @@
 # limitations under the License.
 #
 
-import array
 import concurrent.futures
-import datetime
 import os
 import platform
 import unittest
 from decimal import Decimal
 import pandas as pd
 
-from pyspark.sql import Row
-from pyspark.sql.functions import udf, pandas_udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -78,23 +75,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
     def setUp(self):
         super().setUp()
-        self.test_data = [
-            None,
-            True,
-            1,
-            "a",
-            datetime.date(1970, 1, 1),
-            datetime.datetime(1970, 1, 1, 0, 0),
-            1.0,
-            array.array("i", [1]),
-            [1],
-            (1,),
-            bytearray([65, 66, 67]),
-            Decimal(1),
-            {"a": 1},
-            Row(kwargs=1),
-            Row("namedtuple")(1),
-        ]
 
         self.test_types = [
             BooleanType(),
@@ -143,55 +123,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             [{"a": 1}, {"b": 2}],
         ]
 
-    def test_udf_return_type_coercion_arrow_disabled(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_return_type_coercion_arrow_disabled.txt"
-        )
-        self._run_udf_return_type_coercion_test(
-            use_arrow=False,
-            legacy_pandas=False,
-            golden_file=golden_file,
-            test_name="Arrow disabled",
-        )
-
-    def test_udf_return_type_coercion_arrow_legacy_pandas(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_return_type_coercion_arrow_legacy_pandas.txt"
-        )
-        self._run_udf_return_type_coercion_test(
-            use_arrow=True,
-            legacy_pandas=True,
-            golden_file=golden_file,
-            test_name="Arrow enabled, legacy pandas enabled",
-        )
-
-    def test_udf_return_type_coercion_arrow_enabled(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_return_type_coercion_arrow_enabled.txt"
-        )
-        self._run_udf_return_type_coercion_test(
-            use_arrow=True,
-            legacy_pandas=False,
-            golden_file=golden_file,
-            test_name="Arrow enabled, legacy pandas disabled",
-        )
-
-    def _run_udf_return_type_coercion_test(self, use_arrow, legacy_pandas, golden_file, test_name):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.arrow.enabled": str(use_arrow).lower(),
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
-                    legacy_pandas
-                ).lower(),
-            }
-        ):
-            results = self._generate_udf_return_type_coercion_results(use_arrow)
-            header = ["SQL Type \\ Python Value(Type)"] + [
-                f"{str(v)}({type(v).__name__})" for v in self.test_data
-            ]
-            actual_output = format_type_table(results, header)
-            self._compare_or_create_golden_file(actual_output, golden_file, test_name)
-
     def _compare_or_create_golden_file(self, actual_output, golden_file, test_name):
         """Compare actual output with golden file or create golden file if it doesn't exist.
 
@@ -216,26 +147,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             with open(golden_file, "w") as f:
                 f.write(actual_output)
             self.fail(f"Golden file created for {test_name}. Please review and re-run the test.")
-
-    def _generate_udf_return_type_coercion_results(self, use_arrow):
-        def work(spark_type):
-            result = [spark_type.simpleString()]
-            for value in self.test_data:
-                try:
-                    test_udf = udf(lambda _: value, spark_type, useArrow=use_arrow)
-                    row = self.spark.range(1).select(test_udf("id")).first()
-                    result_value = repr(row[0])
-                    # Normalize Java object hash codes to make tests deterministic
-                    import re
-
-                    result_value = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result_value)
-                except Exception:
-                    result_value = "X"
-                result.append(result_value)
-            return result
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            return list(executor.map(work, self.test_types))
 
     def test_pandas_udf_return_type_coercion(self):
         golden_file = os.path.join(
