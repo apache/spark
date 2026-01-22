@@ -84,6 +84,8 @@ class DataStreamReaderNameTests(ReusedSQLTestCase):
     def test_invalid_names(self):
         """Test that various invalid source names are rejected."""
         invalid_names = [
+            "",               # empty string
+            "  ",             # whitespace only
             "my-source",      # hyphen
             "my source",      # space
             "my.source",      # dot
@@ -105,20 +107,14 @@ class DataStreamReaderNameTests(ReusedSQLTestCase):
                     # The error message should contain information about invalid name
                     self.assertIn("source", str(context.exception).lower())
 
-    def test_invalid_name_empty_string(self):
-        """Test that empty string is rejected."""
-        with self.assertRaises(PySparkValueError):
-            self.spark.readStream.format("rate").name("").load()
-
-    def test_invalid_name_none(self):
-        """Test that None is rejected."""
-        with self.assertRaises(PySparkTypeError):
-            self.spark.readStream.format("rate").name(None).load()
-
     def test_invalid_name_wrong_type(self):
-        """Test that non-string types are rejected."""
-        with self.assertRaises(PySparkTypeError):
-            self.spark.readStream.format("rate").name(123).load()
+        """Test that None and non-string types are rejected."""
+        invalid_types = [None, 123, 45.67, [], {}]
+
+        for invalid_value in invalid_types:
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(PySparkTypeError):
+                    self.spark.readStream.format("rate").name(invalid_value).load()
 
     def test_name_with_different_formats(self):
         """Test that name() works with different streaming data sources."""
