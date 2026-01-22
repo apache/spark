@@ -41,19 +41,28 @@ DROP TEMPORARY FUNCTION session.my_func2;
 DROP TEMPORARY FUNCTION system.session.my_func3;
 
 --
--- SECTION 3: Shadowing Behavior
+-- SECTION 3: Shadowing Behavior (Post-Security Fix)
 --
 
--- Temp function shadows builtin
+-- IMPORTANT: After the security fix, temp functions can NO LONGER shadow built-in functions.
+-- Resolution order is now: extension -> builtin -> session (temp)
+-- This prevents security attacks where users create malicious temp functions like current_user()
+
+-- Create temp function with same name as builtin
 CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999;
-SELECT abs();
+
+-- Unqualified abs now resolves to BUILTIN (not temp!), due to security-focused resolution order
+SELECT abs(-5);
+
+-- Temp function only accessible with explicit qualification
 SELECT session.abs();
+
 -- Builtin still accessible with qualification
 SELECT builtin.abs(-10);
 SELECT system.builtin.abs(-10);
 DROP TEMPORARY FUNCTION abs;
 
--- After drop, builtin works unqualified again
+-- After drop, builtin still works unqualified
 SELECT abs(-5);
 
 --

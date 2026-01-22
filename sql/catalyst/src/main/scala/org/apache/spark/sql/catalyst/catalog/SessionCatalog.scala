@@ -2599,6 +2599,54 @@ class SessionCatalog(
     resolveFunctionWithFallback(name, arguments, functionRegistry)
 
   /**
+   * Resolve only builtin table function.
+   */
+  def resolveBuiltinTableFunction(
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] = {
+    val builtinIdentifier = FunctionIdentifier(format(name))
+    if (tableFunctionRegistry.functionExists(builtinIdentifier)) {
+      Option(tableFunctionRegistry.lookupFunction(builtinIdentifier, arguments))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Resolve only temp table function.
+   */
+  def resolveTempTableFunction(
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] = {
+    val tempIdentifier = tempFunctionIdentifier(name)
+    synchronized {
+      if (tableFunctionRegistry.functionExists(tempIdentifier)) {
+        lookupTempFuncWithViewContext(
+          name,
+          // Return false if temp exists (not builtin)
+          ident => !tableFunctionRegistry.functionExists(tempIdentifier),
+          _ => Option(tableFunctionRegistry.lookupFunction(tempIdentifier, arguments)))
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
+   * Resolve only extension table function.
+   */
+  def resolveExtensionTableFunction(
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] = {
+    val extensionIdentifier = extensionFunctionIdentifier(name)
+    if (tableFunctionRegistry.functionExists(extensionIdentifier)) {
+      Option(tableFunctionRegistry.lookupFunction(extensionIdentifier, arguments))
+    } else {
+      None
+    }
+  }
+
+  /**
    * Look up a table function by name and resolve it to a LogicalPlan.
    * Searches through extension, built-in, and temp functions in that order.
    *

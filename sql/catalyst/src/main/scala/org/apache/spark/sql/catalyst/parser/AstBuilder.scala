@@ -2431,9 +2431,8 @@ class AstBuilder extends DataTypeAstBuilder
       func.functionName,
       Nil,
       (ident, _) => {
-        if (ident.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
-        }
+        // Allow qualified table-valued function names (e.g., builtin.range, system.session.my_tvf)
+        // Removed artificial restriction on multi-part identifiers
         val funcName = func.functionName.getText
         val args = func.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))

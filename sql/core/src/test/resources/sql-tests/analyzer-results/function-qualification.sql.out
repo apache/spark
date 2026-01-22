@@ -126,11 +126,10 @@ CreateSQLFunctionCommand abs, INT, 999, false, true, false, false
 
 
 -- !query
-SELECT abs()
+SELECT abs(-5)
 -- !query analysis
-Project [abs() AS abs()#x]
-+- Project
-   +- OneRowRelation
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
 
 
 -- !query
@@ -255,21 +254,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM builtin.range(5)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`builtin`.`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 30,
-    "fragment" : "builtin.range(5)"
-  } ]
-}
+Project [id#xL]
++- Range (0, 5, step=1)
 
 
 -- !query
@@ -726,22 +712,44 @@ CreateSQLFunctionCommand abs, INT, 777, false, true, false, false
 -- !query
 CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
 -- !query analysis
-CreateViewCommand `shadow_view`, SELECT abs() as result, false, false, LocalTempView, UNSUPPORTED, true, [abs]
-   +- Project [abs() AS result#x]
-      +- Project
-         +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`abs`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 49,
+    "fragment" : "abs()"
+  } ]
+}
 
 
 -- !query
 SELECT * FROM shadow_view
 -- !query analysis
-Project [result#x]
-+- SubqueryAlias shadow_view
-   +- View (`shadow_view`, [result#x])
-      +- Project [cast(result#x as int) AS result#x]
-         +- Project [abs() AS result#x]
-            +- Project
-               +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`shadow_view`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 25,
+    "fragment" : "shadow_view"
+  } ]
+}
 
 
 -- !query
@@ -766,7 +774,14 @@ Project [result#x]
 -- !query
 DROP VIEW shadow_view
 -- !query analysis
-DropTempViewCommand shadow_view
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`shadow_view`"
+  }
+}
 
 
 -- !query
@@ -981,41 +996,23 @@ Project [id#x]
 -- !query
 SELECT * FROM session.my_range()
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 32,
-    "fragment" : "session.my_range()"
-  } ]
-}
+Project [id#x]
++- SQLFunctionNode my_range
+   +- SubqueryAlias my_range
+      +- Project [cast(id#xL as int) AS id#x]
+         +- Project [id#xL]
+            +- Range (0, 3, step=1)
 
 
 -- !query
 SELECT * FROM system.session.my_range()
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`system`.`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 39,
-    "fragment" : "system.session.my_range()"
-  } ]
-}
+Project [id#x]
++- SQLFunctionNode my_range
+   +- SubqueryAlias my_range
+      +- Project [cast(id#xL as int) AS id#x]
+         +- Project [id#xL]
+            +- Range (0, 3, step=1)
 
 
 -- !query
@@ -1085,9 +1082,10 @@ SELECT count(count_test_view.*) FROM count_test_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
@@ -1097,9 +1095,10 @@ SELECT builtin.count(count_test_view.*) FROM count_test_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
@@ -1109,9 +1108,10 @@ SELECT system.builtin.count(count_test_view.*) FROM count_test_view
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
@@ -1120,3 +1120,106 @@ org.apache.spark.sql.AnalysisException
 DROP VIEW count_test_view
 -- !query analysis
 DropTempViewCommand count_test_view
+
+
+-- !query
+SELECT current_user() IS NOT NULL
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE TEMPORARY FUNCTION current_user() RETURNS STRING RETURN 'hacker'
+-- !query analysis
+CreateSQLFunctionCommand current_user, STRING, 'hacker', false, true, false, false
+
+
+-- !query
+SELECT current_user() IS NOT NULL
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT session.current_user()
+-- !query analysis
+Project [current_user() AS current_user()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION current_user
+-- !query analysis
+DropFunctionCommand current_user, false, true
+
+
+-- !query
+SELECT builtin.abs(-5)
+-- !query analysis
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999
+-- !query analysis
+CreateSQLFunctionCommand abs, INT, 999, false, true, false, false
+
+
+-- !query
+SELECT abs(-5)
+-- !query analysis
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT session.abs()
+-- !query analysis
+Project [abs() AS abs()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query analysis
+DropFunctionCommand abs, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION session_user() RETURNS STRING RETURN 'fake_user'
+-- !query analysis
+CreateSQLFunctionCommand session_user, STRING, 'fake_user', false, true, false, false
+
+
+-- !query
+SELECT session_user() IS NOT NULL
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+DROP TEMPORARY FUNCTION session_user
+-- !query analysis
+DropFunctionCommand session_user, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION current_database() RETURNS STRING RETURN 'fake_db'
+-- !query analysis
+CreateSQLFunctionCommand current_database, STRING, 'fake_db', false, true, false, false
+
+
+-- !query
+SELECT current_database() IS NOT NULL
+-- !query analysis
+Project [isnotnull(current_schema()) AS (current_schema() IS NOT NULL)#x]
++- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION current_database
+-- !query analysis
+DropFunctionCommand current_database, false, true

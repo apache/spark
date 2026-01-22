@@ -109,7 +109,17 @@ class FunctionResolution(
   }
 
   def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-    if (name.length == 1) {
+    if (maybeExtensionFunctionName(name)) {
+      // Explicitly qualified as extension - lookup only extension
+      v1SessionCatalog.lookupExtensionTableFunction(name.last)
+    } else if (maybeBuiltinFunctionName(name)) {
+      // Explicitly qualified as builtin - lookup only builtin
+      v1SessionCatalog.lookupBuiltinTableFunction(name.last)
+    } else if (maybeTempFunctionName(name)) {
+      // Explicitly qualified as temp - lookup only temp
+      v1SessionCatalog.lookupTempTableFunction(name.last)
+    } else if (name.length == 1) {
+      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
       v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
     } else {
       None
@@ -253,7 +263,16 @@ class FunctionResolution(
       arguments: Seq[Expression]): Option[LogicalPlan] = {
 
     // Step 1: Try to resolve as table function
-    val tableFunctionResult = if (name.length == 1) {
+    val tableFunctionResult = if (maybeExtensionFunctionName(name)) {
+      // Explicitly qualified as extension - resolve only extension
+      v1SessionCatalog.resolveExtensionTableFunction(name.last, arguments)
+    } else if (maybeBuiltinFunctionName(name)) {
+      // Explicitly qualified as builtin - resolve only builtin
+      v1SessionCatalog.resolveBuiltinTableFunction(name.last, arguments)
+    } else if (maybeTempFunctionName(name)) {
+      // Explicitly qualified as temp - resolve only temp
+      v1SessionCatalog.resolveTempTableFunction(name.last, arguments)
+    } else if (name.length == 1) {
       // For unqualified names, check cross-type shadowing before resolving
       // If a temp scalar function exists with this name, it shadows any builtin table function
       val funcName = name.head
@@ -262,6 +281,7 @@ class FunctionResolution(
         None
       } else {
         // No temp scalar function - safe to resolve as table function
+        // This will use the PATH resolution order: extension -> builtin -> session
         v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
       }
     } else {

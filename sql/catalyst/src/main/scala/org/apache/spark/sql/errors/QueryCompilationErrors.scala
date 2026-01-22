@@ -679,8 +679,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1021",
-      messageParameters = Map("targetString" -> targetString))
+      errorClass = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+      messageParameters = Map("tableName" -> targetString))
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {

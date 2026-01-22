@@ -144,11 +144,11 @@ struct<>
 
 
 -- !query
-SELECT abs()
+SELECT abs(-5)
 -- !query schema
-struct<abs():int>
+struct<abs(-5):int>
 -- !query output
-999
+5
 
 
 -- !query
@@ -286,23 +286,13 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM builtin.range(5)
 -- !query schema
-struct<>
+struct<id:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`builtin`.`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 30,
-    "fragment" : "builtin.range(5)"
-  } ]
-}
+0
+1
+2
+3
+4
 
 
 -- !query
@@ -832,15 +822,46 @@ CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`abs`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 49,
+    "fragment" : "abs()"
+  } ]
+}
 
 
 -- !query
 SELECT * FROM shadow_view
 -- !query schema
-struct<result:int>
+struct<>
 -- !query output
-777
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`shadow_view`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 25,
+    "fragment" : "shadow_view"
+  } ]
+}
 
 
 -- !query
@@ -864,7 +885,14 @@ DROP VIEW shadow_view
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`shadow_view`"
+  }
+}
 
 
 -- !query
@@ -1093,45 +1121,21 @@ struct<id:int>
 -- !query
 SELECT * FROM session.my_range()
 -- !query schema
-struct<>
+struct<id:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 32,
-    "fragment" : "session.my_range()"
-  } ]
-}
+0
+1
+2
 
 
 -- !query
 SELECT * FROM system.session.my_range()
 -- !query schema
-struct<>
+struct<id:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`system`.`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 39,
-    "fragment" : "system.session.my_range()"
-  } ]
-}
+0
+1
+2
 
 
 -- !query
@@ -1205,9 +1209,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
@@ -1219,9 +1224,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
@@ -1233,15 +1239,144 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "count_test_view"
+    "tableName" : "count_test_view"
   }
 }
 
 
 -- !query
 DROP VIEW count_test_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT current_user() IS NOT NULL
+-- !query schema
+struct<(current_user() IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION current_user() RETURNS STRING RETURN 'hacker'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT current_user() IS NOT NULL
+-- !query schema
+struct<(current_user() IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT session.current_user()
+-- !query schema
+struct<current_user():string>
+-- !query output
+hacker
+
+
+-- !query
+DROP TEMPORARY FUNCTION current_user
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT builtin.abs(-5)
+-- !query schema
+struct<abs(-5):int>
+-- !query output
+5
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT abs(-5)
+-- !query schema
+struct<abs(-5):int>
+-- !query output
+5
+
+
+-- !query
+SELECT session.abs()
+-- !query schema
+struct<abs():int>
+-- !query output
+999
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION session_user() RETURNS STRING RETURN 'fake_user'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT session_user() IS NOT NULL
+-- !query schema
+struct<(session_user() IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+DROP TEMPORARY FUNCTION session_user
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION current_database() RETURNS STRING RETURN 'fake_db'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT current_database() IS NOT NULL
+-- !query schema
+struct<(current_schema() IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+DROP TEMPORARY FUNCTION current_database
 -- !query schema
 struct<>
 -- !query output

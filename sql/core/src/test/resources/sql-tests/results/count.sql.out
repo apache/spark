@@ -191,8 +191,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "targetString" : "testData"
+    "tableName" : "testData"
   }
 }
