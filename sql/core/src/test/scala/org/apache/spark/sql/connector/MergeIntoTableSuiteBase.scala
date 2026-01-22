@@ -2148,7 +2148,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("merge with type coercion from INT to STRING") {
+  test("SPARK-55074: imerge with type coercion from INT to STRING") {
     // INT -> STRING is allowed in ANSI mode, merge should succeed via type coercion
     // without requiring schema evolution
     withTempView("source") {
