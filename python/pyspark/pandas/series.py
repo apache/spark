@@ -1205,10 +1205,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 else:
                     current = current.when(self.spark.column == F.lit(to_replace), value)
 
-            if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
+            if isinstance(arg, dict) and hasattr(arg, "__missing__"):
+                tmp_val = arg[np._NoValue]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore[attr-defined]
+                del arg[np._NoValue]
                 current = current.otherwise(F.lit(tmp_val))
             else:
                 current = current.otherwise(F.lit(None).cast(self.spark.data_type))
