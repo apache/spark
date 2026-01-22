@@ -655,29 +655,6 @@ class Analyzer(
       e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
 
-    private def replaceGroupingFunc(
-        expr: Expression,
-        groupByExprs: Seq[Expression],
-        gid: Expression): Expression = {
-      expr transform {
-        case e: GroupingID =>
-          if (e.groupByExprs.isEmpty ||
-              e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
-            Alias(gid, toPrettySQL(e))()
-          } else {
-            throw QueryCompilationErrors.groupingIDMismatchError(e, groupByExprs)
-          }
-        case e @ Grouping(col: Expression) =>
-          val idx = groupByExprs.indexWhere(_.semanticEquals(col))
-          if (idx >= 0) {
-            Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1L)), ByteType), toPrettySQL(e))()
-          } else {
-            throw QueryCompilationErrors.groupingColInvalidError(col, groupByExprs)
-          }
-      }
-    }
-
     /*
      * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
      */
@@ -710,14 +687,7 @@ class Analyzer(
 
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
       plan.collectFirst {
-        case a: Aggregate =>
-          // this Aggregate should have grouping id as the last grouping key.
-          val gid = a.groupingExpressions.last
-          if (!gid.isInstanceOf[AttributeReference]
-            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
-          }
-          a.groupingExpressions.take(a.groupingExpressions.length - 1)
+        case a: Aggregate => GroupingAnalyticsTransformer.collectGroupingExpressions(a)
       }.getOrElse {
         throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
       }
@@ -800,7 +770,13 @@ class Analyzer(
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
         // The unresolved grouping id will be resolved by ResolveReferences
-        val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
+        val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
+          expression = cond,
+          groupByExpressions = groupingExprs,
+          gid = VirtualColumn.groupingIdAttribute,
+          newAlias = (child, name, qualifier) =>
+            Alias(child, name.get)(qualifier = qualifier)
+        )
         f.copy(condition = newCond)
 
       // We should make sure all [[SortOrder]]s have been resolved.
@@ -809,7 +785,15 @@ class Analyzer(
         val groupingExprs = findGroupingExprs(child)
         val gid = VirtualColumn.groupingIdAttribute
         // The unresolved grouping id will be resolved by ResolveReferences
-        val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
+        val newOrder = order.map { expression =>
+          GroupingAnalyticsTransformer.replaceGroupingFunction(
+            expression = expression,
+            groupByExpressions = groupingExprs,
+            gid = gid,
+            newAlias = (child, name, qualifier) =>
+              Alias(child, name.get)(qualifier = qualifier)
+          ).asInstanceOf[SortOrder]
+        }
         s.copy(order = newOrder)
     }
   }
