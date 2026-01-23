@@ -31,7 +31,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1157,6 +1157,23 @@ class DatasetSuite extends QueryTest
 
     assert(namedObservation1.get === expected1)
     assert(namedObservation2.get === expected2)
+  }
+
+  test("SPARK-55150: observation errors are threw in Obseravtion.get in classic mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark.range(10).observe(
+      observation,
+      sum($"id").as("sum_id"),
+      (sum($"id") / lit(0)).as("sum_id_div_by_zero")
+    )
+
+    observed_df.collect()
+
+    val exception = intercept[SparkException] {
+      observation.get
+    }
+
+    assert(exception.getCause.getMessage.contains("DIVIDE_BY_ZERO"))
   }
 
   test("sample with replacement") {

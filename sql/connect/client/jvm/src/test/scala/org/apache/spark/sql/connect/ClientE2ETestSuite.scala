@@ -1616,6 +1616,17 @@ class ClientE2ETestSuite
       assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
 
+  test("SPARK-55150: observation errors leads to empty result in connect mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark
+      .range(10)
+      .observe(observation, sum("id").as("sum_id"), (sum("id") / lit(0)).as("sum_id_div_by_zero"))
+
+    observed_df.collect()
+
+    assert(observation.get.isEmpty)
+  }
+
   test("SPARK-48852: trim function on a string column returns correct results") {
     val session: SparkSession = spark
     import session.implicits._

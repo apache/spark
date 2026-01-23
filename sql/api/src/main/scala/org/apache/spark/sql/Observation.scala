@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.util.Try
 
 import org.apache.spark.util.SparkThreadUtils
 
@@ -118,8 +119,8 @@ class Observation(val name: String) {
    * @return
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
-    promise.trySuccess(metrics)
+  private[sql] def setMetricsAndNotify(metrics: Try[Row]): Boolean = {
+    promise.tryComplete(metrics)
   }
 
   /**
