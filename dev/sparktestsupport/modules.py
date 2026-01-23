@@ -595,7 +595,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
         "pyspark.sql.tests.test_connect_compatibility",
         "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
-        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
+        "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
     ],
 )
@@ -1169,6 +1169,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_artifact_localcluster",
         "pyspark.sql.tests.connect.client.test_client",
+        "pyspark.sql.tests.connect.client.test_client_call_stack_trace",
         "pyspark.sql.tests.connect.client.test_reattach",
         "pyspark.sql.tests.connect.test_resources",
         "pyspark.sql.tests.connect.shell.test_progress",
@@ -1270,8 +1271,6 @@ pyspark_pandas_connect = Module(
         "python/pyspark/pandas",
     ],
     python_test_goals=[
-        # unittests dedicated for Spark Connect
-        "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_arrow_interface",
         "pyspark.pandas.tests.connect.test_parity_categorical",
