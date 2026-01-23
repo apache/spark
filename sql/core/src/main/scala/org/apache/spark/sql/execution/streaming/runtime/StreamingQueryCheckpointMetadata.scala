@@ -57,7 +57,7 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
       // Before creating a new metadata file with a new query ID, validate that the checkpoint
       // is not in an inconsistent state where the metadata file is missing but offset/commit
       // logs have data. This prevents data duplication when using exactly-once sinks
-      // (e.g. DeltaSink) which rely on the query ID for deduplication.
+      // which rely on the query ID for deduplication.
       if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS)) {
         val hasOffsetData = offsetLog.getLatestBatchId().isDefined
         val hasCommitData = commitLog.getLatestBatchId().isDefined
