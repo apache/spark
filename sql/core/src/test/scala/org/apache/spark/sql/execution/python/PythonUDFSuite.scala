@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.functions.{array, avg, col, count, transform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -155,5 +156,113 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       .agg(avg("id"), pythonUDF(col("value")))
 
     checkAnswer(df, Row(0, 0.0, 0))
+  }
+
+  test("SPARK-55046: pythonProcessingTime metric is available for Python UDFs") {
+    assume(shouldTestPythonUDFs)
+    val pythonSQLMetrics = List(
+      "data sent to Python workers",
+      "data returned from Python workers",
+      "number of output rows",
+      "time to initialize Python workers",
+      "time to start Python workers",
+      "time to run Python workers",
+      "time to execute Python code")
+
+    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
+    df.count()
+
+    val statusStore = spark.sharedState.statusStore
+    val lastExecId = statusStore.executionsList().last.executionId
+    val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
+    for (metric <- pythonSQLMetrics) {
+      assert(executionMetrics.contains(metric),
+        s"Expected metric '$metric' not found in execution metrics")
+    }
+  }
+
+  test(
+    "SPARK-55046: pythonProcessingTime reflects actual UDF computation time"
+  ) {
+    assume(shouldTestPythonUDFs)
+    val df = spark.range(10000)
+    val result = df.select(pythonTestUDF(col("id")))
+    result.collect()
+
+    val pythonExec = result.queryExecution.executedPlan.collectFirst {
+      case p: BatchEvalPythonExec => p
+    }.getOrElse {
+      fail("Expected BatchEvalPythonExec in executed plan")
+    }
+
+    val processingTime = pythonExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
+    val pythonTotalTime = pythonExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+
+    // Processing time should be non-zero
+    assert(processingTime > 0,
+      s"pythonProcessingTime should be > 0, but was $processingTime")
+
+    // Python total time should also be non-zero and >= processing time
+    assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+      s"pythonTotalTime should be > 0, but was $pythonTotalTime")
+  }
+
+  test("SPARK-55046:pythonProcessingTime metric for ArrowEvalPythonExec") {
+    assume(shouldTestPythonUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.range(100)
+      val result = df.select(pythonTestUDF(col("id")))
+      result.collect()
+
+      val arrowExec = result.queryExecution.executedPlan.collectFirst {
+        case p: ArrowEvalPythonExec => p
+      }
+
+      // If Arrow execution is available, verify the metric, otherwise, skip the test
+      arrowExec.foreach { exec =>
+        val processingTime = exec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
+        val pythonTotalTime = exec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+
+        assert(processingTime > 0,
+          s"pythonProcessingTime should be > 0 for ArrowEvalPythonExec, but was $processingTime")
+        assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+          s"pythonTotalTime should be > 0 for ArrowEvalPythonExec, but was $pythonTotalTime")
+      }
+    }
+  }
+
+  test("SPARK-55046: pythonProcessingTime metric for BatchEvalPythonUDTFExec") {
+    assume(shouldTestPythonUDFs)
+    val udtf = TestPythonUDTF(name = "test_udtf")
+
+    spark.udtf.registerPython(udtf.name, udtf.udtf)
+    withTempView("t") {
+      try {
+        spark.range(1000).selectExpr("id % 100 as a", "id % 50 as b")
+          .createOrReplaceTempView("t")
+        val result = sql(s"SELECT f.* FROM t, LATERAL ${udtf.name}(a, b) f")
+        result.collect()
+
+        val udtfExec = result.queryExecution.executedPlan.collectFirst {
+          case p: BatchEvalPythonUDTFExec => p
+        }.getOrElse {
+          fail("Expected BatchEvalPythonUDTFExec in executed plan")
+        }
+
+        // Verify the metric exists and has a positive value
+        val processingTime = udtfExec.metrics.get("pythonProcessingTime").map(_.value).getOrElse(0L)
+        val pythonTotalTime = udtfExec.metrics.get("pythonTotalTime").map(_.value).getOrElse(0L)
+
+        assert(processingTime > 0,
+          s"pythonProcessingTime should be > 0 for BatchEvalPythonUDTFExec," +
+            s" but was $processingTime")
+        assert(pythonTotalTime > 0 && pythonTotalTime >= processingTime,
+          s"pythonTotalTime should be > 0 for BatchEvalPythonUDTFExec," +
+            s" but was $pythonTotalTime")
+      } finally {
+        spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+      }
+    }
   }
 }
