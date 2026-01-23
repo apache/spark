@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.annotation.Evolving
+
 /**
  * A class to manage operations on streaming query checkpoints.
  */
+@Evolving
 private[spark] abstract class StreamingCheckpointManager {
 
   /**
