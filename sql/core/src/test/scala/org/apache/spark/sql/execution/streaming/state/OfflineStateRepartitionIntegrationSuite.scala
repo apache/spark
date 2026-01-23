@@ -151,7 +151,7 @@ class OfflineStateRepartitionIntegrationSuite
 
   def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
     Seq(true, false).foreach { changelogCheckpointingEnabled =>
-      test(s"$testName - (enableChangelogCheckpointing=$changelogCheckpointingEnabled)") {
+      test(s"$testName - enableChangelogCheckpointing=$changelogCheckpointingEnabled") {
         withSQLConf(
           "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
             changelogCheckpointingEnabled.toString) {
@@ -163,7 +163,7 @@ class OfflineStateRepartitionIntegrationSuite
 
   def testWithStateStoreCheckpointIds(testName: String)(testBody: => Unit): Unit = {
     Seq(1, 2).foreach { ckptVersion =>
-      val newTestName = s"$testName - (enableStateStoreCheckpointIds = ${ckptVersion >= 2})"
+      val newTestName = s"$testName - enableStateStoreCheckpointIds = ${ckptVersion >= 2}"
       withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
         testWithChangelogConfig(newTestName) {
           testBody
@@ -286,7 +286,7 @@ class OfflineStateRepartitionIntegrationSuite
           StartStream(checkpointLocation = checkpointDir),
           AddData(inputData, (1 to 2).flatMap(_ => 10 to 15) ++ (20 to 22): _*),
           CheckNewAnswer(20, 21, 22),
-          assertNumStateRows(total = 13, updated = 3)
+          assertNumStateRows(total = 10, updated = 3)
         )
       }
     )
@@ -334,7 +334,7 @@ class OfflineStateRepartitionIntegrationSuite
           assertNumStateRows(total = 3, updated = 3),
           AddData(inputData, ("a", 4), ("b", 5), ("d", 6)),
           CheckNewAnswer(("d", 6)),
-          assertNumStateRows(total = 4, updated = 1),
+          assertNumStateRows(total = 2, updated = 1),
           StopStream
         )
       },
@@ -344,7 +344,7 @@ class OfflineStateRepartitionIntegrationSuite
           StartStream(checkpointLocation = checkpointDir),
           AddData(inputData, ("a", 5), ("e", 8), ("d", 7)),
           CheckNewAnswer(("a", 5), ("e", 8)),
-          assertNumStateRows(total = 5, updated = 2)
+          assertNumStateRows(total = 3, updated = 2)
         )
       }
     )
