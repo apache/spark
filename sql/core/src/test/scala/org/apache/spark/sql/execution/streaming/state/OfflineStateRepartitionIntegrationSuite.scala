@@ -70,10 +70,10 @@ class OfflineStateRepartitionIntegrationSuite
   }
 
   /**
-   * Captures state for all specified stores and column families.
+   * Read states for all specified stores and column families.
    * Returns Map[store -> Map[columnFamily -> state rows]]
    */
-  private def captureStateByStoreName(
+  private def readStateDataByStoreName(
       checkpointDir: String,
       batchId: Long,
       storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]]
@@ -135,7 +135,7 @@ class OfflineStateRepartitionIntegrationSuite
         spark, checkpointDir.getAbsolutePath)
       val lastBatchId = checkpointMetadata.commitLog.getLatestBatchId().get
 
-      val stateBeforeRepartition = captureStateByStoreName(
+      val stateBeforeRepartition = readStateDataByStoreName(
         checkpointDir.getAbsolutePath, lastBatchId, storeToColumnFamilyToStateSourceOptions)
 
       // Verify all stores and column families have data before repartition
@@ -143,7 +143,9 @@ class OfflineStateRepartitionIntegrationSuite
         columnFamilies.keys.foreach { cfName =>
           val data = stateBeforeRepartition(storeName)(cfName)
           assert(data.length > 0,
-            s"Store '$storeName', CF '$cfName' has no state data before repartition")
+            s"Store '$storeName', CF '$cfName' has no state data before repartition." +
+            s"Please make sure it has data so that we can test data correctness post-repartition"
+          )
         }
       }
 
@@ -160,7 +162,7 @@ class OfflineStateRepartitionIntegrationSuite
         checkpointDir.getAbsolutePath, newPartitions, spark)
 
       // Step 5: Validate state for each store and column family after repartition
-      val stateAfterRepartition = captureStateByStoreName(
+      val stateAfterRepartition = readStateDataByStoreName(
         checkpointDir.getAbsolutePath, repartitionBatchId, storeToColumnFamilyToStateSourceOptions)
 
       storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
