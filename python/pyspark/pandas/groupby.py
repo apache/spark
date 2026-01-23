@@ -1955,7 +1955,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             psdf, self._groupkeys, agg_columns
         )
 
-        if LooseVersion(pd.__version__) < LooseVersion("3.0.0"):
+        if LooseVersion(pd.__version__) < "3.0.0":
             from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
             f = is_builtin_func(func)
         else:
