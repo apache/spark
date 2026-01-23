@@ -18,13 +18,13 @@
 // scalastyle:off classforname
 package org.apache.spark.tools
 
+import io.github.classgraph.ClassGraph
+
 import scala.collection.{immutable, mutable}
+import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.reflect.runtime.{universe => unv}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
-
-import org.clapper.classutil.ClassFinder
-import org.objectweb.asm.Opcodes
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -157,13 +157,16 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String): Set[String] = {
-    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM8))
-    finder
-      .getClasses()
-      .map(_.name)
-      .filter(_.startsWith(packageName))
-      .filterNot(shouldExclude)
-      .toSet
+    val scanResult = new ClassGraph()
+      .acceptPackages(packageName)
+      .scan()
+    try {
+      scanResult.getAllClasses.getNames.asScala
+        .filterNot(shouldExclude)
+        .toSet
+    } finally {
+      scanResult.close()
+    }
   }
 }
 // scalastyle:on classforname
