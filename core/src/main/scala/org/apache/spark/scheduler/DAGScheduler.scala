@@ -1346,12 +1346,10 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
   }
 
-  private val sqlExecutionIdKey = "spark.sql.execution.id"
-
   private def getQueryExecutionIdFromProperties(properties: Properties): Option[Long] = {
     try {
       Option(properties)
-        .flatMap(properties => Option(properties.getProperty(sqlExecutionIdKey)))
+        .flatMap(properties => Option(properties.getProperty(SparkContext.SQL_EXECUTION_ID_KEY)))
         .map(_.toLong)
     } catch {
       case e: Throwable =>
@@ -1941,6 +1939,7 @@ private[spark] class DAGScheduler(
    * stages will be resubmitted and re-try all the tasks, as the input data may be changed after
    * the map tasks are re-tried. For stages where rollback and retry all tasks are not possible,
    * we will need to abort the stages.
+   *
    * @return true if jobs are not aborted and will continue to run after rollback, otherwise false
    */
   private[scheduler] def rollbackSucceedingStages(
@@ -1991,11 +1990,6 @@ private[spark] class DAGScheduler(
     }
     // Whether there are still active jobs which need to be processed
     hasActiveJobs
-  }
-
-  private def getShuffleId(stage: Stage): Option[Int] = stage match {
-    case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
-    case _ => None
   }
 
   private def getCompletedJobsFromSameQuery(mapStage: ShuffleMapStage): Array[ActiveJob] = {
@@ -2053,9 +2047,9 @@ private[spark] class DAGScheduler(
     val completedJobs = getCompletedJobsFromSameQuery(mapStage)
     val succeedingStagesInCompletedJobs =
       collectSucceedingStagesByShuffleId(mapStage, completedJobs)
-    logInfo(
-      s"Found succeeding stages $succeedingStagesInCompletedJobs of shuffle checksum mismatch " +
-        s"stage $mapStage in completed jobs: (${completedJobs.map(_.jobId).mkString(",")})")
+    logInfo(log"Found succeeding stages ${MDC(STAGES, succeedingStagesInCompletedJobs)} of " +
+      log"shuffle checksum mismatch stage ${MDC(STAGE, mapStage)} in completed jobs: (" +
+      log"${MDC(JOB_IDS, completedJobs.map(_.jobId).mkString(","))})")
 
     // Abort all the succeeding final stages in active jobs to fail fast and avoid wasting
     // resources if there are succeeding result stages in completed jobs.
@@ -2633,6 +2627,11 @@ private[spark] class DAGScheduler(
       mapStage: ShuffleMapStage, jobs: Array[ActiveJob]): HashSet[Stage] = {
     val succeedingStages = HashSet[Stage]()
     val shuffleId = mapStage.shuffleDep.shuffleId
+
+    def getShuffleId(stage: Stage): Option[Int] = stage match {
+      case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
+      case _ => None
+    }
 
     def collectSucceedingStagesInternal(stageChain: List[Stage]): Unit = {
       val head = stageChain.head

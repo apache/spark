@@ -521,7 +521,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-206997: Jobs are tracked in DAGScheduler before query finished") {
+  test("SPARK-55064: Jobs are tracked in DAGScheduler before query finished") {
     val jobs = new mutable.HashSet[Int]()
 
     var sqlExecutionEndVerified: Boolean = false
