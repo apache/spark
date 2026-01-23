@@ -500,7 +500,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "count_test_view")
+      parameters = Map("tableName" -> "`count_test_view`")
     )
 
     // Qualified count with table.*
@@ -510,7 +510,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "count_test_view")
+      parameters = Map("tableName" -> "`count_test_view`")
     )
 
     checkError(
@@ -519,7 +519,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
       sqlState = "42000",
-      parameters = Map("tableName" -> "count_test_view")
+      parameters = Map("tableName" -> "`count_test_view`")
     )
 
     sql("DROP VIEW count_test_view")

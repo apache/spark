@@ -875,9 +875,12 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add an
    * {{{
-   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
-   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
-   *   INSERT INTO [TABLE] tableIdentifier REPLACE whereClause
+   *   INSERT [WITH SCHEMA EVOLUTION] OVERWRITE
+   *     TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier REPLACE whereClause
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -906,7 +909,8 @@ class AstBuilder extends DataTypeAstBuilder
             query = otherPlans.head,
             overwrite = false,
             ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName)
+            byName = insertParams.byName,
+            withSchemaEvolution = table.EVOLUTION() != null)
         })
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
@@ -923,7 +927,8 @@ class AstBuilder extends DataTypeAstBuilder
             query = otherPlans.head,
             overwrite = true,
             ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName)
+            byName = insertParams.byName,
+            withSchemaEvolution = table.EVOLUTION() != null)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
@@ -932,10 +937,20 @@ class AstBuilder extends DataTypeAstBuilder
             Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
           val deleteExpr = expression(ctx.whereClause().booleanExpression())
           val isByName = ctx.NAME() != null
+          val schemaEvolutionWriteOption: Map[String, String] =
+            if (ctx.EVOLUTION() != null) Map("mergeSchema" -> "true") else Map.empty
           if (isByName) {
-            OverwriteByExpression.byName(table, otherPlans.head, deleteExpr)
+            OverwriteByExpression.byName(
+              table,
+              df = otherPlans.head,
+              deleteExpr,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwriteByExpression.byPosition(table, otherPlans.head, deleteExpr)
+            OverwriteByExpression.byPosition(
+              table,
+              query = otherPlans.head,
+              deleteExpr,
+              writeOptions = schemaEvolutionWriteOption)
           }
         })
       case dir: InsertOverwriteDirContext =>
@@ -2475,18 +2490,61 @@ class AstBuilder extends DataTypeAstBuilder
     buildTvfFromTableFunctionCall(ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
   }
 
+  /**
+   * Extract the source name from an identifiedByClause context.
+   */
+  private def extractSourceName(ctx: IdentifiedByClauseContext): Option[String] = {
+    Option(ctx).map(c => c.sourceName.identifier.getText)
+  }
+
   override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
     val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableStreamingRelation = createUnresolvedRelation(
+    val relation = createUnresolvedRelation(
       ctx = ctx,
       ident = ident,
       optionsClause = Option(ctx.optionsClause),
       writePrivileges = Seq.empty,
       isStreaming = true)
 
-    val tableWithWatermark = tableStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
-    mayApplyAliasPlan(ctx.tableAlias, tableWithWatermark)
+    val table = mayApplyAliasPlan(ctx.tableAlias, relation)
+    val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
+    val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
+    tableWithWatermark.transformUp {
+      case r: UnresolvedRelation =>
+        NamedStreamingRelation.withUserProvidedName(
+          r.copy(isStreaming = true), sourceNameOpt)
+    }
   }
+
+  /**
+   * Create a logical plan for a stream TVF.
+   * Handles two forms:
+   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
+   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
+   *    table names
+   */
+  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+    withOrigin(ctx) {
+      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
+        // Form: STREAM tableFunctionCallWithTrailingClauses
+        val sourceName = extractSourceName(funcTable.identifiedByClause)
+        val tvfPlan = buildTvfFromTableFunctionCall(
+          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
+        tvfPlan.transformUp {
+          case tvf: UnresolvedTableValuedFunction =>
+            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+        }
+      }.getOrElse {
+        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
+        val sourceName = extractSourceName(ctx.identifiedByClause)
+        val tvfPlan = buildTvfFromTableFunctionCall(
+          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+        tvfPlan.transformUp {
+          case tvf: UnresolvedTableValuedFunction =>
+            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+        }
+      }
+    }
 
   /**
    * Create an inline table (a virtual table in Hive parlance).
