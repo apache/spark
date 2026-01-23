@@ -230,28 +230,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         stop = 57))
   }
 
-  test("INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME: Invalid table value function name") {
-    checkError(
-      exception = parseException("SELECT * FROM db.func()"),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      sqlState = "42000",
-      parameters = Map("funcName" -> "`db`.`func`"),
-      context = ExpectedContext(
-        fragment = "db.func()",
-        start = 14,
-        stop = 22))
-
-    checkError(
-      exception = parseException("SELECT * FROM ns.db.func()"),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      sqlState = "42000",
-      parameters = Map("funcName" -> "`ns`.`db`.`func`"),
-      context = ExpectedContext(
-        fragment = "ns.db.func()",
-        start = 14,
-        stop = 25))
-  }
-
   test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE: Invalid scope in show functions") {
     val sqlText = "SHOW sys FUNCTIONS"
     checkError(
