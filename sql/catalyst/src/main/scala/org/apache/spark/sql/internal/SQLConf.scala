@@ -2304,8 +2304,8 @@ object SQLConf {
       .doc("When true, allows temporary functions to shadow builtin and extension functions, " +
         "and changes function resolution order to extension -> session -> builtin -> persistent " +
         "(pre-4.0 behavior). When false (default), blocks creation of temporary functions " +
-        "that conflict with builtin or extension functions, and uses the secure resolution order: " +
-        "extension -> builtin -> session -> persistent.")
+        "that conflict with builtin or extension functions, and uses the secure resolution " +
+        "order: extension -> builtin -> session -> persistent.")
       .booleanConf
       .createWithDefault(false)
 
