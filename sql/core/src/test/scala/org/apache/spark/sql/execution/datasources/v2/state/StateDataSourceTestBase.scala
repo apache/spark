@@ -453,8 +453,6 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
    */
   protected def getDedupAndAggregationQuery(
       inputData: MemoryStream[(String, Int)]): DataFrame = {
-    import org.apache.spark.sql.functions._
-
     inputData.toDS()
       .selectExpr("_1 AS key", "_2 AS value")
       .withColumn("eventTime", (unix_timestamp() + $"value").cast("timestamp"))

@@ -18,20 +18,21 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.{Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /**
- * Integration test suite for OfflineStateRepartitionRunner with simple aggregation operators.
+ * Integration test suite for OfflineStateRepartitionRunner with stateful operators.
  * Tests state repartitioning (increase and decrease partitions) and validates:
  * 1. State data remains identical after repartitioning
  * 2. Offset and commit logs are updated correctly
  * 3. Query can resume successfully and compute correctly with repartitioned state
  */
-class OfflineStateRepartitionOperatorSuite
-  extends StateDataSourceTestBase with AlsoTestWithRocksDBFeatures{
+class OfflineStateRepartitionIntegrationSuite
+  extends StateDataSourceTestBase {
 
   import testImplicits._
   import OfflineStateRepartitionTestUtils._
@@ -40,14 +41,14 @@ class OfflineStateRepartitionOperatorSuite
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
-    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
   }
 
   /**
-   * Captures state data from checkpoint directory using StateStore data source.
+   * Reads state data from checkpoint directory using StateStore data source.
    * Returns sorted rows for deterministic comparison.
    */
-  private def captureStateData(checkpointDir: String, batchId: Long): Dataset[Row] = {
+  private def readStateData(checkpointDir: String, batchId: Long): Dataset[Row] = {
     spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -65,7 +66,7 @@ class OfflineStateRepartitionOperatorSuite
       stateBeforeRepartition: Array[Row],
       repartitionBatchId: Long): Unit = {
 
-    val stateAfterRepartition = captureStateData(checkpointDir, repartitionBatchId).collect()
+    val stateAfterRepartition = readStateData(checkpointDir, repartitionBatchId).collect()
 
     // Validate row count
     assert(stateBeforeRepartition.length == stateAfterRepartition.length,
@@ -94,7 +95,7 @@ class OfflineStateRepartitionOperatorSuite
   /**
    * Core helper function that encapsulates the complete repartition test workflow:
    * 1. Run query to create initial state
-   * 2. Capture state before repartition
+   * 2. Read state before repartition
    * 3. Run repartition operation
    * 4. Verify repartition batch and state data
    * 5. Resume query with new data and verify results
@@ -119,12 +120,12 @@ class OfflineStateRepartitionOperatorSuite
       // Step 1: Run initial query to create state
       setupInitialState(inputData, checkpointDir.getAbsolutePath, clock)
 
-      // Step 2: Capture state data before repartition
+      // Step 2: Read state data before repartition
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(
         spark, checkpointDir.getAbsolutePath)
       val lastBatchId = checkpointMetadata.commitLog.getLatestBatchId().get
       val stateBeforeRepartition =
-        captureStateData(checkpointDir.getAbsolutePath, lastBatchId)
+        readStateData(checkpointDir.getAbsolutePath, lastBatchId)
 
       // Step 3: Run repartition
       spark.streamingCheckpointManager.repartition(
@@ -144,8 +145,16 @@ class OfflineStateRepartitionOperatorSuite
         repartitionBatchId)
 
       // Step 6: Resume query with new input and verify
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> newPartitions.toString) {
-        verifyResumedQuery(inputData, checkpointDir.getAbsolutePath, clock)
+      verifyResumedQuery(inputData, checkpointDir.getAbsolutePath, clock)
+    }
+  }
+
+  def testWithStateStoreCheckpointIds(testName: String)(testBody: Boolean => Any): Unit = {
+    Seq(true, false).foreach { enableStateStoreCheckpointIds =>
+      val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
+        s"$enableStateStoreCheckpointIds"
+      test(newTestName) {
+        testBody(enableStateStoreCheckpointIds)
       }
     }
   }
@@ -159,15 +168,15 @@ class OfflineStateRepartitionOperatorSuite
    */
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
-    Seq(("increase", 4), ("decrease", 1)).foreach { case (direction, newPartitions) =>
-      testWithStateStoreCheckpointIds(s"Repartition $direction: $testNamePrefix") { _ =>
+    Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
+      testWithStateStoreCheckpointIds(s"$testNamePrefix - $direction partitions") { _ =>
         testFun(newPartitions)
       }
     }
   }
 
   // Test aggregation operator repartitioning
-  Seq(1, 2).foreach { version =>
+  StreamingAggregationStateManager.supportedVersions.foreach { version =>
     testWithAllRepartitionOperations(s"aggregation state v$version") { newPartitions =>
       withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> version.toString) {
         testRepartitionWorkflow[Int](
@@ -219,11 +228,9 @@ class OfflineStateRepartitionOperatorSuite
                 StartStream(checkpointLocation = checkpointDir),
                 AddData(inputData, 0 until 10: _*),
                 CheckLastBatch(
-                  (0, "Apple", 1, 0, 0, 0), (1, "Banana", 1, 1, 1, 1),
-                  (2, "Carrot", 1, 2, 2, 2), (3, "Date", 1, 3, 3, 3),
-                  (4, "Eggplant", 1, 4, 4, 4), (5, "Fig", 1, 5, 5, 5),
-                  (6, "Grape", 1, 6, 6, 6), (7, "Honeydew", 1, 7, 7, 7),
-                  (8, "Iceberg", 1, 8, 8, 8), (9, "Jackfruit", 1, 9, 9, 9)
+                  (0, "Apple", 2, 6, 6, 0), (0, "Banana", 1, 4, 4, 4),
+                  (0, "Strawberry", 2, 10, 8, 2), (1, "Apple", 2, 12, 9, 3),
+                  (1, "Banana", 2, 8, 7, 1), (1, "Strawberry", 1, 5, 5, 5)
                 ),
                 StopStream
               )
@@ -232,13 +239,9 @@ class OfflineStateRepartitionOperatorSuite
               val aggregated = getCompositeKeyStreamingAggregationQuery(inputData)
               testStream(aggregated, OutputMode.Update)(
                 StartStream(checkpointLocation = checkpointDir),
-                AddData(inputData, 0 until 10: _*),
+                AddData(inputData, 0 until 2: _*),
                 CheckLastBatch(
-                  (0, "Apple", 2, 0, 0, 0), (1, "Banana", 2, 2, 1, 1),
-                  (2, "Carrot", 2, 4, 2, 2), (3, "Date", 2, 6, 3, 3),
-                  (4, "Eggplant", 2, 8, 4, 4), (5, "Fig", 2, 10, 5, 5),
-                  (6, "Grape", 2, 12, 6, 6), (7, "Honeydew", 2, 14, 7, 7),
-                  (8, "Iceberg", 2, 16, 8, 8), (9, "Jackfruit", 2, 18, 9, 9)
+                  (0, "Apple", 3, 6, 6, 0), (1, "Banana", 3, 9, 7, 1)
                 )
               )
             }
@@ -269,7 +272,66 @@ class OfflineStateRepartitionOperatorSuite
         testStream(deduplicated, OutputMode.Append)(
           StartStream(checkpointLocation = checkpointDir),
           AddData(inputData, (1 to 2).flatMap(_ => 10 to 15) ++ (20 to 22): _*),
-          CheckNewAnswer(20, 21, 22)
+          CheckNewAnswer(20, 21, 22),
+          assertNumStateRows(total = 13, updated = 3)
+        )
+      }
+    )
+  }
+
+  // Test dropDuplicates with column specified repartitioning
+  testWithAllRepartitionOperations("dropDuplicates with column specified") { newPartitions =>
+    testRepartitionWorkflow[(String, Int)](
+      newPartitions = newPartitions,
+      setupInitialState = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
+          CheckAnswer(("a", 1), ("b", 2), ("c", 3)),
+          assertNumStateRows(total = 3, updated = 3),
+          AddData(inputData, ("a", 10), ("d", 4)),
+          CheckNewAnswer(("d", 4)),
+          assertNumStateRows(total = 4, updated = 1),
+          StopStream
+        )
+      },
+      verifyResumedQuery = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("b", 20), ("e", 5)),
+          CheckNewAnswer(("e", 5)),
+          assertNumStateRows(total = 5, updated = 1)
+        )
+      }
+    )
+  }
+
+  // Test dropDuplicatesWithinWatermark repartitioning
+  testWithAllRepartitionOperations("dropDuplicatesWithinWatermark") { newPartitions =>
+    testRepartitionWorkflow[(String, Int)](
+      newPartitions = newPartitions,
+      setupInitialState = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
+          CheckNewAnswer(("a", 1), ("b", 2), ("c", 3)),
+          assertNumStateRows(total = 3, updated = 3),
+          AddData(inputData, ("a", 4), ("b", 5), ("d", 6)),
+          CheckNewAnswer(("d", 6)),
+          assertNumStateRows(total = 4, updated = 1),
+          StopStream
+        )
+      },
+      verifyResumedQuery = (inputData, checkpointDir, _) => {
+        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
+        testStream(deduplicated, OutputMode.Append)(
+          StartStream(checkpointLocation = checkpointDir),
+          AddData(inputData, ("a", 5), ("e", 8), ("d", 7)),
+          CheckNewAnswer(("a", 5), ("e", 8)),
+          assertNumStateRows(total = 5, updated = 2)
         )
       }
     )
@@ -291,6 +353,7 @@ class OfflineStateRepartitionOperatorSuite
             ("hello", 40, 51, 11, 2), ("world", 40, 51, 11, 2), ("streaming", 40, 51, 11, 2),
             ("spark", 40, 50, 10, 1), ("structured", 41, 51, 10, 1)
           ),
+          assertNumStateRows(total = 5, updated = 5),
           StopStream
         )
       },
@@ -298,10 +361,10 @@ class OfflineStateRepartitionOperatorSuite
         val resumed = getSessionWindowAggregationQuery(inputData)
         testStream(resumed, OutputMode.Complete())(
           StartStream(checkpointLocation = checkpointDir),
-          AddData(inputData, ("new session", 100L)),
+          AddData(inputData, ("hello spark", 42L), ("new session", 100L)),
           CheckNewAnswer(
-            ("hello", 40, 51, 11, 2), ("world", 40, 51, 11, 2), ("streaming", 40, 51, 11, 2),
-            ("spark", 40, 50, 10, 1), ("structured", 41, 51, 10, 1),
+            ("hello", 40, 52, 12, 3), ("world", 40, 51, 11, 2), ("streaming", 40, 51, 11, 2),
+            ("spark", 40, 52, 12, 2), ("structured", 41, 51, 10, 1),
             ("new", 100, 110, 10, 1), ("session", 100, 110, 10, 1))
         )
       }
@@ -309,8 +372,9 @@ class OfflineStateRepartitionOperatorSuite
   }
 
   /**
-   * Helper function to test FlatMapGroupsWithState Operator with different version
-   * @param testNamePrefix The prefix for the test name (e.g., "aggregation state v2")
+   * Helper function to test FlatMapGroupsWithState operator with different state versions
+   * and both increase/decrease repartition operations.
+   * @param testNamePrefix The prefix for the test name (e.g., "flatMapGroupsWithState")
    * @param testFun The test function that takes in the number of partitions after repartition
    */
   def testFMGWOnAllPartitionOperation(testNamePrefix: String)
@@ -323,9 +387,9 @@ class OfflineStateRepartitionOperatorSuite
         withSQLConf(
           SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
           testWithAllRepartitionOperations(s"$testNamePrefix v$stateVersion") { newPartition =>
-              testFun(newPartition)
-            }
+            testFun(newPartition)
           }
+        }
       }
     }
   }
@@ -366,58 +430,6 @@ class OfflineStateRepartitionOperatorSuite
         )
       },
       useManualClock = true
-    )
-  }
-
-  // Test dropDuplicatesWithinWatermark repartitioning
-  testWithAllRepartitionOperations("dropDuplicatesWithinWatermark") { newPartitions =>
-    testRepartitionWorkflow[(String, Int)](
-      newPartitions = newPartitions,
-      setupInitialState = (inputData, checkpointDir, _) => {
-        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
-        testStream(deduplicated, OutputMode.Append)(
-          StartStream(checkpointLocation = checkpointDir),
-          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
-          CheckNewAnswer(("a", 1), ("b", 2), ("c", 3)),
-          AddData(inputData, ("a", 4), ("b", 5), ("d", 6)),
-          CheckNewAnswer(("d", 6)),
-          StopStream
-        )
-      },
-      verifyResumedQuery = (inputData, checkpointDir, _) => {
-        val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)
-        testStream(deduplicated, OutputMode.Append)(
-          StartStream(checkpointLocation = checkpointDir),
-          AddData(inputData, ("a", 7), ("e", 8)),
-          CheckNewAnswer(("e", 8))
-        )
-      }
-    )
-  }
-
-  // Test dropDuplicates with column specified repartitioning
-  testWithAllRepartitionOperations("dropDuplicates with column specified") { newPartitions =>
-    testRepartitionWorkflow[(String, Int)](
-      newPartitions = newPartitions,
-      setupInitialState = (inputData, checkpointDir, _) => {
-        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
-        testStream(deduplicated, OutputMode.Append)(
-          StartStream(checkpointLocation = checkpointDir),
-          AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
-          CheckAnswer(("a", 1), ("b", 2), ("c", 3)),
-          AddData(inputData, ("a", 10), ("d", 4)),
-          CheckNewAnswer(("d", 4)),
-          StopStream
-        )
-      },
-      verifyResumedQuery = (inputData, checkpointDir, _) => {
-        val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
-        testStream(deduplicated, OutputMode.Append)(
-          StartStream(checkpointLocation = checkpointDir),
-          AddData(inputData, ("b", 20), ("e", 5)),
-          CheckNewAnswer(("e", 5))
-        )
-      }
     )
   }
 
