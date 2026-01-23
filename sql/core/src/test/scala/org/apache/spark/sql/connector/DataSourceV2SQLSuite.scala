@@ -2979,6 +2979,9 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-36481: Test for SET CATALOG statement") {
+    registerCatalog("testcat3", classOf[InMemoryCatalog])
+    registerCatalog("testcat4", classOf[InMemoryCatalog])
+
     val catalogManager = spark.sessionState.catalogManager
     assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
 
@@ -2988,6 +2991,12 @@ class DataSourceV2SQLSuiteV1Filter
     sql("SET CATALOG testcat2")
     assert(catalogManager.currentCatalog.name() == "testcat2")
 
+    sql("SET CATALOG 'testcat3'")
+    assert(catalogManager.currentCatalog.name() == "testcat3")
+
+    sql("SET CATALOG \"testcat4\"")
+    assert(catalogManager.currentCatalog.name() == "testcat4")
+
     checkError(
       exception = intercept[CatalogNotFoundException] {
         sql("SET CATALOG not_exist_catalog")
@@ -2995,7 +3004,9 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "CATALOG_NOT_FOUND",
       parameters = Map(
         "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""
+      )
+    )
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER should work") {
@@ -3015,7 +3026,8 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "CATALOG_NOT_FOUND",
       parameters = Map(
         "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\"")
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""
+      )
     )
   }
 
@@ -3029,14 +3041,132 @@ class DataSourceV2SQLSuiteV1Filter
         spark.sql(sqlText, Map("param" -> "testcat.ns1"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map(
-        "name" -> "`testcat`.`ns1`",
-        "statement" -> "SET CATALOG"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 29)
+      parameters = Map("name" -> "`testcat`.`ns1`", "statement" -> "SET CATALOG"),
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = 29)
+    )
+  }
+
+  test("SPARK-55155: SET CATALOG statement with foldable expressions") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    sql("SET CATALOG CAST(\"testcat\" AS STRING)")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    sql("SET CATALOG CONCAT('test', 'cat2')")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+  }
+
+  test("SPARK-55155: SET CATALOG statement is case-sensitive") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG teStCaT")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\"")
+    )
+
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG 'teStCaT'")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\"")
+    )
+
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG IDENTIFIER('teStCaT')")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\"")
+    )
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG CONCAT('teSt', 'CaT')")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\"")
+    )
+  }
+
+  test("SPARK-55155: SET CATALOG with session temp variable") {
+    registerCatalog("testcat3", classOf[InMemoryCatalog])
+    registerCatalog("testcat4", classOf[InMemoryCatalog])
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+
+    sql("DECLARE cat_name STRING DEFAULT 'testcat'")
+    sql("SET CATALOG IDENTIFIER(cat_name)")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+
+    sql("DECLARE cat_name2 STRING")
+    sql("SET VAR cat_name2 = 'testcat2'")
+    sql("SET CATALOG IDENTIFIER(cat_name2)")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+
+    // Variable reference without IDENTIFIER() is not supported
+    checkError(
+      exception = intercept[CatalogNotFoundException] {
+        sql("SET CATALOG cat_name")
+      },
+      condition = "CATALOG_NOT_FOUND",
+      parameters = Map("catalogName" -> "`cat_name`", "config" -> "\"spark.sql.catalog.cat_name\"")
+    )
+  }
+
+  test("SPARK-55155: SET CATALOG with non-foldable expressions should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG current_user()")
+      },
+      condition = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+      parameters = Map("expr" -> "current_user()", "name" -> "IDENTIFIER"),
+      queryContext = Array(ExpectedContext(fragment = "current_user()", start = 12, stop = 25))
+    )
+  }
+
+  test("SPARK-55155: SET CATALOG with null values should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG NULL")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "NULL", "name" -> "IDENTIFIER", "dataType" -> "void"),
+      queryContext = Array(ExpectedContext(fragment = "NULL", start = 12, stop = 15))
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG CAST(NULL AS STRING)")
+      },
+      condition = "NOT_A_CONSTANT_STRING.NULL",
+      parameters = Map("expr" -> "CAST(NULL AS STRING)", "name" -> "IDENTIFIER"),
+      queryContext =
+        Array(ExpectedContext(fragment = "CAST(NULL AS STRING)", start = 12, stop = 31))
+    )
+  }
+
+  test("SPARK-55155: SET CATALOG with non-string types should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG 42")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "42", "name" -> "IDENTIFIER", "dataType" -> "int"),
+      queryContext = Array(ExpectedContext(fragment = "42", start = 12, stop = 13))
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG 3.14")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "3.14BD", "name" -> "IDENTIFIER", "dataType" -> "decimal(3,2)"),
+      queryContext = Array(ExpectedContext(fragment = "3.14", start = 12, stop = 15))
     )
   }
 

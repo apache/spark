@@ -27,9 +27,10 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
-  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
+  ExpressionWithUnresolvedIdentifier, GlobalTempView, LocalTempView, PersistedView,
+  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -44,6 +45,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -410,15 +412,52 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[SetCatalogCommand]] logical command.
+   *
+   * SET CATALOG is case-sensitive and supports multiple forms:
+   *
+   *   - Simple identifier: SET CATALOG my_catalog
+   *   - String literal: SET CATALOG 'my_catalog'
+   *   - identifier() function: SET CATALOG identifier('my_catalog')
+   *   - CAST, CONCAT, or other foldable expressions: SET CATALOG CAST('my_catalog' AS STRING)
+   *
+   * Note: SET CATALOG <session_temp_variable> is not supported and users should use SET CATALOG
+   * IDENTIFIER(<session_temp_variable>) instead.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    withCatalogIdentClause(ctx.catalogIdentifierReference, identifiers => {
-      if (identifiers.size > 1) {
-        // can occur when user put multipart string in IDENTIFIER(...) clause
-        throw QueryParsingErrors.invalidNameForSetCatalog(identifiers, ctx)
+    val expr = expression(ctx.expression())
+
+    def buildSetCatalogCommand(nameParts: Seq[String]): SetCatalogCommand = {
+      if (nameParts.size > 1) {
+        throw QueryParsingErrors.invalidNameForSetCatalog(nameParts, ctx)
       }
-      SetCatalogCommand(identifiers.head)
-    })
+      SetCatalogCommand(nameParts.head)
+    }
+
+    expr match {
+      // Directly resolve string literals (e.g., 'testcat' or "testcat")
+      case Literal(catalogName: UTF8String, StringType) =>
+        SetCatalogCommand(catalogName.toString)
+
+      // Directly resolve simple identifiers (e.g., my_catalog)
+      case UnresolvedAttribute(nameParts) =>
+        buildSetCatalogCommand(nameParts)
+
+      // Special handling for identifier() function - extract inner expression
+      case ExpressionWithUnresolvedIdentifier(identifierExpr, _, _) =>
+        PlanWithUnresolvedIdentifier(
+          identifierExpr,
+          Nil,
+          (identifiers, _) => buildSetCatalogCommand(identifiers)
+        )
+
+      // For other foldable expressions (CAST, CONCAT, etc.), resolve in analysis phase
+      case _ =>
+        PlanWithUnresolvedIdentifier(
+          expr,
+          Nil,
+          (identifiers, _) => buildSetCatalogCommand(identifiers)
+        )
+    }
   }
 
   /**

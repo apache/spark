@@ -227,7 +227,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG catalogIdentifierReference                           #setCatalog
+    | SET CATALOG expression                                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
