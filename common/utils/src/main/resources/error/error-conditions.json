@@ -6068,7 +6068,7 @@
   "STREAMING_UNFINISHED_REPARTITION_DETECTED" : {
     "message" : [
       "The latest batch <batchId> is for an unfinished state repartitioning i.e. last committed batch is: <lastCommittedBatchId>).",
-      "Let the repartitioning finish successfully before starting the streaming query."
+      "Please retry the repartitioning operation and let it finish successfully before starting the streaming query."
     ],
     "sqlState" : "55019"
   },
