@@ -70,7 +70,7 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     val errorClass = Some("CONNECT_CLIENT_INTERNAL_ERROR")
     val messageParameters = Map("message" -> e.toString)
     val sqlState = Some("XXKCI")
-    val defaultCtor = errorFactory(classOf[SparkRuntimeException].getName)
+    val defaultCtor = errorFactory(classOf[SparkException].getName)
     val constructor =
       getClassHierarchy(e.getClass).flatMap(errorFactory.get).headOption.getOrElse(defaultCtor)
     val errParams = ErrorParams(
