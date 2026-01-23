@@ -84,15 +84,15 @@ class DataStreamReaderNameTests(ReusedSQLTestCase):
     def test_invalid_names(self):
         """Test that various invalid source names are rejected."""
         invalid_names = [
-            "",               # empty string
-            "  ",             # whitespace only
-            "my-source",      # hyphen
-            "my source",      # space
-            "my.source",      # dot
-            "my@source",      # special char
-            "my$source",      # dollar sign
-            "my#source",      # hash
-            "my!source",      # exclamation
+            "",  # empty string
+            "  ",  # whitespace only
+            "my-source",  # hyphen
+            "my source",  # space
+            "my.source",  # dot
+            "my@source",  # special char
+            "my$source",  # dollar sign
+            "my#source",  # hash
+            "my!source",  # exclamation
         ]
 
         for invalid_name in invalid_names:
