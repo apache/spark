@@ -216,10 +216,9 @@ try:
             "numpy>=%s" % _minimum_numpy_version,
             "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
-        python_requires=">=3.10",
+        python_requires=">=3.11",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
