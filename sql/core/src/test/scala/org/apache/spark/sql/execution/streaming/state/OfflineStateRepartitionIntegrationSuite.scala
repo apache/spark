@@ -149,12 +149,25 @@ class OfflineStateRepartitionIntegrationSuite
     }
   }
 
-  def testWithStateStoreCheckpointIds(testName: String)(testBody: Boolean => Any): Unit = {
-    Seq(true, false).foreach { enableStateStoreCheckpointIds =>
-      val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
-        s"$enableStateStoreCheckpointIds"
-      test(newTestName) {
-        testBody(enableStateStoreCheckpointIds)
+  def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
+    Seq(true, false).foreach { changelogCheckpointingEnabled =>
+      test(s"$testName - (enableChangelogCheckpointing=$changelogCheckpointingEnabled)") {
+        withSQLConf(
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
+            changelogCheckpointingEnabled.toString) {
+          testFun
+        }
+      }
+    }
+  }
+
+  def testWithStateStoreCheckpointIds(testName: String)(testBody: => Unit): Unit = {
+    Seq(1, 2).foreach { ckptVersion =>
+      val newTestName = s"$testName - (enableStateStoreCheckpointIds = ${ckptVersion >= 2})"
+      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
+        testWithChangelogConfig(newTestName) {
+          testBody
+        }
       }
     }
   }
@@ -169,7 +182,7 @@ class OfflineStateRepartitionIntegrationSuite
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
     Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
-      testWithStateStoreCheckpointIds(s"$testNamePrefix - $direction partitions") { _ =>
+      testWithStateStoreCheckpointIds(s"$testNamePrefix - $direction partitions") {
         testFun(newPartitions)
       }
     }
