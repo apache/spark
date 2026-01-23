@@ -463,13 +463,6 @@
     ],
     "sqlState" : "46110"
   },
-  "CANNOT_SHADOW_BUILTIN_FUNCTION" : {
-    "message" : [
-      "Cannot create temporary function <funcName>: a function with this name already exists in namespace <namespace>.",
-      "Temporary functions cannot shadow builtin or session functions unless <config> is set to true."
-    ],
-    "sqlState" : "42723"
-  },
   "CANNOT_MODIFY_STATIC_CONFIG" : {
     "message" : [
       "Cannot modify the value of the static Spark config: <key>."
@@ -547,6 +540,13 @@
       "Failed to set permissions on created path <path> back to <permission>."
     ],
     "sqlState" : "58030"
+  },
+  "CANNOT_SHADOW_BUILTIN_FUNCTION" : {
+    "message" : [
+      "Cannot create temporary function <funcName>: a function with this name already exists in namespace <namespace>.",
+      "Temporary functions cannot shadow builtin or session functions unless <config> is set to true."
+    ],
+    "sqlState" : "42723"
   },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
