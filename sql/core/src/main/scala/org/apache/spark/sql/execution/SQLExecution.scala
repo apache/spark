@@ -250,6 +250,10 @@ object SQLExecution extends Logging {
 
               // Clean up jobs tracked by DAGScheduler for this query execution.
               sc.dagScheduler.cleanupQueryJobs(executionId)
+
+              // Observation.tryComplete is called here to ensure the observation is completed,
+              // but it is not high priority, so it is fine to call it later.
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }

@@ -20,7 +20,7 @@ import math
 
 import pandas as pd
 import numpy as np
-from pandas.core.base import PandasObject
+from pandas.core.base import PandasObject  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column

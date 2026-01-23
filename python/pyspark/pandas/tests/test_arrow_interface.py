@@ -16,27 +16,21 @@
 #
 import ctypes
 import unittest
-import pyspark.pandas as ps
 from pyspark.testing.utils import (
-    have_pandas,
     have_pyarrow,
-    pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark import pandas as ps
+from pyspark.testing.sqlutils import SQLTestUtils
 
-if have_pandas:
-    import pandas as pd
-
-if have_pyarrow:
-    import pyarrow as pa
+import pandas as pd
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,
-)
-class TestSparkArrowCStreamer(unittest.TestCase):
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowInterfaceTestsMixin:
     def test_spark_arrow_c_streamer_arrow_consumer(self):
+        import pyarrow as pa
+
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
 
@@ -64,6 +58,10 @@ class TestSparkArrowCStreamer(unittest.TestCase):
             schema=schema,
         )
         self.assertEqual(result, expected)
+
+
+class ArrowInterfaceTests(ArrowInterfaceTestsMixin, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
