@@ -21,6 +21,7 @@ import java.util.concurrent.{Executors, Phaser}
 import scala.util.control.NonFatal
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
+import io.grpc.StatusRuntimeException
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.test.ConnectFunSuite
@@ -102,9 +103,10 @@ class SparkSessionSuite extends ConnectFunSuite {
       })
       .create()
 
-    assertThrows[RuntimeException] {
+    val ex = intercept[StatusRuntimeException] {
       session.range(10).count()
     }
+    assert(ex.getMessage == "Blocked")
     closeSession(session)
   }
 

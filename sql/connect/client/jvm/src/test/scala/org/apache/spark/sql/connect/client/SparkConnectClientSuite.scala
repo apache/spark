@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.connect.SparkSession
@@ -213,9 +213,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
     val session = SparkSession.builder().client(client).create()
 
-    assertThrows[RuntimeException] {
+    val ex = intercept[SparkRuntimeException] {
       session.range(10).count()
     }
+    assert(ex.getMessage == "Blocked")
   }
 
   test("error framework parameters") {
@@ -227,13 +228,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -244,7 +247,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
