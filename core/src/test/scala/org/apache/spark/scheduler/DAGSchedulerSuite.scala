@@ -3566,8 +3566,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val shuffleId2 = shuffleDep2.shuffleId
       val mapStageJobId = submitMapStage(shuffleDep2)
       scheduler.activeQueryToJobs
-        .getOrElseUpdate(executionId, new HashSet[ActiveJob]()) +=
-        scheduler.jobIdToActiveJob(mapStageJobId)
+        .computeIfAbsent(executionId, _ => java.util.concurrent.ConcurrentHashMap.newKeySet())
+        .add(scheduler.jobIdToActiveJob(mapStageJobId))
       scheduler.jobIdToQueryExecutionId.put(mapStageJobId, executionId)
 
       // Finish the stages.

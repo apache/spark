@@ -172,10 +172,12 @@ private[spark] class DAGScheduler(
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   // Track all the jobs submitted by the same query execution, will clean up after
-  // the query finishes
-  private[spark] val activeQueryToJobs = new mutable.HashMap[Long, HashSet[ActiveJob]]()
+  // the query finishes. Use ConcurrentHashMap to allow thread-safe access from
+  // different threads (e.g., SQLExecution during testing).
+  private[spark] val activeQueryToJobs =
+    new ConcurrentHashMap[Long, java.util.Set[ActiveJob]]()
 
-  private[spark] val jobIdToQueryExecutionId = new mutable.HashMap[Int, Long]()
+  private[spark] val jobIdToQueryExecutionId = new ConcurrentHashMap[Int, java.lang.Long]()
 
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
@@ -1168,10 +1170,9 @@ private[spark] class DAGScheduler(
   }
 
   private[spark] def doCleanupQueryJobs(executionId: Long): Unit = {
-    activeQueryToJobs.get(executionId).foreach { jobs =>
-      jobs.map(_.jobId).foreach(jobIdToQueryExecutionId.remove)
+    Option(activeQueryToJobs.remove(executionId)).foreach { jobs =>
+      jobs.forEach(job => jobIdToQueryExecutionId.remove(job.jobId))
     }
-    activeQueryToJobs.remove(executionId)
   }
 
   /**
@@ -1432,7 +1433,7 @@ private[spark] class DAGScheduler(
     jobIdToActiveJob(jobId) = job
     activeJobs += job
     getQueryExecutionIdFromProperties(properties).foreach { qeId =>
-      activeQueryToJobs.getOrElseUpdate(qeId, new HashSet[ActiveJob]()) += job
+      activeQueryToJobs.computeIfAbsent(qeId, _ => ConcurrentHashMap.newKeySet()).add(job)
       jobIdToQueryExecutionId.put(jobId, qeId)
     }
     finalStage.setActiveJob(job)
@@ -1479,7 +1480,7 @@ private[spark] class DAGScheduler(
     jobIdToActiveJob(jobId) = job
     activeJobs += job
     getQueryExecutionIdFromProperties(properties).foreach { qeId =>
-      activeQueryToJobs.getOrElseUpdate(qeId, new HashSet[ActiveJob]()) += job
+      activeQueryToJobs.computeIfAbsent(qeId, _ => ConcurrentHashMap.newKeySet()).add(job)
       jobIdToQueryExecutionId.put(jobId, qeId)
     }
     finalStage.addActiveJob(job)
@@ -1993,14 +1994,15 @@ private[spark] class DAGScheduler(
   }
 
   private def getCompletedJobsFromSameQuery(mapStage: ShuffleMapStage): Array[ActiveJob] = {
+    import scala.jdk.CollectionConverters._
     val executionIds = mapStage
       .jobIds
-      .flatMap(jobIdToQueryExecutionId.get)
+      .flatMap(jobId => Option(jobIdToQueryExecutionId.get(jobId)))
     if (executionIds.size > 1) {
       logWarning(log"There are multiple queries reuse the same stage: ${MDC(STAGE, mapStage)}")
     }
     executionIds
-      .flatMap(activeQueryToJobs.getOrElse(_, Set.empty[ActiveJob]))
+      .flatMap(qeId => Option(activeQueryToJobs.get(qeId)).map(_.asScala).getOrElse(Set.empty))
       .diff(activeJobs)
       .toArray
       .sortBy(_.jobId)

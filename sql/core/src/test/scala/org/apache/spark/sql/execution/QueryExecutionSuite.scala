@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.io.Source
 import scala.util.Try
 
@@ -565,13 +566,17 @@ class QueryExecutionSuite extends SharedSparkSession {
             spark.sparkContext.listenerBus.waitUntilEmpty()
             assert(sqlExecutionEndVerified)
             // The jobs tracked by DAGScheduler should be cleared after the query is done.
-            assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
-            assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+            eventually(timeout(10.seconds)) {
+              assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+              assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+            }
           }
         }
       }
-      assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
-      assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+      eventually(timeout(10.seconds)) {
+        assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+        assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+      }
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }
