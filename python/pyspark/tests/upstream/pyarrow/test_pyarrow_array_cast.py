@@ -7204,7 +7204,9 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
         total_y = sum(1 for s in cls._cast_results.values() for v in s.values() if v == "Y")
         total_n = sum(1 for s in cls._cast_results.values() for v in s.values() if v == "N")
         print(f"\n{'=' * 90}")
-        print(f"Success (Y): {total_y}, Expected Failures (N): {total_n}, Total: {total_y + total_n}")
+        print(
+            f"Success (Y): {total_y}, Expected Failures (N): {total_n}, Total: {total_y + total_n}"
+        )
         print("=" * 90)
 
     def _run_nested_cast_tests(self, casts_dict, source_type_name):
@@ -7469,7 +7471,9 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
             "large_list<large_list<>>": [
                 (
                     pa.array([[["a"]], [["b", "c"]]], type=pa.large_list(pa.list_(pa.string()))),
-                    pa.array([[["a"]], [["b", "c"]]], type=pa.large_list(pa.large_list(pa.string()))),
+                    pa.array(
+                        [[["a"]], [["b", "c"]]], type=pa.large_list(pa.large_list(pa.string()))
+                    ),
                 ),
             ],
             "list<struct<>>": [
@@ -7699,10 +7703,12 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                     pa.array(
                         [[{"key": "a", "value": {"x": 1, "y": "hello"}}]],
                         type=pa.list_(
-                            pa.struct([
-                                ("key", pa.string()),
-                                ("value", pa.struct([("x", pa.int32()), ("y", pa.string())])),
-                            ])
+                            pa.struct(
+                                [
+                                    ("key", pa.string()),
+                                    ("value", pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                                ]
+                            )
                         ),
                     ),
                 ),
@@ -7743,10 +7749,12 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                     pa.array(
                         [[{"key": "outer", "value": [("inner", 1)]}]],
                         type=pa.list_(
-                            pa.struct([
-                                ("key", pa.string()),
-                                ("value", pa.map_(pa.string(), pa.int32())),
-                            ])
+                            pa.struct(
+                                [
+                                    ("key", pa.string()),
+                                    ("value", pa.map_(pa.string(), pa.int32())),
+                                ]
+                            )
                         ),
                     ),
                 ),
@@ -7886,10 +7894,12 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                     ),
                     pa.array(
                         [{"items": [1, 2, 3], "name": "test"}],
-                        type=pa.struct([
-                            ("items", pa.large_list(pa.int32())),
-                            ("name", pa.string()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("items", pa.large_list(pa.int32())),
+                                ("name", pa.string()),
+                            ]
+                        ),
                     ),
                 ),
             ],
@@ -7897,34 +7907,42 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                 (
                     pa.array(
                         [{"inner": {"a": 1, "b": "x"}, "id": 100}],
-                        type=pa.struct([
-                            ("inner", pa.struct([("a", pa.int32()), ("b", pa.string())])),
-                            ("id", pa.int32()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("a", pa.int32()), ("b", pa.string())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
                     ),
                     pa.array(
                         [{"inner": {"a": 1, "b": "x"}, "id": 100}],
-                        type=pa.struct([
-                            ("inner", pa.struct([("a", pa.int64()), ("b", pa.string())])),
-                            ("id", pa.int64()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("a", pa.int64()), ("b", pa.string())])),
+                                ("id", pa.int64()),
+                            ]
+                        ),
                     ),
                 ),
                 # With nulls
                 (
                     pa.array(
                         [{"inner": None, "id": 1}, None],
-                        type=pa.struct([
-                            ("inner", pa.struct([("x", pa.float64())])),
-                            ("id", pa.int32()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("x", pa.float64())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
                     ),
                     pa.array(
                         [{"inner": None, "id": 1}, None],
-                        type=pa.struct([
-                            ("inner", pa.struct([("x", pa.float64())])),
-                            ("id", pa.int32()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("x", pa.float64())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
                     ),
                 ),
             ],
@@ -7932,17 +7950,21 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                 (
                     pa.array(
                         [{"data": [("k1", 1), ("k2", 2)], "label": "test"}],
-                        type=pa.struct([
-                            ("data", pa.map_(pa.string(), pa.int32())),
-                            ("label", pa.string()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("data", pa.map_(pa.string(), pa.int32())),
+                                ("label", pa.string()),
+                            ]
+                        ),
                     ),
                     pa.array(
                         [{"data": [("k1", 1), ("k2", 2)], "label": "test"}],
-                        type=pa.struct([
-                            ("data", pa.map_(pa.string(), pa.int32())),
-                            ("label", pa.string()),
-                        ]),
+                        type=pa.struct(
+                            [
+                                ("data", pa.map_(pa.string(), pa.int32())),
+                                ("label", pa.string()),
+                            ]
+                        ),
                     ),
                 ),
             ],
@@ -7964,10 +7986,12 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
             ("map<string,int32>", pa.array([[("a", 1)]], pa.map_(pa.string(), pa.int32()))),
             ("map<int64,string>", pa.array([[(1, "x")]], pa.map_(pa.int64(), pa.string()))),
             ("struct<x:int32>", pa.array([{"x": 1}], pa.struct([("x", pa.int32())]))),
-            ("struct<a:string,b:float64>", pa.array(
-                [{"a": "hello", "b": 1.5}],
-                pa.struct([("a", pa.string()), ("b", pa.float64())])
-            )),
+            (
+                "struct<a:string,b:float64>",
+                pa.array(
+                    [{"a": "hello", "b": 1.5}], pa.struct([("a", pa.string()), ("b", pa.float64())])
+                ),
+            ),
         ]
 
         # All scalar types to test
