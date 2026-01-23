@@ -723,7 +723,7 @@ class StreamingQueryManager:
         self._jsqm.removeListener(listener._jlistener)
 
 
-class _StreamingCheckpointManager:
+class StreamingCheckpointManager:
     """
     A class to manage operations on streaming query checkpoints.
 

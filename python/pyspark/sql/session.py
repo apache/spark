@@ -76,7 +76,8 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
-    from pyspark.sql.streaming import _StreamingCheckpointManager, StreamingQueryManager
+    from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
     from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
@@ -2007,7 +2008,7 @@ class SparkSession(SparkConversionMixin):
         return StreamingQueryManager(self._jsparkSession.streams())
 
     @cached_property
-    def __streamingCheckpointManager(self) -> "_StreamingCheckpointManager":
+    def _streamingCheckpointManager(self) -> "StreamingCheckpointManager":
         """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
 
         .. versionadded:: 4.2.0
@@ -2020,9 +2021,9 @@ class SparkSession(SparkConversionMixin):
         -------
         :class:`StreamingCheckpointManager`
         """
-        from pyspark.sql.streaming import _StreamingCheckpointManager
+        from pyspark.sql.streaming.query import StreamingCheckpointManager
 
-        return _StreamingCheckpointManager(self._jsparkSession.streamingCheckpointManager())
+        return StreamingCheckpointManager(self._jsparkSession.streamingCheckpointManager())
 
     @property
     def tvf(self) -> "TableValuedFunction":

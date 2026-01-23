@@ -60,7 +60,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                 Exception,
                 "STATE_REPARTITION_INVALID_CHECKPOINT.NO_COMMITTED_BATCH"
             ):
-                self.spark._SparkSession__streamingCheckpointManager.repartition(checkpoint_dir, 5)
+                self.spark._streamingCheckpointManager.repartition(checkpoint_dir, 5)
 
     def test_fail_if_no_batch_found_in_checkpoint_directory(self):
         """Test that repartition fails if no batch found in checkpoint directory."""
@@ -76,7 +76,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                 Exception,
                 "STATE_REPARTITION_INVALID_CHECKPOINT.NO_BATCH_FOUND"
             ):
-                self.spark._SparkSession__streamingCheckpointManager.repartition(checkpoint_dir, 5)
+                self.spark._streamingCheckpointManager.repartition(checkpoint_dir, 5)
 
     def test_fail_if_repartition_parameter_is_invalid(self):
         """Test that repartition fails with invalid parameters."""
@@ -85,21 +85,21 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             Exception,
             "STATE_REPARTITION_INVALID_PARAMETER.IS_NULL"
         ):
-            self.spark._SparkSession__streamingCheckpointManager.repartition(None, 5)
+            self.spark._streamingCheckpointManager.repartition(None, 5)
 
         # Test empty checkpoint location
         with self.assertRaisesRegex(
             Exception,
             "STATE_REPARTITION_INVALID_PARAMETER.IS_EMPTY"
         ):
-            self.spark._SparkSession__streamingCheckpointManager.repartition("", 5)
+            self.spark._streamingCheckpointManager.repartition("", 5)
 
         # Test numPartitions <= 0
         with self.assertRaisesRegex(
             Exception,
             "STATE_REPARTITION_INVALID_PARAMETER.IS_NOT_GREATER_THAN_ZERO"
         ):
-            self.spark._SparkSession__streamingCheckpointManager.repartition("test", 0)
+            self.spark._streamingCheckpointManager.repartition("test", 0)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -192,7 +192,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
 
             # Step 2: Repartition to a different number of partitions
             new_num_partitions = self.NUM_SHUFFLE_PARTITIONS * 2
-            self.spark._SparkSession__streamingCheckpointManager.repartition(
+            self.spark._streamingCheckpointManager.repartition(
                 checkpoint_dir, new_num_partitions
             )
 
