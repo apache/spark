@@ -99,6 +99,7 @@ from pyspark.worker_util import (
     setup_memory_limits,
     setup_spark_files,
     utf8_deserializer,
+    Conf,
 )
 from pyspark.logger.worker_io import capture_outputs
 
@@ -110,37 +111,7 @@ except Exception:
     has_memory_profiler = False
 
 
-class RunnerConf:
-    def __init__(self, infile=None):
-        self._conf = {}
-        if infile is not None:
-            self.load(infile)
-
-    def load(self, infile):
-        num_conf = read_int(infile)
-        # We do a sanity check here to reduce the possibility to stuck indefinitely
-        # due to an invalid messsage. If the numer of configurations is obviously
-        # wrong, we just raise an error directly.
-        # We hand-pick the configurations to send to the worker so the number should
-        # be very small (less than 100).
-        if num_conf < 0 or num_conf > 10000:
-            raise PySparkRuntimeError(
-                errorClass="PROTOCOL_ERROR",
-                messageParameters={
-                    "failure": f"Invalid number of configurations: {num_conf}",
-                },
-            )
-        for _ in range(num_conf):
-            k = utf8_deserializer.loads(infile)
-            v = utf8_deserializer.loads(infile)
-            self._conf[k] = v
-
-    def get(self, key: str, default=""):
-        val = self._conf.get(key, default)
-        if isinstance(val, str):
-            return val.lower()
-        return val
-
+class RunnerConf(Conf):
     @property
     def assign_cols_by_name(self) -> bool:
         return (

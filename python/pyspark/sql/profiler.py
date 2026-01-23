@@ -82,10 +82,12 @@ class WorkerPerfProfiler:
     PerfProfiler is a profiler for performance profiling.
     """
 
-    def __init__(self, accumulator: Accumulator["ProfileResults"], result_id: int) -> None:
+    def __init__(
+        self, accumulator: Accumulator["ProfileResults"], result_key: Union[int, str]
+    ) -> None:
         self._accumulator = accumulator
         self._profiler = cProfile.Profile()
-        self._result_id = result_id
+        self._result_key = result_key
 
     def start(self) -> None:
         self._profiler.enable()
@@ -98,7 +100,7 @@ class WorkerPerfProfiler:
         # make it picklable
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
-        self._accumulator.add({self._result_id: (st, None)})
+        self._accumulator.add({self._result_key: (st, None)})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -120,14 +122,17 @@ class WorkerMemoryProfiler:
     """
 
     def __init__(
-        self, accumulator: Accumulator["ProfileResults"], result_id: int, func: Callable
+        self,
+        accumulator: Accumulator["ProfileResults"],
+        result_key: Union[int, str],
+        func: Callable,
     ) -> None:
         from pyspark.profiler import UDFLineProfilerV2
 
         self._accumulator = accumulator
         self._profiler = UDFLineProfilerV2()
         self._profiler.add_function(func)
-        self._result_id = result_id
+        self._result_key = result_key
 
     def start(self) -> None:
         self._profiler.enable_by_count()
@@ -140,7 +145,7 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self._accumulator.add({self._result_id: (None, codemap_dict)})
+        self._accumulator.add({self._result_key: (None, codemap_dict)})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -185,7 +190,10 @@ class ProfilerCollector(ABC):
             s = stats.get(id)
             if s is not None:
                 print("=" * 60)
-                print(f"Profile of UDF<id={id}>")
+                if isinstance(id, str):
+                    print(f"Profile of {id}")
+                else:
+                    print(f"Profile of UDF<id={id}>")
                 print("=" * 60)
                 s.sort_stats("time", "cumulative").print_stats()
 
@@ -196,7 +204,7 @@ class ProfilerCollector(ABC):
                 show(id)
 
     @property
-    def _perf_profile_results(self) -> Dict[int, pstats.Stats]:
+    def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
         with self._lock:
             return {
                 result_id: perf
@@ -228,7 +236,10 @@ class ProfilerCollector(ABC):
             cm = code_map.get(id)
             if cm is not None:
                 print("=" * 60)
-                print(f"Profile of UDF<id={id}>")
+                if isinstance(id, str):
+                    print(f"Profile of {id}")
+                else:
+                    print(f"Profile of UDF<id={id}>")
                 print("=" * 60)
                 MemoryProfiler._show_results(cm)
 
@@ -239,7 +250,7 @@ class ProfilerCollector(ABC):
                 show(id)
 
     @property
-    def _memory_profile_results(self) -> Dict[int, CodeMapDict]:
+    def _memory_profile_results(self) -> Dict[Union[int, str], CodeMapDict]:
         with self._lock:
             return {
                 result_id: mem

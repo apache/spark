@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+import io
 import os
 import platform
 import tempfile
@@ -1259,6 +1261,35 @@ class BasePythonDataSourceTestsMixin:
                         ]
                     ],
                 )
+
+    def test_data_source_perf_profiler(self):
+        with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "perf"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="perf")
+            stdout = stdout_io.getvalue()
+            self.assertIn("Profile of create_data_source", stdout)
+            self.assertIn("Profile of plan_data_source_read", stdout)
+            self.assertIn("ncalls", stdout)
+            self.assertIn("tottime", stdout)
+
+    def test_data_source_memory_profiler(self):
+        with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "memory"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="memory")
+            stdout = stdout_io.getvalue()
+            self.assertIn("Profile of create_data_source", stdout)
+            self.assertIn("Profile of plan_data_source_read", stdout)
+            self.assertIn("Mem usage", stdout)
+
+    def test_data_source_read_perf_profiler(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="perf")
+            stdout = stdout_io.getvalue()
+            print(stdout)
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
