@@ -16,27 +16,28 @@
 #
 
 """
-Tests for PyArrow's pa.Array.cast() method with default parameters only.
+Tests for PyArrow's pa.Array.cast() method with safe=True (default).
 
-## Scalar Type Conversion Matrix (pa.Array.cast with default safe=True)
+## Scalar Type Cast Tests (PyArrowScalarTypeCastTests)
 
-### Covered Types:
-- **Signed Integers**: int8, int16, int32, int64
-- **Unsigned Integers**: uint8, uint16, uint32, uint64
+Tests all scalar-to-scalar type conversions:
+- **Integers**: int8, int16, int32, int64, uint8, uint16, uint32, uint64
 - **Floats**: float16, float32, float64
+- **Boolean**: bool
+- **Strings**: string, large_string
+- **Binary**: binary, large_binary, fixed_size_binary
+- **Decimal**: decimal128, decimal256
+- **Date**: date32, date64
+- **Time**: time32(s/ms), time64(us/ns)
+- **Timestamp**: timestamp(s/ms/us/ns), with/without timezone
+- **Duration**: duration(s/ms/us/ns)
 
-## Nested Type Conversion Matrix
+## Nested/Container Type Cast Tests (PyArrowNestedTypeCastTests)
 
-### Covered Types:
+Tests container-to-container type conversions:
 - **List variants**: list, large_list, fixed_size_list
 - **Map**: map<key, value>
 - **Struct**: struct<fields...>
-
-### Container Cast Rules:
-- List variants (list, large_list, fixed_size_list) can cast to each other
-- Map can cast to list<struct<key, value>> (but not vice versa)
-- Cross-container casts (list<->map, list<->struct, map<->struct) are not supported
-- Nested types cannot cast to scalar types
 """
 
 import platform
