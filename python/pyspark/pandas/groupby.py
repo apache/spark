@@ -3708,6 +3708,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 psdf = align_diff_frames(
                     assign_columns,
@@ -3723,6 +3724,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         new_by_series = []
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 new_by_series.append(psdf._psser_for(label).rename(psser.name))
             else:

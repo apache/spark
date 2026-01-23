@@ -624,7 +624,7 @@ class FractionalOps(NumericOps):
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                    dtype=dtype, spark_type=spark_type
                 ),
             )
         elif isinstance(spark_type, StringType):
@@ -764,7 +764,7 @@ class FractionalExtensionOps(FractionalOps):
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                    dtype=dtype, spark_type=spark_type
                 ),
             )
         elif isinstance(spark_type, StringType):

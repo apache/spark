@@ -124,15 +124,15 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.Index, MissingPandasLikeIndex),
         (pd.MultiIndex, MissingPandasLikeMultiIndex),
         (pd.DatetimeIndex, MissingPandasLikeDatetimeIndex),
-        (pd.core.groupby.DataFrameGroupBy, MissingPandasLikeDataFrameGroupBy),
-        (pd.core.groupby.SeriesGroupBy, MissingPandasLikeSeriesGroupBy),
-        (pd.core.window.Expanding, MissingPandasLikeExpanding),
-        (pd.core.window.Rolling, MissingPandasLikeRolling),
-        (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),
-        (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
-        (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
+        (pd.core.groupby.DataFrameGroupBy, MissingPandasLikeDataFrameGroupBy),  # type: ignore[attr-defined]
+        (pd.core.groupby.SeriesGroupBy, MissingPandasLikeSeriesGroupBy),  # type: ignore[attr-defined]
+        (pd.core.window.Expanding, MissingPandasLikeExpanding),  # type: ignore[attr-defined]
+        (pd.core.window.Rolling, MissingPandasLikeRolling),  # type: ignore[attr-defined]
+        (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),  # type: ignore[attr-defined]
+        (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),  # type: ignore[attr-defined]
+        (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),  # type: ignore[attr-defined]
         (
-            pd.core.window.ExponentialMovingWindowGroupby,
+            pd.core.window.ExponentialMovingWindowGroupby,  # type: ignore[attr-defined]
             MissingPandasLikeExponentialMovingGroupby,
         ),
     ]

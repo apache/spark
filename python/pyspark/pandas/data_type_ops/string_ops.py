@@ -133,7 +133,7 @@ class StringOps(DataTypeOps):
             return index_ops._with_new_scol(
                 scol,
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                    dtype=dtype, spark_type=spark_type
                 ),
             )
         elif isinstance(spark_type, StringType):

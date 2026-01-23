@@ -1177,6 +1177,7 @@ class MultiIndex(Index):
             spark_frame_other = cast(MultiIndex, other).to_frame()._to_spark()
             keep_name = True
 
+        assert isinstance(other, MultiIndex)
         index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
         default_name: List[Name] = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
