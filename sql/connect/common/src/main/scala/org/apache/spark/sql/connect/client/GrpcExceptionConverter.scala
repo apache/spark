@@ -79,8 +79,7 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       errorClass = errorClass,
       messageParameters = messageParameters,
       queryContext = Array.empty,
-      sqlState = sqlState
-    )
+      sqlState = sqlState)
     val result = constructor(errParams)
     result.setStackTrace(e.getStackTrace)
     result
@@ -319,7 +318,8 @@ private[client] object GrpcExceptionConverter {
         errorParamsToMessageParameters(params),
         params.cause)),
     errorConstructor(params =>
-      new NoSuchNamespaceException(getErrorClassOrFallback(params),
+      new NoSuchNamespaceException(
+        getErrorClassOrFallback(params),
         errorParamsToMessageParameters(params))),
     errorConstructor(params =>
       new NoSuchTableException(

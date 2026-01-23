@@ -107,8 +107,9 @@ class SparkSessionSuite extends ConnectFunSuite {
     }
     assert(ex.isInstanceOf[RuntimeException])
     assert(ex.getCondition == "CONNECT_CLIENT_INTERNAL_ERROR")
-    assert(ex.getMessage contains
-      "Spark Connect client internal error: java.lang.RuntimeException: Blocked")
+    assert(
+      ex.getMessage contains
+        "Spark Connect client internal error: java.lang.RuntimeException: Blocked")
     assert(ex.getSqlState == "XXKCI")
     closeSession(session)
   }
