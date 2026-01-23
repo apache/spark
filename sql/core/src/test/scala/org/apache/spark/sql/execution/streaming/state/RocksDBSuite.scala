@@ -3288,7 +3288,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
       withDB(remoteDir, version = 4, conf = conf,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId ) { db =>
+        versionToUniqueId = versionToUniqueId) { db =>
         db.close()
       }
     })
@@ -3320,7 +3320,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
     withDB(remoteDir, version = 4, conf = conf,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-      versionToUniqueId = versionToUniqueId ) { db =>
+      versionToUniqueId = versionToUniqueId) { db =>
       db.close()
     }
   }
