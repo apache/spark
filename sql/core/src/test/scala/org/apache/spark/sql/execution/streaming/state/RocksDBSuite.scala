@@ -276,7 +276,7 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
+      test(newTestName, testTags: _*) {
         testBody(enableStateStoreCheckpointIds)
       }
     }
