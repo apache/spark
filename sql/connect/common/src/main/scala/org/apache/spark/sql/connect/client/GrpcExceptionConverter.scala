@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.io.UncheckedIOException
 import java.time.DateTimeException
+import java.util.{ConcurrentModificationException, MissingResourceException, NoSuchElementException}
+import java.util.concurrent.RejectedExecutionException
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -71,8 +74,8 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     val messageParameters = Map("message" -> e.toString)
     val sqlState = Some("XXKCI")
     val defaultCtor = errorFactory(classOf[SparkException].getName)
-    val constructor =
-      getClassHierarchy(e.getClass).flatMap(errorFactory.get).headOption.getOrElse(defaultCtor)
+    val classHierarchy = getClassHierarchy(e.getClass)
+    val constructor = resolveConstructor(classHierarchy)
     val errParams = ErrorParams(
       message = Option(e.getMessage).getOrElse(e.toString),
       cause = Option(e.getCause),
@@ -161,7 +164,6 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       userContext: UserContext,
       clientType: String): Throwable = {
     val status = StatusProto.fromThrowable(ex)
-
     // Extract the ErrorInfo from the StatusProto, if present.
     val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))
@@ -275,6 +277,22 @@ private[client] object GrpcExceptionConverter {
     (className, throwableCtr)
   }
 
+  private def resolveConstructor(classHierarchy: Seq[String]): ErrorParams => Throwable =
+    classHierarchy
+      .flatMap(errorFactory.get)
+      .headOption
+      .getOrElse(((params: ErrorParams) =>
+        sparkExceptionCtor(classHierarchy.head, params)): ErrorParams => Throwable)
+
+  private def sparkExceptionCtor(className: String, params: ErrorParams): SparkException =
+    new SparkException(
+      message = s"$className: ${params.message}",
+      cause = params.cause.orNull,
+      errorClass = Option(getErrorClassOrFallback(params)),
+      messageParameters = errorParamsToMessageParameters(params),
+      context = params.queryContext,
+      sqlState = getSqlStateOrFallback(params))
+
   private[client] val errorFactory = Map(
     errorConstructor(params =>
       new StreamingQueryException(
@@ -365,6 +383,28 @@ private[client] object GrpcExceptionConverter {
         summary = "",
         cause = None,
         getSqlStateOrFallback(params))),
+    // Due to legacy reasons, we use SparkException instead of SparkRuntimeException even though
+    // these are all RuntimeException subclasses.
+    classOf[ConcurrentModificationException].getName -> (params =>
+      sparkExceptionCtor(classOf[ConcurrentModificationException].getName, params)),
+    classOf[IllegalStateException].getName -> (params =>
+      sparkExceptionCtor(classOf[IllegalStateException].getName, params)),
+    classOf[IndexOutOfBoundsException].getName -> (params =>
+      sparkExceptionCtor(classOf[IndexOutOfBoundsException].getName, params)),
+    classOf[MissingResourceException].getName -> (params =>
+      sparkExceptionCtor(classOf[MissingResourceException].getName, params)),
+    classOf[NoSuchElementException].getName -> (params =>
+      sparkExceptionCtor(classOf[NoSuchElementException].getName, params)),
+    classOf[NullPointerException].getName -> (params =>
+      sparkExceptionCtor(classOf[NullPointerException].getName, params)),
+    classOf[RejectedExecutionException].getName -> (params =>
+      sparkExceptionCtor(classOf[RejectedExecutionException].getName, params)),
+    classOf[SecurityException].getName -> (params =>
+      sparkExceptionCtor(classOf[SecurityException].getName, params)),
+    classOf[UncheckedIOException].getName -> (params =>
+      sparkExceptionCtor(classOf[UncheckedIOException].getName, params)),
+    // RuntimeException is the base class of all runtime exceptions, so its probably safe
+    // to be more specific with SparkRuntimeException
     errorConstructor[RuntimeException](params =>
       new SparkRuntimeException(
         getErrorClassOrFallback(params),
@@ -404,16 +444,8 @@ private[client] object GrpcExceptionConverter {
       errors: Seq[FetchErrorDetailsResponse.Error]): Throwable = {
 
     val error = errors(errorIdx)
-    val classHierarchy = error.getErrorTypeHierarchyList.asScala
-
-    val constructor =
-      classHierarchy
-        .flatMap(errorFactory.get)
-        .headOption
-        .getOrElse((params: ErrorParams) =>
-          errorFactory
-            .get(classOf[SparkException].getName)
-            .get(params.copy(message = s"${classHierarchy.head}: ${params.message}")))
+    val classHierarchy = error.getErrorTypeHierarchyList.asScala.toSeq
+    val constructor = resolveConstructor(classHierarchy)
 
     val causeOpt =
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
