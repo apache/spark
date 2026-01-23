@@ -16,11 +16,11 @@
 #
 
 from itertools import chain
-from typing import cast, Any, Union
+from typing import cast, Any, Sequence, Union
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
@@ -43,7 +43,7 @@ class CategoricalOps(DataTypeOps):
         """Restore column when to_pandas."""
         return pd.Series(
             pd.Categorical.from_codes(
-                col.replace(np.nan, -1).astype(int),
+                cast(Sequence[int], col.replace(np.nan, -1).astype(int)),
                 categories=cast(CategoricalDtype, self.dtype).categories,
                 ordered=cast(CategoricalDtype, self.dtype).ordered,
             )

@@ -46,7 +46,8 @@ object PythonSQLMetrics {
     Map(
       "pythonBootTime" -> "time to start Python workers",
       "pythonInitTime" -> "time to initialize Python workers",
-      "pythonTotalTime" -> "time to run Python workers"
+      "pythonTotalTime" -> "time to run Python workers",
+      "pythonProcessingTime" -> "time to execute Python code"
     )
   }
 

@@ -124,7 +124,7 @@ def _attach(
     logger_module: Union[str, ModuleType],
     modules: List[ModuleType],
     classes: List[Type[Any]],
-    missings: List[Tuple[Type[Any], Type[Any]]],
+    missings: List[Tuple[Union[ModuleType, Type[Any]], Type[Any]]],
 ) -> None:
     if isinstance(logger_module, str):
         logger_module = importlib.import_module(logger_module)

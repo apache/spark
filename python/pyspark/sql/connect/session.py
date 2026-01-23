@@ -46,10 +46,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from pandas.api.types import (  # type: ignore[attr-defined]
-    is_datetime64_dtype,
-    is_timedelta64_dtype,
-)
+from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
 import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
