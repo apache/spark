@@ -30,6 +30,7 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TSaslClientTransport;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 public final class KerberosSaslHelper {
 
@@ -68,8 +69,8 @@ public final class KerberosSaslHelper {
         new TSaslClientTransport("GSSAPI", null, names[0], names[1], saslProps, null,
           underlyingTransport);
       return new TSubjectAssumingTransport(saslTransport);
-    } catch (SaslException se) {
-      throw new IOException("Could not instantiate SASL transport", se);
+    } catch (SaslException | TTransportException se) {
+      throw new IOException("Could not instantiate transport", se);
     }
   }
 
