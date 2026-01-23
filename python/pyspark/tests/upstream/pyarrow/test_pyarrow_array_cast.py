@@ -1991,9 +1991,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             ],
             "binary": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
             "large_binary": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [
-                (_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)
-            ],
+            "fixed_size_binary_16": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
             "decimal128": [
                 (_make_float16_array([0.0, 1.0, -1.0, None]), pa.lib.ArrowNotImplementedError),
             ],
