@@ -629,6 +629,118 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     val desc = sql("DESCRIBE FUNCTION test_ext_func").collect()
     assert(desc.nonEmpty, "DESCRIBE FUNCTION should return results for extension functions")
   }
+
+  test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is false") {
+    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "false") {
+      // Try to create a temp function that shadows a builtin
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """CREATE TEMPORARY FUNCTION abs AS
+              |'org.apache.spark.sql.MyTestUDF'
+              |""".stripMargin)
+        },
+        condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+        parameters = Map(
+          "funcName" -> "`abs`",
+          "namespace" -> "`system`.`builtin`",
+          "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
+        )
+      )
+
+      // Try to create a temp function that shadows an extension function
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """CREATE TEMPORARY FUNCTION test_ext_func AS
+              |'org.apache.spark.sql.MyTestUDF'
+              |""".stripMargin)
+        },
+        condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+        parameters = Map(
+          "funcName" -> "`test_ext_func`",
+          "namespace" -> "`system`.`extension`",
+          "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
+        )
+      )
+    }
+  }
+
+  test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION allowed when config is true") {
+    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+      withTempView("test_data") {
+        sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
+
+        // Create a temp function that shadows abs (should be allowed)
+        spark.udf.register("abs", (x: Int) => x + 100)
+
+        try {
+          // Unqualified abs should now resolve to temp function (returns input + 100)
+          checkAnswer(
+            sql("SELECT abs(5) FROM test_data"),
+            Row(105)
+          )
+
+          // Qualified builtin.abs should still work (returns absolute value)
+          checkAnswer(
+            sql("SELECT builtin.abs(-5) FROM test_data"),
+            Row(5)
+          )
+
+          // system.builtin.abs should also work
+          checkAnswer(
+            sql("SELECT system.builtin.abs(-5) FROM test_data"),
+            Row(5)
+          )
+        } finally {
+          spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
+        }
+      }
+    }
+  }
+
+  test("SECTION 13: Legacy mode - resolution order changes when config is true") {
+    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+      withTempView("test_data") {
+        sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
+
+        // Register a temp function with the same name as a builtin
+        spark.udf.register("upper", (s: String) => "TEMP_" + s)
+
+        try {
+          // With legacy mode, temp should shadow builtin
+          // Resolution order: extension -> session (temp) -> builtin
+          checkAnswer(
+            sql("SELECT upper('test') FROM test_data"),
+            Row("TEMP_test")
+          )
+
+          // Explicit builtin qualification should still work
+          checkAnswer(
+            sql("SELECT builtin.upper('test') FROM test_data"),
+            Row("TEST")
+          )
+        } finally {
+          spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
+        }
+      }
+    }
+  }
+
+  test("SECTION 13: Legacy mode - default behavior blocks shadowing") {
+    // Without setting the config (default is false), shadowing should be blocked
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.register("length", (s: String) => 999)
+      },
+      condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+      parameters = Map(
+        "funcName" -> "`length`",
+        "namespace" -> "`system`.`builtin`",
+        "config" -> "\"spark.sql.legacy.allowFunctionShadowing\""
+      )
+    )
+  }
 }
 
 /**

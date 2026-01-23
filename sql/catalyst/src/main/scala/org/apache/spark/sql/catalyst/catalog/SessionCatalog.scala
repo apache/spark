@@ -185,11 +185,24 @@ class SessionCatalog(
     SESSION_NAMESPACE_TEMPLATE
   )
 
+  // Legacy resolution path: extension -> session -> builtin (pre-4.0 behavior, allows shadowing)
+  private val LEGACY_RESOLUTION_PATH = Seq(
+    EXTENSION_NAMESPACE_TEMPLATE,
+    SESSION_NAMESPACE_TEMPLATE,
+    BUILTIN_NAMESPACE_TEMPLATE
+  )
+
   /**
    * Returns the resolution path for function lookup.
    * @return Ordered sequence of namespace identifiers.
    */
-  private def resolutionPath(): Seq[FunctionIdentifier] = RESOLUTION_PATH
+  private def resolutionPath(): Seq[FunctionIdentifier] = {
+    if (conf.legacyAllowBuiltinFunctionShadowing) {
+      LEGACY_RESOLUTION_PATH
+    } else {
+      RESOLUTION_PATH
+    }
+  }
 
   /**
    * Maps a namespace template to an actual storage identifier for a specific function.
@@ -2173,6 +2186,27 @@ class SessionCatalog(
       func
     }
 
+    // Security check: When legacy mode is disabled, block creation of temporary functions
+    // that would shadow builtin or extension functions
+    if (func.database.isEmpty && useCompositeKey && !conf.legacyAllowBuiltinFunctionShadowing &&
+        !overrideIfExists) {
+      val funcName = func.funcName
+      // Check if function exists in builtin namespace
+      val builtinIdent = FunctionIdentifier(format(funcName))
+      if (functionRegistry.functionExists(builtinIdent) ||
+          tableFunctionRegistry.functionExists(builtinIdent)) {
+        throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
+          funcName, "system.builtin")
+      }
+      // Check if function exists in extension namespace
+      val extensionIdent = extensionFunctionIdentifier(funcName)
+      if (functionRegistry.functionExists(extensionIdent) ||
+          tableFunctionRegistry.functionExists(extensionIdent)) {
+        throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
+          funcName, "system.extension")
+      }
+    }
+
     if (registry.functionExists(identToRegister) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
@@ -2275,6 +2309,26 @@ class SessionCatalog(
     if (isTemporary) {
       // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
+
+      // Security check: When legacy mode is disabled, block creation of temporary functions
+      // that would shadow builtin or extension functions
+      if (!conf.legacyAllowBuiltinFunctionShadowing && !overrideIfExists) {
+        val funcName = function.name.funcName
+        // Check if function exists in builtin namespace
+        val builtinIdent = FunctionIdentifier(format(funcName))
+        if (functionRegistry.functionExists(builtinIdent) ||
+            tableFunctionRegistry.functionExists(builtinIdent)) {
+          throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
+            funcName, "system.builtin")
+        }
+        // Check if function exists in extension namespace
+        val extensionIdent = extensionFunctionIdentifier(funcName)
+        if (functionRegistry.functionExists(extensionIdent) ||
+            tableFunctionRegistry.functionExists(extensionIdent)) {
+          throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
+            funcName, "system.extension")
+        }
+      }
 
       // Check if this temp function already exists in the target registry
       if (registry.functionExists(tempIdentifier) && !overrideIfExists) {
