@@ -298,15 +298,17 @@ abstract class TupleIntersectionAggBase[S <: Summary]
 
     (intersectionBuffer, input) match {
       // The input was serialized then deserialized.
-      case (IntersectionTupleAggregationBuffer(intersection), FinalizedTupleSketch(sketch)) =>
+      case (
+            intersectionBuffer @ IntersectionTupleAggregationBuffer(intersection),
+            FinalizedTupleSketch(sketch)) =>
         intersection.intersect(sketch)
-        IntersectionTupleAggregationBuffer(intersection)
+        intersectionBuffer
       // If both arguments are intersection objects, merge them directly.
       case (
-            IntersectionTupleAggregationBuffer(intersection1),
+            intersectionBuffer @ IntersectionTupleAggregationBuffer(intersection1),
             IntersectionTupleAggregationBuffer(intersection2)) =>
         intersection1.intersect(intersection2.getResult)
-        IntersectionTupleAggregationBuffer(intersection1)
+        intersectionBuffer
 
       case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }

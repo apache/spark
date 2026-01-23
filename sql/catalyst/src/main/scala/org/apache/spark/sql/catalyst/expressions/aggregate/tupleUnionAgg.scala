@@ -299,13 +299,15 @@ abstract class TupleUnionAggBase[S <: Summary]
       input: TupleSketchState[S]): TupleSketchState[S] = {
     (unionBuffer, input) match {
       // The input was serialized then deserialized.
-      case (UnionTupleAggregationBuffer(union), FinalizedTupleSketch(sketch)) =>
+      case (unionBuffer @ UnionTupleAggregationBuffer(union), FinalizedTupleSketch(sketch)) =>
         union.union(sketch)
-        UnionTupleAggregationBuffer(union)
+        unionBuffer
       // If both arguments are union objects, merge them directly.
-      case (UnionTupleAggregationBuffer(union1), UnionTupleAggregationBuffer(union2)) =>
+      case (
+            unionBuffer @ UnionTupleAggregationBuffer(union1),
+            UnionTupleAggregationBuffer(union2)) =>
         union1.union(union2.getResult)
-        UnionTupleAggregationBuffer(union1)
+        unionBuffer
       case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }
   }

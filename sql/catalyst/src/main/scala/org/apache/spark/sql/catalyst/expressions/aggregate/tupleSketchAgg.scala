@@ -403,17 +403,21 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
     }
 
     (updateBuffer, input) match {
-      case (UnionTupleAggregationBuffer(union), buffer: UpdatableTupleSketchBuffer[_, S]) =>
+      case (
+            updateBuffer @ UnionTupleAggregationBuffer(union),
+            buffer: UpdatableTupleSketchBuffer[_, S]) =>
         union.union(buffer.compactSketch)
-        UnionTupleAggregationBuffer(union)
+        updateBuffer
 
-      case (UnionTupleAggregationBuffer(union), FinalizedTupleSketch(sketch)) =>
+      case (updateBuffer @ UnionTupleAggregationBuffer(union), FinalizedTupleSketch(sketch)) =>
         union.union(sketch)
-        UnionTupleAggregationBuffer(union)
+        updateBuffer
 
-      case (UnionTupleAggregationBuffer(union1), UnionTupleAggregationBuffer(union2)) =>
+      case (
+            updateBuffer @ UnionTupleAggregationBuffer(union1),
+            UnionTupleAggregationBuffer(union2)) =>
         union1.union(union2.getResult)
-        UnionTupleAggregationBuffer(union1)
+        updateBuffer
 
       case (
             buffer1: UpdatableTupleSketchBuffer[_, S],
