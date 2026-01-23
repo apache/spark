@@ -1956,7 +1956,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         if LooseVersion(pd.__version__) < "3.0.0":
-            from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+            from pandas.core.common import is_builtin_func
 
             f = is_builtin_func(func)
         else:
@@ -2189,7 +2189,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         else:
             if LooseVersion(pd.__version__) < "3.0.0":
-                from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+                from pandas.core.common import is_builtin_func
 
                 f = is_builtin_func(func)
             else:
