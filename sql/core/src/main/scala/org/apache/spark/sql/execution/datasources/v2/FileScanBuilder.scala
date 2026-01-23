@@ -42,6 +42,10 @@ abstract class FileScanBuilder(
   protected var dataFilters = Seq.empty[Expression]
   protected var pushedDataFilters = Array.empty[Filter]
 
+  def currentPartitionFilters: Seq[Expression] = partitionFilters
+
+  def currentDataFilters: Seq[Expression] = dataFilters
+
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
     // the actual data schema of this scan is determined in `readDataSchema`.

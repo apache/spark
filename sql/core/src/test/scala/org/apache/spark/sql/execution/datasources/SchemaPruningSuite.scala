@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExecBase, FileScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -87,6 +88,29 @@ abstract class SchemaPruningSuite
     Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
 
   val employees = Employee(0, janeDoe, company) :: Employee(1, johnDoe, company) :: Nil
+
+  // Test data for chained generators - mimics real-world nested array structures
+  case class ServedItem(id: Int, name: String, clicked: Boolean, revenue: Double)
+  case class Request(available: Boolean, clientMode: String, servedItems: Array[ServedItem])
+  case class Session(
+    publisherId: Long,
+    endOfSession: Long,
+    requests: Array[Request])
+
+  val servedItems1 = Array(
+    ServedItem(1, "item1", clicked = true, revenue = 10.0),
+    ServedItem(2, "item2", clicked = false, revenue = 0.0))
+  val servedItems2 = Array(
+    ServedItem(3, "item3", clicked = true, revenue = 15.0))
+
+  val sessions =
+    Session(100L, 1234567890L,
+      requests = Array(
+        Request(available = true, clientMode = "mobile", servedItems = servedItems1),
+        Request(available = false, clientMode = "desktop", servedItems = servedItems2))) ::
+    Session(200L, 1234567900L,
+      requests = Array(
+        Request(available = true, clientMode = "mobile", servedItems = Array.empty))) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -369,11 +393,11 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // SPARK-47230: Now we DO prune multiple field case!
     val query2 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = spark.table("contacts")
@@ -404,10 +428,10 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // SPARK-47230: Now we DO prune multiple field case!
     val query2 = sql(
       "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = sql(
@@ -418,6 +442,619 @@ abstract class SchemaPruningSuite
     checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
+
+  testSchemaPruning("SPARK-47230: nested column prune on POSEXPLODE output") {
+    // Single field access
+    val query1 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("friend.first")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Multiple field access - this is the NEW capability enabled by SPARK-47230
+    val query2 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("friend.first", "friend.middle")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    // All fields including the whole struct
+    val query3 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("pos", "friend.first", "friend.middle", "friend")
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+
+    // Using position in selection
+    val query4 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("pos", "friend.last")
+    checkScan(query4, "struct<friends:array<struct<last:string>>>")
+    checkAnswer(query4, Row(0, "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: nested schema pruning on POSEXPLODE with LATERAL VIEW") {
+    // Single field
+    val query1 = sql(
+      "select friend.first from contacts, lateral posexplode(friends) t(pos, friend)")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Multiple fields - NEW capability
+    val query2 = sql(
+      """select friend.first, friend.middle
+        |from contacts, lateral posexplode(friends) t(pos, friend)""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    // With position
+    val query3 = sql(
+      """
+        |select pos, friend.first, friend.last
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query3, Row(0, "Susan", "Smith") :: Nil)
+
+    // All fields
+    val query4 = sql(
+      """
+        |select pos, friend.first, friend.middle, friend
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |""".stripMargin)
+    val friendsSchema =
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>"
+    checkScan(query4, friendsSchema)
+    checkAnswer(query4, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning(
+    "SPARK-47230: posexplode keeps requested nested block reasons without widening structs") {
+    withSQLConf(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key -> "true") {
+      val jsonData =
+        """
+          |[
+          |  {
+          |    "publisherId": 1,
+          |    "endOfSession": 1000,
+          |    "pv_requests": [
+          |      {
+          |        "available": true,
+          |        "rankerVerboseDataList": [
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r0_req0_rv0",
+          |                "extra": "extra_r0_req0_rv0"
+          |              },
+          |              { "blockReason": "second_r0_req0_rv1" }
+          |            ]
+          |          }
+          |        ],
+          |        "servedItems": [ { "id": 1, "name": "item_0_0", "clicked": true } ]
+          |      },
+          |      {
+          |        "available": false,
+          |        "rankerVerboseDataList": [
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r0_req1_rv0",
+          |                "extra": "extra_r0_req1_rv0"
+          |              }
+          |            ]
+          |          }
+          |        ],
+          |        "servedItems": [ { "id": 11, "name": "item_0_1", "clicked": false } ]
+          |      }
+          |    ]
+          |  },
+          |  {
+          |    "publisherId": 2,
+          |    "endOfSession": 1001,
+          |    "pv_requests": [
+          |      {
+          |        "available": true,
+          |        "rankerVerboseDataList": [
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r1_req0_rv0",
+          |                "extra": "extra_r1_req0_rv0"
+          |              },
+          |              { "blockReason": "second_r1_req0_rv1" }
+          |            ]
+          |          }
+          |        ],
+          |        "servedItems": [ { "id": 1, "name": "item_1_0", "clicked": false } ]
+          |      },
+          |      {
+          |        "available": false,
+          |        "rankerVerboseDataList": [
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r1_req1_rv0",
+          |                "extra": "extra_r1_req1_rv0"
+          |              }
+          |            ]
+          |          }
+          |        ],
+          |        "servedItems": [ { "id": 11, "name": "item_1_1", "clicked": true } ]
+          |      }
+          |    ]
+          |  }
+          |]
+          |""".stripMargin
+
+      withTempPath { path =>
+        val jsonDS = spark.createDataset(Seq(jsonData))(org.apache.spark.sql.Encoders.STRING)
+        val rawDF = spark.read.json(jsonDS)
+        rawDF.write.mode("overwrite").parquet(path.getCanonicalPath)
+
+        spark.read.parquet(path.getCanonicalPath).createOrReplaceTempView("rawdata")
+
+        val result = spark.sql(
+          """
+            |WITH pageviews AS (
+            |  SELECT *,
+            |         request.available AS request_available
+            |  FROM rawdata
+            |  LATERAL VIEW OUTER posexplode(pv_requests) AS requestIdx, request
+            |  LATERAL VIEW OUTER posexplode(request.servedItems) AS servedItemIdx, servedItem
+            |)
+            |SELECT request.rankerVerboseDataList.blockedItemsList[0].blockReason AS blockReason,
+            |       request.available AS request_available
+            |FROM pageviews
+            |""".stripMargin)
+
+        val hasV2Scan = result.queryExecution.executedPlan.exists {
+          case _: DataSourceV2ScanExecBase => true
+          case _ => false
+        }
+        val schemaPrefix =
+          "struct<pv_requests:array<struct<available:boolean," +
+            "rankerVerboseDataList:array<struct<blockedItemsList:" +
+            "array<struct<blockReason:string>>>>,"
+        val expectedSchema =
+          if (hasV2Scan) {
+            schemaPrefix + "servedItems:array<struct<>>>>>"
+          } else {
+            schemaPrefix +
+              "servedItems:array<struct<clicked:boolean,id:bigint,name:string>>>>>"
+          }
+
+        checkScan(result, expectedSchema)
+
+        checkAnswer(
+          result,
+          Row(Seq("reason_r0_req0_rv0", "second_r0_req0_rv1"), true) ::
+            Row(Seq("reason_r0_req1_rv0"), false) ::
+            Row(Seq("reason_r1_req0_rv0", "second_r1_req0_rv1"), true) ::
+            Row(Seq("reason_r1_req1_rv0"), false) :: Nil)
+      }
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: multi-field pruning with case-insensitive EXPLODE") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // Mixed case field names with multiple fields
+      val query1 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.FIRST", "friend.Middle")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+      // With LATERAL VIEW
+      val query2 = sql(
+        "select friend.FiRsT, friend.MiDdLe from contacts, lateral explode(friends) t(friend)")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: multi-field pruning with case-insensitive POSEXPLODE") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // Mixed case with POSEXPLODE
+      val query1 = spark.table("contacts")
+        .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+        .select("friend.First", "friend.MIDDLE")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+      // With LATERAL VIEW
+      val query2 = sql(
+        """select friend.LAST, friend.first
+          |from contacts, lateral posexplode(friends) t(pos, friend)""".stripMargin)
+      checkScan(query2, "struct<friends:array<struct<first:string,last:string>>>")
+      checkAnswer(query2, Row("Smith", "Susan") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: chained LATERAL VIEWs with multi-field pruning") {
+    // Direct query on contacts table with LATERAL VIEW
+    val query = sql(
+      """
+        |select name.first as contact_name, friend.first as friend_first, friend.middle
+        |from contacts
+        |lateral view explode(friends) t1 as friend
+        |where id = 0
+        |""".stripMargin)
+    checkScan(query, "struct<id:int,name:struct<first:string>," +
+      "friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query, Row("Jane", "Susan", "Z.") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: EXPLODE with filter predicates on nested fields") {
+    // Filter on exploded struct fields - should only prune to needed fields
+    val query1 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .where("friend.middle = 'Z.'")
+      .select("friend.first", "friend.middle")
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // SQL syntax with WHERE clause
+    val query2 = sql(
+      """
+        |select friend.first, friend.last
+        |from contacts, lateral explode(friends) t(friend)
+        |where friend.middle is not null
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Smith") :: Nil)
+
+    // Complex filter with multiple conditions
+    val query3 = sql(
+      """
+        |select friend.first
+        |from contacts, lateral explode(friends) t(friend)
+        |where friend.first = 'Susan' and friend.middle = 'Z.'
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query3, Row("Susan") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: POSEXPLODE with filter on position and nested fields") {
+    // Filter using position
+    val query1 = sql(
+      """
+        |select friend.first, friend.middle
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |where pos = 0
+        |""".stripMargin)
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // Filter on both position and field
+    val query2 = sql(
+      """
+        |select pos, friend.last
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |where pos < 1 and friend.first = 'Susan'
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query2, Row(0, "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: aggregate functions on exploded multi-field structs") {
+    // Aggregate on multiple fields from exploded array
+    val query1 = sql(
+      """
+        |select count(distinct friend.first), count(distinct friend.middle)
+        |from contacts, lateral explode(friends) t(friend)
+        |""".stripMargin)
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row(1, 1) :: Nil)
+
+    // Group by with exploded fields
+    val query2 = sql(
+      """
+        |select friend.first, count(*)
+        |from contacts, lateral explode(friends) t(friend)
+        |group by friend.first
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query2, Row("Susan", 1) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: join after posexplode with multi-field pruning") {
+    // Join contacts with departments after posexploding friends array
+    // This tests that schema pruning works correctly when joining exploded data
+    val query = sql(
+      """
+        |select c.name.first, pos, friend.first, friend.middle, d.depName
+        |from contacts c
+        |cross join lateral posexplode(c.friends) t(pos, friend)
+        |join departments d on c.id = d.contactId
+        |where friend.first = 'Susan'
+        |""".stripMargin)
+    // Schema pruning should only read the fields we need from each table:
+    // - contacts: id (for join), name.first, friends.first, friends.middle
+    // - departments: contactId (for join), depName
+    checkScan(query,
+      "struct<id:int,name:struct<first:string>,friends:array<struct<first:string,middle:string>>>",
+      "struct<depName:string,contactId:int>")
+    checkAnswer(query, Row("Jane", 0, "Susan", "Z.", "Engineering") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: CTE with SELECT * and EXPLODE should not over-preserve") {
+    // Test that CTE intermediate `SELECT *` doesn't cause false positives
+    // The fix should only preserve full struct when both direct reference AND
+    // GetStructField accesses occur in the SAME Project, not across CTE boundaries
+    val query1 = sql(
+      """
+        |WITH cte AS (
+        |  SELECT * FROM contacts, LATERAL EXPLODE(friends) t(friend)
+        |)
+        |SELECT friend.first, friend.middle FROM cte WHERE id = 0
+        |""".stripMargin)
+    // Should prune to only first and middle fields, not preserve full struct
+    checkScan(query1, "struct<id:int,friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // Variation: CTE with explicit columns
+    val query2 = sql(
+      """
+        |WITH exploded AS (
+        |  SELECT id, friend FROM contacts, LATERAL EXPLODE(friends) t(friend)
+        |)
+        |SELECT friend.first, friend.last FROM exploded WHERE id = 0
+        |""".stripMargin)
+    checkScan(query2, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: CTE with SELECT * and POSEXPLODE should not over-preserve") {
+    // Similar test for POSEXPLODE to ensure CTE doesn't cause false positives
+    val query1 = sql(
+      """
+        |WITH cte AS (
+        |  SELECT * FROM contacts, LATERAL POSEXPLODE(friends) t(pos, friend)
+        |)
+        |SELECT friend.first, friend.middle FROM cte WHERE id = 0
+        |""".stripMargin)
+    // Should prune to only first and middle fields
+    checkScan(query1, "struct<id:int,friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // Variation: CTE with position in final SELECT
+    val query2 = sql(
+      """
+        |WITH exploded AS (
+        |  SELECT * FROM contacts, LATERAL POSEXPLODE(friends) t(pos, friend)
+        |)
+        |SELECT pos, friend.first, friend.last FROM exploded WHERE id = 0
+        |""".stripMargin)
+    checkScan(query2, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query2, Row(0, "Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: CTE with chained EXPLODE generators") {
+    // Test chained LATERAL VIEW OUTER explode similar to real-world queries
+    // This simulates: SELECT *, field FROM table LATERAL VIEW explode(...)
+    // LATERAL VIEW explode(...)
+
+    // Since contacts.friends is Array[FullName] (not nested arrays), we simulate
+    // chained generators by exploding friends array and then using map_values on relatives
+    val query1 = sql(
+      """
+        |WITH exploded_data AS (
+        |  SELECT *, friend.first as friend_first
+        |  FROM contacts
+        |  LATERAL VIEW OUTER explode(friends) t1 AS friend
+        |  WHERE p = 1
+        |)
+        |SELECT friend_first, friend.middle, friend.last
+        |FROM exploded_data
+        |WHERE id = 0
+        |""".stripMargin)
+    // Should prune to only the fields we actually use
+    checkScan(query1,
+      "struct<id:int,friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.", "Smith") :: Nil)
+
+    // Aggregate query after chained generators (similar to user's real query pattern)
+    val query2 = sql(
+      """
+        |WITH exploded_data AS (
+        |  SELECT *, friend.first as friend_first
+        |  FROM contacts
+        |  LATERAL VIEW OUTER explode(friends) t1 AS friend
+        |  WHERE p = 1
+        |)
+        |SELECT count(*), max(friend.middle), sum(if(friend.first = 'Susan', 1, 0))
+        |FROM exploded_data
+        |GROUP BY id
+        |""".stripMargin)
+    checkScan(query2, "struct<id:int,friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row(1, "Z.", 1) :: Row(1, null, 0) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: CTE with chained POSEXPLODE generators") {
+    // Test chained LATERAL VIEW OUTER posexplode similar to real-world queries
+    // Pattern: CTE with SELECT *, field extraction, then chained posexplodes with aggregation
+
+    val query1 = sql(
+      """
+        |WITH exploded_data AS (
+        |  SELECT *, friend.first as friend_first
+        |  FROM contacts
+        |  LATERAL VIEW OUTER posexplode(friends) t1 AS friendPos, friend
+        |  WHERE p = 1
+        |)
+        |SELECT friendPos, friend_first, friend.middle, friend.last
+        |FROM exploded_data
+        |WHERE id = 0
+        |""".stripMargin)
+    // Should prune to only the fields we actually use
+    checkScan(query1,
+      "struct<id:int,friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query1, Row(0, "Susan", "Z.", "Smith") :: Nil)
+
+    // Aggregate query with posexplode (matching user's real query pattern)
+    val query2 = sql(
+      """
+        |WITH exploded_data AS (
+        |  SELECT *, friend.middle as friend_middle
+        |  FROM contacts
+        |  LATERAL VIEW OUTER posexplode(friends) t1 AS friendPos, friend
+        |  WHERE p = 1
+        |)
+        |SELECT
+        |  count(*) as cnt,
+        |  max(id) as max_id,
+        |  sum(if(friend.first = 'Susan', 1, 0)) as susan_count,
+        |  sum(if(friend_middle IS NOT NULL, 1, 0)) as has_middle
+        |FROM exploded_data
+        |GROUP BY id
+        |""".stripMargin)
+    checkScan(query2, "struct<id:int,friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row(1, 0, 1, 1) :: Row(1, 1, 0, 0) :: Nil)
+
+    // Query with both position and nested field access in WHERE clause
+    val query3 = sql(
+      """
+        |WITH exploded_data AS (
+        |  SELECT *
+        |  FROM contacts
+        |  LATERAL VIEW OUTER posexplode(friends) t1 AS friendPos, friend
+        |)
+        |SELECT friend.first, friend.last
+        |FROM exploded_data
+        |WHERE friendPos = 0 AND friend.middle = 'Z.'
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row("Susan", "Smith") :: Nil)
+  }
+
+
+  // Case classes for nested data with 4 fields at each level
+  case class InnerStruct(a: Int, b: Int, c: Int, d: Int)
+  case class MiddleStruct(w: Int, x: Int, y: Int, z: Int, nested: Array[InnerStruct])
+  case class OuterData(
+    id: Int, name: String, extra1: Int, extra2: String, items: Array[MiddleStruct])
+
+  private val nestedChainedData =
+    OuterData(1, "test", 100, "unused1",
+      Array(
+        MiddleStruct(5, 10, 20, 25, Array(InnerStruct(1, 3, 7, 9), InnerStruct(2, 4, 8, 10))),
+        MiddleStruct(15, 30, 40, 45, Array(InnerStruct(5, 6, 11, 12)))
+      )) :: Nil
+
+  testSchemaPruning(
+    "SPARK-47230: CTE with SELECT * over 2 chained EXPLODE selecting from all levels") {
+    // Test CTE with SELECT * over chained generators with 4+ fields at each level,
+    // but only selecting 2 fields from each level to validate pruning of the other 2 fields:
+    // - Top level: 4 table columns (id, name, extra1, extra2) - select only 2 (id, name)
+    // - 1st generator level: 4 struct fields (w, x, y, z) - select only 2 (x, y)
+    // - 2nd generator level: 4 struct fields (a, b, c, d) - select only 2 (a, b)
+    withDataSourceTable(nestedChainedData, "nested_data") {
+      // CTE with SELECT * over 2 chained explodes (each over array of structs)
+      // Only select 2 fields from each level - others should be pruned
+      val query = sql(
+        """
+          |WITH exploded AS (
+          |  SELECT *
+          |  FROM nested_data
+          |  LATERAL VIEW OUTER explode(items) t1 AS item1
+          |  LATERAL VIEW OUTER explode(item1.nested) t2 AS item2
+          |)
+          |SELECT id, name, item1.x, item1.y, item2.a, item2.b
+          |FROM exploded
+          |""".stripMargin)
+
+      // Should prune unused fields:
+      // - Top level: extra1, extra2 should be pruned (only id, name selected)
+      // - 1st level: w, z, nested should be pruned from item1 (only x, y selected from item1)
+      // - 2nd level: c, d should be pruned (only a, b selected)
+      checkScan(query,
+        "struct<id:int,name:string," +
+        "items:array<struct<x:int,y:int,nested:array<struct<a:int,b:int>>>>>")
+      checkAnswer(query,
+        Row(1, "test", 10, 20, 1, 3) ::
+        Row(1, "test", 10, 20, 2, 4) ::
+        Row(1, "test", 30, 40, 5, 6) :: Nil)
+    }
+  }
+
+  testSchemaPruning(
+    "SPARK-47230: CTE with SELECT * over 2 chained POSEXPLODE selecting from all levels") {
+    // Test CTE with SELECT * over chained posexplode with 4+ fields at each level,
+    // but only selecting 2 fields from each level to validate pruning of the other 2 fields:
+    // - Top level: 4 table columns (id, name, extra1, extra2) - select only 2 (id, name)
+    // - 1st generator level: position + 4 struct fields (w, x, y, z)
+    //   select only pos + 2 fields (x, y)
+    // - 2nd generator level: position + 4 struct fields (a, b, c, d)
+    //   select only pos + 2 fields (a, b)
+    withDataSourceTable(nestedChainedData, "nested_data") {
+      // CTE with SELECT * over 2 chained posexplodes
+      // Only select 2 fields from each level (plus positions) - others should be pruned
+      val query = sql(
+        """
+          |WITH exploded AS (
+          |  SELECT *
+          |  FROM nested_data
+          |  LATERAL VIEW OUTER posexplode(items) t1 AS pos1, item1
+          |  LATERAL VIEW OUTER posexplode(item1.nested) t2 AS pos2, item2
+          |)
+          |SELECT id, name, pos1, item1.x, item1.y, pos2, item2.a, item2.b
+          |FROM exploded
+          |""".stripMargin)
+
+      // Should prune unused fields:
+      // - Top level: extra1, extra2 should be pruned (only id, name selected)
+      // - 1st level: w, z should be pruned (only pos1, x, y selected)
+      // - 2nd level: c, d should be pruned (only pos2, a, b selected)
+      checkScan(query,
+        "struct<id:int,name:string," +
+        "items:array<struct<x:int,y:int,nested:array<struct<a:int,b:int>>>>>")
+      checkAnswer(query,
+        Row(1, "test", 0, 10, 20, 0, 1, 3) ::
+        Row(1, "test", 0, 10, 20, 1, 2, 4) ::
+        Row(1, "test", 1, 30, 40, 0, 5, 6) :: Nil)
+    }
+  }
+
+  testSchemaPruning(
+    "SPARK-47230: chained POSEXPLODE with SELECT * on session requests prunes to thin schema") {
+    withSQLConf(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key -> "true") {
+      withDataSourceTable(sessions, "sessions_data") {
+        val query = sql(
+        """
+          |WITH exploded_data AS (
+          |  SELECT *,
+          |    request.available AS request_available
+          |  FROM sessions_data
+          |  LATERAL VIEW OUTER posexplode(requests) t1 AS requestIdx, request
+          |  LATERAL VIEW OUTER posexplode(request.servedItems) t2 AS servedItemIdx, servedItem
+          |)
+          |SELECT
+          |  publisherId,
+          |  max(endOfSession) AS endOfSession,
+          |  sum(CASE WHEN request.available THEN 1 ELSE 0 END) AS available_requests,
+          |  sum(CASE WHEN request.clientMode = 'mobile' THEN 1 ELSE 0 END) AS mobile_requests,
+          |  sum(CASE WHEN coalesce(servedItem.clicked, false) THEN 1 ELSE 0 END) AS clicked_items,
+          |  sum(servedItem.revenue) AS revenue_total
+          |FROM exploded_data
+          |GROUP BY publisherId
+          |""".stripMargin)
+
+        checkScan(query,
+          "struct<publisherId:bigint,endOfSession:bigint," +
+            "requests:array<struct<available:boolean,clientMode:string," +
+            "servedItems:array<struct<clicked:boolean,revenue:double>>>>>")
+
+        checkAnswer(query.orderBy("publisherId"),
+          Row(100L, 1234567890L, 2L, 2L, 2L, 25.0) ::
+            Row(200L, 1234567900L, 1L, 1L, 0L, null) :: Nil)
+      }
+    }
+  }
+
+  // TODO SPARK-47230: Re-enable when MapType pruning with chained generators is fixed
+  // Currently disabled due to expression ID conflict when pruning map value types
+  // testSchemaPruning("SPARK-47230: CTE with SELECT * over 2 chained generators with contacts")
 
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
@@ -885,10 +1522,19 @@ abstract class SchemaPruningSuite
       collect(df.queryExecution.executedPlan) {
         case scan: FileSourceScanExec => scan.requiredSchema
       }
-    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
-      s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
+    val v2ScanSchemata =
+      collect(df.queryExecution.executedPlan) {
+        case scan: DataSourceV2ScanExecBase =>
+          scan.scan match {
+            case fileScan: FileScan => fileScan.readDataSchema
+            case other => other.readSchema()
+          }
+      }
+    val collectedSchemas = fileSourceScanSchemata ++ v2ScanSchemata
+    assert(collectedSchemas.size === expectedSchemaCatalogStrings.size,
+      s"Found ${collectedSchemas.size} file/V2 sources in dataframe, " +
         s"but expected $expectedSchemaCatalogStrings")
-    fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {
+    collectedSchemas.zip(expectedSchemaCatalogStrings).foreach {
       case (scanSchema, expectedScanSchemaCatalogString) =>
         val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
         implicit val equality = schemaEquality
