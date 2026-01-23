@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.streaming
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 
 /**
@@ -89,16 +90,16 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       val path = dir.getCanonicalPath
       spark.range(10).write.parquet(path)
 
-      val exception = intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("my-source")
-          .load(path)
-      }
-
-      assert(exception.getMessage.contains("Invalid streaming source name"))
-      assert(exception.getMessage.contains("my-source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my-source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my-source"))
     }
   }
 
@@ -107,16 +108,16 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       val path = dir.getCanonicalPath
       spark.range(10).write.parquet(path)
 
-      val exception = intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("my source")
-          .load(path)
-      }
-
-      assert(exception.getMessage.contains("Invalid streaming source name"))
-      assert(exception.getMessage.contains("my source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my source"))
     }
   }
 
@@ -125,16 +126,16 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       val path = dir.getCanonicalPath
       spark.range(10).write.parquet(path)
 
-      val exception = intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("my.source")
-          .load(path)
-      }
-
-      assert(exception.getMessage.contains("Invalid streaming source name"))
-      assert(exception.getMessage.contains("my.source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my.source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my.source"))
     }
   }
 
@@ -143,16 +144,16 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       val path = dir.getCanonicalPath
       spark.range(10).write.parquet(path)
 
-      val exception = intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("my@source")
-          .load(path)
-      }
-
-      assert(exception.getMessage.contains("Invalid streaming source name"))
-      assert(exception.getMessage.contains("my@source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my@source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my@source"))
     }
   }
 
@@ -161,15 +162,14 @@ class DataStreamReaderNameSuite extends QueryTest with RemoteSparkSession {
       val path = dir.getCanonicalPath
       spark.range(10).write.parquet(path)
 
-      val exception = intercept[IllegalArgumentException] {
+      // Empty string triggers require() check which throws IllegalArgumentException
+      intercept[IllegalArgumentException] {
         spark.readStream
           .format("parquet")
           .schema("id LONG")
           .name("")
           .load(path)
       }
-
-      assert(exception.getMessage.contains("Invalid streaming source name"))
     }
   }
 
