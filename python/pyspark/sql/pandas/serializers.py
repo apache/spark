@@ -426,6 +426,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             timezone=self._timezone,
             struct_in_pandas=struct_in_pandas,
             ndarray_as_list=ndarray_as_list,
+            df_for_struct=False,
         )
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
@@ -593,45 +594,20 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         self._input_type = input_type
 
     def arrow_to_pandas(self, arrow_column, idx):
-        import pyarrow.types as types
-
-        # If the arrow type is struct, return a pandas dataframe where the fields of the struct
-        # correspond to columns in the DataFrame. However, if the arrow struct is actually a
-        # Variant, which is an atomic type, treat it as a non-struct arrow type.
-        if (
-            self._df_for_struct
-            and types.is_struct(arrow_column.type)
-            and not is_variant(arrow_column.type)
-        ):
-            import pandas as pd
-
-            series = [
-                # Need to be explicit here because it's in a comprehension
-                super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(
-                    column,
-                    i,
-                    self._struct_in_pandas,
-                    self._ndarray_as_list,
-                    spark_type=(
-                        self._input_type[idx].dataType[i].dataType
-                        if self._input_type is not None
-                        else None
-                    ),
-                )
-                .rename(field.name)
-                for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
-            ]
-            s = pd.concat(series, axis=1)
+        spark_type: DataType
+        if self._input_type is not None:
+            spark_type = self._input_type[idx].dtype
         else:
-            s = super().arrow_to_pandas(
-                arrow_column,
-                idx,
-                self._struct_in_pandas,
-                self._ndarray_as_list,
-                spark_type=self._input_type[idx].dataType if self._input_type is not None else None,
-            )
-        return s
+            spark_type = from_arrow_type(arrow_column.type)
+
+        return ArrowArrayToPandasConversion.convert_legacy(
+            arr=arrow_column,
+            spark_type=spark_type,
+            timezone=self._timezone,
+            struct_in_pandas=self._struct_in_pandas,
+            ndarray_as_list=self._ndarray_as_list,
+            df_for_struct=self._df_for_struct,
+        )
 
     def _create_struct_array(
         self,
