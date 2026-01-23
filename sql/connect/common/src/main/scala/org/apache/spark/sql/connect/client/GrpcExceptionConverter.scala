@@ -62,14 +62,28 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       case e: StatusRuntimeException =>
         throw toThrowable(e, sessionId, userContext, clientType)
       case NonFatal(e) =>
-        throw new SparkException(
-          message = e.toString,
-          cause = e,
-          errorClass = Some("CONNECT_CLIENT_INTERNAL_ERROR"),
-          messageParameters = Map("message" -> e.toString),
-          context = Array.empty,
-          sqlState = Some("XXKCI"))
+        throw handleClientSideError(e)
     }
+  }
+
+  private def handleClientSideError(e: Throwable): Throwable = {
+    val errorClass = Some("CONNECT_CLIENT_INTERNAL_ERROR")
+    val messageParameters = Map("message" -> e.toString)
+    val sqlState = Some("XXKCI")
+    val defaultCtor = errorFactory(classOf[SparkRuntimeException].getName)
+    val constructor =
+      getClassHierarchy(e.getClass).flatMap(errorFactory.get).headOption.getOrElse(defaultCtor)
+    val errParams = ErrorParams(
+      message = Option(e.getMessage).getOrElse(e.toString),
+      cause = Option(e.getCause),
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      queryContext = Array.empty,
+      sqlState = sqlState
+    )
+    val result = constructor(errParams)
+    result.setStackTrace(e.getStackTrace)
+    result
   }
 
   def convertIterator[T](
@@ -149,25 +163,6 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       clientType: String): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
-    if (status == null) {
-      val statusCode = ex.getStatus.getCode
-      val (errorClass, sqlState) = statusCode match {
-        case io.grpc.Status.Code.PERMISSION_DENIED =>
-          ("INSUFFICIENT_PERMISSIONS", "42501")
-        case io.grpc.Status.Code.UNAUTHENTICATED =>
-          ("UNAUTHENTICATED", "08000")
-        case _ =>
-          ("CONNECT_CLIENT_INTERNAL_ERROR", "XXKCI")
-      }
-      return new SparkException(
-        message = ex.toString,
-        cause = ex,
-        errorClass = Some(errorClass),
-        messageParameters = Map("message" -> ex.toString),
-        context = Array.empty,
-        sqlState = Some(sqlState))
-    }
-
     // Extract the ErrorInfo from the StatusProto, if present.
     val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))
@@ -188,9 +183,12 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     }
 
     // If no ErrorInfo is found, create a SparkException based on the StatusRuntimeException.
-    // Use errorFactory and the exception's class for constructing the error, defaulting to
-    // SparkException constructor logic
-    convertException(ex)
+    new SparkException(
+      message = ex.toString,
+      cause = ex.getCause,
+      errorClass = Some("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
+      messageParameters = Map("message" -> ex.toString),
+      context = Array.empty)
   }
 }
 
@@ -283,48 +281,49 @@ private[client] object GrpcExceptionConverter {
         params.message,
         params.cause.orNull,
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         getSqlStateOrFallback(params))),
     errorConstructor(params =>
       new ParseException(
         None,
         Origin(),
         errorClass = getErrorClassOrFallback(params),
-        messageParameters = params.messageParameters,
+        messageParameters = errorParamsToMessageParameters(params),
         queryContext = params.queryContext)),
     errorConstructor(params =>
       new AnalysisException(
         message = params.message,
         cause = params.cause,
         errorClass = resolveParams(params).errorClass,
-        messageParameters = params.messageParameters,
+        messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext,
         sqlState = getSqlStateOrFallback(params))),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(
         getErrorClassOrFallback(params),
-        params.messageParameters)),
+        errorParamsToMessageParameters(params))),
     errorConstructor(params =>
       new TableAlreadyExistsException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause)),
     errorConstructor(params =>
       new TempTableAlreadyExistsException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause)),
     errorConstructor(params =>
       new NoSuchDatabaseException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause)),
     errorConstructor(params =>
-      new NoSuchNamespaceException(getErrorClassOrFallback(params), params.messageParameters)),
+      new NoSuchNamespaceException(getErrorClassOrFallback(params),
+        errorParamsToMessageParameters(params))),
     errorConstructor(params =>
       new NoSuchTableException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
@@ -368,21 +367,21 @@ private[client] object GrpcExceptionConverter {
     errorConstructor[RuntimeException](params =>
       new SparkRuntimeException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause.orNull,
         params.queryContext,
         getSqlStateOrFallback(params))),
     errorConstructor(params =>
       new SparkRuntimeException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause.orNull,
         params.queryContext,
         getSqlStateOrFallback(params))),
     errorConstructor(params =>
       new SparkUpgradeException(
         getErrorClassOrFallback(params),
-        params.messageParameters,
+        errorParamsToMessageParameters(params),
         params.cause.orNull,
         getSqlStateOrFallback(params))),
     errorConstructor(params =>
@@ -390,7 +389,7 @@ private[client] object GrpcExceptionConverter {
         message = params.message,
         cause = params.cause.orNull,
         errorClass = Option(getErrorClassOrFallback(params)),
-        messageParameters = params.messageParameters,
+        messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext,
         sqlState = getSqlStateOrFallback(params))))
 
@@ -515,9 +514,13 @@ private[client] object GrpcExceptionConverter {
    *   params.
    */
   private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] =
-    params.errorClass match {
-      case Some(_) => params.messageParameters
-      case None => Map("message" -> params.message)
+    resolveParams(params).errorClass match {
+      case Some("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE") =>
+        Map("message" -> params.message)
+      case Some(_) =>
+        params.messageParameters
+      case None =>
+        Map("message" -> params.message)
     }
 
   private def getClassHierarchy(clazz: Class[_]): Seq[String] =

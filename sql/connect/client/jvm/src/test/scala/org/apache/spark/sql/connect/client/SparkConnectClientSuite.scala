@@ -216,7 +216,12 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     val ex = intercept[SparkRuntimeException] {
       session.range(10).count()
     }
-    assert(ex.getMessage == "Blocked")
+
+    assert(ex.isInstanceOf[RuntimeException])
+    assert(ex.getCondition == "CONNECT_CLIENT_INTERNAL_ERROR")
+    assert(ex.getMessage contains
+      "Spark Connect client internal error: java.lang.RuntimeException: Blocked")
+    assert(ex.getSqlState == "XXKCI")
   }
 
   test("error framework parameters") {
