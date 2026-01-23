@@ -15,25 +15,15 @@
 # limitations under the License.
 #
 
-import pandas as pd
-
-from pyspark import pandas as ps
+from pyspark.pandas.tests.test_arrow_interface import ArrowInterfaceTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class ConnectPlottingTests(PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase):
-    @property
-    def pdf1(self):
-        return pd.DataFrame(
-            [[1, 2], [4, 5], [7, 8]],
-            index=["cobra", "viper", None],
-            columns=["max_speed", "shield"],
-        )
-
-    @property
-    def psdf1(self):
-        return ps.from_pandas(self.pdf1)
+class ArrowInterfaceParityTests(
+    ArrowInterfaceTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

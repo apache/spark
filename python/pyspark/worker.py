@@ -2747,9 +2747,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
-            ser = ArrowStreamAggArrowUDFSerializer(
-                runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
-            )
+            ser = ArrowStreamAggArrowUDFSerializer(safecheck=True, arrow_cast=True)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -2822,9 +2820,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         ):
             # Arrow cast and safe check are always enabled
-            ser = ArrowStreamArrowUDFSerializer(
-                runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
-            )
+            ser = ArrowStreamArrowUDFSerializer(safecheck=True, arrow_cast=True)
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
@@ -2833,7 +2829,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
             ser = ArrowBatchUDFSerializer(
-                runner_conf.timezone,
                 runner_conf.safecheck,
                 input_types,
                 runner_conf.int_to_decimal_coercion_enabled,

@@ -15,18 +15,14 @@
 # limitations under the License.
 #
 
-import array
 import concurrent.futures
-import datetime
 from decimal import Decimal
 import itertools
 import os
-import re
 import time
 import unittest
 
-from pyspark.sql import Row
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -65,7 +61,7 @@ if have_pandas:
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
 # e.g.:
 # SPARK_GENERATE_GOLDEN_FILES=1 python/run-tests -k
-# --testnames 'pyspark.sql.tests.coercion.test_python_udf_return_type'
+# --testnames 'pyspark.sql.tests.coercion.test_pandas_udf_return_type'
 # If package tabulate https://pypi.org/project/tabulate/ is installed,
 # it will also re-generate the Markdown files.
 
@@ -77,7 +73,7 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFReturnTypeTests(ReusedSQLTestCase):
+class PandasUDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -102,27 +98,40 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
     @property
     def prefix(self):
-        return "golden_python_udf_return_type_coercion"
+        return "golden_pandas_udf_return_type_coercion"
 
     @property
     def test_data(self):
-        return [
-            None,
-            True,
-            1,
-            "a",
-            datetime.date(1970, 1, 1),
-            datetime.datetime(1970, 1, 1, 0, 0),
-            1.0,
-            array.array("i", [1]),
-            [1],
-            (1,),
-            bytearray([65, 66, 67]),
-            Decimal(1),
-            {"a": 1},
-            Row(kwargs=1),
-            Row("namedtuple")(1),
+        data = [
+            [None, None],
+            [True, False],
+            list("ab"),
+            ["12", "34"],
+            [Decimal("1"), Decimal("2")],
+            [{"a": 1}, {"b": 2}],
+            np.arange(1, 3).astype("int8"),
+            np.arange(1, 3).astype("int16"),
+            np.arange(1, 3).astype("int32"),
+            np.arange(1, 3).astype("int64"),
+            np.arange(1, 3).astype("uint8"),
+            np.arange(1, 3).astype("uint16"),
+            np.arange(1, 3).astype("uint32"),
+            np.arange(1, 3).astype("uint64"),
+            np.arange(1, 3).astype("float16"),
+            np.arange(1, 3).astype("float32"),
+            np.arange(1, 3).astype("float64"),
+            # float128 is not supported on macOS
+            # np.arange(1, 3).astype("float128"),
+            np.arange(1, 3).astype("complex64"),
+            np.arange(1, 3).astype("complex128"),
+            [np.array([1, 2, 3], dtype=np.int32), np.array([1, 2, 3], dtype=np.int32)],
+            pd.date_range("19700101", periods=2).values,
+            pd.date_range("19700101", periods=2, tz="US/Eastern").values,
+            [pd.Timedelta("1 day"), pd.Timedelta("2 days")],
+            pd.Categorical(["A", "B"]),
+            pd.DataFrame({"_1": [1, 2]}),
         ]
+        return data
 
     @property
     def test_types(self):
@@ -148,7 +157,15 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         return spark_type.simpleString()
 
     def repr_value(self, value):
-        return f"{str(value)}({type(value).__name__})"
+        v_str = value.to_json() if isinstance(value, pd.DataFrame) else str(value)
+        v_str = v_str.replace(chr(10), " ")
+        v_str = v_str[:32]
+        if isinstance(value, np.ndarray):
+            return f"{v_str}@ndarray[{value.dtype.name}]"
+        elif isinstance(value, pd.DataFrame):
+            simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
+            return f"{v_str}@Dataframe[{simple_schema}]"
+        return f"{v_str}@{type(value).__name__}"
 
     def test_str_repr(self):
         self.assertEqual(
@@ -162,38 +179,14 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             "String representations of values should be different!",
         )
 
-    def test_python_return_type_coercion_vanilla(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=False,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_vanilla",
-            test_name="Vanilla Python UDF",
+    def test_pandas_return_type_coercion_vanilla(self):
+        self._run_pandas_udf_return_type_coercion(
+            golden_file=f"{self.prefix}_base",
+            test_name="Pandas UDF",
         )
 
-    def test_python_return_type_coercion_with_arrow(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=True,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_with_arrow",
-            test_name="Arrow Optimized Python UDF",
-        )
-
-    def test_python_return_type_coercion_with_arrow_and_pandas(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=True,
-            legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
-            test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
-        )
-
-    def _run_udf_return_type_coercion(self, use_arrow, legacy_pandas, golden_file, test_name):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.arrow.enabled": use_arrow,
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": legacy_pandas,
-            }
-        ):
-            self._compare_or_generate_golden(golden_file, test_name)
+    def _run_pandas_udf_return_type_coercion(self, golden_file, test_name):
+        self._compare_or_generate_golden(golden_file, test_name)
 
     def _compare_or_generate_golden(self, golden_file, test_name):
         testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
@@ -218,14 +211,24 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             str_v = self.repr_value(value)
 
             try:
-                test_udf = udf(lambda _: value, spark_type)
-                row = self.spark.range(1).select(test_udf("id")).first()
-                result = repr(row[0])
-                # Normalize Java object hash codes to make tests deterministic
-                result = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result)
+
+                @pandas_udf(returnType=spark_type)
+                def pandas_udf_func(series: pd.Series) -> pd.Series:
+                    assert len(series) == 2
+                    if isinstance(value, pd.DataFrame):
+                        return value
+                    else:
+                        return pd.Series(value)
+
+                rows = (
+                    self.spark.range(0, 2, 1, 1)
+                    .select(pandas_udf_func("id").alias("result"))
+                    .collect()
+                )
+                result = repr([row[0] for row in rows])
                 # "\t" is used as the delimiter
                 result = result.replace("\t", "")
-                result = result[:30]
+                result = result[:40]
             except Exception:
                 result = "X"
 
@@ -256,7 +259,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         else:
             index = pd.Index(
                 [self.repr_type(t) for t in self.test_types],
-                name="SQL Type \\ Pandas Value(Type)",
+                name="SQL Type \\  Value@Type",
             )
             new_golden = pd.DataFrame({}, index=index)
             for v in self.test_data:
