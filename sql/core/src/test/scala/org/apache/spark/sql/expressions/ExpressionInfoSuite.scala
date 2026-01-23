@@ -56,7 +56,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     }
 
     val validGroups = Seq(
-      "agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
+      "agg_funcs", "array_funcs", "avro_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
       "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
       "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
       "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs", "table_funcs",
