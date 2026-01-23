@@ -1830,12 +1830,38 @@ class Analyzer(
     }
 
     /**
-     * Checks if the given function name parts match the expected unqualified function name,
-     * regardless of whether it's qualified or not.
-     * Handles: "count", "builtin.count", "system.builtin.count", "session.count", etc.
+     * Checks if the given function name parts match the expected builtin function name.
+     * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
+     * should only apply to builtin functions, not to user-defined functions.
+     *
+     * Valid patterns (returns true):
+     * - 1 part: "count" (unqualified, will resolve to builtin due to resolution order)
+     * - 2 parts: "builtin.count"
+     * - 3 parts: "system.builtin.count"
+     *
+     * Invalid patterns (returns false):
+     * - "session.count" (could be a non-aggregate UDF)
+     * - "extension.count" (could be a non-aggregate UDF)
+     * - "foo.bar.count" (invalid qualification)
+     * - "catalog.db.count" (persistent function)
+     * - More than 3 parts
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName))
+      if (!nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName))) {
+        return false
+      }
+
+      nameParts.length match {
+        case 1 => true  // Unqualified: safe due to resolution order (builtin wins)
+        case 2 =>
+          // Only allow explicit builtin qualification
+          nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+        case 3 =>
+          // Only allow system.builtin.name
+          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+        case _ => false
+      }
     }
 
     /**
@@ -2034,8 +2060,24 @@ class Analyzer(
             f
           } else {
             // Might be a persistent function - compute full name and check cache first
-            val CatalogAndIdentifier(catalog, ident) =
-              relationResolution.expandIdentifier(nameParts)
+            // Use try-catch to handle session catalog with invalid multi-part namespace
+            val (catalog, ident) = try {
+              val CatalogAndIdentifier(cat, id) = relationResolution.expandIdentifier(nameParts)
+              (cat, id)
+            } catch {
+              case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+                // Session catalog doesn't support multi-part namespaces for tables, but for
+                // function lookups we want to report this as "function not found" rather than
+                // "invalid namespace". This handles cases like foo.bar.count where foo.bar is
+                // treated as a multi-part namespace in the session catalog.
+                val catalogPath = (catalogManager.currentCatalog.name +:
+                  catalogManager.currentNamespace).mkString(".")
+                throw QueryCompilationErrors.unresolvedRoutineError(
+                  nameParts,
+                  Seq("system.builtin", "system.session", catalogPath),
+                  f.origin)
+            }
+
             val fullName = normalizeFuncName(
               (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
 
@@ -2048,8 +2090,12 @@ class Analyzer(
 
               functionType match {
                 case FunctionType.Builtin | FunctionType.Temporary =>
-                  // This shouldn't happen since we checked above, but handle it
-                  f
+                  // This indicates a logic bug - the quick check said this was NOT a
+                  // builtin/temp function, but the full lookup says it IS.
+                  throw SparkException.internalError(
+                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
+                    s"classified as $functionType by full lookup but not found by quick check. " +
+                    s"Check maybeBuiltinFunctionName/maybeTempFunctionName logic.")
 
                 case FunctionType.Persistent =>
                   // Cache it to avoid repeated external catalog lookups

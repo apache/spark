@@ -345,40 +345,57 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     createNamedStruct.children.forall(checkExpression)
   }
 
+  /**
+   * Checks if an unresolved function is supported by the single-pass analyzer.
+   *
+   * The single-pass analyzer supports built-in functions. For qualified function names,
+   * we allow them to pass through to the resolver, which will handle them appropriately.
+   * This includes:
+   * - Built-in functions: `builtin.count`, `system.builtin.count`, unqualified `count`
+   * - Session/temp functions: `session.my_func`, `system.session.my_func` (may or may not work)
+   * - Persistent functions: `catalog.db.func` (not currently supported, but not actively blocked)
+   *
+   * We only explicitly reject certain built-in functions that require special handling
+   * (lambdas, generators, etc.) via the UNSUPPORTED_FUNCTION_NAMES list.
+   *
+   * @param unresolvedFunction the unresolved function to check
+   * @return true if the function should be allowed to attempt resolution, false otherwise
+   */
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
     val nameParts = unresolvedFunction.nameParts
+    val functionName = nameParts.last
 
-    // Only accept unqualified names or names explicitly qualified as builtin.
-    // Session/temporary functions are UDFs and not supported by single-pass analyzer.
-    // Persistent functions from external catalogs are also not supported.
-    val isBuiltinOrUnqualified = nameParts.length match {
-      case 1 =>
-        // Unqualified: "count" - check if it's a builtin
-        true
-      case 2 =>
-        // Two parts: must be "builtin.count"
-        nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case 3 =>
-        // Three parts: must be "system.builtin.count"
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case _ =>
-        // More than 3 parts is not valid
-        false
+    // Only reject functions that are explicitly unsupported or not in the builtin registry
+    // for unqualified names. For qualified names, let the resolver attempt resolution.
+    val shouldReject = if (nameParts.length == 1) {
+      // Unqualified: only allow if it's a known builtin (excluding unsupported ones)
+      ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) ||
+      !FunctionRegistry.functionSet.contains(
+        FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
+      )
+    } else {
+      // Qualified: allow to pass through, let downstream resolver handle it
+      false
     }
 
-    if (!isBuiltinOrUnqualified) {
-      // This is session.func, catalog.db.function, or invalid - not supported
-      false
-    } else {
-      // Extract the unqualified function name (last part) to check against builtin set
-      val functionName = nameParts.last
-      !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(functionName) &&
-      // UDFs are not supported - only built-in functions
-      FunctionRegistry.functionSet.contains(
-        FunctionIdentifier(functionName.toLowerCase(Locale.ROOT))
-      ) &&
-      unresolvedFunction.children.forall(checkExpression)
+    !shouldReject && unresolvedFunction.children.forall(checkExpression)
+  }
+
+  /**
+   * Checks if a function name is unqualified or explicitly qualified as builtin.
+   * This method is currently unused but kept for potential future use.
+   *
+   * @param nameParts the parts of the function name
+   * @return true if the name is unqualified, "builtin.func", or "system.builtin.func"
+   */
+  private def isBuiltinOrUnqualified(nameParts: Seq[String]): Boolean = {
+    nameParts.length match {
+      case 1 => true
+      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case 3 =>
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case _ => false
     }
   }
 

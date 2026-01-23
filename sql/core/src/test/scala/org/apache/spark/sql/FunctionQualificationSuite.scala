@@ -454,6 +454,42 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT System.Builtin.Count(*) FROM VALUES (1), (2), (3) AS t(a)"), Row(3))
   }
 
+  test("SECTION 10: COUNT(*) - invalid qualified names rejected") {
+    // Invalid qualifier "foo.bar" should not be treated as count
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT foo.bar.count(*) FROM VALUES (1), (2), (3) AS t(a)")
+      },
+      condition = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`foo`.`bar`.`count`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+      ),
+      context = ExpectedContext(
+        fragment = "foo.bar.count(*)",
+        start = 7,
+        stop = 22
+      )
+    )
+
+    // Invalid qualifier "catalog.db" should not be treated as count
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT catalog.db.count(*) FROM VALUES (1), (2), (3) AS t(a)")
+      },
+      condition = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`catalog`.`db`.`count`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+      ),
+      context = ExpectedContext(
+        fragment = "catalog.db.count(*)",
+        start = 7,
+        stop = 25
+      )
+    )
+  }
+
   test("SECTION 10: COUNT(*) - count(tbl.*) blocking") {
     sql("CREATE TEMPORARY VIEW count_test_view AS SELECT 1 AS a, 2 AS b")
 
