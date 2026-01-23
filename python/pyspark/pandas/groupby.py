@@ -1957,6 +1957,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if LooseVersion(pd.__version__) < "3.0.0":
             from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+
             f = is_builtin_func(func)
         else:
             f = func
@@ -1965,6 +1966,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             name = psdf.columns[-1]
             pandas_apply = f
         else:
+
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
                 return f(pdf.drop(groupkey_names, axis=1), *a, **k)
 
@@ -2186,7 +2188,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))  # type: ignore[arg-type]
 
         else:
-            f = _builtin_table.get(func, func)
+            if LooseVersion(pd.__version__) < "3.0.0":
+                from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+
+                f = is_builtin_func(func)
+            else:
+                f = func
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 return f(pdf.drop(groupkey_names, axis=1))
