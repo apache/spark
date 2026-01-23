@@ -1766,6 +1766,218 @@ WithCTE
 
 
 -- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 2147483647),
+  (2, 1),
+  (3, 100) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, -2147483648),
+  (2, -1),
+  (3, -100) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 2147483647),
+  (2, -2147483648),
+  (3, 1000000) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'max'))
+FROM VALUES
+  (1, 2147483647),
+  (2, 2147483646),
+  (3, 100) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, max, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, max))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'min'))
+FROM VALUES
+  (1, -2147483648),
+  (2, -2147483647),
+  (3, 100) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, min, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, min))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.7976931348623157E308),
+  (3, 1.0E308) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, -1.7976931348623157E308),
+  (2, -1.7976931348623157E308),
+  (3, -1.0E308) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'max'))
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.0E308),
+  (3, 100.0D) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, max, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, max))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'min'))
+FROM VALUES
+  (1, -1.7976931348623157E308),
+  (2, -1.0E308),
+  (3, -100.0D) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, min, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, min))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 1.0E308),
+  (1, 1.0E308),
+  (1, 1.0E308) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (2, 1),
+  (3, 100) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_summary_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, sum), sum)#xL]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (1, 2147483647),
+  (1, 2147483647),
+  (2, 100),
+  (3, 200) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_summary_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, sum), sum)#xL]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT
+  tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum')) AS estimate,
+  tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum') AS summary
+FROM VALUES
+  (1, -2147483648),
+  (1, -2147483648),
+  (1, -2147483648),
+  (2, -100),
+  (3, -200) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0)) AS estimate#x, tuple_sketch_summary_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0), sum) AS summary#xL]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (1, 2147483647),
+  (1, -2147483648),
+  (2, 500) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_summary_integer(tuple_sketch_agg_integer(key#x, val#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, sum), sum)#xL]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.7976931348623157E308) AS tab(key, val)
+-- !query analysis
+Aggregate [tuple_sketch_summary_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_double(tuple_sketch_agg_double(key, val, 12, sum), sum)#x]
++- SubqueryAlias tab
+   +- LocalRelation [key#x, val#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_integer(key2, val2, 12, 'sum'), 12, 'sum'))
+FROM VALUES
+  (1, 2147483647, 1, 1000) AS tab(key1, val1, key2, val2)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_integer(tuple_union_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_integer(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_integer(tuple_union_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), tuple_sketch_agg_integer(key2, val2, 12, sum), 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key1#x, val1#x, key2#x, val2#x]
+
+
+-- !query
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_double(key2, val2, 12, 'sum'), 12, 'sum'))
+FROM VALUES
+  (1, 1.0E308, 1, 1.0E308) AS tab(key1, val1, key2, val2)
+-- !query analysis
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
++- SubqueryAlias tab
+   +- LocalRelation [key1#x, val1#x, key2#x, val2#x]
+
+
+-- !query
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key => key1, summary => val1))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis

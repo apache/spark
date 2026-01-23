@@ -774,6 +774,141 @@ SELECT
   tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches;
 
+-- Overflow tests for tuple_sketch_agg_integer and tuple_sketch_agg_double
+
+-- Test tuple_sketch_agg_integer with values that cause integer overflow when summed (sum mode)
+-- Testing sum of values that exceed INT max (2147483647)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 2147483647),
+  (2, 1),
+  (3, 100) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with negative overflow (sum mode)
+-- Testing sum of values that go below INT min (-2147483648)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, -2147483648),
+  (2, -1),
+  (3, -100) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with mixed positive and negative values near overflow boundaries
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 2147483647),
+  (2, -2147483648),
+  (3, 1000000) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with max mode - should handle max integer value
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'max'))
+FROM VALUES
+  (1, 2147483647),
+  (2, 2147483646),
+  (3, 100) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with min mode - should handle min integer value
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'min'))
+FROM VALUES
+  (1, -2147483648),
+  (2, -2147483647),
+  (3, 100) AS tab(key, val);
+
+-- Test tuple_sketch_agg_double with values that cause overflow to positive infinity
+-- Testing sum of very large double values
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.7976931348623157E308),
+  (3, 1.0E308) AS tab(key, val);
+
+-- Test tuple_sketch_agg_double with values that cause overflow to negative infinity
+-- Testing sum of very large negative double values
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, -1.7976931348623157E308),
+  (2, -1.7976931348623157E308),
+  (3, -1.0E308) AS tab(key, val);
+
+-- Test tuple_sketch_agg_double with max mode using Double.MAX_VALUE
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'max'))
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.0E308),
+  (3, 100.0D) AS tab(key, val);
+
+-- Test tuple_sketch_agg_double with min mode using very large negative value
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'min'))
+FROM VALUES
+  (1, -1.7976931348623157E308),
+  (2, -1.0E308),
+  (3, -100.0D) AS tab(key, val);
+
+-- Test tuple_sketch_agg_double with same key, values that overflow when summed
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES
+  (1, 1.0E308),
+  (1, 1.0E308),
+  (1, 1.0E308) AS tab(key, val);
+
+-- Test tuple_sketch_summary_integer with overflow in sum mode
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (2, 1),
+  (3, 100) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with same key where multiple values overflow when summed, then extract summary
+-- Key 1 gets three INT_MAX values that overflow when summed
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (1, 2147483647),
+  (1, 2147483647),
+  (2, 100),
+  (3, 200) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with negative overflow on same key, then extract both estimate and summary
+-- Key 1 gets three INT_MIN values that overflow when summed
+SELECT
+  tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12, 'sum')) AS estimate,
+  tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum') AS summary
+FROM VALUES
+  (1, -2147483648),
+  (1, -2147483648),
+  (1, -2147483648),
+  (2, -100),
+  (3, -200) AS tab(key, val);
+
+-- Test tuple_sketch_agg_integer with mixed overflow - positive and negative values for same key
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 2147483647),
+  (1, 2147483647),
+  (1, -2147483648),
+  (2, 500) AS tab(key, val);
+
+-- Test tuple_sketch_summary_double with overflow to infinity
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key, val, 12, 'sum'), 'sum')
+FROM VALUES
+  (1, 1.7976931348623157E308),
+  (2, 1.7976931348623157E308) AS tab(key, val);
+
+-- Test tuple_union_integer with sketches containing values that overflow when combined
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_integer(key2, val2, 12, 'sum'), 12, 'sum'))
+FROM VALUES
+  (1, 2147483647, 1, 1000) AS tab(key1, val1, key2, val2);
+
+-- Test tuple_union_double with sketches containing values that overflow to infinity when combined
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_double(key2, val2, 12, 'sum'), 12, 'sum'))
+FROM VALUES
+  (1, 1.0E308, 1, 1.0E308) AS tab(key1, val1, key2, val2);
+
 -- Named parameter tests for tuple sketch functions
 
 -- Test tuple_sketch_agg_double with named parameters - only required params
