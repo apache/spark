@@ -11293,7 +11293,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         # Rely on dtype rather than spark type because columns that consist of bools and
         # Nones should be excluded if bool_only is True
-        return [label for label in column_labels if is_bool_dtype(self._psser_for(label))]  # type: ignore[arg-type]
+        return [label for label in column_labels if is_bool_dtype(self._psser_for(label))]
 
     def _result_aggregated(
         self, column_labels: List[Label], scols: Sequence[PySparkColumn]

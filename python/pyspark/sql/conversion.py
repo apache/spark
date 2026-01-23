@@ -21,7 +21,12 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.types import (
+    _dedup_names,
+    _deduplicate_field_names,
+    _create_converter_to_pandas,
+    to_arrow_schema,
+)
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
@@ -48,6 +53,7 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    import pandas as pd
 
 
 class LocalDataToArrowConversion:
@@ -954,3 +960,37 @@ class ArrowTimestampConversion:
             )
         else:  # pragma: no cover
             assert False, f"Need converter for {pa_type} but failed to find one."
+
+
+class ArrowArrayToPandasConversion:
+    @classmethod
+    def convert_legacy(
+        cls,
+        arr: "pa.Array",
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+    ) -> "pd.Series":
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+        return converter(ser)

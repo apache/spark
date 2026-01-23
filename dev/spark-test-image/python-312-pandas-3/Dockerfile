@@ -15,16 +15,19 @@
 # limitations under the License.
 #
 
+# Note this is a temporary image file for development with Pandas 3,
+# and will be remvoed after PySpark is fully compatible with Pandas 3.
+
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:jammy-20240911.1
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.12 and Pandas 3"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250618
+ENV FULL_REFRESH_DATE=20260110
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -43,64 +46,39 @@ RUN apt-get update && apt-get install -y \
     libgit2-dev \
     libharfbuzz-dev \
     libjpeg-dev \
+    liblapack-dev \
+    libopenblas-dev \
     libpng-dev \
+    libpython3-dev \
     libssl-dev \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
-    nodejs \
-    npm \
+    openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
     tzdata \
-    r-base \
     software-properties-common \
     wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+    zlib1g-dev
 
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" \
-    && Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" \
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
-# Install Python 3.11
+# Install Python 3.12
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.11 \
+    python3.12 \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Note that mlflow is execluded since it requires pandas<3
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas>=3 scipy plotly<6.0.0 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+# Python deps for Spark Connect
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install \
-    'black==23.12.1' \
-    'flake8==3.9.0' \
-    'ruff==0.14.8' \
-    'googleapis-common-protos-stubs==2.2.0' \
-    'grpc-stubs==1.24.11' \
-    'grpcio-status==1.76.0' \
-    'grpcio==1.76.0' \
-    'zstandard==0.25.0' \
-    'ipython' \
-    'ipython_genutils' \
-    'jinja2' \
-    'matplotlib' \
-    'mypy==1.8.0' \
-    'numpy==2.4.1' \
-    'numpydoc' \
-    'pandas' \
-    'pandas-stubs' \
-    'plotly>=4.8' \
-    'pyarrow>=22.0.0' \
-    'pytest-mypy-plugins==1.9.3' \
-    'pytest==7.1.3' \
-    'scipy>=1.8.0' \
-    'scipy-stubs' \
-    && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && python3.11 -m pip install torcheval \
-    && python3.11 -m pip cache purge
+# Install Python 3.12 packages
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+# RUN python3.12 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
+RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
+    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install torcheval && \
+    python3.12 -m pip cache purge

@@ -907,6 +907,7 @@ class SparkSession private(
       override protected def conf: SQLConf = sessionState.conf
     }
 
+  @transient
   private[sql] lazy val observationManager = new ObservationManager(this)
 
   override private[sql] def isUsable: Boolean = !sparkContext.isStopped
