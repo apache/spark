@@ -225,6 +225,7 @@ private[client] object GrpcExceptionConverter {
   private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
+      // errorClass will only be set if the error is SparkThrowable.
       errorClass: Option[String],
       // messageParameters will only be set if the error is both enriched and SparkThrowable.
       messageParameters: Map[String, String],
@@ -525,33 +526,4 @@ private[client] object GrpcExceptionConverter {
 
   private def getClassHierarchy(clazz: Class[_]): Seq[String] =
     Iterator.iterate[Class[_]](clazz)(_.getSuperclass).takeWhile(_ != null).map(_.getName).toSeq
-
-  /**
-   * Converts an exception to a Spark exception using errorFactory. Checks cause's hierarchy
-   * first; if no match and fallbackToSparkException is false, also checks exception's hierarchy.
-   */
-  private[client] def convertException(
-      ex: Throwable,
-      fallbackToSparkException: Boolean = true): Throwable = {
-    val defaultCtor = errorFactory(classOf[SparkException].getName)
-    val causeCtor = Option(ex.getCause)
-      .map(c => getClassHierarchy(c.getClass)).getOrElse(Seq.empty)
-      .flatMap(errorFactory.get).headOption
-
-    val constructor = causeCtor.getOrElse {
-      if (fallbackToSparkException) defaultCtor
-      else getClassHierarchy(ex.getClass).flatMap(errorFactory.get)
-        .headOption.getOrElse(defaultCtor)
-    }
-
-    val result = constructor(ErrorParams(
-      message = Option(ex.getMessage).getOrElse(ex.toString),
-      cause = Option(ex.getCause),
-      errorClass = None,
-      messageParameters = Map.empty,
-      queryContext = Array.empty,
-      sqlState = None))
-    result.setStackTrace(ex.getStackTrace)
-    result
-  }
 }
