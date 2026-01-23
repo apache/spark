@@ -23,11 +23,13 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
     Optional,
     Set,
     Sized,
     Tuple,
     Type,
+    TYPE_CHECKING,
     Union,
     cast,
     no_type_check,
@@ -42,7 +44,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     is_datetime64_dtype,
     is_list_like,
 )
@@ -99,6 +101,9 @@ from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
+
+if TYPE_CHECKING:
+    from pandas._typing import HTMLFlavors
 
 __all__ = [
     "from_pandas",
@@ -1137,7 +1142,7 @@ def read_excel(
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
     ) -> pd.DataFrame:
-        return pd.read_excel(
+        return pd.read_excel(  # type: ignore[call-overload, misc]
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
             header=header,
@@ -1154,7 +1159,7 @@ def read_excel(
             na_values=na_values,
             keep_default_na=keep_default_na,
             verbose=verbose,
-            parse_dates=parse_dates,  # type: ignore[arg-type]
+            parse_dates=parse_dates,
             date_parser=date_parser,
             thousands=thousands,
             comment=comment,
@@ -1260,7 +1265,7 @@ def read_excel(
 def read_html(
     io: Union[str, Any],
     match: str = ".+",
-    flavor: Optional[str] = None,
+    flavor: Optional["HTMLFlavors"] = None,
     header: Optional[Union[int, List[int]]] = None,
     index_col: Optional[Union[int, List[int]]] = None,
     skiprows: Optional[Union[int, List[int], slice]] = None,
@@ -1917,7 +1922,7 @@ def date_range(
     return cast(
         DatetimeIndex,
         ps.from_pandas(
-            pd.date_range(
+            pd.date_range(  # type: ignore[call-overload]
                 start=start,
                 end=end,
                 periods=periods,
@@ -2032,7 +2037,7 @@ def timedelta_range(
     periods: Optional[int] = None,
     freq: Optional[Union[str, DateOffset]] = None,
     name: Optional[str] = None,
-    closed: Optional[str] = None,
+    closed: Optional[Literal["left", "right"]] = None,
 ) -> TimedeltaIndex:
     """
     Return a fixed frequency TimedeltaIndex, with day as the default frequency.
@@ -2101,7 +2106,7 @@ def timedelta_range(
     return cast(
         TimedeltaIndex,
         ps.from_pandas(
-            pd.timedelta_range(
+            pd.timedelta_range(  # type: ignore[call-overload]
                 start=start,
                 end=end,
                 periods=periods,

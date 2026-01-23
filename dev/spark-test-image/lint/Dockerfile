@@ -91,10 +91,10 @@ RUN python3.11 -m pip install \
     'jinja2' \
     'matplotlib' \
     'mypy==1.8.0' \
-    'numpy==2.0.2' \
+    'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \
-    'pandas-stubs==1.2.0.53' \
+    'pandas-stubs' \
     'plotly>=4.8' \
     'pyarrow>=22.0.0' \
     'pytest-mypy-plugins==1.9.3' \
