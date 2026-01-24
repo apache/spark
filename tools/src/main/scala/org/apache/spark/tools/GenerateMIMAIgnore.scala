@@ -18,13 +18,13 @@
 // scalastyle:off classforname
 package org.apache.spark.tools
 
-import io.github.classgraph.ClassGraph
-
 import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.reflect.runtime.{universe => unv}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
+
+import io.github.classgraph.ClassGraph
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
