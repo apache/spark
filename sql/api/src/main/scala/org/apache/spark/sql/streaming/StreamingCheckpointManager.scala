@@ -50,6 +50,7 @@ private[spark] abstract class StreamingCheckpointManager {
    * @param enforceExactlyOnceSink
    *   if we shouldn't allow skipping failed batches, to avoid duplicates in exactly once sinks.
    */
+  @Evolving
   private[spark] def repartition(
       checkpointLocation: String,
       numPartitions: Int,

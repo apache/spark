@@ -767,6 +767,8 @@ class StreamingCheckpointManager:
 
         Notes
         -----
+        This API is experimental.
+
         This operation should only be performed after the streaming query has been stopped. If not,
         can lead to undefined behavior or checkpoint corruption.
         """
