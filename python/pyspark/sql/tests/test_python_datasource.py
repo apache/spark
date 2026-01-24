@@ -28,6 +28,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
+from pyspark.profiler import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -1275,6 +1276,10 @@ class BasePythonDataSourceTestsMixin:
             # We should also found UDF profile results for data source read
             self.assertIn("UDF<id=", stdout)
 
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Fails with coverage enabled, skipping for now."
+    )
+    @unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
     def test_data_source_memory_profiler(self):
         with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "memory"}):
             self.test_custom_json_data_source_read()
