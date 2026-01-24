@@ -1525,15 +1525,13 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type, runner_conf):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
-        input_types = [
-            field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        ]
+        input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if runner_conf.use_legacy_pandas_udtf_conversion:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
             ser = ArrowStreamPandasUDTFSerializer(
                 runner_conf.timezone,
                 runner_conf.safecheck,
-                input_types=input_types,
+                input_type=input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         else:
@@ -2456,9 +2454,11 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
             try:
                 converters = [
                     ArrowTableToRowsConversion._create_converter(
-                        dt, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
+                        f.dataType,
+                        none_on_identity=True,
+                        binary_as_bytes=runner_conf.binary_as_bytes,
                     )
-                    for dt in input_types
+                    for f in input_type
                 ]
                 for a in it:
                     pylist = [
@@ -2825,12 +2825,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
         ):
-            input_types = [
-                f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
-            ]
+            input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ser = ArrowBatchUDFSerializer(
                 runner_conf.safecheck,
-                input_types,
+                input_type,
                 runner_conf.int_to_decimal_coercion_enabled,
                 runner_conf.binary_as_bytes,
             )
@@ -2848,8 +2846,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF takes input types
-            input_types = (
-                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
+            input_type = (
+                _parse_datatype_json_string(utf8_deserializer.loads(infile))
                 if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
                 else None
             )
@@ -2862,7 +2860,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 struct_in_pandas,
                 ndarray_as_list,
                 True,
-                input_types,
+                input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
     else:

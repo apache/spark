@@ -516,12 +516,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         timezone,
         safecheck,
         assign_cols_by_name,
-        df_for_struct=False,
-        struct_in_pandas="dict",
-        ndarray_as_list=False,
-        arrow_cast=False,
-        input_types=None,
-        int_to_decimal_coercion_enabled=False,
+        df_for_struct: bool = False,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        arrow_cast: bool = False,
+        input_type: Optional[StructType] = None,
+        int_to_decimal_coercion_enabled: bool = False,
     ):
         super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
         self._assign_cols_by_name = assign_cols_by_name
@@ -529,7 +529,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = ndarray_as_list
         self._arrow_cast = arrow_cast
-        self._input_types = input_types
+        if input_type is not None:
+            assert isinstance(input_type, StructType)
+        self._input_type = input_type
 
     def arrow_to_pandas(self, arrow_column, idx):
         import pyarrow.types as types
@@ -553,8 +555,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     self._struct_in_pandas,
                     self._ndarray_as_list,
                     spark_type=(
-                        self._input_types[idx][i].dataType
-                        if self._input_types is not None
+                        self._input_type[idx].dataType[i].dataType
+                        if self._input_type is not None
                         else None
                     ),
                 )
@@ -568,7 +570,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 idx,
                 self._struct_in_pandas,
                 self._ndarray_as_list,
-                spark_type=self._input_types[idx] if self._input_types is not None else None,
+                spark_type=self._input_type[idx].dataType if self._input_type is not None else None,
             )
         return s
 
@@ -781,8 +783,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
     ----------
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    input_types : list
-        List of input data types for the UDF
+    input_type : spark data type
+        input data type for the UDF, must be a StructType
     int_to_decimal_coercion_enabled : bool
         If True, applies additional coercions in Python before converting to Arrow
         This has performance penalties.
@@ -792,16 +794,17 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
     def __init__(
         self,
-        safecheck,
-        input_types,
-        int_to_decimal_coercion_enabled,
-        binary_as_bytes,
+        safecheck: bool,
+        input_type: StructType,
+        int_to_decimal_coercion_enabled: bool,
+        binary_as_bytes: bool,
     ):
         super().__init__(
             safecheck=safecheck,
             arrow_cast=True,
         )
-        self._input_types = input_types
+        assert isinstance(input_type, StructType)
+        self._input_type = input_type
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
         self._binary_as_bytes = binary_as_bytes
 
@@ -821,9 +824,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         """
         converters = [
             ArrowTableToRowsConversion._create_converter(
-                dt, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
+                f.dataType, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
             )
-            for dt in self._input_types
+            for f in self._input_type
         ]
 
         for batch in super().load_stream(stream):
@@ -884,7 +887,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck, input_types, int_to_decimal_coercion_enabled):
+    def __init__(self, timezone, safecheck, input_type, int_to_decimal_coercion_enabled):
         super().__init__(
             timezone=timezone,
             safecheck=safecheck,
@@ -904,7 +907,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             ndarray_as_list=True,
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
-            input_types=input_types,
+            input_type=input_type,
             # Enable additional coercions for UDTF serialization
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
@@ -1116,7 +1119,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             struct_in_pandas="dict",
             ndarray_as_list=False,
             arrow_cast=True,
-            input_types=None,
+            input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
 
@@ -1171,7 +1174,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             struct_in_pandas="dict",
             ndarray_as_list=False,
             arrow_cast=True,
-            input_types=None,
+            input_type=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
 
