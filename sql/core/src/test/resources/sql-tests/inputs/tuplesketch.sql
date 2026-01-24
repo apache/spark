@@ -1,3 +1,8 @@
+-- Test legacy behavior: allow invalid UTF-8 when casting binary to string
+-- This preserves the original collation test coverage for Tuple Sketch aggregation.
+-- Related: SPARK-54586
+SET spark.sql.castBinaryToString.validateUtf8=false;
+
 -- Positive test cases
 -- Create tables with key-value pairs for tuple sketches
 

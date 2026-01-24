@@ -1,3 +1,6 @@
+--SET spark.sql.ansi.enabled=false
+--SET spark.sql.castBinaryToString.validateUtf8=true
+
 -- Test UTF-8 validation when casting binary to string
 -- Tests for SPARK-54586: Validate UTF-8 when casting BinaryType to StringType
 -- The default behavior (validateUtf8=true) ensures StringType always contains valid UTF-8

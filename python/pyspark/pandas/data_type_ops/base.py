@@ -199,8 +199,17 @@ def _as_string_type(
     else:
         casted = index_ops.spark.column.cast(spark_type)
         scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
+
+    # Always get nullable from the Spark schema after the cast.
+    # Binary->String can be nullable when UTF-8 validation is enabled.
+    temp_sdf = index_ops._internal.spark_frame.select(scol)
+    nullable = temp_sdf.schema.fields[0].nullable
+
     return index_ops._with_new_scol(
-        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
+        scol,
+        field=index_ops._internal.data_fields[0].copy(
+            dtype=dtype, spark_type=spark_type, nullable=nullable
+        ),
     )
 
 
