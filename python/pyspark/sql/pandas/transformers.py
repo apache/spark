@@ -36,9 +36,7 @@ class FlattenStructTransformer:
     Output: Iterator of RecordBatch (flattened)
     """
 
-    def __call__(
-        self, batches: Iterator["pa.RecordBatch"]
-    ) -> Iterator["pa.RecordBatch"]:
+    def __call__(self, batches: Iterator["pa.RecordBatch"]) -> Iterator["pa.RecordBatch"]:
         import pyarrow as pa
 
         for batch in batches:
