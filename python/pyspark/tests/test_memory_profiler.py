@@ -23,7 +23,7 @@ import unittest
 import warnings
 from contextlib import contextmanager
 from io import StringIO
-from typing import cast, Iterator
+from typing import Iterator
 from unittest import mock
 
 from pyspark import SparkConf
@@ -114,7 +114,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
@@ -136,7 +136,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_profile_pandas_function_api(self):
         apis = [self.exec_grouped_map]
@@ -273,7 +273,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_udf_with_arrow(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
@@ -315,7 +315,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_pandas_udf(self):
         @pandas_udf("long")
@@ -339,7 +339,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_pandas_udf_iterator(self):
         import pandas as pd
@@ -367,7 +367,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_map_in_pandas(self):
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
@@ -386,7 +386,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_pandas_udf_window(self):
         # WindowInPandasExec
@@ -411,7 +411,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_aggregate_in_pandas(self):
         # AggregateInPandasExec
@@ -434,7 +434,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_group_apply_in_pandas(self):
         # FlatMapGroupsInBatchExec
@@ -456,7 +456,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
@@ -485,7 +485,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_group_apply_in_arrow(self):
         # FlatMapGroupsInBatchExec
@@ -510,7 +510,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_cogroup_apply_in_arrow(self):
         import pyarrow as pa

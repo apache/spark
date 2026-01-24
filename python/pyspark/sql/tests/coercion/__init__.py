@@ -14,29 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import pandas as pd
-
-from pyspark import pandas as ps
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
-
-
-class ConnectPlottingTests(PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase):
-    @property
-    def pdf1(self):
-        return pd.DataFrame(
-            [[1, 2], [4, 5], [7, 8]],
-            index=["cobra", "viper", None],
-            columns=["max_speed", "shield"],
-        )
-
-    @property
-    def psdf1(self):
-        return ps.from_pandas(self.pdf1)
-
-
-if __name__ == "__main__":
-    from pyspark.testing import main
-
-    main()

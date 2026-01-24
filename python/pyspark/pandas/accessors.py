@@ -579,7 +579,7 @@ class PandasOnSparkFrameMethods:
             return original_func(o, *args, **kwargs)
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            return new_func(pdf).to_frame()
+            return new_func(pdf).to_frame()  # type: ignore[operator]
 
         def pandas_series_func(
             f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
