@@ -38,8 +38,8 @@ from pyspark.sql.conversion import (
     ArrowArrayToPandasConversion,
 )
 from pyspark.sql.pandas.transformers import (
-    FlattenStructTransformer,
-    WrapStructTransformer,
+    flatten_struct,
+    wrap_struct,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -149,17 +149,12 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
     """
 
-    def __init__(self):
-        super().__init__()
-        self._flatten_struct = FlattenStructTransformer()
-        self._wrap_struct = WrapStructTransformer()
-
     def load_stream(self, stream):
         """
         Flatten the struct into Arrow's record batches.
         """
         batches = super().load_stream(stream)
-        return map(list, self._flatten_struct(batches))
+        return map(list, map(flatten_struct, batches))
 
     def dump_stream(self, iterator, stream):
         """
@@ -167,7 +162,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import itertools
 
-        batches = self._wrap_struct(iterator)
+        batches = map(lambda x: wrap_struct(x[0]), iterator)
         first = next(batches, None)
         if first is None:
             return

@@ -24,141 +24,74 @@ from pyspark.testing.sqlutils import (
 if have_pyarrow:
     import pyarrow as pa
 
-    from pyspark.sql.pandas.transformers import FlattenStructTransformer, WrapStructTransformer
+    from pyspark.sql.pandas.transformers import flatten_struct, wrap_struct
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class TransformerTests(unittest.TestCase):
-    def test_flatten_struct_transformer_basic(self):
+    def test_flatten_struct_basic(self):
         """Test flattening a struct column into separate columns."""
-        # Create a batch with a single struct column containing two fields
         struct_array = pa.StructArray.from_arrays(
             [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
             names=["x", "y"],
         )
         batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
 
-        transformer = FlattenStructTransformer()
-        result = list(transformer(iter([batch])))
+        flattened = flatten_struct(batch)
 
-        self.assertEqual(len(result), 1)
-        flattened = result[0]
         self.assertEqual(flattened.num_columns, 2)
         self.assertEqual(flattened.column(0).to_pylist(), [1, 2, 3])
         self.assertEqual(flattened.column(1).to_pylist(), ["a", "b", "c"])
         self.assertEqual(flattened.schema.names, ["x", "y"])
 
-    def test_flatten_struct_transformer_multiple_batches(self):
-        """Test flattening multiple batches."""
-        batches = []
-        for i in range(3):
-            struct_array = pa.StructArray.from_arrays(
-                [pa.array([i * 10 + j for j in range(2)])],
-                names=["val"],
-            )
-            batches.append(pa.RecordBatch.from_arrays([struct_array], ["_0"]))
-
-        transformer = FlattenStructTransformer()
-        result = list(transformer(iter(batches)))
-
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0].column(0).to_pylist(), [0, 1])
-        self.assertEqual(result[1].column(0).to_pylist(), [10, 11])
-        self.assertEqual(result[2].column(0).to_pylist(), [20, 21])
-
-    def test_flatten_struct_transformer_empty_batch(self):
+    def test_flatten_struct_empty_batch(self):
         """Test flattening an empty batch."""
         struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
         struct_array = pa.array([], type=struct_type)
         batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
 
-        transformer = FlattenStructTransformer()
-        result = list(transformer(iter([batch])))
+        flattened = flatten_struct(batch)
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].num_rows, 0)
-        self.assertEqual(result[0].num_columns, 2)
+        self.assertEqual(flattened.num_rows, 0)
+        self.assertEqual(flattened.num_columns, 2)
 
-    def test_wrap_struct_transformer_basic(self):
+    def test_wrap_struct_basic(self):
         """Test wrapping columns into a struct."""
         batch = pa.RecordBatch.from_arrays(
             [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
             names=["x", "y"],
         )
-        arrow_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
 
-        transformer = WrapStructTransformer()
-        result = list(transformer(iter([(batch, arrow_type)])))
+        wrapped = wrap_struct(batch)
 
-        self.assertEqual(len(result), 1)
-        wrapped = result[0]
         self.assertEqual(wrapped.num_columns, 1)
         self.assertEqual(wrapped.schema.names, ["_0"])
 
-        # Verify the struct content
         struct_col = wrapped.column(0)
         self.assertEqual(len(struct_col), 3)
-        # Access struct fields
         self.assertEqual(struct_col.field(0).to_pylist(), [1, 2, 3])
         self.assertEqual(struct_col.field(1).to_pylist(), ["a", "b", "c"])
 
-    def test_wrap_struct_transformer_multiple_batches(self):
-        """Test wrapping multiple batches."""
-        batches_with_types = []
-        arrow_type = pa.struct([("val", pa.int64())])
-        for i in range(3):
-            batch = pa.RecordBatch.from_arrays(
-                [pa.array([i * 10 + j for j in range(2)])],
-                names=["val"],
-            )
-            batches_with_types.append((batch, arrow_type))
-
-        transformer = WrapStructTransformer()
-        result = list(transformer(iter(batches_with_types)))
-
-        self.assertEqual(len(result), 3)
-        for i, wrapped in enumerate(result):
-            self.assertEqual(wrapped.num_columns, 1)
-            struct_col = wrapped.column(0)
-            self.assertEqual(struct_col.field(0).to_pylist(), [i * 10, i * 10 + 1])
-
-    def test_wrap_struct_transformer_empty_columns(self):
+    def test_wrap_struct_empty_columns(self):
         """Test wrapping a batch with no columns."""
-        # Create an empty schema batch with some rows
-        batch = pa.RecordBatch.from_arrays([], names=[])
-        # Manually set num_rows by creating from pydict
-        batch = pa.RecordBatch.from_pydict({}, schema=pa.schema([]))
-        # Create batch with rows using a workaround
-        batch = pa.record_batch({"dummy": [1, 2, 3]}).select([]).slice(0, 3)
-        # Actually, let's create it properly
         schema = pa.schema([])
         batch = pa.RecordBatch.from_arrays([], schema=schema)
 
-        arrow_type = pa.struct([])
+        wrapped = wrap_struct(batch)
 
-        transformer = WrapStructTransformer()
-        result = list(transformer(iter([(batch, arrow_type)])))
-
-        self.assertEqual(len(result), 1)
-        wrapped = result[0]
         self.assertEqual(wrapped.num_columns, 1)
-        # Empty struct batch has 0 rows
         self.assertEqual(wrapped.num_rows, 0)
 
-    def test_wrap_struct_transformer_empty_batch(self):
+    def test_wrap_struct_empty_batch(self):
         """Test wrapping an empty batch with schema."""
         schema = pa.schema([("x", pa.int64()), ("y", pa.string())])
         batch = pa.RecordBatch.from_arrays(
             [pa.array([], type=pa.int64()), pa.array([], type=pa.string())],
             schema=schema,
         )
-        arrow_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
 
-        transformer = WrapStructTransformer()
-        result = list(transformer(iter([(batch, arrow_type)])))
+        wrapped = wrap_struct(batch)
 
-        self.assertEqual(len(result), 1)
-        wrapped = result[0]
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
 

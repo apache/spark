@@ -18,52 +18,40 @@
 """
 Arrow batch transformers for building data processing pipelines.
 
-These are pure callable classes that transform Iterator[RecordBatch] -> Iterator[...].
+These are pure functions that transform RecordBatch -> RecordBatch.
 They should have no side effects (no I/O, no writing to streams).
 """
 
-from typing import TYPE_CHECKING, Iterator, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
 
-class FlattenStructTransformer:
+def flatten_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
     """
     Flatten a single struct column into a RecordBatch.
 
-    Input: Iterator of RecordBatch with a single struct column
-    Output: Iterator of RecordBatch (flattened)
+    Used by: ArrowStreamUDFSerializer.load_stream
     """
+    import pyarrow as pa
 
-    def __call__(self, batches: Iterator["pa.RecordBatch"]) -> Iterator["pa.RecordBatch"]:
-        import pyarrow as pa
-
-        for batch in batches:
-            struct = batch.column(0)
-            yield pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+    struct = batch.column(0)
+    return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
 
 
-class WrapStructTransformer:
+def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
     """
     Wrap a RecordBatch's columns into a single struct column.
 
-    Input: Iterator of (RecordBatch, arrow_type)
-    Output: Iterator of RecordBatch with a single struct column
+    Used by: ArrowStreamUDFSerializer.dump_stream
     """
+    import pyarrow as pa
 
-    def __call__(
-        self, iterator: Iterator[Tuple["pa.RecordBatch", "pa.DataType"]]
-    ) -> Iterator["pa.RecordBatch"]:
-        import pyarrow as pa
-
-        for batch, _ in iterator:
-            if batch.num_columns == 0:
-                # When batch has no column, it should still create
-                # an empty batch with the number of rows set.
-                struct = pa.array([{}] * batch.num_rows)
-            else:
-                struct = pa.StructArray.from_arrays(
-                    batch.columns, fields=pa.struct(list(batch.schema))
-                )
-            yield pa.RecordBatch.from_arrays([struct], ["_0"])
+    if batch.num_columns == 0:
+        # When batch has no column, it should still create
+        # an empty batch with the number of rows set.
+        struct = pa.array([{}] * batch.num_rows)
+    else:
+        struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
+    return pa.RecordBatch.from_arrays([struct], ["_0"])
