@@ -67,7 +67,9 @@ class ArrowBatchTransformer:
         """
         Flatten a single struct column into a RecordBatch.
 
-        Used by: ArrowStreamUDFSerializer.load_stream
+        Used by:
+            - ArrowStreamUDFSerializer.load_stream
+            - GroupArrowUDFSerializer.load_stream
         """
         import pyarrow as pa
 
