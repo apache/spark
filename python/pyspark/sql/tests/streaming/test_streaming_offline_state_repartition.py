@@ -51,7 +51,7 @@ class OfflineStateRepartitionTestUtils:
         batch3_data,
         verify_initial,
         verify_after_increase,
-        verify_after_decrease
+        verify_after_decrease,
     ):
         """
         Common helper to run repartition tests with different streaming operators.
@@ -78,9 +78,7 @@ class OfflineStateRepartitionTestUtils:
         verify_initial, verify_after_increase, verify_after_decrease : callable
             Functions(collected_results) to verify results at each stage.
         """
-        with tempfile.TemporaryDirectory() as input_dir, \
-             tempfile.TemporaryDirectory() as checkpoint_dir:
-
+        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as checkpoint_dir:
             collected_results = []
 
             def collect_batch(batch_df, batch_id):
@@ -91,8 +89,7 @@ class OfflineStateRepartitionTestUtils:
                 df = spark.readStream.format("text").load(input_dir)
                 transformed_df = create_streaming_df(df)
                 query = (
-                    transformed_df.writeStream
-                    .foreachBatch(collect_batch)
+                    transformed_df.writeStream.foreachBatch(collect_batch)
                     .option("checkpointLocation", checkpoint_dir)
                     .outputMode(output_mode)
                     .start()
@@ -138,6 +135,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
     """
     Test suite for Offline state repartitioning.
     """
+
     NUM_SHUFFLE_PARTITIONS = 3
 
     @classmethod
@@ -146,7 +144,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         cfg.set("spark.sql.shuffle.partitions", str(cls.NUM_SHUFFLE_PARTITIONS))
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
-            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
+            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
         return cfg
 
@@ -154,8 +152,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         """Test that repartition fails if checkpoint directory is empty."""
         with tempfile.TemporaryDirectory() as checkpoint_dir:
             with self.assertRaisesRegex(
-                Exception,
-                "STATE_REPARTITION_INVALID_CHECKPOINT.NO_COMMITTED_BATCH"
+                Exception, "STATE_REPARTITION_INVALID_CHECKPOINT.NO_COMMITTED_BATCH"
             ):
                 self.spark._streamingCheckpointManager.repartition(checkpoint_dir, 5)
 
@@ -170,31 +167,23 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                 f.write("v1\n{}")
 
             with self.assertRaisesRegex(
-                Exception,
-                "STATE_REPARTITION_INVALID_CHECKPOINT.NO_BATCH_FOUND"
+                Exception, "STATE_REPARTITION_INVALID_CHECKPOINT.NO_BATCH_FOUND"
             ):
                 self.spark._streamingCheckpointManager.repartition(checkpoint_dir, 5)
 
     def test_fail_if_repartition_parameter_is_invalid(self):
         """Test that repartition fails with invalid parameters."""
         # Test null checkpoint location
-        with self.assertRaisesRegex(
-            Exception,
-            "STATE_REPARTITION_INVALID_PARAMETER.IS_NULL"
-        ):
+        with self.assertRaisesRegex(Exception, "STATE_REPARTITION_INVALID_PARAMETER.IS_NULL"):
             self.spark._streamingCheckpointManager.repartition(None, 5)
 
         # Test empty checkpoint location
-        with self.assertRaisesRegex(
-            Exception,
-            "STATE_REPARTITION_INVALID_PARAMETER.IS_EMPTY"
-        ):
+        with self.assertRaisesRegex(Exception, "STATE_REPARTITION_INVALID_PARAMETER.IS_EMPTY"):
             self.spark._streamingCheckpointManager.repartition("", 5)
 
         # Test numPartitions <= 0
         with self.assertRaisesRegex(
-            Exception,
-            "STATE_REPARTITION_INVALID_PARAMETER.IS_NOT_GREATER_THAN_ZERO"
+            Exception, "STATE_REPARTITION_INVALID_PARAMETER.IS_NOT_GREATER_THAN_ZERO"
         ):
             self.spark._streamingCheckpointManager.repartition("test", 0)
 
@@ -204,6 +193,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
     )
     def test_repartition_with_apply_in_pandas_with_state(self):
         """Test repartition for a streaming query using applyInPandasWithState."""
+
         # Define the stateful function that tracks count per key
         def stateful_count_func(key, pdf_iter, state):
             existing_count = state.getOption
@@ -217,10 +207,9 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             state.update((total_count,))
             yield pd.DataFrame({"key": [key[0]], "count": [total_count]})
 
-        output_schema = StructType([
-            StructField("key", StringType()),
-            StructField("count", LongType())
-        ])
+        output_schema = StructType(
+            [StructField("key", StringType()), StructField("count", LongType())]
+        )
         state_schema = StructType([StructField("count", LongType())])
 
         def create_streaming_df(df):
@@ -229,7 +218,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                 output_schema,
                 state_schema,
                 "Update",
-                GroupStateTimeout.NoTimeout
+                GroupStateTimeout.NoTimeout,
             )
 
         def verify_initial(results):
@@ -256,15 +245,16 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             create_streaming_df=create_streaming_df,
             output_mode="update",
             batch1_data="a\nb\na\nc\n",  # a:2, b:1, c:1
-            batch2_data="a\nb\nd\n",      # a:+1, b:+1, d:1 (new)
-            batch3_data="a\nc\ne\n",      # a:+1, c:+1, e:1 (new)
+            batch2_data="a\nb\nd\n",  # a:+1, b:+1, d:1 (new)
+            batch3_data="a\nc\ne\n",  # a:+1, c:+1, e:1 (new)
             verify_initial=verify_initial,
             verify_after_increase=verify_after_increase,
-            verify_after_decrease=verify_after_decrease
+            verify_after_decrease=verify_after_decrease,
         )
 
     def test_repartition_with_streaming_aggregation(self):
         """Test repartition for a streaming aggregation query (groupBy + count)."""
+
         def create_streaming_df(df):
             return df.groupBy("value").count()
 
@@ -292,15 +282,16 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             create_streaming_df=create_streaming_df,
             output_mode="update",
             batch1_data="a\nb\na\nc\n",  # a:2, b:1, c:1
-            batch2_data="a\nb\nd\n",      # a:+1, b:+1, d:1 (new)
-            batch3_data="a\nc\ne\n",      # a:+1, c:+1, e:1 (new)
+            batch2_data="a\nb\nd\n",  # a:+1, b:+1, d:1 (new)
+            batch3_data="a\nc\ne\n",  # a:+1, c:+1, e:1 (new)
             verify_initial=verify_initial,
             verify_after_increase=verify_after_increase,
-            verify_after_decrease=verify_after_decrease
+            verify_after_decrease=verify_after_decrease,
         )
 
     def test_repartition_with_streaming_dedup(self):
         """Test repartition for a streaming deduplication query (dropDuplicates)."""
+
         def create_streaming_df(df):
             return df.dropDuplicates(["value"])
 
@@ -321,12 +312,12 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
             create_streaming_df=create_streaming_df,
             output_mode="append",
-            batch1_data="a\nb\na\nc\n",   # unique: a, b, c
-            batch2_data="a\nb\nd\ne\n",   # a, b duplicates; d, e new
-            batch3_data="a\nc\nf\ng\n",   # a, c duplicates; f, g new
+            batch1_data="a\nb\na\nc\n",  # unique: a, b, c
+            batch2_data="a\nb\nd\ne\n",  # a, b duplicates; d, e new
+            batch3_data="a\nc\nf\ng\n",  # a, c duplicates; f, g new
             verify_initial=verify_initial,
             verify_after_increase=verify_after_increase,
-            verify_after_decrease=verify_after_decrease
+            verify_after_decrease=verify_after_decrease,
         )
 
 

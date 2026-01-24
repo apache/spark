@@ -737,7 +737,9 @@ class StreamingCheckpointManager:
     def __init__(self, jmanager: "JavaObject") -> None:
         self._jmanager = jmanager
 
-    def repartition(self, checkpoint_location: str, num_partitions: int, enforce_exactly_once_sink: bool = True) -> None:
+    def repartition(
+        self, checkpoint_location: str, num_partitions: int, enforce_exactly_once_sink: bool = True
+    ) -> None:
         """
         Repartition the stateful streaming operators state in the streaming checkpoint to have
         `num_partitions` partitions. The streaming query MUST not be running. If `num_partitions` is
