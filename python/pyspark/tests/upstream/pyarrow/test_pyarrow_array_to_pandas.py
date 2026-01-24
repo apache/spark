@@ -111,11 +111,10 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             (pa.float64(), [float("inf"), float("-inf"), float("nan")], np.float64),
         ]
         for arrow_type, values, expected_dtype in test_cases:
-            with self.subTest(arrow_type=arrow_type, values=values):
-                arr = pa.array(values, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, expected_dtype)
+            arr = pa.array(values, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, expected_dtype)
 
         # Verify null becomes NaN
         arr = pa.array([1.5, None, 3.5], type=pa.float64())
@@ -127,19 +126,19 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
         import pandas as pd
         import pyarrow as pa
 
-        # Without nulls - bool dtype
-        arr = pa.array([True, False, True], type=pa.bool_())
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, bool)
-        self.assertEqual(series.tolist(), [True, False, True])
-
-        # With nulls - object dtype
-        arr = pa.array([True, None, False], type=pa.bool_())
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertEqual(series.tolist(), [True, None, False])
+        # (values, expected_dtype, expected_values)
+        test_cases = [
+            # Without nulls - bool dtype
+            ([True, False, True], bool, [True, False, True]),
+            # With nulls - object dtype
+            ([True, None, False], object, [True, None, False]),
+        ]
+        for values, expected_dtype, expected_values in test_cases:
+            arr = pa.array(values, type=pa.bool_())
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, expected_dtype)
+            self.assertEqual(series.tolist(), expected_values)
 
     def test_string_and_binary_types(self):
         """Test conversion of string and binary arrays to pandas."""
@@ -155,12 +154,11 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             ([b"hello", b"world"], pa.large_binary(), [b"hello", b"world"]),
         ]
         for data, arrow_type, expected in test_cases:
-            with self.subTest(arrow_type=arrow_type):
-                arr = pa.array(data, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, object)
-                self.assertEqual(series.tolist(), expected)
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(series.tolist(), expected)
 
     def test_date_and_time_types(self):
         """Test conversion of date and time arrays to pandas."""
@@ -182,12 +180,11 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             (times, pa.time64("ns")),
         ]
         for data, arrow_type in test_cases:
-            with self.subTest(arrow_type=arrow_type):
-                arr = pa.array(data, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, object)
-                self.assertEqual(len(series), len(data))
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(len(series), len(data))
 
     def test_timestamp_types(self):
         """Test conversion of timestamp arrays to pandas."""
@@ -201,11 +198,10 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
 
         # Timezone-naive timestamps with various units
         for unit in ["s", "ms", "us", "ns"]:
-            with self.subTest(unit=unit, tz=None):
-                arr = pa.array(timestamps, type=pa.timestamp(unit))
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertTrue(str(series.dtype).startswith("datetime64"))
+            arr = pa.array(timestamps, type=pa.timestamp(unit))
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertTrue(str(series.dtype).startswith("datetime64"))
 
         # Timezone-aware timestamp
         from zoneinfo import ZoneInfo
@@ -230,38 +226,30 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
         ]
 
         for unit in ["s", "ms", "us", "ns"]:
-            with self.subTest(unit=unit):
-                arr = pa.array(durations, type=pa.duration(unit))
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertTrue(str(series.dtype).startswith("timedelta64"))
+            arr = pa.array(durations, type=pa.duration(unit))
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertTrue(str(series.dtype).startswith("timedelta64"))
 
     def test_decimal_and_null_types(self):
         """Test conversion of decimal and null arrays to pandas."""
         import pandas as pd
         import pyarrow as pa
 
-        # Decimal128
         decimals = [Decimal("123.45"), Decimal("-999.99"), Decimal("0.00")]
-        arr = pa.array(decimals, type=pa.decimal128(10, 2))
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertEqual(series.tolist(), decimals)
 
-        # Decimal256
-        arr = pa.array(decimals, type=pa.decimal256(40, 2))
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertEqual(series.tolist(), decimals)
-
-        # Null type
-        arr = pa.array([None, None, None], type=pa.null())
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype, object)
-        self.assertTrue(all(v is None for v in series))
+        # (data, arrow_type, expected_values)
+        test_cases = [
+            (decimals, pa.decimal128(10, 2), decimals),
+            (decimals, pa.decimal256(40, 2), decimals),
+            ([None, None, None], pa.null(), [None, None, None]),
+        ]
+        for data, arrow_type, expected in test_cases:
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(series.tolist(), expected)
 
     def test_empty_and_chunked_arrays(self):
         """Test conversion of empty and chunked arrays to pandas."""
@@ -314,12 +302,11 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             ([["a", None, "b"], None, ["c"], []], pa.list_(pa.string()), 4),
         ]
         for data, arrow_type, expected_len in test_cases:
-            with self.subTest(arrow_type=arrow_type):
-                arr = pa.array(data, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, object)
-                self.assertEqual(len(series), expected_len)
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(len(series), expected_len)
 
     def test_struct_types(self):
         """Test conversion of struct arrays to pandas."""
@@ -363,12 +350,11 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             ([None, None, None], simple_struct, 3),
         ]
         for data, arrow_type, expected_len in test_cases:
-            with self.subTest(arrow_type=arrow_type):
-                arr = pa.array(data, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, object)
-                self.assertEqual(len(series), expected_len)
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(len(series), expected_len)
 
     def test_list_of_structs(self):
         """Test conversion of list containing struct elements."""
@@ -409,32 +395,28 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
             ([[[("a", 1)], [("b", 2)]], [[("c", 3)]]], pa.list_(simple_map), 2),
         ]
         for data, arrow_type, expected_len in test_cases:
-            with self.subTest(arrow_type=arrow_type):
-                arr = pa.array(data, type=arrow_type)
-                series = arr.to_pandas()
-                self.assertIsInstance(series, pd.Series)
-                self.assertEqual(series.dtype, object)
-                self.assertEqual(len(series), expected_len)
+            arr = pa.array(data, type=arrow_type)
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype, object)
+            self.assertEqual(len(series), expected_len)
 
     def test_dictionary_type(self):
         """Test conversion of dictionary-encoded arrays to pandas."""
         import pandas as pd
         import pyarrow as pa
 
-        # Dictionary-encoded string array
-        arr = pa.array(["a", "b", "a", "c", "b", "a"]).dictionary_encode()
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        # Dictionary arrays become categorical by default
-        self.assertEqual(series.dtype.name, "category")
-        self.assertEqual(series.tolist(), ["a", "b", "a", "c", "b", "a"])
-
-        # Dictionary-encoded with nulls
-        arr = pa.array(["a", None, "a", "b", None]).dictionary_encode()
-        series = arr.to_pandas()
-        self.assertIsInstance(series, pd.Series)
-        self.assertEqual(series.dtype.name, "category")
-        self.assertEqual(len(series), 5)
+        # (values, expected_len)
+        test_cases = [
+            (["a", "b", "a", "c", "b", "a"], 6),
+            (["a", None, "a", "b", None], 5),
+        ]
+        for values, expected_len in test_cases:
+            arr = pa.array(values).dictionary_encode()
+            series = arr.to_pandas()
+            self.assertIsInstance(series, pd.Series)
+            self.assertEqual(series.dtype.name, "category")
+            self.assertEqual(len(series), expected_len)
 
     def test_union_types(self):
         """Test that union arrays raise ArrowNotImplementedError when converting to pandas."""
