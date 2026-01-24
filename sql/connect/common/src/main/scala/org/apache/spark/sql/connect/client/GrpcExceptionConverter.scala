@@ -375,14 +375,15 @@ private[client] object GrpcExceptionConverter {
       errors: Seq[FetchErrorDetailsResponse.Error]): Throwable = {
 
     val error = errors(errorIdx)
-    val classHierarchy = error.getErrorTypeHierarchyList.asScala.toSeq
-    val constructor = classHierarchy
-      .flatMap(errorFactory.get)
-      .headOption
-      .getOrElse(((params: ErrorParams) =>
-        errorFactory
-          .get(classOf[SparkException].getName)
-          .get(params.copy(message = s"${classHierarchy.head}: ${params.message}"))))
+    val classHierarchy = error.getErrorTypeHierarchyList.asScala
+    val constructor =
+      classHierarchy
+        .flatMap(errorFactory.get)
+        .headOption
+        .getOrElse((params: ErrorParams) =>
+          errorFactory
+            .get(classOf[SparkException].getName)
+            .get(params.copy(message = s"${classHierarchy.head}: ${params.message}")))
 
     val causeOpt =
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
