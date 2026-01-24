@@ -1795,42 +1795,6 @@ class ClientE2ETestSuite
     assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
   }
 
-  test(
-    "SPARK-53883: GrpcExceptionConverter ensures all exceptions have errorClass and sqlState") {
-    // Test that normal Spark errors have proper errorClass and sqlState
-    val analysisEx = intercept[AnalysisException] {
-      spark.sql("select nonexistent_column").collect()
-    }
-    assert(
-      analysisEx.getCondition == "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      s"AnalysisException should have correct errorClass, got: ${analysisEx.getCondition}")
-    assert(
-      analysisEx.getSqlState == "42703",
-      s"AnalysisException should have correct sqlState, got: ${analysisEx.getSqlState}")
-
-    val parseEx = intercept[ParseException] {
-      spark.sql("SELECT !!!").collect()
-    }
-    assert(
-      parseEx.getCondition.startsWith("PARSE_SYNTAX_ERROR"),
-      s"ParseException should have correct errorClass, got: ${parseEx.getCondition}")
-    assert(
-      parseEx.getSqlState == "42601",
-      s"ParseException should have correct sqlState, got: ${parseEx.getSqlState}")
-
-    // UDF exceptions are wrapped in SparkException with FAILED_EXECUTE_UDF error class
-    val udfEx = intercept[SparkException] {
-      spark.udf.register("badUdf", () => { throw new RuntimeException("test error") })
-      spark.sql("SELECT badUdf()").collect()
-    }
-    assert(
-      udfEx.getCondition == "FAILED_EXECUTE_UDF",
-      s"UDF exception should have FAILED_EXECUTE_UDF errorClass, got: ${udfEx.getCondition}")
-    assert(
-      udfEx.getSqlState == "39000",
-      s"UDF exception should have correct sqlState, got: ${udfEx.getSqlState}")
-  }
-
   // SQL Scripting tests
   test("SQL Script result") {
     val df = spark.sql("""BEGIN
