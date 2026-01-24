@@ -16,14 +16,28 @@
 #
 
 """
-Tests for PyArrow's pa.Array.cast() method with default parameters only.
+Tests for PyArrow's pa.Array.cast() method with safe=True (default).
 
-## Numerical Type Conversion Matrix (pa.Array.cast with default safe=True)
+## Scalar Type Cast Tests (PyArrowScalarTypeCastTests)
 
-### Covered Types:
-- **Signed Integers**: int8, int16, int32, int64
-- **Unsigned Integers**: uint8, uint16, uint32, uint64
+Tests all scalar-to-scalar type conversions:
+- **Integers**: int8, int16, int32, int64, uint8, uint16, uint32, uint64
 - **Floats**: float16, float32, float64
+- **Boolean**: bool
+- **Strings**: string, large_string
+- **Binary**: binary, large_binary, fixed_size_binary
+- **Decimal**: decimal128, decimal256
+- **Date**: date32, date64
+- **Time**: time32(s/ms), time64(us/ns)
+- **Timestamp**: timestamp(s/ms/us/ns), with/without timezone
+- **Duration**: duration(s/ms/us/ns)
+
+## Nested/Container Type Cast Tests (PyArrowNestedTypeCastTests)
+
+Tests container-to-container type conversions:
+- **List variants**: list, large_list, fixed_size_list
+- **Map**: map<key, value>
+- **Struct**: struct<fields...>
 """
 
 import platform
@@ -7140,6 +7154,881 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             ],
         }
         self._run_cast_tests(casts, "time64_ns")
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PyArrowNestedTypeCastTests(unittest.TestCase):
+    """
+    Tests for PyArrow nested type casts (list, map, struct) with safe=True.
+
+    This class tests container-level type conversions:
+    1. List variants: list <-> large_list <-> fixed_size_list
+    2. Map <-> List<Struct>: map<K,V> -> list<struct<key:K, value:V>>
+    3. Cross-container failures: list<->map, list<->struct, map<->struct
+    4. Struct -> Struct: field matching, reordering, adding/dropping fields
+    """
+
+    # Class-level storage for test results
+    _cast_results = {}
+    _all_targets = set()
+
+    @classmethod
+    def setUpClass(cls):
+        """Initialize the cast results matrix."""
+        cls._cast_results = {}
+        cls._all_targets = set()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Print the cast matrix after all tests complete."""
+        if not cls._cast_results:
+            return
+
+        print("\n" + "=" * 90)
+        print("PyArrow Nested Type Cast Matrix (Y=success, N=expected failure)")
+        print("=" * 90)
+
+        # Get all sources
+        sources = sorted(cls._cast_results.keys())
+
+        # Print by source
+        for src in sources:
+            print(f"\n{src}:")
+            for tgt in sorted(cls._cast_results.get(src, {}).keys()):
+                status = cls._cast_results[src][tgt]
+                print(f"  → {tgt:<45} [{status}]")
+
+        # Summary
+        total_y = sum(1 for s in cls._cast_results.values() for v in s.values() if v == "Y")
+        total_n = sum(1 for s in cls._cast_results.values() for v in s.values() if v == "N")
+        print(f"\n{'=' * 90}")
+        print(
+            f"Success (Y): {total_y}, Expected Failures (N): {total_n}, Total: {total_y + total_n}"
+        )
+        print("=" * 90)
+
+    def _run_nested_cast_tests(self, casts_dict, source_type_name):
+        """Run cast tests for a nested source type using dictionary of test pairs."""
+        import pyarrow as pa
+
+        failed_cases = []
+
+        # Initialize results for this source type
+        if source_type_name not in self.__class__._cast_results:
+            self.__class__._cast_results[source_type_name] = {}
+
+        for tgt_type_name, test_pairs in casts_dict.items():
+            self.__class__._all_targets.add(tgt_type_name)
+            expects_failure = False
+            test_passed = True
+
+            for i, pair in enumerate(test_pairs):
+                src_arr, expected = pair[0], pair[1]
+                # Optional: target type override (for types that can't be inferred from name)
+                tgt_type = pair[2] if len(pair) > 2 else None
+                case_id = f"{source_type_name}->{tgt_type_name}[{i}]"
+
+                try:
+                    if isinstance(expected, type) and issubclass(expected, Exception):
+                        expects_failure = True
+                        try:
+                            result = src_arr.cast(tgt_type)
+                            failed_cases.append(
+                                f"{case_id}: expected {expected.__name__}, "
+                                f"got success: {result.to_pylist()}"
+                            )
+                            test_passed = False
+                        except expected:
+                            pass
+                        except Exception as e:
+                            failed_cases.append(
+                                f"{case_id}: expected {expected.__name__}, "
+                                f"got {type(e).__name__}: {e}"
+                            )
+                            test_passed = False
+                    elif isinstance(expected, pa.Array):
+                        try:
+                            result = src_arr.cast(expected.type)
+                            if result.to_pylist() != expected.to_pylist():
+                                failed_cases.append(
+                                    f"{case_id}: mismatch, expected {expected.to_pylist()}, "
+                                    f"got {result.to_pylist()}"
+                                )
+                                test_passed = False
+                        except Exception as e:
+                            failed_cases.append(
+                                f"{case_id}: expected success, got {type(e).__name__}: {e}"
+                            )
+                            test_passed = False
+                except Exception as e:
+                    failed_cases.append(f"{case_id}: test error: {e}")
+                    test_passed = False
+
+            # Record result: Y for success, N for expected failure
+            if test_passed:
+                self.__class__._cast_results[source_type_name][tgt_type_name] = (
+                    "N" if expects_failure else "Y"
+                )
+
+        if failed_cases:
+            self.fail("\n".join(failed_cases))
+
+    def test_list_casts(self):
+        """Test list<T> -> all nested types."""
+        import pyarrow as pa
+
+        casts = {
+            "large_list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32())),
+                    pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32())),
+                ),
+                (
+                    pa.array([[1, None], None, [3]], type=pa.list_(pa.int32())),
+                    pa.array([[1, None], None, [3]], type=pa.large_list(pa.int32())),
+                ),
+                (
+                    pa.array([[], [1]], type=pa.list_(pa.int32())),
+                    pa.array([[], [1]], type=pa.large_list(pa.int32())),
+                ),
+                (
+                    pa.array([None, None], type=pa.list_(pa.int32())),
+                    pa.array([None, None], type=pa.large_list(pa.int32())),
+                ),
+                (
+                    pa.array([], type=pa.list_(pa.int32())),
+                    pa.array([], type=pa.large_list(pa.int32())),
+                ),
+                # Nested: list<list> -> large_list<list>
+                (
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.list_(pa.list_(pa.int32()))),
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.large_list(pa.list_(pa.int32()))),
+                ),
+                # Nested: list<struct> -> large_list<struct>
+                (
+                    pa.array(
+                        [[{"x": 1, "y": "a"}]],
+                        type=pa.list_(pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                    ),
+                    pa.array(
+                        [[{"x": 1, "y": "a"}]],
+                        type=pa.large_list(pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                    ),
+                ),
+            ],
+            "fixed_size_list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32())),
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                ),
+                (
+                    pa.array([[1, None], None], type=pa.list_(pa.int32())),
+                    pa.array([[1, None], None], type=pa.list_(pa.int32(), 2)),
+                ),
+                (
+                    pa.array([None, None], type=pa.list_(pa.int32())),
+                    pa.array([None, None], type=pa.list_(pa.int32(), 2)),
+                ),
+                # Mismatched size - failure
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32())),
+                    pa.lib.ArrowInvalid,
+                    pa.list_(pa.int32(), 3),
+                ),
+                # Variable length - failure
+                (
+                    pa.array([[1, 2], [3, 4, 5]], type=pa.list_(pa.int32())),
+                    pa.lib.ArrowInvalid,
+                    pa.list_(pa.int32(), 2),
+                ),
+            ],
+            "list_large_list": [
+                (
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.list_(pa.list_(pa.int32()))),
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.list_(pa.large_list(pa.int32()))),
+                ),
+            ],
+            "large_list_large_list": [
+                (
+                    pa.array([[[1, 2]], [[3]]], type=pa.list_(pa.list_(pa.int32()))),
+                    pa.array([[[1, 2]], [[3]]], type=pa.large_list(pa.large_list(pa.int32()))),
+                ),
+            ],
+            "map": [
+                (
+                    pa.array([[1, 2]], type=pa.list_(pa.int32())),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.map_(pa.string(), pa.int32()),
+                ),
+            ],
+            "struct": [
+                (
+                    pa.array([[1, 2]], type=pa.list_(pa.int32())),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "list")
+
+    def test_nested_list_casts(self):
+        """Test list<nested> -> other types."""
+        import pyarrow as pa
+
+        casts = {
+            "large_list<list<>>": [
+                (
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.list_(pa.list_(pa.int32()))),
+                    pa.array([[[1, 2], [3]], [[4]]], type=pa.large_list(pa.list_(pa.int32()))),
+                ),
+            ],
+            "list<large_list<>>": [
+                (
+                    pa.array([[["a", "b"]], [["c"]]], type=pa.list_(pa.list_(pa.string()))),
+                    pa.array([[["a", "b"]], [["c"]]], type=pa.list_(pa.large_list(pa.string()))),
+                ),
+            ],
+            "large_list<struct<>>": [
+                (
+                    pa.array(
+                        [[{"x": 1, "y": "a"}]],
+                        type=pa.list_(pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                    ),
+                    pa.array(
+                        [[{"x": 1, "y": "a"}]],
+                        type=pa.large_list(pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                    ),
+                ),
+            ],
+            "large_list<map<>>": [
+                (
+                    pa.array(
+                        [[[("a", 1), ("b", 2)]]],
+                        type=pa.list_(pa.map_(pa.string(), pa.int32())),
+                    ),
+                    pa.array(
+                        [[[("a", 1), ("b", 2)]]],
+                        type=pa.large_list(pa.map_(pa.string(), pa.int32())),
+                    ),
+                ),
+            ],
+            "map<>": [
+                (
+                    pa.array(
+                        [[{"key": "a", "value": 1}]],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.map_(pa.string(), pa.int32()),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "list<nested>")
+
+    def test_large_list_casts(self):
+        """Test large_list<T> -> all nested types."""
+        import pyarrow as pa
+
+        casts = {
+            "list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32())),
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32())),
+                ),
+                (
+                    pa.array([[1, None], None, [3]], type=pa.large_list(pa.int32())),
+                    pa.array([[1, None], None, [3]], type=pa.list_(pa.int32())),
+                ),
+            ],
+            "fixed_size_list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32())),
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                ),
+                # Mismatched size - failure
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32())),
+                    pa.lib.ArrowInvalid,
+                    pa.list_(pa.int32(), 3),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "large_list")
+
+    def test_nested_large_list_casts(self):
+        """Test large_list<nested> -> other types."""
+        import pyarrow as pa
+
+        casts = {
+            "list<list<>>": [
+                (
+                    pa.array([[[1, 2]], [[3]]], type=pa.large_list(pa.list_(pa.int32()))),
+                    pa.array([[[1, 2]], [[3]]], type=pa.list_(pa.list_(pa.int32()))),
+                ),
+            ],
+            "large_list<large_list<>>": [
+                (
+                    pa.array([[["a"]], [["b", "c"]]], type=pa.large_list(pa.list_(pa.string()))),
+                    pa.array(
+                        [[["a"]], [["b", "c"]]], type=pa.large_list(pa.large_list(pa.string()))
+                    ),
+                ),
+            ],
+            "list<struct<>>": [
+                (
+                    pa.array(
+                        [[{"x": 1.0}]],
+                        type=pa.large_list(pa.struct([("x", pa.float64())])),
+                    ),
+                    pa.array(
+                        [[{"x": 1.0}]],
+                        type=pa.list_(pa.struct([("x", pa.float64())])),
+                    ),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "large_list<nested>")
+
+    def test_fixed_size_list_casts(self):
+        """Test fixed_size_list<T, N> -> all nested types."""
+        import pyarrow as pa
+
+        casts = {
+            "list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32())),
+                ),
+                (
+                    pa.array([[1, None], None], type=pa.list_(pa.int32(), 2)),
+                    pa.array([[1, None], None], type=pa.list_(pa.int32())),
+                ),
+            ],
+            "large_list": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                    pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int32())),
+                ),
+            ],
+            "fixed_size_list_same_size": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int64(), 2)),
+                ),
+            ],
+            "fixed_size_list_diff_size": [
+                (
+                    pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int32(), 2)),
+                    pa.lib.ArrowTypeError,
+                    pa.list_(pa.int32(), 3),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "fixed_size_list")
+
+    def test_nested_fixed_size_list_casts(self):
+        """Test fixed_size_list<nested> -> other types."""
+        import pyarrow as pa
+
+        casts = {
+            "list<list<>>": [
+                (
+                    pa.array([[[1, 2], [3, 4]]], type=pa.list_(pa.list_(pa.int32()), 2)),
+                    pa.array([[[1, 2], [3, 4]]], type=pa.list_(pa.list_(pa.int32()))),
+                ),
+            ],
+            "large_list<list<>>": [
+                (
+                    pa.array([[["a"], ["b"]]], type=pa.list_(pa.list_(pa.string()), 2)),
+                    pa.array([[["a"], ["b"]]], type=pa.large_list(pa.list_(pa.string()))),
+                ),
+            ],
+            "list<struct<>>": [
+                (
+                    pa.array(
+                        [[{"x": 1.0}, {"x": 2.0}]],
+                        type=pa.list_(pa.struct([("x", pa.float64())]), 2),
+                    ),
+                    pa.array(
+                        [[{"x": 1.0}, {"x": 2.0}]],
+                        type=pa.list_(pa.struct([("x", pa.float64())])),
+                    ),
+                ),
+            ],
+            "fixed_size_list<large_list<>>": [
+                (
+                    pa.array([[[1], [2]]], type=pa.list_(pa.list_(pa.int32()), 2)),
+                    pa.array([[[1], [2]]], type=pa.list_(pa.large_list(pa.int32()), 2)),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "fixed_size_list<nested>")
+
+    def test_map_casts(self):
+        """Test map<K, V> -> all nested types."""
+        import pyarrow as pa
+
+        casts = {
+            "list_struct": [
+                (
+                    pa.array(
+                        [[("a", 1), ("b", 2)], [("c", 3)]],
+                        type=pa.map_(pa.string(), pa.int32()),
+                    ),
+                    pa.array(
+                        [
+                            [{"key": "a", "value": 1}, {"key": "b", "value": 2}],
+                            [{"key": "c", "value": 3}],
+                        ],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                ),
+                (
+                    pa.array(
+                        [[("a", 1), ("b", None)], None],
+                        type=pa.map_(pa.string(), pa.int32()),
+                    ),
+                    pa.array(
+                        [[{"key": "a", "value": 1}, {"key": "b", "value": None}], None],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                ),
+                (
+                    pa.array([[], [("a", 1)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.array(
+                        [[], [{"key": "a", "value": 1}]],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                ),
+                (
+                    pa.array([None, None], type=pa.map_(pa.string(), pa.int32())),
+                    pa.array(
+                        [None, None],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                ),
+                (
+                    pa.array([], type=pa.map_(pa.string(), pa.int32())),
+                    pa.array(
+                        [],
+                        type=pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())])),
+                    ),
+                ),
+                (
+                    pa.array([[(1, "x"), (2, "y")]], type=pa.map_(pa.int64(), pa.string())),
+                    pa.array(
+                        [[{"key": 1, "value": "x"}, {"key": 2, "value": "y"}]],
+                        type=pa.list_(pa.struct([("key", pa.int64()), ("value", pa.string())])),
+                    ),
+                ),
+                # Custom field names
+                (
+                    pa.array([[("a", 1), ("b", 2)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.array(
+                        [[{"k": "a", "v": 1}, {"k": "b", "v": 2}]],
+                        type=pa.list_(pa.struct([("k", pa.string()), ("v", pa.int32())])),
+                    ),
+                ),
+            ],
+            "large_list_struct": [
+                (
+                    pa.array([[("a", 1), ("b", 2)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.array(
+                        [[{"key": "a", "value": 1}, {"key": "b", "value": 2}]],
+                        type=pa.large_list(
+                            pa.struct([("key", pa.string()), ("value", pa.int32())])
+                        ),
+                    ),
+                ),
+            ],
+            "fixed_size_list_struct": [
+                (
+                    pa.array(
+                        [[("a", 1), ("b", 2)], [("c", 3)]],
+                        type=pa.map_(pa.string(), pa.int32()),
+                    ),
+                    pa.lib.ArrowInvalid,
+                    pa.list_(pa.struct([("key", pa.string()), ("value", pa.int32())]), 2),
+                ),
+            ],
+            "list_struct_wrong_count": [
+                (
+                    pa.array([[("a", 1)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.lib.ArrowTypeError,
+                    pa.list_(
+                        pa.struct(
+                            [("key", pa.string()), ("value", pa.int32()), ("extra", pa.int32())]
+                        )
+                    ),
+                ),
+                (
+                    pa.array([[("a", 1)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.lib.ArrowTypeError,
+                    pa.list_(pa.struct([("key", pa.string())])),
+                ),
+            ],
+            "list_scalar": [
+                (
+                    pa.array([[("a", 1)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.lib.ArrowTypeError,
+                    pa.list_(pa.string()),
+                ),
+            ],
+            "struct": [
+                (
+                    pa.array([[("x", 1), ("y", 2)]], type=pa.map_(pa.string(), pa.int32())),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "map")
+
+    def test_nested_map_casts(self):
+        """Test map<nested> -> other types (map with nested key or value)."""
+        import pyarrow as pa
+
+        casts = {
+            "list<struct<key,value:struct<>>>": [
+                (
+                    pa.array(
+                        [[("a", {"x": 1, "y": "hello"})]],
+                        type=pa.map_(
+                            pa.string(),
+                            pa.struct([("x", pa.int32()), ("y", pa.string())]),
+                        ),
+                    ),
+                    pa.array(
+                        [[{"key": "a", "value": {"x": 1, "y": "hello"}}]],
+                        type=pa.list_(
+                            pa.struct(
+                                [
+                                    ("key", pa.string()),
+                                    ("value", pa.struct([("x", pa.int32()), ("y", pa.string())])),
+                                ]
+                            )
+                        ),
+                    ),
+                ),
+            ],
+            "list<struct<key,value:list<>>>": [
+                (
+                    pa.array(
+                        [[("a", [1, 2, 3])]],
+                        type=pa.map_(pa.string(), pa.list_(pa.int32())),
+                    ),
+                    pa.array(
+                        [[{"key": "a", "value": [1, 2, 3]}]],
+                        type=pa.list_(
+                            pa.struct([("key", pa.string()), ("value", pa.list_(pa.int32()))])
+                        ),
+                    ),
+                ),
+                # With nulls
+                (
+                    pa.array(
+                        [[("x", [1.0, None]), ("y", None)], None],
+                        type=pa.map_(pa.string(), pa.list_(pa.float64())),
+                    ),
+                    pa.array(
+                        [[{"key": "x", "value": [1.0, None]}, {"key": "y", "value": None}], None],
+                        type=pa.list_(
+                            pa.struct([("key", pa.string()), ("value", pa.list_(pa.float64()))])
+                        ),
+                    ),
+                ),
+            ],
+            "list<struct<key,value:map<>>>": [
+                (
+                    pa.array(
+                        [[("outer", [("inner", 1)])]],
+                        type=pa.map_(pa.string(), pa.map_(pa.string(), pa.int32())),
+                    ),
+                    pa.array(
+                        [[{"key": "outer", "value": [("inner", 1)]}]],
+                        type=pa.list_(
+                            pa.struct(
+                                [
+                                    ("key", pa.string()),
+                                    ("value", pa.map_(pa.string(), pa.int32())),
+                                ]
+                            )
+                        ),
+                    ),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "map<nested>")
+
+    def test_struct_casts(self):
+        """Test struct<fields...> -> all nested types."""
+        import pyarrow as pa
+
+        casts = {
+            # struct -> struct (same schema)
+            "struct_same": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                ),
+                # With nulls
+                (
+                    pa.array(
+                        [{"x": 1, "y": None}, None],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [{"x": 1, "y": None}, None],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                ),
+                # All nulls
+                (
+                    pa.array(
+                        [None, None],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [None, None],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                ),
+                # Empty array
+                (
+                    pa.array([], type=pa.struct([("x", pa.int32())])),
+                    pa.array([], type=pa.struct([("x", pa.int32())])),
+                ),
+            ],
+            # struct -> struct (field name mismatch - missing become null)
+            "struct_name_mismatch": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [{"a": None, "b": None}],
+                        type=pa.struct([("a", pa.int32()), ("b", pa.int32())]),
+                    ),
+                ),
+            ],
+            # struct -> struct (more fields - extra become null)
+            "struct_more_fields": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [{"x": 1, "y": 2, "z": None}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
+                    ),
+                ),
+            ],
+            # struct -> struct (fewer fields - drops extra)
+            "struct_fewer_fields": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array([{"x": 1}], type=pa.struct([("x", pa.int32())])),
+                ),
+            ],
+            # struct -> struct (field reorder)
+            "struct_reorder": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.array(
+                        [{"y": 2, "x": 1}],
+                        type=pa.struct([("y", pa.int32()), ("x", pa.int32())]),
+                    ),
+                ),
+            ],
+            # struct -> list (not supported)
+            "list": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.list_(pa.int32()),
+                ),
+            ],
+            # struct -> map (not supported)
+            "map": [
+                (
+                    pa.array(
+                        [{"x": 1, "y": 2}],
+                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                    ),
+                    pa.lib.ArrowNotImplementedError,
+                    pa.map_(pa.string(), pa.int32()),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "struct")
+
+    def test_nested_struct_casts(self):
+        """Test struct<nested> -> other types."""
+        import pyarrow as pa
+
+        casts = {
+            "struct<large_list<>>": [
+                (
+                    pa.array(
+                        [{"items": [1, 2, 3], "name": "test"}],
+                        type=pa.struct([("items", pa.list_(pa.int32())), ("name", pa.string())]),
+                    ),
+                    pa.array(
+                        [{"items": [1, 2, 3], "name": "test"}],
+                        type=pa.struct(
+                            [
+                                ("items", pa.large_list(pa.int32())),
+                                ("name", pa.string()),
+                            ]
+                        ),
+                    ),
+                ),
+            ],
+            "struct<struct<>>": [
+                (
+                    pa.array(
+                        [{"inner": {"a": 1, "b": "x"}, "id": 100}],
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("a", pa.int32()), ("b", pa.string())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
+                    ),
+                    pa.array(
+                        [{"inner": {"a": 1, "b": "x"}, "id": 100}],
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("a", pa.int64()), ("b", pa.string())])),
+                                ("id", pa.int64()),
+                            ]
+                        ),
+                    ),
+                ),
+                # With nulls
+                (
+                    pa.array(
+                        [{"inner": None, "id": 1}, None],
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("x", pa.float64())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
+                    ),
+                    pa.array(
+                        [{"inner": None, "id": 1}, None],
+                        type=pa.struct(
+                            [
+                                ("inner", pa.struct([("x", pa.float64())])),
+                                ("id", pa.int32()),
+                            ]
+                        ),
+                    ),
+                ),
+            ],
+            "struct<map<>>": [
+                (
+                    pa.array(
+                        [{"data": [("k1", 1), ("k2", 2)], "label": "test"}],
+                        type=pa.struct(
+                            [
+                                ("data", pa.map_(pa.string(), pa.int32())),
+                                ("label", pa.string()),
+                            ]
+                        ),
+                    ),
+                    pa.array(
+                        [{"data": [("k1", 1), ("k2", 2)], "label": "test"}],
+                        type=pa.struct(
+                            [
+                                ("data", pa.map_(pa.string(), pa.int32())),
+                                ("label", pa.string()),
+                            ]
+                        ),
+                    ),
+                ),
+            ],
+        }
+        self._run_nested_cast_tests(casts, "struct<nested>")
+
+    def test_container_to_scalar_fails(self):
+        """Verify all container types fail when casting to scalar types."""
+        import pyarrow as pa
+
+        # All container type sample arrays
+        container_arrays = [
+            ("list<int32>", pa.array([[1, 2], [3]], pa.list_(pa.int32()))),
+            ("list<string>", pa.array([["a", "b"]], pa.list_(pa.string()))),
+            ("large_list<int32>", pa.array([[1, 2]], pa.large_list(pa.int32()))),
+            ("large_list<float64>", pa.array([[1.5, 2.5]], pa.large_list(pa.float64()))),
+            ("fixed_size_list<int32,2>", pa.array([[1, 2]], pa.list_(pa.int32(), 2))),
+            ("fixed_size_list<string,2>", pa.array([["a", "b"]], pa.list_(pa.string(), 2))),
+            ("map<string,int32>", pa.array([[("a", 1)]], pa.map_(pa.string(), pa.int32()))),
+            ("map<int64,string>", pa.array([[(1, "x")]], pa.map_(pa.int64(), pa.string()))),
+            ("struct<x:int32>", pa.array([{"x": 1}], pa.struct([("x", pa.int32())]))),
+            (
+                "struct<a:string,b:float64>",
+                pa.array(
+                    [{"a": "hello", "b": 1.5}], pa.struct([("a", pa.string()), ("b", pa.float64())])
+                ),
+            ),
+        ]
+
+        # All scalar types to test
+        scalar_types = [
+            # String/Binary
+            ("string", pa.string()),
+            ("binary", pa.binary()),
+            # Numeric
+            ("int64", pa.int64()),
+            ("float64", pa.float64()),
+            # Boolean
+            ("bool", pa.bool_()),
+            # Temporal
+            ("date32", pa.date32()),
+            ("timestamp_us", pa.timestamp("us")),
+            ("duration_ns", pa.duration("ns")),
+        ]
+
+        failed_cases = []
+
+        for container_name, container_arr in container_arrays:
+            for scalar_name, scalar_type in scalar_types:
+                case_id = f"{container_name} -> {scalar_name}"
+                try:
+                    result = container_arr.cast(scalar_type, safe=True)
+                    failed_cases.append(
+                        f"{case_id}: expected ArrowNotImplementedError, "
+                        f"got success: {result.to_pylist()}"
+                    )
+                except pa.lib.ArrowNotImplementedError:
+                    pass  # Expected
+                except Exception as e:
+                    failed_cases.append(
+                        f"{case_id}: expected ArrowNotImplementedError, "
+                        f"got {type(e).__name__}: {e}"
+                    )
+
+        if failed_cases:
+            self.fail("\n".join(failed_cases))
 
 
 if __name__ == "__main__":
