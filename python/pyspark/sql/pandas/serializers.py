@@ -37,6 +37,10 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowArrayToPandasConversion,
 )
+from pyspark.sql.pandas.transformers import (
+    FlattenStructTransformer,
+    WrapStructTransformer,
+)
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     is_variant,
@@ -143,50 +147,38 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     """
     Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
+
+    Uses transformers for data processing:
+    - load_stream: ArrowStreamSerializer -> FlattenStructTransformer
+    - dump_stream: WrapStructTransformer -> ArrowStreamSerializer (with START_ARROW_STREAM marker)
     """
+
+    def __init__(self):
+        super().__init__()
+        self._flatten_struct = FlattenStructTransformer()
+        self._wrap_struct = WrapStructTransformer()
 
     def load_stream(self, stream):
         """
         Flatten the struct into Arrow's record batches.
         """
-        import pyarrow as pa
-
         batches = super().load_stream(stream)
-        for batch in batches:
-            struct = batch.column(0)
-            yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
+        # Wrap each batch in a list for downstream UDF processing
+        return ([batch] for batch in self._flatten_struct(batches))
 
     def dump_stream(self, iterator, stream):
         """
         Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
         """
-        import pyarrow as pa
+        import itertools
 
-        def wrap_and_init_stream():
-            should_write_start_length = True
-            for batch, _ in iterator:
-                assert isinstance(batch, pa.RecordBatch)
+        batches = self._wrap_struct(iterator)
+        first = next(batches, None)
+        if first is None:
+            return
 
-                # Wrap the root struct
-                if batch.num_columns == 0:
-                    # When batch has no column, it should still create
-                    # an empty batch with the number of rows set.
-                    struct = pa.array([{}] * batch.num_rows)
-                else:
-                    struct = pa.StructArray.from_arrays(
-                        batch.columns, fields=pa.struct(list(batch.schema))
-                    )
-                batch = pa.RecordBatch.from_arrays([struct], ["_0"])
-
-                # Write the first record batch with initialization.
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
-
-        return super().dump_stream(wrap_and_init_stream(), stream)
+        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+        return super().dump_stream(itertools.chain([first], batches), stream)
 
 
 class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
