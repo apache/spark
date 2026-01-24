@@ -88,9 +88,7 @@ class ArrowBatchTransformer:
             # an empty batch with the number of rows set.
             struct = pa.array([{}] * batch.num_rows)
         else:
-            struct = pa.StructArray.from_arrays(
-                batch.columns, fields=pa.struct(list(batch.schema))
-            )
+            struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
 
