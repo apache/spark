@@ -172,6 +172,11 @@ class ProfilerCollector(ABC):
     def __init__(self) -> None:
         self._lock = RLock()
 
+    def _sorted_keys(self, keys: list[Union[int, str]]) -> list[Union[int, str]]:
+        int_keys = sorted(x for x in keys if isinstance(x, int))
+        str_keys = sorted(x for x in keys if isinstance(x, str))
+        return str_keys + int_keys
+
     def show_perf_profiles(self, id: Optional[int] = None) -> None:
         """
         Show the perf profile results.
@@ -200,7 +205,7 @@ class ProfilerCollector(ABC):
         if id is not None:
             show(id)
         else:
-            for id in sorted(stats.keys()):
+            for id in self._sorted_keys(stats.keys()):
                 show(id)
 
     @property
@@ -246,7 +251,7 @@ class ProfilerCollector(ABC):
         if id is not None:
             show(id)
         else:
-            for id in sorted(code_map.keys()):
+            for id in self._sorted_keys(code_map.keys()):
                 show(id)
 
     @property
@@ -293,7 +298,7 @@ class ProfilerCollector(ABC):
         if id is not None:
             dump(id)
         else:
-            for id in sorted(stats.keys()):
+            for id in self._sorted_keys(stats.keys()):
                 dump(id)
 
     def dump_memory_profiles(self, path: str, id: Optional[int] = None) -> None:
@@ -331,7 +336,7 @@ class ProfilerCollector(ABC):
         if id is not None:
             dump(id)
         else:
-            for id in sorted(code_map.keys()):
+            for id in self._sorted_keys(code_map.keys()):
                 dump(id)
 
     def clear_perf_profiles(self, id: Optional[int] = None) -> None:

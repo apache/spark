@@ -472,7 +472,7 @@ class MemoryProfiler(Profiler):
             stream.write(header + "\n")
             stream.write("=" * len(header) + "\n")
 
-            all_lines = linecache.getlines(filename)
+            all_lines = linecache.getlines(filename, module_globals=globals())
             if len(all_lines) == 0:
                 raise PySparkValueError(
                     errorClass="MEMORY_PROFILE_INVALID_SOURCE", messageParameters={}

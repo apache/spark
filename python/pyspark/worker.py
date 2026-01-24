@@ -169,8 +169,12 @@ class RunnerConf(Conf):
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
     @property
-    def profiler(self) -> Optional[str]:
+    def udf_profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.udf.profiler", None)
+
+    @property
+    def data_source_profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.dataSource.profiler", None)
 
 
 def report_times(outfile, boot, init, finish):
@@ -1390,7 +1394,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 
     result_id = read_long(infile)
 
-    profiler = runner_conf.profiler
+    # If chained_func is from pyspark.sql.worker, it is to read/write data source.
+    # In this case, we check the data_source_profiler config.
+    if getattr(chained_func, "__module__", "").startswith("pyspark.sql.worker."):
+        profiler = runner_conf.data_source_profiler
+    else:
+        profiler = runner_conf.udf_profiler
     if profiler == "perf":
         profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
     elif profiler == "memory":
