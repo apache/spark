@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:noble-20260113
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
@@ -41,19 +41,11 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     libssl-dev \
     openjdk-17-jdk-headless \
+    python3.12 \
     pkg-config \
     tzdata \
     software-properties-common \
     zlib1g-dev
-
-# Install Python 3.12
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.12 \
-    && apt-get autoremove --purge -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
