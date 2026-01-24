@@ -37,6 +37,103 @@ if have_pyarrow:
     import pyarrow as pa  # noqa: F401
 
 
+class OfflineStateRepartitionTestUtils:
+    """Utility class for repartition tests."""
+
+    @staticmethod
+    def run_repartition_test(
+        spark,
+        num_shuffle_partitions,
+        create_streaming_df,
+        output_mode,
+        batch1_data,
+        batch2_data,
+        batch3_data,
+        verify_initial,
+        verify_after_increase,
+        verify_after_decrease
+    ):
+        """
+        Common helper to run repartition tests with different streaming operators.
+
+        Steps:
+        1. Run streaming query to generate initial state
+        2. Repartition to more partitions
+        3. Add new data and restart query, verify state preserved
+        4. Repartition to fewer partitions
+        5. Add new data and restart query, verify state preserved
+
+        Parameters
+        ----------
+        spark : SparkSession
+            The active Spark session.
+        num_shuffle_partitions : int
+            The initial number of shuffle partitions.
+        create_streaming_df : callable
+            Function(df) -> DataFrame that applies the streaming transformation.
+        output_mode : str
+            Output mode for the streaming query ("update" or "append").
+        batch1_data, batch2_data, batch3_data : str
+            Data to write for each batch (newline-separated values).
+        verify_initial, verify_after_increase, verify_after_decrease : callable
+            Functions(collected_results) to verify results at each stage.
+        """
+        with tempfile.TemporaryDirectory() as input_dir, \
+             tempfile.TemporaryDirectory() as checkpoint_dir:
+
+            collected_results = []
+
+            def collect_batch(batch_df, batch_id):
+                rows = batch_df.collect()
+                collected_results.extend(rows)
+
+            def run_streaming_query():
+                df = spark.readStream.format("text").load(input_dir)
+                transformed_df = create_streaming_df(df)
+                query = (
+                    transformed_df.writeStream
+                    .foreachBatch(collect_batch)
+                    .option("checkpointLocation", checkpoint_dir)
+                    .outputMode(output_mode)
+                    .start()
+                )
+                query.processAllAvailable()
+                query.stop()
+
+            # Step 1: Write initial data and run streaming query
+            with open(os.path.join(input_dir, "batch1.txt"), "w") as f:
+                f.write(batch1_data)
+
+            run_streaming_query()
+            verify_initial(collected_results)
+
+            # Step 2: Repartition to more partitions
+            spark._streamingCheckpointManager.repartition(
+                checkpoint_dir, num_shuffle_partitions * 2
+            )
+
+            # Step 3: Add more data and restart query
+            with open(os.path.join(input_dir, "batch2.txt"), "w") as f:
+                f.write(batch2_data)
+
+            collected_results.clear()
+            run_streaming_query()
+            verify_after_increase(collected_results)
+
+            # Step 4: Repartition to fewer partitions
+            spark._streamingCheckpointManager.repartition(
+                checkpoint_dir, num_shuffle_partitions - 1
+            )
+
+            # Step 5: Add more data and restart query
+            with open(os.path.join(input_dir, "batch3.txt"), "w") as f:
+                f.write(batch3_data)
+
+            collected_results.clear()
+            run_streaming_query()
+            verify_after_decrease(collected_results)
+
+
 class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
     """
     Test suite for Offline state repartitioning.
@@ -106,141 +203,131 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_repartition_with_apply_in_pandas_with_state(self):
-        """
-        Test repartition for a streaming query using applyInPandasWithState.
+        """Test repartition for a streaming query using applyInPandasWithState."""
+        # Define the stateful function that tracks count per key
+        def stateful_count_func(key, pdf_iter, state):
+            existing_count = state.getOption
+            count = 0 if existing_count is None else existing_count[0]
 
-        1. Run streaming query to generate state (count per key)
-        2. Repartition to more partitions
-        3. Add new data and restart query
-        4. Validate state is preserved after increasing partitions
-        5. Repartition to fewer partitions
-        6. Add new data and restart query
-        7. Validate state is preserved after reducing partitions
-        """
-        with tempfile.TemporaryDirectory() as input_dir, \
-             tempfile.TemporaryDirectory() as checkpoint_dir:
+            new_count = 0
+            for pdf in pdf_iter:
+                new_count += len(pdf)
 
-            # Collect results from foreachBatch
-            collected_results = []
+            total_count = count + new_count
+            state.update((total_count,))
+            yield pd.DataFrame({"key": [key[0]], "count": [total_count]})
 
-            def collect_batch(batch_df, batch_id):
-                """ForeachBatch function to collect batch results for verification."""
-                rows = batch_df.collect()
-                collected_results.extend(rows)
+        output_schema = StructType([
+            StructField("key", StringType()),
+            StructField("count", LongType())
+        ])
+        state_schema = StructType([StructField("count", LongType())])
 
-            # Define the stateful function that tracks count per key
-            def stateful_count_func(key, pdf_iter, state):
-                """
-                Stateful function that counts occurrences per key.
-                State stores the running count.
-                """
-                # Get existing count from state or start at 0
-                existing_count = state.getOption
-                if existing_count is None:
-                    count = 0
-                else:
-                    count = existing_count[0]
-
-                # Count new rows
-                new_count = 0
-                for pdf in pdf_iter:
-                    new_count += len(pdf)
-
-                # Update state with new total
-                total_count = count + new_count
-                state.update((total_count,))
-
-                # Output the key and current count
-                yield pd.DataFrame({"key": [key[0]], "count": [total_count]})
-
-            output_schema = StructType([
-                StructField("key", StringType()),
-                StructField("count", LongType())
-            ])
-            state_schema = StructType([StructField("count", LongType())])
-
-            def run_streaming_query():
-                """Helper to create and run the streaming query."""
-                df = self.spark.readStream.format("text").load(input_dir)
-                query = (
-                    df.groupBy(df["value"])
-                    .applyInPandasWithState(
-                        stateful_count_func,
-                        output_schema,
-                        state_schema,
-                        "Update",
-                        GroupStateTimeout.NoTimeout
-                    )
-                    .writeStream
-                    .foreachBatch(collect_batch)
-                    .option("checkpointLocation", checkpoint_dir)
-                    .outputMode("update")
-                    .start()
-                )
-                query.processAllAvailable()
-                query.stop()
-
-            # Step 1: Write initial data and run streaming query
-            with open(os.path.join(input_dir, "batch1.txt"), "w") as f:
-                f.write("a\nb\na\nc\n")  # a:2, b:1, c:1
-
-            run_streaming_query()
-
-            # Verify initial state
-            initial_counts = {row.key: row["count"] for row in collected_results}
-            self.assertEqual(initial_counts.get("a"), 2)
-            self.assertEqual(initial_counts.get("b"), 1)
-            self.assertEqual(initial_counts.get("c"), 1)
-
-            # Step 2: Repartition to a higher number of partitions
-            self.spark._streamingCheckpointManager.repartition(
-                checkpoint_dir, self.NUM_SHUFFLE_PARTITIONS * 2
+        def create_streaming_df(df):
+            return df.groupBy(df["value"]).applyInPandasWithState(
+                stateful_count_func,
+                output_schema,
+                state_schema,
+                "Update",
+                GroupStateTimeout.NoTimeout
             )
 
-            # Step 3: Add more data and restart query
-            with open(os.path.join(input_dir, "batch2.txt"), "w") as f:
-                f.write("a\nb\nd\n")  # a:+1, b:+1, d:1 (new key)
+        def verify_initial(results):
+            counts = {row.key: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 2)
+            self.assertEqual(counts.get("b"), 1)
+            self.assertEqual(counts.get("c"), 1)
 
-            # Clear collected results for restart
-            collected_results.clear()
-            run_streaming_query()
+        def verify_after_increase(results):
+            counts = {row.key: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 3, "State for 'a': 2 + 1 = 3")
+            self.assertEqual(counts.get("b"), 2, "State for 'b': 1 + 1 = 2")
+            self.assertEqual(counts.get("d"), 1, "New key 'd' should have count 1")
 
-            # Step 4: Validate state was preserved after increasing partitions
-            # After restart with new data:
-            # - a should have count 3 (2 from before + 1 new)
-            # - b should have count 2 (1 from before + 1 new)
-            # - d should have count 1 (new key)
-            increased_counts = {row.key: row["count"] for row in collected_results}
+        def verify_after_decrease(results):
+            counts = {row.key: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 4, "State for 'a': 3 + 1 = 4")
+            self.assertEqual(counts.get("c"), 2, "State for 'c': 1 + 1 = 2")
+            self.assertEqual(counts.get("e"), 1, "New key 'e' should have count 1")
 
-            # Only updated keys will be in the output (a, b, d)
-            self.assertEqual(increased_counts.get("a"), 3, "State for 'a' should be preserved: 2 + 1 = 3")
-            self.assertEqual(increased_counts.get("b"), 2, "State for 'b' should be preserved: 1 + 1 = 2")
-            self.assertEqual(increased_counts.get("d"), 1, "New key 'd' should have count 1")
+        OfflineStateRepartitionTestUtils.run_repartition_test(
+            spark=self.spark,
+            num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
+            create_streaming_df=create_streaming_df,
+            output_mode="update",
+            batch1_data="a\nb\na\nc\n",  # a:2, b:1, c:1
+            batch2_data="a\nb\nd\n",      # a:+1, b:+1, d:1 (new)
+            batch3_data="a\nc\ne\n",      # a:+1, c:+1, e:1 (new)
+            verify_initial=verify_initial,
+            verify_after_increase=verify_after_increase,
+            verify_after_decrease=verify_after_decrease
+        )
 
-            # Step 5: Repartition to fewer partitions
-            self.spark._streamingCheckpointManager.repartition(
-                checkpoint_dir, self.NUM_SHUFFLE_PARTITIONS - 1
-            )
+    def test_repartition_with_streaming_aggregation(self):
+        """Test repartition for a streaming aggregation query (groupBy + count)."""
+        def create_streaming_df(df):
+            return df.groupBy("value").count()
 
-            # Step 6: Add more data and restart query
-            with open(os.path.join(input_dir, "batch3.txt"), "w") as f:
-                f.write("a\nc\ne\n")  # a:+1, c:+1, e:1 (new key)
+        def verify_initial(results):
+            counts = {row.value: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 2)
+            self.assertEqual(counts.get("b"), 1)
+            self.assertEqual(counts.get("c"), 1)
 
-            # Clear collected results for restart
-            collected_results.clear()
-            run_streaming_query()
+        def verify_after_increase(results):
+            counts = {row.value: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 3, "State for 'a': 2 + 1 = 3")
+            self.assertEqual(counts.get("b"), 2, "State for 'b': 1 + 1 = 2")
+            self.assertEqual(counts.get("d"), 1, "New key 'd' should have count 1")
 
-            # Step 7: Validate state was preserved after reducing partitions
-            # After restart with new data:
-            # - a should have count 4 (3 from before + 1 new)
-            # - c should have count 2 (1 from before + 1 new)
-            # - e should have count 1 (new key)
-            reduced_counts = {row.key: row["count"] for row in collected_results}
+        def verify_after_decrease(results):
+            counts = {row.value: row["count"] for row in results}
+            self.assertEqual(counts.get("a"), 4, "State for 'a': 3 + 1 = 4")
+            self.assertEqual(counts.get("c"), 2, "State for 'c': 1 + 1 = 2")
+            self.assertEqual(counts.get("e"), 1, "New key 'e' should have count 1")
 
-            # Only updated keys will be in the output (a, c, e)
-            self.assertEqual(reduced_counts.get("a"), 4, "State for 'a' should be preserved: 3 + 1 = 4")
-            self.assertEqual(reduced_counts.get("c"), 2, "State for 'c' should be preserved: 1 + 1 = 2")
-            self.assertEqual(reduced_counts.get("e"), 1, "New key 'e' should have count 1")
+        OfflineStateRepartitionTestUtils.run_repartition_test(
+            spark=self.spark,
+            num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
+            create_streaming_df=create_streaming_df,
+            output_mode="update",
+            batch1_data="a\nb\na\nc\n",  # a:2, b:1, c:1
+            batch2_data="a\nb\nd\n",      # a:+1, b:+1, d:1 (new)
+            batch3_data="a\nc\ne\n",      # a:+1, c:+1, e:1 (new)
+            verify_initial=verify_initial,
+            verify_after_increase=verify_after_increase,
+            verify_after_decrease=verify_after_decrease
+        )
+
+    def test_repartition_with_streaming_dedup(self):
+        """Test repartition for a streaming deduplication query (dropDuplicates)."""
+        def create_streaming_df(df):
+            return df.dropDuplicates(["value"])
+
+        def verify_initial(results):
+            values = {row.value for row in results}
+            self.assertEqual(values, {"a", "b", "c"})
+
+        def verify_after_increase(results):
+            values = {row.value for row in results}
+            self.assertEqual(values, {"d", "e"}, "Only new keys after repartition")
+
+        def verify_after_decrease(results):
+            values = {row.value for row in results}
+            self.assertEqual(values, {"f", "g"}, "Only new keys after repartition")
+
+        OfflineStateRepartitionTestUtils.run_repartition_test(
+            spark=self.spark,
+            num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
+            create_streaming_df=create_streaming_df,
+            output_mode="append",
+            batch1_data="a\nb\na\nc\n",   # unique: a, b, c
+            batch2_data="a\nb\nd\ne\n",   # a, b duplicates; d, e new
+            batch3_data="a\nc\nf\ng\n",   # a, c duplicates; f, g new
+            verify_initial=verify_initial,
+            verify_after_increase=verify_after_increase,
+            verify_after_decrease=verify_after_decrease
+        )
 
 
 if __name__ == "__main__":
