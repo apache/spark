@@ -1272,6 +1272,8 @@ class BasePythonDataSourceTestsMixin:
             self.assertIn("Profile of plan_data_source_read", stdout)
             self.assertIn("ncalls", stdout)
             self.assertIn("tottime", stdout)
+            # We should also found UDF profile results for data source read
+            self.assertIn("UDF<id=", stdout)
 
     def test_data_source_memory_profiler(self):
         with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "memory"}):
@@ -1282,14 +1284,17 @@ class BasePythonDataSourceTestsMixin:
             self.assertIn("Profile of create_data_source", stdout)
             self.assertIn("Profile of plan_data_source_read", stdout)
             self.assertIn("Mem usage", stdout)
+            # We should also found UDF profile results for data source read
+            self.assertIn("UDF<id=", stdout)
 
-    def test_data_source_read_perf_profiler(self):
+    def test_data_source_read_with_udf_perf_profiler(self):
+        """udf profiler config should not enable data source profiling"""
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             self.test_custom_json_data_source_read()
             with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
                 self.spark.profile.show(type="perf")
             stdout = stdout_io.getvalue()
-            print(stdout)
+            self.assertEqual(stdout, "")
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
