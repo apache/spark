@@ -376,6 +376,7 @@ private[client] object GrpcExceptionConverter {
 
     val error = errors(errorIdx)
     val classHierarchy = error.getErrorTypeHierarchyList.asScala
+
     val constructor =
       classHierarchy
         .flatMap(errorFactory.get)
