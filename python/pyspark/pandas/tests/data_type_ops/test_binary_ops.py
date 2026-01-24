@@ -162,11 +162,74 @@ class BinaryOpsTestsMixin:
     def test_astype(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq(psser.astype(str), psser.astype(str))
+        # Binary to String cast - test should succeed regardless of nullable
+        result = psser.astype(str)
+        self.assertIsInstance(result, ps.Series)
+        # String dtype can be object or Unicode string
+        self.assertIn(result.dtype.kind, ["O", "U"])
         self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[b"2", b"3", b"1"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+    def test_astype_binary_to_string_with_validation(self):
+        """Test Binary->String cast with UTF-8 validation enabled in LEGACY mode"""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.getActiveSession()
+
+        try:
+            # Set LEGACY mode (ANSI=false) where invalid UTF-8 returns NULL
+            spark.conf.set("spark.sql.ansi.enabled", "false")
+
+            pser = pd.Series([b"valid"])
+            psser = ps.from_pandas(pser)
+            result = psser.astype(str)
+
+            # Should work and return correct values
+            self.assertEqual(result.to_list(), ["valid"])
+
+            # Assert that result schema is nullable=True when validation is enabled
+            # in LEGACY mode, because Binary->String cast can produce nulls for invalid UTF-8
+            result_field = result._internal.data_fields[0]
+            self.assertTrue(
+                result_field.nullable,
+                "Binary->String cast should be nullable in LEGACY mode with validation enabled",
+            )
+        finally:
+            # Reset to default (ANSI mode in Spark 4)
+            spark.conf.unset("spark.sql.ansi.enabled")
+
+    def test_astype_binary_to_string_without_validation(self):
+        """Test Binary->String cast with UTF-8 validation disabled in LEGACY mode"""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.getActiveSession()
+
+        try:
+            # Set LEGACY mode and disable validation
+            spark.conf.set("spark.sql.ansi.enabled", "false")
+            spark.conf.set("spark.sql.castBinaryToString.validateUtf8", "false")
+
+            pser = pd.Series([b"data"])
+            psser = ps.from_pandas(pser)
+            result = psser.astype(str)
+
+            # Should work and return correct values
+            self.assertEqual(result.to_list(), ["data"])
+
+            # The schema now accurately reflects nullability based on config.
+            # With validation disabled in LEGACY mode, cast won't produce nulls.
+            # So nullable should be False.
+            result_field = result._internal.data_fields[0]
+            self.assertFalse(
+                result_field.nullable,
+                "Binary->String cast should not be nullable when validation is disabled",
+            )
+        finally:
+            # Reset configs
+            spark.conf.unset("spark.sql.castBinaryToString.validateUtf8")
+            spark.conf.unset("spark.sql.ansi.enabled")
 
     def test_neg(self):
         self.assertRaises(TypeError, lambda: -self.psser)

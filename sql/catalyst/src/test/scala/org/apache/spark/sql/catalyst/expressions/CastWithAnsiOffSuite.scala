@@ -25,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -932,14 +933,19 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   }
 
   test("LEGACY mode: cast invalid UTF-8 binary to string should return null") {
-    // In LEGACY mode, invalid UTF-8 returns null
-    checkEvaluation(cast(invalidUtf8Literal, StringType), null)
+    withSQLConf(
+      SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
+      // Create Cast expressions inside withSQLConf so they pick up the correct config
+      // In LEGACY mode with validation enabled, invalid UTF-8 returns null
+      checkEvaluation(cast(invalidUtf8Literal, StringType), null)
 
-    // Valid UTF-8 should work
-    checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+      // Valid UTF-8 should work
+      checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
 
-    // Empty binary should work
-    checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+      // Empty binary should work
+      checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
   }
 
   test("LEGACY mode: cast invalid UTF-8 with validation disabled (old behavior)") {
@@ -955,6 +961,109 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
       // Empty binary should work
       checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
+  }
+
+  test("LEGACY mode: cast array with invalid UTF-8 binary to array of string") {
+    // Array with mix of valid and invalid UTF-8
+    val arrayLiteral = Literal.create(
+      Seq(validUtf8Bytes, invalidUtf8Bytes, emptyBinaryBytes),
+      ArrayType(BinaryType, containsNull = false))
+
+    val result = cast(arrayLiteral, ArrayType(StringType, containsNull = true)).eval()
+    val resultArray = result.asInstanceOf[ArrayData]
+
+    // Valid UTF-8 should convert
+    assert(resultArray.getUTF8String(0) == UTF8String.fromString("Hello"))
+    // Invalid UTF-8 should be NULL
+    assert(resultArray.isNullAt(1))
+    // Empty should convert
+    assert(resultArray.getUTF8String(2) == UTF8String.fromString(""))
+  }
+
+  test("LEGACY mode: nested array with invalid UTF-8") {
+    val nestedArrayLiteral = Literal.create(
+      Seq(Seq(validUtf8Bytes), Seq(invalidUtf8Bytes)),
+      ArrayType(ArrayType(BinaryType, containsNull = false), containsNull = false))
+
+    val result = cast(nestedArrayLiteral,
+      ArrayType(ArrayType(StringType, containsNull = true), containsNull = false)).eval()
+    val outer = result.asInstanceOf[ArrayData]
+
+    // First inner array should have valid string
+    val inner0 = outer.getArray(0)
+    assert(inner0.getUTF8String(0) == UTF8String.fromString("Hello"))
+
+    // Second inner array should have NULL for invalid UTF-8
+    val inner1 = outer.getArray(1)
+    assert(inner1.isNullAt(0))
+  }
+
+  test("LEGACY mode: cast map with invalid UTF-8 binary values") {
+    val mapLiteral = Literal.create(
+      Map("valid" -> validUtf8Bytes, "invalid" -> invalidUtf8Bytes),
+      MapType(StringType, BinaryType, valueContainsNull = false))
+
+    val result = cast(mapLiteral,
+      MapType(StringType, StringType, valueContainsNull = true)).eval()
+    val resultMap = result.asInstanceOf[MapData]
+
+    // Get keys and values
+    val keys = resultMap.keyArray()
+    val values = resultMap.valueArray()
+
+    // Find indices for our keys
+    var validIdx = -1
+    var invalidIdx = -1
+    for (i <- 0 until keys.numElements()) {
+      val key = keys.getUTF8String(i).toString
+      if (key == "valid") validIdx = i
+      if (key == "invalid") invalidIdx = i
+    }
+
+    // Valid value should convert
+    assert(!values.isNullAt(validIdx))
+    assert(values.getUTF8String(validIdx) == UTF8String.fromString("Hello"))
+
+    // Invalid value should be NULL
+    assert(values.isNullAt(invalidIdx))
+  }
+
+  test("LEGACY mode: cast struct with invalid UTF-8 binary field") {
+    val structLiteral = Literal.create(
+      InternalRow(validUtf8Bytes, invalidUtf8Bytes),
+      StructType(Seq(
+        StructField("valid", BinaryType, nullable = false),
+        StructField("invalid", BinaryType, nullable = false))))
+
+    val targetStruct = StructType(Seq(
+      StructField("valid", StringType, nullable = false),
+      StructField("invalid", StringType, nullable = true))) // Must allow null now
+
+    val result = cast(structLiteral, targetStruct).eval()
+    val resultRow = result.asInstanceOf[InternalRow]
+
+    // Valid field should convert
+    assert(resultRow.getUTF8String(0) == UTF8String.fromString("Hello"))
+    // Invalid field should be NULL
+    assert(resultRow.isNullAt(1))
+  }
+
+  test("SPARK-54586: forceNullable for Binary->String in LEGACY mode") {
+    // With validation enabled in LEGACY mode, should be nullable
+    withSQLConf(
+      SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
+      assert(Cast.forceNullable(BinaryType, StringType) === true,
+        "forceNullable should return true for Binary->String in LEGACY mode with validation")
+    }
+
+    // With validation disabled in LEGACY mode, should NOT be nullable
+    withSQLConf(
+      SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "false") {
+      assert(Cast.forceNullable(BinaryType, StringType) === false,
+        "forceNullable should return false for Binary->String without validation")
     }
   }
 }

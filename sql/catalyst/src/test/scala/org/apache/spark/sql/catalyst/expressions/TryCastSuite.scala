@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -142,6 +143,45 @@ class TryCastSuite extends CastWithAnsiOnSuite {
       // Empty binary should work
       checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
     }
+  }
+
+  test("TRY mode: try_cast array with invalid UTF-8 returns array with nulls") {
+    val arrayLiteral = Literal.create(
+      Seq(validUtf8Bytes, invalidUtf8Bytes),
+      ArrayType(BinaryType, containsNull = false))
+
+    val result = cast(arrayLiteral, ArrayType(StringType, containsNull = true)).eval()
+    val resultArray = result.asInstanceOf[ArrayData]
+
+    assert(resultArray.getUTF8String(0) == UTF8String.fromString("Hello"))
+    assert(resultArray.isNullAt(1)) // Invalid UTF-8 becomes null
+  }
+
+  test("TRY mode: try_cast map with invalid UTF-8 value returns map with null value") {
+    val mapLiteral = Literal.create(
+      Map("key" -> invalidUtf8Bytes),
+      MapType(StringType, BinaryType, valueContainsNull = false))
+
+    val result = cast(mapLiteral,
+      MapType(StringType, StringType, valueContainsNull = true)).eval()
+    val resultMap = result.asInstanceOf[MapData]
+
+    // Map should have the key, but value should be null
+    val values = resultMap.valueArray()
+    assert(values.isNullAt(0))
+  }
+
+  test("TRY mode: try_cast struct with invalid UTF-8 field returns struct with null field") {
+    val structLiteral = Literal.create(
+      InternalRow(invalidUtf8Bytes),
+      StructType(Seq(StructField("field", BinaryType, nullable = false))))
+
+    val result = cast(structLiteral,
+      StructType(Seq(StructField("field", StringType, nullable = true)))).eval()
+    val resultRow = result.asInstanceOf[InternalRow]
+
+    // Field should be null
+    assert(resultRow.isNullAt(0))
   }
 }
 
