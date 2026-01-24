@@ -151,7 +151,8 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         Flatten the struct into Arrow's record batches.
         """
         batches = super().load_stream(stream)
-        return map(list, map(ArrowBatchTransformer.flatten_struct, batches))
+        flattened = map(ArrowBatchTransformer.flatten_struct, batches)
+        return map(lambda b: [b], flattened)
 
     def dump_stream(self, iterator, stream):
         """
@@ -159,13 +160,15 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import itertools
 
-        batches = map(lambda x: ArrowBatchTransformer.wrap_struct(x[0]), iterator)
-        first = next(batches, None)
+        first = next(iterator, None)
         if first is None:
             return
 
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
-        return super().dump_stream(itertools.chain([first], batches), stream)
+        batches = map(
+            lambda x: ArrowBatchTransformer.wrap_struct(x[0]), itertools.chain([first], iterator)
+        )
+        return super().dump_stream(batches, stream)
 
 
 class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
