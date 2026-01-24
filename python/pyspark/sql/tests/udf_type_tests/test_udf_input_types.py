@@ -21,7 +21,7 @@ import unittest
 import pandas as pd
 
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, pandas_udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
