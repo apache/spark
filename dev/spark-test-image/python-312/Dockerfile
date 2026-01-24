@@ -44,7 +44,6 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     tzdata \
     software-properties-common \
-    wget \
     zlib1g-dev
 
 # Install Python 3.12
