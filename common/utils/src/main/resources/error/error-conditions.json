@@ -912,15 +912,9 @@
     },
     "sqlState" : "56K00"
   },
-  "CONNECT_CLIENT_INTERNAL_ERROR" : {
-    "message" : [
-      "Spark Connect client internal error: <message>"
-    ],
-    "sqlState" : "XXKCI"
-  },
   "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
     "message" : [
-      "The server response is missing SQL state: <message>"
+      "Unidentified Error: <message>"
     ],
     "sqlState" : "XXKCM"
   },

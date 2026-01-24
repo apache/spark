@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -102,15 +102,9 @@ class SparkSessionSuite extends ConnectFunSuite {
       })
       .create()
 
-    val ex = intercept[SparkRuntimeException] {
+    assertThrows[RuntimeException] {
       session.range(10).count()
     }
-    assert(ex.isInstanceOf[RuntimeException])
-    assert(ex.getCondition == "CONNECT_CLIENT_INTERNAL_ERROR")
-    assert(
-      ex.getMessage contains
-        "Spark Connect client internal error: java.lang.RuntimeException: Blocked")
-    assert(ex.getSqlState == "XXKCI")
     closeSession(session)
   }
 

@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.connect.SparkSession
@@ -213,16 +213,9 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
     val session = SparkSession.builder().client(client).create()
 
-    val ex = intercept[SparkRuntimeException] {
+    assertThrows[RuntimeException] {
       session.range(10).count()
     }
-
-    assert(ex.isInstanceOf[RuntimeException])
-    assert(ex.getCondition == "CONNECT_CLIENT_INTERNAL_ERROR")
-    assert(
-      ex.getMessage contains
-        "Spark Connect client internal error: java.lang.RuntimeException: Blocked")
-    assert(ex.getSqlState == "XXKCI")
   }
 
   test("error framework parameters") {

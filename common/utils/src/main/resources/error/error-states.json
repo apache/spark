@@ -7524,12 +7524,6 @@
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
-    "XXKCI": {
-        "description": "Connect Client - Internal error",
-        "origin": "Spark",
-        "standard": "N",
-        "usedBy": ["Spark"]
-    },
     "XXKCM": {
         "description": "Connect Client - Unexpected missing SQL state",
         "origin": "Spark",
