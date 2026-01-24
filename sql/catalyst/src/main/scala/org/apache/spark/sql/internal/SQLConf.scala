@@ -2953,7 +2953,7 @@ object SQLConf {
         "repartitioning to be complete before restarting the query.")
       .version("4.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS =
     buildConf("spark.sql.streaming.checkpoint.verifyMetadataExists.enabled")
