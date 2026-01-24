@@ -135,7 +135,7 @@ class ArrowStreamSerializer(Serializer):
         for batch in reader:
             yield batch
 
-    def _load_dataframe_groups(
+    def _load_group_dataframes(
         self, stream, num_dfs: int = 1
     ) -> "Iterator[tuple[Iterator[pa.RecordBatch], ...]]":
         """
@@ -1077,8 +1077,8 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
                 struct = batch.column(0)
                 yield pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
 
-        for (batch_iter,) in self._load_dataframe_groups(stream, num_dfs=1):
-            processed_iter = process_group(batch_iter)
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            processed_iter = process_group(batches)
             yield processed_iter
             # Make sure the batches are fully iterated before getting the next group
             for _ in processed_iter:
@@ -1097,10 +1097,10 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
         Each group yields Iterator[Tuple[pa.Array, ...]], allowing UDF to process batches one by one
         without consuming all batches upfront.
         """
-        for (batch_iter,) in self._load_dataframe_groups(stream, num_dfs=1):
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
             # Lazily read and convert Arrow batches one at a time from the stream
             # This avoids loading all batches into memory for the group
-            columns_iter = (batch.columns for batch in batch_iter)
+            columns_iter = (batch.columns for batch in batches)
             yield columns_iter
             # Make sure the batches are fully iterated before getting the next group
             for _ in columns_iter:
@@ -1138,12 +1138,12 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         Each group yields Iterator[Tuple[pd.Series, ...]], allowing UDF to
         process batches one by one without consuming all batches upfront.
         """
-        for (batch_iter,) in self._load_dataframe_groups(stream, num_dfs=1):
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
             # Lazily read and convert Arrow batches to pandas Series one at a time
             # from the stream. This avoids loading all batches into memory for the group
             series_iter = (
                 tuple(self.arrow_to_pandas(c, i) for i, c in enumerate(batch.columns))
-                for batch in batch_iter
+                for batch in batches
             )
             yield series_iter
             # Make sure the batches are fully iterated before getting the next group
@@ -1191,10 +1191,10 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 ]
                 yield series
 
-        for (batch_iter,) in self._load_dataframe_groups(stream, num_dfs=1):
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
             # Lazily read and convert Arrow batches one at a time from the stream
             # This avoids loading all batches into memory for the group
-            series_iter = process_group(batch_iter)
+            series_iter = process_group(batches)
             yield series_iter
             # Make sure the batches are fully iterated before getting the next group
             for _ in series_iter:
@@ -1231,8 +1231,8 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         """
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
         """
-        for group1_batches, group2_batches in self._load_dataframe_groups(stream, num_dfs=2):
-            yield list(group1_batches), list(group2_batches)
+        for df1_batches, df2_batches in self._load_group_dataframes(stream, num_dfs=2):
+            yield list(df1_batches), list(df2_batches)
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
@@ -1243,15 +1243,15 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
 
-        for group1_batches, group2_batches in self._load_dataframe_groups(stream, num_dfs=2):
+        for df1_batches, df2_batches in self._load_group_dataframes(stream, num_dfs=2):
             yield (
                 [
                     self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(pa.Table.from_batches(group1_batches).itercolumns())
+                    for i, c in enumerate(pa.Table.from_batches(df1_batches).itercolumns())
                 ],
                 [
                     self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(pa.Table.from_batches(group2_batches).itercolumns())
+                    for i, c in enumerate(pa.Table.from_batches(df2_batches).itercolumns())
                 ],
             )
 
