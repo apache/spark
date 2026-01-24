@@ -147,10 +147,6 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     """
     Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
-
-    Uses transformers for data processing:
-    - load_stream: ArrowStreamSerializer -> FlattenStructTransformer
-    - dump_stream: WrapStructTransformer -> ArrowStreamSerializer (with START_ARROW_STREAM marker)
     """
 
     def __init__(self):
@@ -163,8 +159,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         Flatten the struct into Arrow's record batches.
         """
         batches = super().load_stream(stream)
-        # Wrap each batch in a list for downstream UDF processing
-        return ([batch] for batch in self._flatten_struct(batches))
+        return map(list, self._flatten_struct(batches))
 
     def dump_stream(self, iterator, stream):
         """
