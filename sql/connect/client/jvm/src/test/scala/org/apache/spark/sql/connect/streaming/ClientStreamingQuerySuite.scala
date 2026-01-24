@@ -53,6 +53,20 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       "test-data",
       "streaming")
 
+  /**
+   * Helper method to run tests with source evolution configs enabled.
+   */
+  private def testWithSourceEvolution(testName: String)(testFun: => Unit): Unit = {
+    test(testName) {
+      withSQLConf(
+        "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
+        "spark.sql.streaming.offsetLog.formatVersion" -> "2"
+      ) {
+        testFun
+      }
+    }
+  }
+
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
     withSQLConf(
@@ -753,6 +767,111 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       terminate = terminate :+ event.json
     }
   }
+
+  // Tests for DataStreamReader.name() method
+  testWithSourceEvolution("stream reader name() with valid source names") {
+    Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
+      .foreach { name =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.parquet(path)
+
+          val df = spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name(name)
+            .load(path)
+
+          assert(df.isStreaming, s"DataFrame should be streaming for name: $name")
+        }
+      }
+  }
+
+  testWithSourceEvolution("stream reader name() method chaining") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      val df = spark.readStream
+        .format("parquet")
+        .schema("id LONG")
+        .name("my_source")
+        .option("maxFilesPerTrigger", "1")
+        .load(path)
+
+      assert(df.isStreaming, "DataFrame should be streaming")
+    }
+  }
+
+  test("stream reader invalid source name - contains hyphen") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my-source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my-source"))
+    }
+  }
+
+  test("stream reader invalid source name - contains space") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my space")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my space"))
+    }
+  }
+
+  test("stream reader invalid source name - contains dot") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my.source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my.source"))
+    }
+  }
+
+  test("stream reader invalid source name - empty string") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      // Empty string triggers require() check which throws IllegalArgumentException
+      intercept[IllegalArgumentException] {
+        spark.readStream
+          .format("parquet")
+          .schema("id LONG")
+          .name("")
+          .load(path)
+      }
+    }
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {
@@ -778,123 +897,4 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
-}
-
-// Tests for DataStreamReader.name() method
-// These tests require source evolution configs to be enabled
-class DataStreamReaderNameTests extends QueryTest with RemoteSparkSession {
-
-  test("name() with valid source names") {
-    withSQLConf(
-      "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
-      "spark.sql.streaming.offsetLog.formatVersion" -> "2"
-    ) {
-      Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
-        .foreach { name =>
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-            spark.range(10).write.parquet(path)
-
-            val df = spark.readStream
-              .format("parquet")
-              .schema("id LONG")
-              .name(name)
-              .load(path)
-
-            assert(df.isStreaming, s"DataFrame should be streaming for name: $name")
-          }
-        }
-    }
-  }
-
-  test("name() method chaining") {
-    withSQLConf(
-      "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
-      "spark.sql.streaming.offsetLog.formatVersion" -> "2"
-    ) {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(10).write.parquet(path)
-
-        val df = spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("my_source")
-          .option("maxFilesPerTrigger", "1")
-          .load(path)
-
-        assert(df.isStreaming, "DataFrame should be streaming")
-      }
-    }
-  }
-
-  test("invalid source name - contains hyphen") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("parquet")
-            .schema("id LONG")
-            .name("my-source")
-            .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my-source"))
-    }
-  }
-
-  test("invalid source name - contains space") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("parquet")
-            .schema("id LONG")
-            .name("my space")
-            .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my space"))
-    }
-  }
-
-  test("invalid source name - contains dot") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("parquet")
-            .schema("id LONG")
-            .name("my.source")
-            .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my.source"))
-    }
-  }
-
-  test("invalid source name - empty string") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      // Empty string triggers require() check which throws IllegalArgumentException
-      intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("")
-          .load(path)
-      }
-    }
-  }
 }
