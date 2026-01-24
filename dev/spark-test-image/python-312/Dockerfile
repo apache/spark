@@ -28,6 +28,7 @@ ENV FULL_REFRESH_DATE=20260124
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 RUN apt-get update && apt-get install -y \
     build-essential \
