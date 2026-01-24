@@ -425,6 +425,14 @@ object Cast extends QueryErrorsBase {
 
     case (_: StringType, BinaryType | _: StringType) => false
     case (_: StringType, _) => true
+    // Binary to String can produce null only in LEGACY/TRY mode with UTF-8 validation:
+    // - ANSI mode: throws exception
+    // - LEGACY mode + validateUtf8=true: returns NULL
+    // - LEGACY mode + validateUtf8=false: no nulls
+    case (BinaryType, _: StringType) =>
+      val validateUtf8 = SQLConf.get.getConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST)
+      val ansiEnabled = SQLConf.get.getConf(SQLConf.ANSI_ENABLED)
+      !ansiEnabled && validateUtf8
     case (_, _: StringType) => false
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
@@ -622,10 +630,7 @@ case class Cast(
   }
 
   override def nullable: Boolean = if (!isTryCast) {
-    // In LEGACY mode with validation enabled, casting BinaryType to StringType can return null
-    val binaryToStringInLegacy = !ansiEnabled && validateUtf8 &&
-      child.dataType == BinaryType && dataType.isInstanceOf[StringType]
-    child.nullable || Cast.forceNullable(child.dataType, dataType) || binaryToStringInLegacy
+    child.nullable || Cast.forceNullable(child.dataType, dataType)
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable

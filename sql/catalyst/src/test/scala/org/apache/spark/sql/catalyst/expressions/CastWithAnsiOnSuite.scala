@@ -928,4 +928,55 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
     }
   }
+
+  test("ANSI mode: cast array with invalid UTF-8 should throw") {
+    // Only run this test when evalMode is actually ANSI, not TRY
+    // TryCastSuite inherits from CastWithAnsiOnSuite but overrides evalMode to TRY
+    if (evalMode == EvalMode.ANSI) {
+      val arrayLiteral = Literal.create(
+        Seq(invalidUtf8Bytes),
+        ArrayType(BinaryType, containsNull = false))
+
+      // Should throw when casting array element
+      checkExceptionInExpression[SparkRuntimeException](
+        cast(arrayLiteral, ArrayType(StringType, containsNull = false)),
+        "CAST_INVALID_INPUT")
+    }
+  }
+
+  test("ANSI mode: cast map with invalid UTF-8 value should throw") {
+    if (evalMode == EvalMode.ANSI) {
+      val mapLiteral = Literal.create(
+        Map("key" -> invalidUtf8Bytes),
+        MapType(StringType, BinaryType, valueContainsNull = false))
+
+      checkExceptionInExpression[SparkRuntimeException](
+        cast(mapLiteral, MapType(StringType, StringType, valueContainsNull = false)),
+        "CAST_INVALID_INPUT")
+    }
+  }
+
+  test("ANSI mode: cast struct with invalid UTF-8 field should throw") {
+    if (evalMode == EvalMode.ANSI) {
+      val structLiteral = Literal.create(
+        InternalRow(invalidUtf8Bytes),
+        StructType(Seq(StructField("field", BinaryType, nullable = false))))
+
+      checkExceptionInExpression[SparkRuntimeException](
+        cast(structLiteral,
+          StructType(Seq(StructField("field", StringType, nullable = false)))),
+        "CAST_INVALID_INPUT")
+    }
+  }
+
+  test("SPARK-54586: forceNullable for Binary->String in ANSI mode") {
+    // In ANSI mode with validation enabled, should NOT be nullable (throws instead)
+    withSQLConf(
+      SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      assert(Cast.forceNullable(BinaryType, StringType) === false,
+        "forceNullable should return false for Binary->String in ANSI mode " +
+        "(throws instead of NULL)")
+    }
+  }
 }
