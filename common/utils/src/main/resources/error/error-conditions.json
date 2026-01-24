@@ -3027,6 +3027,13 @@
     ],
     "sqlState" : "42623"
   },
+  "GENERIC_RECORD_NOT_SUPPORTED" : {
+    "message" : [
+      "Cannot create an encoder for Java record <recordClass> because its type parameters (<typeParams>) are not bound to concrete types.",
+      "Use a Java record without type parameters, or use it as a component of a type that binds its type arguments."
+    ],
+    "sqlState" : "0A000"
+  },
   "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
     "message" : [
       "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
@@ -6463,6 +6470,13 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ],
     "sqlState" : "42809"
+  },
+  "NOT_A_RECORD_CLASS" : {
+    "message" : [
+      "Encoders.record() requires a Java record, but <className> is not a record.",
+      "Use Encoders.bean() for JavaBeans."
+    ],
+    "sqlState" : "42K09"
   },
   "NOT_A_SCALAR_FUNCTION" : {
     "message" : [

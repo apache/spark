@@ -28,7 +28,7 @@ import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_GEOGRAPHY_ENCODER, DEFAULT_GEOMETRY_ENCODER, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_GEOGRAPHY_ENCODER, DEFAULT_GEOMETRY_ENCODER, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, JavaRecordEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -148,6 +148,8 @@ object JavaTypeInference {
       val allTvs = typeVariables ++ newTvs
       encoderFor(pt.getRawType, seenTypeSet, allTvs)
 
+    case c: Class[_] if c.isRecord => encoderForJavaRecord(c, seenTypeSet, typeVariables)
+
     case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
         throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
@@ -184,6 +186,45 @@ object JavaTypeInference {
 
     case _ =>
       throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)
+  }
+
+  /**
+   * Infer an [[AgnosticEncoder]] for a Java record (`java.lang.Record`). Fields follow component
+   * declaration order and are read through the component accessors. Like the JavaBean case,
+   * components are resolved through `encoderFor`, which carries `seenTypeSet` and `typeVariables`
+   * into nested components.
+   */
+  private def encoderForJavaRecord[T](
+      recordClass: Class[T],
+      seenTypeSet: Set[Class[_]],
+      typeVariables: Map[TypeVariable[_], Type]): JavaRecordEncoder[T] = {
+    if (seenTypeSet.contains(recordClass)) {
+      throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(recordClass)
+    }
+
+    // Type parameters are erased, so they can only be resolved when the enclosing type binds
+    // them (e.g. a `Box<String>` component), which puts them in `typeVariables`.
+    val unboundTypeParams = recordClass.getTypeParameters.filterNot(typeVariables.contains)
+    if (unboundTypeParams.nonEmpty) {
+      throw ExecutionErrors.genericRecordNotSupportedError(recordClass)
+    }
+
+    val fields = recordClass.getRecordComponents.map { component =>
+      val accessor = component.getAccessor
+      val encoder = encoderFor(component.getGenericType, seenTypeSet + recordClass, typeVariables)
+      // The existence of `javax.annotation.Nonnull` means this component is not nullable.
+      val hasNonNull = accessor.isAnnotationPresent(classOf[Nonnull])
+      EncoderField(
+        component.getName,
+        encoder,
+        encoder.nullable && !hasNonNull,
+        Metadata.empty,
+        readMethod = Some(accessor.getName),
+        writeMethod = None // Records are immutable.
+      )
+    }
+
+    JavaRecordEncoder(ClassTag(recordClass), fields.toImmutableArraySeq)
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
