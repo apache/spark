@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, InputAdapter, ProjectExec, QueryExecution, SortExec, SparkPlan, SQLExecution, UnaryExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{InputAdapter, QueryExecution, SortExec, SparkPlan, SQLExecution, UnaryExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BaseJoinExec
@@ -513,8 +513,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     def unapply(p: SparkPlan): Option[SparkPlan] = p match {
       case w: WholeStageCodegenExec => Some(w.child)
       case i: InputAdapter => Some(i.child)
-      case p: ProjectExec => Some(p.child)
-      case f: FilterExec => Some(f.child)
       case s: SortExec => Some(s.child)
       case e: ShuffleExchangeExec => Some(e.child)
       case a: AQEShuffleReadExec => Some(a.child)
@@ -547,7 +545,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         val sourceSide = if (hasTargetTable(join.left)) join.right else join.left
         findSource(sourceSide)
       case None =>
-        // Group-based merge, no join.
+        // No join found
         // Return -1 if we can't identify source data, e.g. empty source.
         if (hasTargetTable(mergeRowsExec.child)) {
           -1L
