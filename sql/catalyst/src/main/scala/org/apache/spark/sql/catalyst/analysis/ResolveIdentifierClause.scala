@@ -62,6 +62,13 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
       referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
       UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
+      case p: PlanWithUnresolvedIdentifierAndFallback if p.childrenResolved =>
+
+        if (referredTempVars.isDefined) {
+          referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+        }
+
+        executor.execute(p.planBuilder(p.getIdentifier, p.children))
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
         if (referredTempVars.isDefined) {

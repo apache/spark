@@ -3004,9 +3004,7 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "CATALOG_NOT_FOUND",
       parameters = Map(
         "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""
-      )
-    )
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER should work") {
@@ -3026,8 +3024,7 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "CATALOG_NOT_FOUND",
       parameters = Map(
         "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""
-      )
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\"")
     )
   }
 
@@ -3041,8 +3038,14 @@ class DataSourceV2SQLSuiteV1Filter
         spark.sql(sqlText, Map("param" -> "testcat.ns1"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("name" -> "`testcat`.`ns1`", "statement" -> "SET CATALOG"),
-      context = ExpectedContext(fragment = sqlText, start = 0, stop = 29)
+      parameters = Map(
+        "name" -> "`testcat`.`ns1`",
+        "statement" -> "SET CATALOG"
+      ),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 29)
     )
   }
 
@@ -3099,23 +3102,27 @@ class DataSourceV2SQLSuiteV1Filter
     val catalogManager = spark.sessionState.catalogManager
     assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
 
+    // Declare and set the session temp variable
     sql("DECLARE cat_name STRING DEFAULT 'testcat'")
-    sql("SET CATALOG IDENTIFIER(cat_name)")
-    assert(catalogManager.currentCatalog.name() == "testcat")
-
     sql("DECLARE cat_name2 STRING")
     sql("SET VAR cat_name2 = 'testcat2'")
+
+    // Using the session temp variable without IDENTIFIER()
+    sql("SET CATALOG cat_name")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    sql("SET CATALOG cat_name2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    // Using the session temp variable with IDENTIFIER()
+    sql("SET CATALOG IDENTIFIER(cat_name)")
+    assert(catalogManager.currentCatalog.name() == "testcat")
     sql("SET CATALOG IDENTIFIER(cat_name2)")
     assert(catalogManager.currentCatalog.name() == "testcat2")
 
-    // Variable reference without IDENTIFIER() is not supported
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG cat_name")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map("catalogName" -> "`cat_name`", "config" -> "\"spark.sql.catalog.cat_name\"")
-    )
+    // Fallback to literal when name is not a variable
+    sql("SET CATALOG testcat3")
+    assert(catalogManager.currentCatalog.name() == "testcat3")
+    sql("SET CATALOG testcat4")
+    assert(catalogManager.currentCatalog.name() == "testcat4")
   }
 
   test("SPARK-55155: SET CATALOG with non-foldable expressions should fail") {

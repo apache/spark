@@ -27,10 +27,10 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
-  ExpressionWithUnresolvedIdentifier, GlobalTempView, LocalTempView, PersistedView,
-  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView,
+  LocalTempView, PersistedView, PlanWithUnresolvedIdentifier,
+  PlanWithUnresolvedIdentifierAndFallback, SchemaEvolution, SchemaTypeEvolution,
+  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -45,7 +45,6 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -415,13 +414,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    * SET CATALOG is case-sensitive and supports multiple forms:
    *
+   *   - Session temp variable: SET CATALOG var_name (where var_name is a declared variable)
    *   - Simple identifier: SET CATALOG my_catalog
+   *     (tries to resolve as session temp variable first, then uses as literal catalog name)
    *   - String literal: SET CATALOG 'my_catalog'
-   *   - identifier() function: SET CATALOG identifier('my_catalog')
-   *   - CAST, CONCAT, or other foldable expressions: SET CATALOG CAST('my_catalog' AS STRING)
-   *
-   * Note: SET CATALOG <session_temp_variable> is not supported and users should use SET CATALOG
-   * IDENTIFIER(<session_temp_variable>) instead.
+   *   - identifier() function: SET CATALOG IDENTIFIER('my_catalog') or IDENTIFIER(var_name)
+   *   - Other foldable expressions: SET CATALOG CAST('my_catalog' AS STRING),
+   *     CONCAT('my', '_catalog')
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
     val expr = expression(ctx.expression())
@@ -434,23 +433,19 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     expr match {
-      // Directly resolve string literals (e.g., 'testcat' or "testcat")
-      case Literal(catalogName: UTF8String, StringType) =>
-        SetCatalogCommand(catalogName.toString)
-
-      // Directly resolve simple identifiers (e.g., my_catalog)
+      // UnresolvedAttribute - try to resolve as variable, fallback to literal
+      // Resolution order: (1) session temp variable, (2) literal catalog name
       case UnresolvedAttribute(nameParts) =>
-        buildSetCatalogCommand(nameParts)
-
-      // Special handling for identifier() function - extract inner expression
-      case ExpressionWithUnresolvedIdentifier(identifierExpr, _, _) =>
-        PlanWithUnresolvedIdentifier(
-          identifierExpr,
+        PlanWithUnresolvedIdentifierAndFallback(
+          expr,
+          fallbackIdentifier = nameParts,
           Nil,
           (identifiers, _) => buildSetCatalogCommand(identifiers)
         )
 
-      // For other foldable expressions (CAST, CONCAT, etc.), resolve in analysis phase
+      // All other expressions (IDENTIFIER(), Literal, foldable) - standard resolution
+      // Note that we cannot check foldability and evaluate the expression here
+      // as expression plans like UnresolvedFunction need to be resolved in the analysis phase
       case _ =>
         PlanWithUnresolvedIdentifier(
           expr,
