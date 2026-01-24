@@ -29,7 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
@@ -778,4 +778,123 @@ class TestForeachWriter[T] extends ForeachWriter[T] {
 
 case class TestClass(value: Int) {
   override def toString: String = value.toString
+}
+
+// Tests for DataStreamReader.name() method
+// These tests require source evolution configs to be enabled
+class DataStreamReaderNameTests extends QueryTest with RemoteSparkSession {
+
+  test("name() with valid source names") {
+    withSQLConf(
+      "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
+      "spark.sql.streaming.offsetLog.formatVersion" -> "2"
+    ) {
+      Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
+        .foreach { name =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            spark.range(10).write.parquet(path)
+
+            val df = spark.readStream
+              .format("parquet")
+              .schema("id LONG")
+              .name(name)
+              .load(path)
+
+            assert(df.isStreaming, s"DataFrame should be streaming for name: $name")
+          }
+        }
+    }
+  }
+
+  test("name() method chaining") {
+    withSQLConf(
+      "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
+      "spark.sql.streaming.offsetLog.formatVersion" -> "2"
+    ) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).write.parquet(path)
+
+        val df = spark.readStream
+          .format("parquet")
+          .schema("id LONG")
+          .name("my_source")
+          .option("maxFilesPerTrigger", "1")
+          .load(path)
+
+        assert(df.isStreaming, "DataFrame should be streaming")
+      }
+    }
+  }
+
+  test("invalid source name - contains hyphen") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my-source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my-source"))
+    }
+  }
+
+  test("invalid source name - contains space") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my space")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my space"))
+    }
+  }
+
+  test("invalid source name - contains dot") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name("my.source")
+            .load(path)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        parameters = Map("sourceName" -> "my.source"))
+    }
+  }
+
+  test("invalid source name - empty string") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      // Empty string triggers require() check which throws IllegalArgumentException
+      intercept[IllegalArgumentException] {
+        spark.readStream
+          .format("parquet")
+          .schema("id LONG")
+          .name("")
+          .load(path)
+      }
+    }
+  }
 }
