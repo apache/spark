@@ -110,10 +110,12 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         Test repartition for a streaming query using applyInPandasWithState.
 
         1. Run streaming query to generate state (count per key)
-        2. Stop the query
-        3. Repartition to a different number of partitions
-        4. Restart the query with new data
-        5. Validate state is preserved (counts continue from where they left off)
+        2. Repartition to more partitions
+        3. Add new data and restart query
+        4. Validate state is preserved after increasing partitions
+        5. Repartition to fewer partitions
+        6. Add new data and restart query
+        7. Validate state is preserved after reducing partitions
         """
         with tempfile.TemporaryDirectory() as input_dir, \
              tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -190,10 +192,9 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             self.assertEqual(initial_counts.get("b"), 1)
             self.assertEqual(initial_counts.get("c"), 1)
 
-            # Step 2: Repartition to a different number of partitions
-            new_num_partitions = self.NUM_SHUFFLE_PARTITIONS * 2
+            # Step 2: Repartition to a higher number of partitions
             self.spark._streamingCheckpointManager.repartition(
-                checkpoint_dir, new_num_partitions
+                checkpoint_dir, self.NUM_SHUFFLE_PARTITIONS * 2
             )
 
             # Step 3: Add more data and restart query
@@ -202,21 +203,44 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
 
             # Clear collected results for restart
             collected_results.clear()
-
             run_streaming_query()
 
-            # Step 4: Validate state was preserved after repartition
+            # Step 4: Validate state was preserved after increasing partitions
             # After restart with new data:
             # - a should have count 3 (2 from before + 1 new)
             # - b should have count 2 (1 from before + 1 new)
-            # - c should have count 1 (no new data, but state preserved)
             # - d should have count 1 (new key)
-            final_counts = {row.key: row["count"] for row in collected_results}
+            increased_counts = {row.key: row["count"] for row in collected_results}
 
             # Only updated keys will be in the output (a, b, d)
-            self.assertEqual(final_counts.get("a"), 3, "State for 'a' should be preserved: 2 + 1 = 3")
-            self.assertEqual(final_counts.get("b"), 2, "State for 'b' should be preserved: 1 + 1 = 2")
-            self.assertEqual(final_counts.get("d"), 1, "New key 'd' should have count 1")
+            self.assertEqual(increased_counts.get("a"), 3, "State for 'a' should be preserved: 2 + 1 = 3")
+            self.assertEqual(increased_counts.get("b"), 2, "State for 'b' should be preserved: 1 + 1 = 2")
+            self.assertEqual(increased_counts.get("d"), 1, "New key 'd' should have count 1")
+
+            # Step 5: Repartition to fewer partitions
+            self.spark._streamingCheckpointManager.repartition(
+                checkpoint_dir, self.NUM_SHUFFLE_PARTITIONS - 1
+            )
+
+            # Step 6: Add more data and restart query
+            with open(os.path.join(input_dir, "batch3.txt"), "w") as f:
+                f.write("a\nc\ne\n")  # a:+1, c:+1, e:1 (new key)
+
+            # Clear collected results for restart
+            collected_results.clear()
+            run_streaming_query()
+
+            # Step 7: Validate state was preserved after reducing partitions
+            # After restart with new data:
+            # - a should have count 4 (3 from before + 1 new)
+            # - c should have count 2 (1 from before + 1 new)
+            # - e should have count 1 (new key)
+            reduced_counts = {row.key: row["count"] for row in collected_results}
+
+            # Only updated keys will be in the output (a, c, e)
+            self.assertEqual(reduced_counts.get("a"), 4, "State for 'a' should be preserved: 3 + 1 = 4")
+            self.assertEqual(reduced_counts.get("c"), 2, "State for 'c' should be preserved: 1 + 1 = 2")
+            self.assertEqual(reduced_counts.get("e"), 1, "New key 'e' should have count 1")
 
 
 if __name__ == "__main__":
