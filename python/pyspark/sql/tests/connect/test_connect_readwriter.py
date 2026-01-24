@@ -393,23 +393,27 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         """Test that various invalid source names are rejected."""
         from pyspark.errors import PySparkValueError
 
-        invalid_names = [
-            "",  # empty string
-            "  ",  # whitespace only
-            "my-source",  # hyphen
-            "my source",  # space
-            "my.source",  # dot
-            "my@source",  # special char
-        ]
+        with self.sql_conf({
+            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+            "spark.sql.streaming.offsetLog.formatVersion": "2"
+        }):
+            invalid_names = [
+                "",  # empty string
+                "  ",  # whitespace only
+                "my-source",  # hyphen
+                "my source",  # space
+                "my.source",  # dot
+                "my@source",  # special char
+            ]
 
-        for invalid_name in invalid_names:
-            with self.subTest(name=invalid_name):
-                with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
-                    self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
-                    with self.assertRaises(PySparkValueError):
-                        self.connect.readStream.format("parquet").schema("id LONG").name(
-                            invalid_name
-                        ).load(tmpdir)
+            for invalid_name in invalid_names:
+                with self.subTest(name=invalid_name):
+                    with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
+                        self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                        with self.assertRaises(PySparkValueError):
+                            self.connect.readStream.format("parquet").schema("id LONG").name(
+                                invalid_name
+                            ).load(tmpdir)
 
     def test_stream_reader_name_invalid_type(self):
         """Test that None and non-string types are rejected."""
