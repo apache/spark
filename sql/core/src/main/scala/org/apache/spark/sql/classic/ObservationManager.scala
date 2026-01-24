@@ -22,14 +22,12 @@ import org.apache.spark.sql.{Observation, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.QueryExecutionListener
 
 /**
  * This class keeps track of registered Observations that await query completion.
  */
 private[sql] class ObservationManager(session: SparkSession) {
   private val observations = new ConcurrentHashMap[(String, Long), Observation]
-  session.listenerManager.register(Listener)
 
   def register(observation: Observation, ds: Dataset[_]): Unit = {
     if (ds.isStreaming) {
@@ -53,10 +51,10 @@ private[sql] class ObservationManager(session: SparkSession) {
       observation
     })
 
-  private def tryComplete(qe: QueryExecution): Unit = {
+  private[sql] def tryComplete(qe: QueryExecution): Unit = {
     // Use lazy val to defer collecting the observed metrics until it is needed so that tryComplete
     // can finish faster (e.g., when the logical plan doesn't contain CollectMetrics).
-    lazy val allMetrics = qe.observedMetrics
+    lazy val lazyObservedMetrics = qe.observedMetrics
     qe.logical.foreachWithSubqueriesAndPruning(
       _.containsPattern(TreePattern.COLLECT_METRICS)) {
       case c: CollectMetrics =>
@@ -65,17 +63,9 @@ private[sql] class ObservationManager(session: SparkSession) {
           // If the key exists but no metrics were collected, it means for some reason the
           // metrics could not be collected. This can happen e.g., if the CollectMetricsExec
           // was optimized away.
-          observation.setMetricsAndNotify(allMetrics.getOrElse(c.name, Row.empty))
+          observation.setMetricsAndNotify(lazyObservedMetrics.getOrElse(c.name, Row.empty))
         }
       case _ =>
     }
-  }
-
-  private object Listener extends QueryExecutionListener {
-    override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit =
-      tryComplete(qe)
-
-    override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit =
-      tryComplete(qe)
   }
 }
