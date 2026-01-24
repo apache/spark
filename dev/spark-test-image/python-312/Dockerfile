@@ -36,24 +36,12 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     git \
     gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
     libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
     libssl-dev \
-    libtiff5-dev \
-    libwebp-dev \
-    libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
-    qpdf \
     tzdata \
     software-properties-common \
     wget \
