@@ -388,6 +388,28 @@ class MemoryProfiler2TestsMixin:
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,
     )
+    def test_memory_profiler_different_function(self):
+        df = self.spark.createDataFrame([(1,), (2,), (3,)], ["x"])
+
+        def ident(batches):
+            for b in batches:
+                yield b
+
+        def func(batches):
+            return ident(batches)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df.mapInArrow(func, schema="y long").show()
+
+        self.assertEqual(1, len(self.profile_results))
+
+        for id in self.profile_results:
+            self.assert_udf_memory_profile_present(udf_id=id)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_memory_profiler_pandas_udf_window(self):
         # WindowInPandasExec
         import pandas as pd
