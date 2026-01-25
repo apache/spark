@@ -164,12 +164,15 @@ class ArrowStreamSerializer(Serializer):
 
             if dataframes_in_group == num_dfs:
                 if num_dfs == 1:
-                    # Single dataframe: can use lazy iterator (original behavior)
-                    yield (self.load_stream(stream),)
+                    # Single dataframe: can use lazy iterator
+                    yield (ArrowStreamSerializer.load_stream(self, stream),)
                 else:
                     # Multiple dataframes: must eagerly load sequentially
                     # to maintain correct stream position
-                    yield tuple(list(self.load_stream(stream)) for _ in range(num_dfs))
+                    yield tuple(
+                        list(ArrowStreamSerializer.load_stream(self, stream))
+                        for _ in range(num_dfs)
+                    )
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
