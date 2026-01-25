@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 
+from decimal import Decimal
+import datetime
 import os
-import platform
+import time
 import unittest
-import pandas as pd
 
-from pyspark.sql import Row
-from pyspark.sql.functions import pandas_udf
+from pyspark.sql.functions import udf
 from pyspark.sql.types import (
+    Row,
     ArrayType,
     BinaryType,
     BooleanType,
@@ -50,120 +51,57 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from .type_table_utils import generate_table_diff, format_type_table
 
 if have_numpy:
     import numpy as np
+if have_pandas:
+    import pandas as pd
+
+# If you need to re-generate the golden files, you need to set the
+# SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
+# e.g.:
+# SPARK_GENERATE_GOLDEN_FILES=1 python/run-tests -k
+# --testnames 'pyspark.sql.tests.coercion.test_pandas_udf_input_type'
+# If package tabulate https://pypi.org/project/tabulate/ is installed,
+# it will also re-generate the Markdown files.
 
 
 @unittest.skipIf(
     not have_pandas
     or not have_pyarrow
     or not have_numpy
-    or LooseVersion(np.__version__) < LooseVersion("2.0.0")
-    or platform.system() == "Darwin",
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or numpy_requirement_message
-    or "float128 not supported on macos",
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFInputTypeTests(ReusedSQLTestCase):
+class PandasUDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-    def setUp(self):
-        super().setUp()
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
 
-    def test_pandas_udf_input(self):
-        golden_file = os.path.join(os.path.dirname(__file__), "golden_pandas_udf_input_types.txt")
-        results = self._generate_pandas_udf_input_type_coercion_results()
-        actual_output = format_type_table(
-            results,
-            ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
-            column_width=85,
-        )
-        self._compare_or_create_golden_file(actual_output, golden_file, "Pandas UDF input types")
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
 
-    def _generate_pandas_udf_input_type_coercion_results(self):
-        results = []
-        test_cases = self._get_input_type_test_cases()
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
 
-        for test_name, spark_type, data_func in test_cases:
-            input_df = data_func(spark_type).repartition(1)
-            input_data = [row["value"] for row in input_df.collect()]
-            result_row = [test_name, spark_type.simpleString(), str(input_data)]
+        super().tearDownClass()
 
-            try:
+    @property
+    def prefix(self):
+        return "golden_pandas_udf_input_type_coercion"
 
-                def type_pandas_udf(data):
-                    if hasattr(data, "dtype"):
-                        # Series case
-                        return pd.Series([str(data.dtype)] * len(data))
-                    else:
-                        # DataFrame case (for struct types)
-                        return pd.Series([str(type(data).__name__)] * len(data))
-
-                def value_pandas_udf(series):
-                    return series
-
-                type_test_pandas_udf = pandas_udf(type_pandas_udf, returnType=StringType())
-                value_test_pandas_udf = pandas_udf(value_pandas_udf, returnType=spark_type)
-
-                result_df = input_df.select(
-                    value_test_pandas_udf("value").alias("python_value"),
-                    type_test_pandas_udf("value").alias("python_type"),
-                )
-                results_data = result_df.collect()
-                values = [row["python_value"] for row in results_data]
-                types = [row["python_type"] for row in results_data]
-
-                result_row.append(str(types))
-                result_row.append(str(values).replace("\n", " "))
-
-            except Exception as e:
-                print("error_msg", e)
-                error_msg = str(e).replace("\n", " ").replace("\r", " ")
-                result_row.append(f"✗ {error_msg}")
-
-            results.append(result_row)
-
-        return results
-
-    def _compare_or_create_golden_file(self, actual_output, golden_file, test_name):
-        """Compare actual output with golden file or create golden file if it doesn't exist.
-
-        Args:
-            actual_output: The actual output to compare
-            golden_file: Path to the golden file
-            test_name: Name of the test for error messages
-        """
-        if os.path.exists(golden_file):
-            with open(golden_file, "r") as f:
-                expected_output = f.read()
-
-            if actual_output != expected_output:
-                diff_output = generate_table_diff(actual_output, expected_output, cell_width=85)
-                self.fail(
-                    f"""
-                    Results don't match golden file for :{test_name}.\n
-                    Diff:\n{diff_output}
-                    """
-                )
-        else:
-            with open(golden_file, "w") as f:
-                f.write(actual_output)
-            self.fail(f"Golden file created for {test_name}. Please review and re-run the test.")
-
-    def _create_value_schema(self, data_type):
-        """Helper to create a StructType schema with a single 'value' column of the given type."""
-        return StructType([StructField("value", data_type, True)])
-
-    def _get_input_type_test_cases(self):
-        from pyspark.sql.types import StructType, StructField
-        import datetime
-        from decimal import Decimal
-
+    @property
+    def test_cases(self):
         def df(args):
             def create_df(data_type):
                 # For StructType where the data contains Row objects (not wrapped in tuples)
@@ -316,6 +254,134 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                 df([(Row(a=1, b=Row(a1=1, a2="hello")),)]),
             ),
         ]
+
+    def test_python_input_type_coercion_vanilla(self):
+        self._run_udf_input_type_coercion(
+            use_arrow=False,
+            legacy_pandas=False,
+            golden_file=f"{self.prefix}_vanilla",
+            test_name="Vanilla Python UDF",
+        )
+
+    def test_python_input_type_coercion_with_arrow(self):
+        self._run_udf_input_type_coercion(
+            use_arrow=True,
+            legacy_pandas=False,
+            golden_file=f"{self.prefix}_with_arrow",
+            test_name="Arrow Optimized Python UDF",
+        )
+
+    def test_python_input_type_coercion_with_arrow_and_pandas(self):
+        self._run_udf_input_type_coercion(
+            use_arrow=True,
+            legacy_pandas=True,
+            golden_file=f"{self.prefix}_with_arrow_and_pandas",
+            test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
+        )
+
+    def _run_udf_input_type_coercion(self, use_arrow, legacy_pandas, golden_file, test_name):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.arrow.enabled": use_arrow,
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": legacy_pandas,
+            }
+        ):
+            self._compare_or_generate_golden(golden_file, test_name)
+
+    def _compare_or_generate_golden(self, golden_file, test_name):
+        testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
+
+        golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
+        golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
+
+        golden = None
+        if testing:
+            golden = pd.read_csv(
+                golden_csv,
+                sep="\t",
+                index_col=0,
+                dtype="str",
+                na_filter=False,
+                engine="python",
+            )
+
+        results = []
+        for idx, (test_name, spark_type, data_func) in enumerate(self.test_cases):
+            input_df = data_func(spark_type).repartition(1)
+            input_data = [row["value"] for row in input_df.collect()]
+            result = [test_name, spark_type.simpleString(), str(input_data)]
+
+            try:
+
+                def type_udf(x):
+                    if x is None:
+                        return "NoneType"
+                    else:
+                        return type(x).__name__
+
+                def value_udf(x):
+                    return x
+
+                def value_str(x):
+                    return str(x)
+
+                type_test_udf = udf(type_udf, returnType=StringType())
+                value_test_udf = udf(value_udf, returnType=spark_type)
+                value_str_udf = udf(value_str, returnType=StringType())
+
+                result_df = input_df.select(
+                    value_test_udf("value").alias("python_value"),
+                    type_test_udf("value").alias("python_type"),
+                    value_str_udf("value").alias("python_value_str"),
+                )
+                results_data = result_df.collect()
+                values = [row["python_value"] for row in results_data]
+                types = [row["python_type"] for row in results_data]
+                values_str = [row["python_value_str"] for row in results_data]
+
+                # Assert that the UDF output values match the input values
+                assert values == input_data, f"Input {values} != output {input_data}"
+
+                result.append(str(types))
+                result.append(str(values_str).replace("\n", " "))
+
+            except Exception as e:
+                print("error_msg", e)
+                # Clean up exception message to remove newlines and extra whitespace
+                e = str(e).replace("\n", " ").replace("\r", " ").replace("\t", " ")
+                result.append(f"✗ {e}")
+
+            error_msg = None
+            if testing and result != list(golden.iloc[idx]):
+                error_msg = f"line mismatch: expects {list(golden.iloc[idx])} but got {result}"
+
+            results.append((result, error_msg))
+
+        if testing:
+            errs = []
+            for _, err in results:
+                if err is not None:
+                    errs.append(err)
+            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
+
+        else:
+            new_golden = pd.DataFrame(
+                [res for res, _ in results],
+                columns=["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
+            )
+
+            # generating the CSV file as the golden file
+            new_golden.to_csv(golden_csv, sep="\t", header=True, index=True)
+
+            try:
+                # generating the GitHub flavored Markdown file
+                # package tabulate is required
+                new_golden.to_markdown(golden_md, index=True, tablefmt="github")
+            except Exception as e:
+                print(
+                    f"{test_name} return type coercion: "
+                    f"fail to write the markdown file due to {e}!"
+                )
 
 
 if __name__ == "__main__":
