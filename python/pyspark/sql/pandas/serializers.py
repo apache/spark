@@ -1239,8 +1239,8 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         """
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
         """
-        for df1_batches, df2_batches in self._load_group_dataframes(stream, num_dfs=2):
-            yield df1_batches, df2_batches
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+            yield left_batches, right_batches
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
@@ -1251,15 +1251,15 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
 
-        for df1_batches, df2_batches in self._load_group_dataframes(stream, num_dfs=2):
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
             yield (
                 [
                     self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(pa.Table.from_batches(df1_batches).itercolumns())
+                    for i, c in enumerate(pa.Table.from_batches(left_batches).itercolumns())
                 ],
                 [
                     self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(pa.Table.from_batches(df2_batches).itercolumns())
+                    for i, c in enumerate(pa.Table.from_batches(right_batches).itercolumns())
                 ],
             )
 
