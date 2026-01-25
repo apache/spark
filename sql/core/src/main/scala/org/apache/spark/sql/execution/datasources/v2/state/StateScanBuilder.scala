@@ -42,6 +42,7 @@ class StateScanBuilder(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
+    batchNumPartitions: Int,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
@@ -49,7 +50,8 @@ class StateScanBuilder(
     joinColFamilyOpt: Option[String],
     allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
-    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
+    batchNumPartitions, keyStateEncoderSpec,
+    stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
     joinColFamilyOpt, allColumnFamiliesReaderInfo)
 }
 
@@ -65,6 +67,7 @@ class StateScan(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
+    batchNumPartitions: Int,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
@@ -85,7 +88,11 @@ class StateScan(
     val partitions = fs.listStatus(stateCheckpointPartitionsLocation, new PathFilter() {
       override def accept(path: Path): Boolean = {
         fs.getFileStatus(path).isDirectory &&
-        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
+        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0 &&
+        // Since we now support state repartitioning, it is possible that a future batch has
+        // increased the number of partitions, hence increased the number of partition directories.
+        // So we only want partition dirs for the number of partitions in this batch.
+        path.getName.toInt < batchNumPartitions
       }
     })
 

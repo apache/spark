@@ -22,7 +22,6 @@ import shutil
 import tempfile
 import warnings
 import unittest
-from typing import cast
 import io
 from contextlib import redirect_stdout
 
@@ -159,6 +158,13 @@ class DataFrameTestsMixin:
         df3 = df1.join(df2, df1.id == df2.id, "right")
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
         self.assertTrue(df3.count() == 20)
+
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", lit(1))
+        df2 = self.spark.range(10).withColumn("v2", lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
 
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
@@ -679,7 +685,7 @@ class DataFrameTestsMixin:
     def test_cache_table(self):
         spark = self.spark
         tables = ["tab1", "tab2", "tab3"]
-        with self.tempView(*tables):
+        with self.temp_view(*tables):
             for i, tab in enumerate(tables):
                 spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
                 self.assertFalse(spark.catalog.isCached(tab))
@@ -935,7 +941,7 @@ class DataFrameTestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_pandas_api(self):
         import pandas as pd
@@ -1183,8 +1189,6 @@ class DataFrameTestsMixin:
             [Row(dt="08/01/2017", month_y=i) for i in range(12)],
         )
 
-
-class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).executionInfo
@@ -1196,13 +1200,11 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
         )
 
 
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

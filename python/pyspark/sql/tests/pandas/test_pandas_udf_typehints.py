@@ -16,7 +16,7 @@
 #
 import unittest
 from inspect import signature
-from typing import Union, Iterator, Tuple, cast, get_type_hints
+from typing import Union, Iterator, Tuple, get_type_hints
 
 from pyspark.sql.functions import mean, lit
 from pyspark.testing.sqlutils import (
@@ -39,7 +39,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTypeHintsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):
@@ -534,12 +534,6 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

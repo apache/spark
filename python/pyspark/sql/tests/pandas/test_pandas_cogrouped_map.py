@@ -17,8 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
-
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -52,7 +50,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property
@@ -763,12 +761,6 @@ class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTes
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_cogrouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

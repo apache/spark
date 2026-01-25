@@ -1731,7 +1731,7 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -1840,7 +1840,11 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
@@ -2071,6 +2075,7 @@ class DataFrame(ParentDataFrame):
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
+        binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
         for schema_or_table in self._session.client.to_table_as_iterator(
@@ -2085,7 +2090,7 @@ class DataFrame(ParentDataFrame):
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(
-                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                    table, schema, binary_as_bytes=binary_as_bytes
                 )
 
     def pandas_api(
@@ -2257,13 +2262,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -2376,7 +2378,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (

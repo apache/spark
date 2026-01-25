@@ -7,7 +7,7 @@ SELECT 1 + explode(array(1, 2, 3));
 -- multiple generators should work
 SELECT explode(array(0, 1, 2)), explode(array(10, 20));
 
--- multiple generators are processed in left-to-right order regardless of internal rule ordering
+-- multiple generators' order is not fixed and depends on rule ordering
 SELECT explode(array(sin(0), 1, 2)), explode(array(10, 20));
 
 -- multiple generators in aggregate should fail
@@ -127,3 +127,9 @@ SELECT explode(array(1, 2, 3)) as col, count(*) OVER ();
 
 -- generator with window function and aggregate together resolves in order Aggregate -> Window -> Generator
 SELECT explode(array(1, 2, 3)), count(*) OVER (), count(*);
+
+-- generator LCA left-to-right should work
+SELECT explode(array(array(0), array(1), array(2))) as arr, explode(arr) as col;
+
+-- generator LCA right-to-left should work
+SELECT explode(arr) as col, explode(array(array(0), array(1), array(2))) as arr;

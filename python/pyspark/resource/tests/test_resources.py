@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 import unittest
-from typing import cast
-
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import (
@@ -80,7 +78,7 @@ class ResourceProfileTests(unittest.TestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_profile_before_sc_for_sql(self):
         rpb = ResourceProfileBuilder()
@@ -96,12 +94,6 @@ class ResourceProfileTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.resource.tests.test_resources import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

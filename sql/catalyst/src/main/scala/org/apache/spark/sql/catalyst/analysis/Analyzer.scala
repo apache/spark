@@ -235,6 +235,7 @@ object AnalysisContext {
 object Analyzer {
   // List of configurations that should be passed on when resolving views and SQL UDF.
   private val RETAINED_ANALYSIS_FLAGS = Seq(
+    "spark.sql.view.schemaEvolution.preserveUserComments",
     // retainedHiveConfigs
     // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
     // optimization phase.
@@ -473,7 +474,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ApplyDefaultCollationToStringType ::
+      ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -504,7 +505,8 @@ class Analyzer(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
-      extendedResolutionRules : _*),
+      extendedResolutionRules ++
+      Seq(NameStreamingSources) : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
@@ -653,98 +655,6 @@ class Analyzer(
       e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
 
-    private def replaceGroupingFunc(
-        expr: Expression,
-        groupByExprs: Seq[Expression],
-        gid: Expression): Expression = {
-      expr transform {
-        case e: GroupingID =>
-          if (e.groupByExprs.isEmpty ||
-              e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
-            Alias(gid, toPrettySQL(e))()
-          } else {
-            throw QueryCompilationErrors.groupingIDMismatchError(e, groupByExprs)
-          }
-        case e @ Grouping(col: Expression) =>
-          val idx = groupByExprs.indexWhere(_.semanticEquals(col))
-          if (idx >= 0) {
-            Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1L)), ByteType), toPrettySQL(e))()
-          } else {
-            throw QueryCompilationErrors.groupingColInvalidError(col, groupByExprs)
-          }
-      }
-    }
-
-    /*
-     * Create new alias for all group by expressions for `Expand` operator.
-     */
-    private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
-      groupByExprs.map {
-        case e: NamedExpression => Alias(e, e.name)(qualifier = e.qualifier)
-        case other => Alias(other, toPrettySQL(other))()
-      }
-    }
-
-    /*
-     * Construct [[Expand]] operator with grouping sets.
-     */
-    private def constructExpand(
-        selectedGroupByExprs: Seq[Seq[Expression]],
-        child: LogicalPlan,
-        groupByAliases: Seq[Alias],
-        gid: Attribute): LogicalPlan = {
-      // Change the nullability of group by aliases if necessary. For example, if we have
-      // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-      // should change the nullability of b to be TRUE.
-      // TODO: For Cube/Rollup just set nullability to be `true`.
-      val expandedAttributes = groupByAliases.map { alias =>
-        if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
-          alias.toAttribute.withNullability(true)
-        } else {
-          alias.toAttribute
-        }
-      }
-
-      val groupingSetsAttributes = selectedGroupByExprs.map { groupingSetExprs =>
-        groupingSetExprs.map { expr =>
-          val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
-            throw QueryCompilationErrors.selectExprNotInGroupByError(expr, groupByAliases))
-          // Map alias to expanded attribute.
-          expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
-            alias.toAttribute)
-        }
-      }
-
-      Expand(groupingSetsAttributes, groupByAliases, expandedAttributes, gid, child)
-    }
-
-    /*
-     * Construct new aggregate expressions by replacing grouping functions.
-     */
-    private def constructAggregateExprs(
-        groupByExprs: Seq[Expression],
-        aggregations: Seq[NamedExpression],
-        groupByAliases: Seq[Alias],
-        groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = {
-      def replaceExprs(e: Expression): Expression = e match {
-        case e: AggregateExpression => e
-        case e =>
-          // Replace expression by expand output attribute.
-          val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
-          if (index == -1) {
-            e.mapChildren(replaceExprs)
-          } else {
-            groupingAttrs(index)
-          }
-      }
-      aggregations
-        .map(replaceGroupingFunc(_, groupByExprs, gid))
-        .map(replaceExprs)
-        .map(_.asInstanceOf[NamedExpression])
-    }
-
     /*
      * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
      */
@@ -754,6 +664,7 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+      val aggregationExprsNoAlias = aggregationExprs.map(trimNonTopLevelAliases)
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -763,32 +674,20 @@ class Analyzer(
         throw QueryCompilationErrors.generatorOutsideSelectError(operator)
       }
 
-      // Expand works by setting grouping expressions to null as determined by the
-      // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
-      // instead of the original value we need to create new aliases for all group by expressions
-      // that will only be used for the intended purpose.
-      val groupByAliases = constructGroupByAlias(groupByExprs)
-
-      val gid = AttributeReference(VirtualColumn.groupingIdName, GroupingID.dataType, false)()
-      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
-      val groupingAttrs = expand.output.drop(child.output.length)
-
-      val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
-
-      Aggregate(groupingAttrs, aggregations, expand)
+      GroupingAnalyticsTransformer(
+        newAlias = (child, name, qualifier) =>
+          Alias(child, name.get)(qualifier = qualifier),
+        childOutput = child.output,
+        groupByExpressions = groupByExprs,
+        selectedGroupByExpressions = selectedGroupByExprs,
+        child = child,
+        aggregationExpressions = aggregationExprsNoAlias
+      )
     }
 
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
       plan.collectFirst {
-        case a: Aggregate =>
-          // this Aggregate should have grouping id as the last grouping key.
-          val gid = a.groupingExpressions.last
-          if (!gid.isInstanceOf[AttributeReference]
-            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
-          }
-          a.groupingExpressions.take(a.groupingExpressions.length - 1)
+        case a: Aggregate => GroupingAnalyticsTransformer.collectGroupingExpressions(a)
       }.getOrElse {
         throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
       }
@@ -871,7 +770,13 @@ class Analyzer(
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
         // The unresolved grouping id will be resolved by ResolveReferences
-        val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
+        val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
+          expression = cond,
+          groupByExpressions = groupingExprs,
+          gid = VirtualColumn.groupingIdAttribute,
+          newAlias = (child, name, qualifier) =>
+            Alias(child, name.get)(qualifier = qualifier)
+        )
         f.copy(condition = newCond)
 
       // We should make sure all [[SortOrder]]s have been resolved.
@@ -880,7 +785,15 @@ class Analyzer(
         val groupingExprs = findGroupingExprs(child)
         val gid = VirtualColumn.groupingIdAttribute
         // The unresolved grouping id will be resolved by ResolveReferences
-        val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
+        val newOrder = order.map { expression =>
+          GroupingAnalyticsTransformer.replaceGroupingFunction(
+            expression = expression,
+            groupByExpressions = groupingExprs,
+            gid = gid,
+            newAlias = (child, name, qualifier) =>
+              Alias(child, name.get)(qualifier = qualifier)
+          ).asInstanceOf[SortOrder]
+        }
         s.copy(order = newOrder)
     }
   }
@@ -951,32 +864,7 @@ class Analyzer(
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
       case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
-
-        def toString(values: Seq[NamedExpression]): String =
-          values.map(v => v.name).mkString("_")
-
-        // construct unpivot expressions for Expand
-        val exprs: Seq[Seq[Expression]] =
-          values.zip(aliases.getOrElse(values.map(_ => None))).map {
-            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
-            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
-            // there are more than one value in vals
-            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
-          }
-
-        // construct output attributes
-        val variableAttr = AttributeReference(variableColumnName, StringType, nullable = false)()
-        val valueAttrs = valueColumnNames.zipWithIndex.map {
-          case (valueColumnName, idx) =>
-            AttributeReference(
-              valueColumnName,
-              values.head(idx).dataType,
-              values.map(_(idx)).exists(_.nullable))()
-        }
-        val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
-
-        // expand the unpivot expressions
-        Expand(exprs, output, child)
+        UnpivotTransformer(ids, values, aliases, variableColumnName, valueColumnNames, child)
     }
   }
 
@@ -1093,44 +981,46 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+      // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
+      // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
+      // as it stores resolved plans directly.
+      case view: View if view.isTempViewStoringAnalyzedPlan =>
+        view.copy(child = resolveTableReferences(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
     }
 
+    // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
-        case v: View if v.isTempViewStoringAnalyzedPlan => v.child
+        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferences(v.child)
         case other => other
       }
     }
 
-    private def resolveAsV2Relation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
-      plan match {
-        case ref: V2TableReference =>
-          EliminateSubqueryAliases(relationResolution.resolveReference(ref)) match {
-            case r: DataSourceV2Relation => Some(r)
-            case _ => None
-          }
-        case r: DataSourceV2Relation => Some(r)
-        case _ => None
+    // Resolve V2TableReference nodes in a plan. V2TableReference is only created for temp views
+    // (via V2TableReference.createForTempView), so we only need to resolve it when returning
+    // the plan of temp views (in resolveViews and unwrapRelationPlan).
+    private def resolveTableReferences(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUp {
+        case r: V2TableReference => relationResolution.resolveReference(r)
       }
     }
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
-          case r: V2TableReference =>
-            relationResolution.resolveReference(r)
           case other => other
         }
 
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
@@ -1147,11 +1037,10 @@ class Analyzer(
               case u: UnresolvedCatalogRelation =>
                 throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                   u.tableMeta.identifier, write)
-              case plan =>
-                resolveAsV2Relation(plan).map(write.withNewTable).getOrElse {
-                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                    u.multipartIdentifier.quoted)
-                }
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case _ =>
+                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                  u.multipartIdentifier.quoted)
             }.getOrElse(write)
           case _ => write
         }
@@ -1254,7 +1143,7 @@ class Analyzer(
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _)
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _)
           if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1272,27 +1161,50 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
+        val schemaEvolutionWriteOption: Map[String, String] =
+          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
+
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
 
         if (!i.overwrite) {
           if (isByName) {
-            AppendData.byName(r, query)
+            AppendData.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            AppendData.byPosition(r, query)
+            AppendData.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
-            OverwritePartitionsDynamic.byName(r, query)
+            OverwritePartitionsDynamic.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwritePartitionsDynamic.byPosition(r, query)
+            OverwritePartitionsDynamic.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else {
           if (isByName) {
-            OverwriteByExpression.byName(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byName(
+              table = r,
+              df = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byPosition(
+              table = r,
+              query = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           }
         }
     }
@@ -2118,16 +2030,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
-      // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
+      case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
           .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          if (requirePersistentFunc) {
-            throw QueryCompilationErrors.expectPersistentFuncError(
-              nameParts.head, cmd, mismatchHint, u)
-          } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
-          }
+          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =
             relationResolution.expandIdentifier(nameParts)
@@ -2308,10 +2215,10 @@ class Analyzer(
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args, execute) =>
+      case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
         val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
-        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args, execute)
+        ResolvedProcedure(procedureCatalog, ident, procedure)
     }
 
     private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
@@ -3064,13 +2971,6 @@ class Analyzer(
       })
     }
 
-    private def hasUnresolvedGeneratorOrFunction(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.exists {
-        case _: UnresolvedFunction | _: UnresolvedGenerator => true
-        case _ => false
-      })
-    }
-
     private def trimAlias(expr: NamedExpression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
@@ -3162,21 +3062,15 @@ class Analyzer(
         p
 
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
-      // We also wait for all functions and generators to be resolved to ensure left-to-right
-      // generator ordering.
-      case p @ Project(projectList, child)
-          if !projectList.exists(_.exists(_.isInstanceOf[Star])) &&
-             !hasUnresolvedGeneratorOrFunction(projectList) =>
-        var hasSeenGenerator = false
+      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
               // If there are more than one generator, we only rewrite the first one and wait for
               // the next analyzer iteration to rewrite the next one.
-              case AliasedGenerator(generator, names, outer) if !hasSeenGenerator &&
+              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
                   generator.childrenResolved =>
-                hasSeenGenerator = true
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -3186,7 +3080,6 @@ class Analyzer(
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
-                hasSeenGenerator |= hasGenerator(other)
                 (res._1, res._2 :+ other)
             }
           }

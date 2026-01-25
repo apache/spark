@@ -245,31 +245,35 @@ class DataFrame:
         """
         ...
 
-    if not is_remote_only():
+    @dispatch_df_method
+    def toJSON(self, use_unicode: bool = True) -> Union["RDD[str]", "DataFrame"]:
+        """Converts a :class:`DataFrame` into a :class:`RDD` of string or :class:`DataFrame`.
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+        Each row is turned into a JSON document as one element in the returned RDD
+        or DataFrame.
 
-            Each row is turned into a JSON document as one element in the returned RDD.
+        .. versionadded:: 1.3.0
 
-            .. versionadded:: 1.3.0
+        .. versionchanged:: 4.2.0
+            Supports Spark Connect.
 
-            Parameters
-            ----------
-            use_unicode : bool, optional, default True
-                Whether to convert to unicode or not.
+        Parameters
+        ----------
+        use_unicode : bool, optional, default True
+            Whether to convert to unicode or not. Note that this argument is disallowed
+            in Spark Connect mode.
 
-            Returns
-            -------
-            :class:`RDD`
+        Returns
+        -------
+        :class:`RDD` (in Classic mode) or :class:`DataFrame` (in connect mode)
 
-            Examples
-            --------
-            >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-            >>> df.toJSON().first()
-            '{"age":2,"name":"Alice"}'
-            """
-            ...
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.toJSON().first()
+        '{"age":2,"name":"Alice"}'
+        """
+        ...
 
     @dispatch_df_method
     def registerTempTable(self, name: str) -> None:
@@ -6981,6 +6985,23 @@ class DataFrame:
         >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
         """
         ...
+
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
+        """
+        Export to a C PyCapsule stream object.
+
+        Parameters
+        ----------
+        requested_schema : PyCapsule, optional
+            The schema to attempt to use for the output stream. This is a best effort request,
+
+        Returns
+        -------
+        A C PyCapsule stream object.
+        """
+        from pyspark.sql.interchange import SparkArrowCStreamer
+
+        return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
 
 class DataFrameNaFunctions:

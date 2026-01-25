@@ -94,7 +94,8 @@ object SqlResourceSuite {
         1 -> JobExecutionStatus.SUCCEEDED),
       stages = Set[Int](),
       metricValues = getMetricValues(),
-      errorMessage = None
+      errorMessage = None,
+      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c")
     )
   }
 

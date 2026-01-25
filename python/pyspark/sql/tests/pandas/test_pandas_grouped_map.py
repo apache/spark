@@ -22,7 +22,7 @@ import os
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast, Iterator, Tuple, Any
+from typing import Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
@@ -62,7 +62,7 @@ if have_pyarrow and have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ApplyInPandasTestsMixin:
     @property
@@ -1472,12 +1472,6 @@ class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_grouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

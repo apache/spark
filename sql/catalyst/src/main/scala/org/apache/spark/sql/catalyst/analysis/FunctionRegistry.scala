@@ -90,11 +90,16 @@ trait FunctionRegistryBase[T] {
   /* List all of the registered function names. */
   def listFunction(): Seq[FunctionIdentifier]
 
-  /* Get the class of the registered function by specified name. */
-  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo]
+  /* Get both ExpressionInfo and FunctionBuilder in a single lookup. */
+  def lookupFunctionEntry(name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)]
+
+  /* Get the ExpressionInfo of the registered function by specified name. */
+  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] =
+    lookupFunctionEntry(name).map(_._1)
 
   /* Get the builder of the registered function by specified name. */
-  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder]
+  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] =
+    lookupFunctionEntry(name).map(_._2)
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: FunctionIdentifier): Boolean
@@ -245,13 +250,9 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     functionBuilders.iterator.map(_._1).toList
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._1)
-  }
-
-  override def lookupFunctionBuilder(
-      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._2)
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = synchronized {
+    functionBuilders.get(normalizeFuncName(name))
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
@@ -281,11 +282,8 @@ trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
     throw SparkUnsupportedOperationException()
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw SparkUnsupportedOperationException()
-  }
-
-  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = {
     throw SparkUnsupportedOperationException()
   }
 
@@ -539,21 +537,14 @@ object FunctionRegistry {
     expression[KllSketchAggBigint]("kll_sketch_agg_bigint"),
     expression[KllSketchAggFloat]("kll_sketch_agg_float"),
     expression[KllSketchAggDouble]("kll_sketch_agg_double"),
-    expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
-    expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
-    expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),
-    expression[KllSketchGetNBigint]("kll_sketch_get_n_bigint"),
-    expression[KllSketchGetNFloat]("kll_sketch_get_n_float"),
-    expression[KllSketchGetNDouble]("kll_sketch_get_n_double"),
-    expression[KllSketchMergeBigint]("kll_sketch_merge_bigint"),
-    expression[KllSketchMergeFloat]("kll_sketch_merge_float"),
-    expression[KllSketchMergeDouble]("kll_sketch_merge_double"),
-    expression[KllSketchGetQuantileBigint]("kll_sketch_get_quantile_bigint"),
-    expression[KllSketchGetQuantileFloat]("kll_sketch_get_quantile_float"),
-    expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
-    expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
-    expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
-    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
+    expression[KllMergeAggBigint]("kll_merge_agg_bigint"),
+    expression[KllMergeAggFloat]("kll_merge_agg_float"),
+    expression[KllMergeAggDouble]("kll_merge_agg_double"),
+
+    // vector functions
+    expression[VectorCosineSimilarity]("vector_cosine_similarity"),
+    expression[VectorInnerProduct]("vector_inner_product"),
+    expression[VectorL2Distance]("vector_l2_distance"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -826,6 +817,21 @@ object FunctionRegistry {
     expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
     expression[Measure]("measure"),
+    expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
+    expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
+    expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),
+    expression[KllSketchGetNBigint]("kll_sketch_get_n_bigint"),
+    expression[KllSketchGetNFloat]("kll_sketch_get_n_float"),
+    expression[KllSketchGetNDouble]("kll_sketch_get_n_double"),
+    expression[KllSketchMergeBigint]("kll_sketch_merge_bigint"),
+    expression[KllSketchMergeFloat]("kll_sketch_merge_float"),
+    expression[KllSketchMergeDouble]("kll_sketch_merge_double"),
+    expression[KllSketchGetQuantileBigint]("kll_sketch_get_quantile_bigint"),
+    expression[KllSketchGetQuantileFloat]("kll_sketch_get_quantile_float"),
+    expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
+    expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
+    expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
+    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
 
     // grouping sets
     expression[Grouping]("grouping"),

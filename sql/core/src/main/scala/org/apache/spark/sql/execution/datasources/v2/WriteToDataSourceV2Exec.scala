@@ -357,7 +357,7 @@ case class WriteToDataSourceV2Exec(
     query: SparkPlan,
     writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
 
-  override val stringArgs: Iterator[Any] = Iterator(batchWrite, query)
+  override def stringArgs: Iterator[Any] = Iterator(batchWrite, query)
 
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
@@ -377,7 +377,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
 
-  override val stringArgs: Iterator[Any] = Iterator(query, write)
+  override def stringArgs: Iterator[Any] = Iterator(query, write)
 
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>
@@ -789,8 +789,11 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       } else {
         AppendData.byPosition(relation, query, writeOptions)
       }
-      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled)
-      qe.assertCommandExecuted()
+      QueryExecution.runCommand(
+        session,
+        writeCommand,
+        "inner data writing for CTAS/RTAS",
+        refreshPhaseEnabled)
       DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil
     })(catchBlock = {

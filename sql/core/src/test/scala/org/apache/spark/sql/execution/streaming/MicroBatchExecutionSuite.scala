@@ -23,14 +23,16 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
@@ -171,13 +173,16 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
-    testStream(streamEvent) (
-      AddData(inputData, 1, 2, 3, 4, 5, 6),
-      StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
-      ExpectFailure[IllegalStateException] { e =>
-        assert(e.getMessage.contains("batch 3 doesn't exist"))
-      }
-    )
+    // Disable this check so it fails where we throw the exception we are verifying
+    withSQLConf(SQLConf.STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART.key -> "false") {
+      testStream(streamEvent) (
+        AddData(inputData, 1, 2, 3, 4, 5, 6),
+        StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
+        ExpectFailure[IllegalStateException] { e =>
+          assert(e.getMessage.contains("batch 3 doesn't exist"))
+        }
+      )
+    }
   }
 
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {
@@ -257,6 +262,56 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       ProcessAllAvailable(),      // let no-data-batch be executed
       CheckAnswer(0, 5, 10, 15, 20, 25)
     )
+  }
+
+  test("Query cannot be started if there's an unfinished repartition batch") {
+    val numPartitions = 5
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+      withTempDir { checkpointLocation =>
+        val inputData = MemoryStream[Int]
+        val streamEvent = inputData.toDF().groupBy("value").agg(count("value"))
+
+        // Run a few batches and stop
+        testStream(streamEvent, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputData, 1, 2, 3),
+          CheckNewAnswer((1, 1), (2, 1), (3, 1)),
+          StopStream
+        )
+
+        // Simulate an uncommitted repartition batch by adding a new offset log entry
+        // with different shuffle partitions
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointLocation.getAbsolutePath}/offsets")
+        val (latestBatchId, latestOffsetSeq) = offsetLog.getLatest().get
+        val latestMetadata = latestOffsetSeq.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
+
+        val newShufflePartitions = numPartitions * 2
+        val newMetadata = latestMetadata.copy(
+          conf = latestMetadata.conf +
+            (SQLConf.SHUFFLE_PARTITIONS.key -> newShufflePartitions.toString)
+        )
+        val newOffsetSeq = latestOffsetSeq.asInstanceOf[OffsetSeq].copy(
+          metadataOpt = Some(newMetadata)
+        )
+
+        // Write the new offset log entry (without committing it)
+        val newBatchId = latestBatchId + 1
+        offsetLog.add(newBatchId, newOffsetSeq)
+
+        // Restart the query - should fail because there's an uncommitted repartition batch
+        testStream(streamEvent, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointLocation.getAbsolutePath),
+          ExpectFailure[SparkException] { ex =>
+            checkError(
+              ex.asInstanceOf[SparkThrowable],
+              condition = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+              parameters = Map("batchId" -> newBatchId.toString,
+                "lastCommittedBatchId" -> latestBatchId.toString)
+            )
+          }
+        )
+      }
+    }
   }
 
   case class ReExecutedBatchTestSource(spark: SparkSession) extends Source {

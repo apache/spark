@@ -69,6 +69,7 @@ from pyspark.sql.types import (
     NullType,
     VariantType,
     VariantVal,
+    _create_row,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -149,7 +150,7 @@ class TypesTestsMixin:
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
 
-        with self.tempView("test"):
+        with self.temp_view("test"):
             df.createOrReplaceTempView("test")
             result = self.spark.sql("SELECT l from test")
             self.assertEqual([], result.head()[0])
@@ -165,7 +166,7 @@ class TypesTestsMixin:
         self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
 
-        with self.tempView("test2"):
+        with self.temp_view("test2"):
             df2.createOrReplaceTempView("test2")
             result = self.spark.sql("SELECT l from test2")
             self.assertEqual([], result.head()[0])
@@ -612,7 +613,7 @@ class TypesTestsMixin:
         )
         self.assertEqual(r, results.first())
 
-        with self.tempView("table2"):
+        with self.temp_view("table2"):
             df.createOrReplaceTempView("table2")
             r = self.spark.sql(
                 "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, "
@@ -627,7 +628,7 @@ class TypesTestsMixin:
         self.assertEqual(1, row.asDict()["l"][0].a)
         df = self.spark.createDataFrame([row])
 
-        with self.tempView("test"):
+        with self.temp_view("test"):
             df.createOrReplaceTempView("test")
             row = self.spark.sql("select l, d from test").head()
             self.assertEqual(1, row.asDict()["l"][0].a)
@@ -1112,7 +1113,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, ExamplePoint(1.0, 2.0))
@@ -1123,7 +1124,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
@@ -1135,7 +1136,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, ExamplePoint(1.0, 2.0))
@@ -1146,7 +1147,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
@@ -3014,6 +3015,25 @@ class DataTypeTests(unittest.TestCase):
         row_class = Row("c1", "c2")
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
+    def test_row_with_duplicated_fields(self):
+        for fields, values, expected in [
+            (["a", "a"], [1, 1], "Row(a=1, a=1)"),
+            (["a", "a", "a", "b", "b"], [1, 2, 3, 4, 5], "Row(a=1, a=2, a=3, b=4, b=5)"),
+            (["a", "a"], [1, _create_row(["a", "a"], [2, 3])], "Row(a=1, a=Row(a=2, a=3))"),
+            (["a", "a"], [1, _create_row(["b", "b"], [2, 2])], "Row(a=1, a=Row(b=2, b=2))"),
+        ]:
+            row = _create_row(fields, values)
+            self.assertEqual(str(row), expected)
+
+        r = _create_row(["a", "a", "a"], [1, 2, 3])
+        self.assertEqual(r.a, 1)
+        self.assertEqual(r["a"], 1)
+        self.assertEqual(r[0], 1)
+        self.assertEqual(r[1], 2)
+        self.assertEqual(r[2], 3)
+        self.assertEqual(list(r), [1, 2, 3])
+        self.assertEqual([v for v in r], [1, 2, 3])
+
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
@@ -3237,12 +3257,6 @@ class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_types import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

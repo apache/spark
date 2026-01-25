@@ -171,6 +171,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
         from pyspark.core.rdd import RDD
 
+        warnings.warn(
+            "The return type of DataFrame.toJSON will be changed from RDD to DataFrame "
+            "in future releases."
+        )
+
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
@@ -2011,7 +2016,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (

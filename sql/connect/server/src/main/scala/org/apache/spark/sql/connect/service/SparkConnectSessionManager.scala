@@ -39,6 +39,12 @@ import org.apache.spark.util.ThreadUtils
  */
 class SparkConnectSessionManager extends Logging {
 
+  // Used to lazily initialize the base session
+  @volatile private var baseSessionCreator: Option[() => SparkSession] = None
+
+  // Base SparkSession created from the SparkContext, used to create new isolated sessions
+  @volatile private var _baseSession: Option[SparkSession] = None
+
   private val sessionStore: ConcurrentMap[SessionKey, SessionHolder] =
     new ConcurrentHashMap[SessionKey, SessionHolder]()
 
@@ -47,6 +53,23 @@ class SparkConnectSessionManager extends Logging {
       .newBuilder()
       .maximumSize(SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
       .build[SessionKey, SessionHolderInfo]()
+
+  private def baseSession: Option[SparkSession] = {
+    if (_baseSession.isEmpty && baseSessionCreator.isDefined) {
+      _baseSession = Some(baseSessionCreator.get())
+    }
+    _baseSession
+  }
+
+  /**
+   * Initialize the base SparkSession from the provided SparkContext. This should be called once
+   * during SparkConnectService startup.
+   */
+  def initializeBaseSession(createSession: () => SparkSession): Unit = {
+    if (baseSessionCreator.isEmpty) {
+      baseSessionCreator = Some(createSession)
+    }
+  }
 
   /** Executor for the periodic maintenance */
   private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
@@ -333,12 +356,12 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def newIsolatedSession(): SparkSession = {
-    val active = SparkSession.active
-    if (active.sparkContext.isStopped) {
+    val session = baseSession.get
+    if (session.sparkContext.isStopped) {
       assert(SparkSession.getDefaultSession.nonEmpty)
       SparkSession.getDefaultSession.get.newSession()
     } else {
-      active.newSession()
+      session.newSession()
     }
   }
 

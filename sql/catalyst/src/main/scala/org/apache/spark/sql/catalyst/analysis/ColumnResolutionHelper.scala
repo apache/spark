@@ -140,8 +140,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts)
-          if u.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
+        case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
           // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
@@ -451,7 +450,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Option[Expression] = {
-    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+    assert(u.containsTag(LogicalPlan.PLAN_ID_TAG),
       s"UnresolvedAttribute $u should have a Plan Id tag")
 
     resolveDataFrameColumn(u, q.children).map { r =>
@@ -524,7 +523,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+    val isMetadataAccess = u.containsTag(LogicalPlan.IS_METADATA_COL)
 
     val (resolved, matched) = resolveDataFrameColumnByPlanId(
       u, planId, isMetadataAccess, q, 0)
@@ -617,11 +616,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // the dataframe column 'df.id' will remain unresolved, and the analyzer
     // will try to resolve 'id' without plan id later.
     val filtered = resolved.filter { r =>
-      if (isMetadataAccess) {
-        r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
-      } else {
-        r._1.references.subsetOf(p.outputSet)
-      }
+      // A DataFrame column can be resolved as a metadata column, we should keep it.
+      r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
     }
     (filtered, matched)
   }

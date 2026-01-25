@@ -86,9 +86,9 @@ try:
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst,
     # python/packaging/classic/setup.py, and python/packaging/client/setup.py
-    _minimum_pandas_version = "2.0.0"
+    _minimum_pandas_version = "2.2.0"
     _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "11.0.0"
+    _minimum_pyarrow_version = "18.0.0"
     _minimum_grpc_version = "1.76.0"
     _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"

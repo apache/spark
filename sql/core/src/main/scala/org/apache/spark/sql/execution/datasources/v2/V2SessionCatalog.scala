@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -136,6 +135,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def loadTable(ident: Identifier, version: String): Table = {
     failTimeTravel(ident, loadTable(ident))
+  }
+
+  override def tableExists(ident: Identifier): Boolean = {
+    catalog.tableExists(ident.asTableIdentifier)
   }
 
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
@@ -330,7 +333,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
   private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
       loadTable(ident) match {
-        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW &&
+            !SQLConf.get.getConf(SQLConf.DROP_TABLE_VIEW_ENABLED) =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
@@ -475,7 +479,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {

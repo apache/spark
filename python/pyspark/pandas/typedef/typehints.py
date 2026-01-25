@@ -28,7 +28,7 @@ from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hi
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
 
@@ -304,7 +304,11 @@ def spark_type_to_pandas_dtype(
             .lower()
             == "true"
         )
-        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
+        return np.dtype(
+            to_arrow_type(
+                spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
+            ).to_pandas_dtype()
+        )
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
@@ -342,7 +346,7 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     try:
         dtype = pandas_dtype(tpe)
         spark_type = as_spark_type(dtype)
-    except TypeError:
+    except (TypeError, ValueError):
         spark_type = as_spark_type(tpe)
         dtype = spark_type_to_pandas_dtype(spark_type)
     return dtype, spark_type
