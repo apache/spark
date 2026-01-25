@@ -618,7 +618,7 @@ class SparkSession(SparkConversionMixin):
                     # Create a new SparkSession in the JVM
                     jSparkSession = jSparkSessionClass.builder().config(self._options).create()
                     # Wrap the JVM SparkSession in a Python SparkSession
-                    return SparkSession(sc, jsparkSession = jSparkSession, options=self._options)
+                    return SparkSession(sc, jsparkSession=jSparkSession, options=self._options)
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.

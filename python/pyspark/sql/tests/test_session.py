@@ -462,6 +462,7 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             messageParameters={},
         )
 
+
 class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
     """
     Tests for SparkSession.Builder.create() API.
@@ -500,11 +501,11 @@ class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(df.count(), 10)
 
         # Ensure the active session is updated when it was previously None
-        self.assertEqual(self.session,  SparkSession.getActiveSession())
+        self.assertEqual(self.session, SparkSession.getActiveSession())
         # Check that calling create again will create a different session
         session2 = self._get_builder().create()
         # Ensure that the active session is not updated since it is already set
-        self.assertNotEqual(session2,  SparkSession.getActiveSession())
+        self.assertNotEqual(session2, SparkSession.getActiveSession())
         # Ensure that a brand new session was created
         self.assertNotEqual(self.session, session2)
         self.assertNotEqual(self.session._jsparkSession, session2._jsparkSession)
@@ -552,11 +553,7 @@ class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(session2.conf.get("spark.sql.shuffle.partitions"), "10")
         self.assertEqual(session2.conf.get("spark.test.additional.config"), "extra_value")
 
-        session3 = (
-            self._get_builder()
-            .config("spark.sql.shuffle.partitions", "20")
-            .create()
-        )
+        session3 = self._get_builder().config("spark.sql.shuffle.partitions", "20").create()
         self.assertEqual(session3.conf.get("spark.sql.shuffle.partitions"), "20")
         # Ensure config doesn't leak between sessions
         with self.assertRaises(SparkNoSuchElementException):
@@ -570,6 +567,55 @@ class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
         # getOrCreate() should return the active session (self.session)
         session2 = SparkSession.builder.getOrCreate()
         self.assertEqual(self.session, session2)
+
+    def test_create_with_invalid_master(self):
+        """Test create() with invalid master URL."""
+        with self.assertRaises(Exception):
+            self.session = SparkSession.builder.master("invalid://localhost").create()
+
+    def test_create_with_app_name(self):
+        """Test create() with appName() builder method."""
+        app_name = "TestCreateAppName"
+        self.session = self._get_builder().appName(app_name).create()
+
+        self.assertEqual(self.session.sparkContext.appName, app_name)
+        self.assertEqual(self.session.range(5).count(), 5)
+
+    def test_create_default_session_behavior(self):
+        """Test that first create() sets active session, subsequent calls don't override."""
+        self.assertIsNone(SparkSession.getActiveSession())
+
+        self.session = self._get_builder().appName("DefaultSessionTest1").create()
+        self.assertEqual(self.session, SparkSession.getActiveSession())
+
+        session2 = self._get_builder().appName("DefaultSessionTest2").create()
+        try:
+            self.assertEqual(self.session, SparkSession.getActiveSession())
+            self.assertNotEqual(session2, SparkSession.getActiveSession())
+            self.assertEqual(self.session.range(3).count(), 3)
+            self.assertEqual(session2.range(5).count(), 5)
+        finally:
+            session2.stop()
+
+    def test_create_sessions_share_spark_context(self):
+        """Test that multiple create() sessions share SparkContext but have independent state."""
+        self.session = self._get_builder().appName("SharedContextTest1").create()
+        session2 = self._get_builder().appName("SharedContextTest2").create()
+        try:
+            self.assertEqual(self.session.sparkContext, session2.sparkContext)
+            self.assertIsNotNone(self.session.sparkContext)
+
+            df1 = self.session.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"])
+            self.assertEqual(df1.count(), 2)
+
+            df2 = session2.createDataFrame([(3, "Charlie"), (4, "David")], ["id", "name"])
+            self.assertEqual(df2.count(), 2)
+
+            self.assertNotEqual(self.session, session2)
+            self.assertNotEqual(self.session._jsparkSession, session2._jsparkSession)
+        finally:
+            session2.stop()
+
 
 class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
     def setUp(self):
