@@ -1376,11 +1376,12 @@ def wrap_memory_profiler(f, eval_type, result_id):
     if _is_iter_based(eval_type):
 
         def profiling_func(*args, **kwargs):
-            iterator = iter(f(*args, **kwargs))
+            g = f(*args, **kwargs)
+            iterator = iter(g)
 
             while True:
                 try:
-                    with WorkerMemoryProfiler(accumulator, result_id, f):
+                    with WorkerMemoryProfiler(accumulator, result_id, g.gi_code):
                         item = next(iterator)
                     yield item
                 except StopIteration:
