@@ -135,15 +135,13 @@ class ArrowStreamSerializer(Serializer):
         for batch in reader:
             yield batch
 
-    def _load_group_dataframes(
-        self, stream, num_dfs: int = 1
-    ) -> "Iterator[tuple[Iterator[pa.RecordBatch], ...]]":
+    def _load_group_dataframes(self, stream, num_dfs: int = 1):
         """
         Load groups with specified number of dataframes from stream.
 
-        Yields a tuple of iterators of RecordBatches for each group. Callers must fully
-        consume all iterators before the next group becomes available. For eager loading,
-        callers can convert iterators to lists.
+        For num_dfs=1, yields a single-element tuple containing a lazy iterator.
+        For num_dfs>1, yields a tuple of eagerly loaded lists to ensure correct
+        stream position when reading multiple dataframes sequentially.
 
         Parameters
         ----------
@@ -155,8 +153,9 @@ class ArrowStreamSerializer(Serializer):
 
         Yields
         ------
-        tuple[Iterator[pa.RecordBatch], ...]
-            A tuple of iterators of RecordBatches for each group
+        tuple
+            For num_dfs=1: tuple[Iterator[pa.RecordBatch]]
+            For num_dfs>1: tuple[list[pa.RecordBatch], ...]
         """
         dataframes_in_group = None
 
@@ -164,7 +163,13 @@ class ArrowStreamSerializer(Serializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == num_dfs:
-                yield tuple(self.load_stream(stream) for _ in range(num_dfs))
+                if num_dfs == 1:
+                    # Single dataframe: can use lazy iterator (original behavior)
+                    yield (self.load_stream(stream),)
+                else:
+                    # Multiple dataframes: must eagerly load sequentially
+                    # to maintain correct stream position
+                    yield tuple(list(self.load_stream(stream)) for _ in range(num_dfs))
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
@@ -1232,7 +1237,7 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
         """
         for df1_batches, df2_batches in self._load_group_dataframes(stream, num_dfs=2):
-            yield list(df1_batches), list(df2_batches)
+            yield df1_batches, df2_batches
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
