@@ -169,6 +169,12 @@ class DataFrame(ParentDataFrame):
             },
         )
 
+    def __getstate__(self):
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
     def __repr__(self) -> str:
         if not self._support_repr_html:
             (
@@ -1736,13 +1742,11 @@ class DataFrame(ParentDataFrame):
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not any(
-            field.name == name for field in self._schema
-        ):
-            raise PySparkAttributeError(
-                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
-            )
-
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1":
+            if not any(field.name == name for field in self._schema):
+                raise PySparkAttributeError(
+                    errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
+                )
         return self._col(name)
 
     @overload
