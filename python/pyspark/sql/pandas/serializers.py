@@ -165,7 +165,7 @@ class ArrowStreamSerializer(Serializer):
 
             if dataframes_in_group == num_dfs:
                 yield tuple(self.load_stream(stream) for _ in range(num_dfs))
-            elif dataframes_in_group != 0:
+            elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
                     messageParameters={"dataframes_in_group": str(dataframes_in_group)},
