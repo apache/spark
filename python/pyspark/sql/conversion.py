@@ -1005,7 +1005,7 @@ class ArrowArrayToPandasConversion:
         ndarray_as_list: bool = False,
         df_for_struct: bool = False,
         input_types: Optional[List] = None,
-    ) -> Callable[["pa.Array", int], "pd.Series"]:
+    ) -> Callable[["pa.Array", int], Union["pd.Series", "pd.DataFrame"]]:
         """
         Create an arrow_to_pandas converter function.
 
@@ -1029,7 +1029,7 @@ class ArrowArrayToPandasConversion:
         """
         import pyarrow.types as types
 
-        def convert(arr: "pa.Array", spark_type=None) -> "pd.Series":
+        def convert(arr: "pa.Array", spark_type: Optional[DataType] = None) -> "pd.Series":
             return cls.convert_legacy(
                 arr,
                 spark_type or from_arrow_type(arr.type),
@@ -1038,7 +1038,7 @@ class ArrowArrayToPandasConversion:
                 ndarray_as_list=ndarray_as_list,
             )
 
-        def converter(arrow_column: "pa.Array", idx: int) -> "pd.Series":
+        def converter(arrow_column: "pa.Array", idx: int) -> Union["pd.Series", "pd.DataFrame"]:
             spark_type = input_types[idx] if input_types is not None else None
 
             # If the arrow struct is actually a Variant, which is an atomic type,
