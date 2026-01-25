@@ -25,6 +25,8 @@ from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
     _create_converter_to_pandas,
+    from_arrow_type,
+    is_variant,
     to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
@@ -1027,8 +1029,6 @@ class ArrowArrayToPandasConversion:
         """
         import pyarrow.types as types
 
-        from pyspark.sql.pandas.types import from_arrow_type, is_variant
-
         def convert(arr: "pa.Array", spark_type=None) -> "pd.Series":
             return cls.convert_legacy(
                 arr,
@@ -1041,21 +1041,23 @@ class ArrowArrayToPandasConversion:
         def converter(arrow_column: "pa.Array", idx: int) -> "pd.Series":
             spark_type = input_types[idx] if input_types is not None else None
 
-            # Special case: flatten struct to DataFrame when df_for_struct is enabled
+            # If the arrow struct is actually a Variant, which is an atomic type,
+            # treat it as a non-struct arrow type.
             if (
-                df_for_struct
-                and types.is_struct(arrow_column.type)
-                and not is_variant(arrow_column.type)
+                not df_for_struct
+                or not types.is_struct(arrow_column.type)
+                or is_variant(arrow_column.type)
             ):
-                import pandas as pd
+                return convert(arrow_column, spark_type)
 
-                return pd.concat(
-                    [
-                        convert(col, spark_type[i].dataType if spark_type else None).rename(f.name)
-                        for i, (col, f) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
-                    ],
-                    axis=1,
-                )
-            return convert(arrow_column, spark_type)
+            # Struct case: return a pandas DataFrame where the fields of the struct
+            # correspond to columns in the DataFrame.
+            import pandas as pd
+
+            series = [
+                convert(col, spark_type[i].dataType if spark_type else None).rename(field.name)
+                for i, (col, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
+            ]
+            return pd.concat(series, axis=1)
 
         return converter
