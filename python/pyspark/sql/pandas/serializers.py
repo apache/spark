@@ -484,7 +484,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         import pandas as pd
 
         for batch in batches:
-            pandas_batches = [self._arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)]
+            pandas_batches = [
+                self._arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
+            ]
             if len(pandas_batches) == 0:
                 yield [pd.Series([pyspark._NoValue] * batch.num_rows)]
             else:
@@ -1138,7 +1140,9 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
             for batch in batches:
                 # The batch from ArrowStreamSerializer is already flattened (no struct wrapper)
-                series = [self._arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)]
+                series = [
+                    self._arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
+                ]
                 yield series
 
         dataframes_in_group = None
@@ -1844,12 +1848,14 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
                     flatten_state_table = flatten_columns(batch, "inputData")
                     data_pandas = [
-                        self._arrow_to_pandas(c, i) for i, c in enumerate(flatten_state_table.itercolumns())
+                        self._arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_state_table.itercolumns())
                     ]
 
                     flatten_init_table = flatten_columns(batch, "initState")
                     init_data_pandas = [
-                        self._arrow_to_pandas(c, i) for i, c in enumerate(flatten_init_table.itercolumns())
+                        self._arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
                     assert not (bool(init_data_pandas) and bool(data_pandas))

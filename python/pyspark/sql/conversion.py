@@ -1042,7 +1042,11 @@ class ArrowArrayToPandasConversion:
             spark_type = input_types[idx] if input_types is not None else None
 
             # Special case: flatten struct to DataFrame when df_for_struct is enabled
-            if df_for_struct and types.is_struct(arrow_column.type) and not is_variant(arrow_column.type):
+            if (
+                df_for_struct
+                and types.is_struct(arrow_column.type)
+                and not is_variant(arrow_column.type)
+            ):
                 import pandas as pd
 
                 return pd.concat(
