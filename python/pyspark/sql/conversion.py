@@ -994,3 +994,64 @@ class ArrowArrayToPandasConversion:
             integer_object_nulls=True,
         )
         return converter(ser)
+
+    @classmethod
+    def create_converter(
+        cls,
+        timezone: str,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+        input_types: Optional[List] = None,
+    ) -> Callable[["pa.Array", int], "pd.Series"]:
+        """
+        Create an arrow_to_pandas converter function.
+
+        Parameters
+        ----------
+        timezone : str
+            Timezone for timestamp conversion.
+        struct_in_pandas : str
+            How to represent struct in pandas ("dict", "row", etc.)
+        ndarray_as_list : bool
+            Whether to convert ndarray as list.
+        df_for_struct : bool
+            If True, convert struct columns to DataFrame instead of Series.
+        input_types : list, optional
+            Spark types for each column, used for precise type conversion.
+
+        Returns
+        -------
+        callable
+            Function (arrow_column, idx) -> pd.Series or pd.DataFrame
+        """
+        import pyarrow.types as types
+
+        from pyspark.sql.pandas.types import from_arrow_type, is_variant
+
+        def convert(arr: "pa.Array", spark_type=None) -> "pd.Series":
+            return cls.convert_legacy(
+                arr,
+                spark_type or from_arrow_type(arr.type),
+                timezone=timezone,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+            )
+
+        def converter(arrow_column: "pa.Array", idx: int) -> "pd.Series":
+            spark_type = input_types[idx] if input_types is not None else None
+
+            # Special case: flatten struct to DataFrame when df_for_struct is enabled
+            if df_for_struct and types.is_struct(arrow_column.type) and not is_variant(arrow_column.type):
+                import pandas as pd
+
+                return pd.concat(
+                    [
+                        convert(col, spark_type[i].dataType if spark_type else None).rename(f.name)
+                        for i, (col, f) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
+                    ],
+                    axis=1,
+                )
+            return convert(arrow_column, spark_type)
+
+        return converter
