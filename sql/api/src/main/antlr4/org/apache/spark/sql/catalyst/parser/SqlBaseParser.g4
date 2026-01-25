@@ -1830,7 +1830,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
-    | DROP identifierSeq
+    | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
