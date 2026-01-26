@@ -60,8 +60,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     test(testName) {
       withSQLConf(
         "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
-        "spark.sql.streaming.offsetLog.formatVersion" -> "2"
-      ) {
+        "spark.sql.streaming.offsetLog.formatVersion" -> "2") {
         testFun
       }
     }
@@ -805,11 +804,17 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
 
   // Seq of (sourceName, expectedExceptionClass, expectedConditionOpt)
   val invalidSourceNames = Seq(
-    ("my-source", classOf[AnalysisException],
+    (
+      "my-source",
+      classOf[AnalysisException],
       Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
-    ("my space", classOf[AnalysisException],
+    (
+      "my space",
+      classOf[AnalysisException],
       Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
-    ("my.source", classOf[AnalysisException],
+    (
+      "my.source",
+      classOf[AnalysisException],
       Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
     ("", classOf[IllegalArgumentException], None) // empty string case
   )
