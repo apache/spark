@@ -320,20 +320,24 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
-    Serializes pyarrow.RecordBatch data with Arrow streaming format.
+    Serializer for grouped Arrow UDFs.
+
+    Deserializes:
+        ``Iterator[Iterator[pa.RecordBatch]]`` - one inner iterator per group.
+        Each batch contains a single struct column.
+
+    Serializes:
+        ``Iterator[Tuple[Iterator[pa.RecordBatch], pa.DataType]]``
+        Each tuple contains iterator of flattened batches and their Arrow type.
 
     Used by:
         - SQL_GROUPED_MAP_ARROW_UDF
         - SQL_GROUPED_MAP_ARROW_ITER_UDF
 
-    Loads Arrow record batches as ``Iterator[Iterator[pyarrow.RecordBatch]]`` (one inner iterator
-    per group). Each batch contains a single struct column.
-    Serializes ``Iterator[Tuple[pyarrow.RecordBatch, pyarrow.DataType]]``.
-
     Parameters
     ----------
     assign_cols_by_name : bool
-        If True, then DataFrames will get columns by name
+        If True, reorder serialized columns by schema name.
     """
 
     def __init__(self, assign_cols_by_name):
