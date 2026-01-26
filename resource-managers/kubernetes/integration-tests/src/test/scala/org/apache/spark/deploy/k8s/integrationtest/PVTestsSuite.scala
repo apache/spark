@@ -178,7 +178,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local storage", k8sTestTag, pvTestTag) {
+  test("PVs with local storage", k8sTestTag, pvTestTag, commandTestTag) {
     assume(this.getClass.getSimpleName == "KubernetesSuite")
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
