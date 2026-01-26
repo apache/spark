@@ -23,14 +23,19 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Milliseconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
   import PVTestsSuite._
 
   private def setupLocalStorage(): Unit = {
-    val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
-    val hostname = if (testBackend == MinikubeTestBackend) "minikube" else "docker-desktop"
+    val (storageClassName, hostname) = testBackend match {
+      case MinikubeTestBackend => ("standard", BACKEND_MINIKUBE)
+      case DockerForDesktopBackend => ("hostpath", BACKEND_DOCKER_DESKTOP)
+      case _ => ("hostpath", BACKEND_DOCKER_DESKTOP)
+    }
     val pvBuilder = new PersistentVolumeBuilder()
       .withKind("PersistentVolume")
       .withApiVersion("v1")

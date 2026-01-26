@@ -99,7 +99,10 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("A driver-only Spark job with an OnDemand PVC volume", k8sTestTag) {
-    val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
+    val storageClassName = testBackend match {
+      case MinikubeTestBackend => "standard"
+      case _ => "hostpath"
+    }
     val DRIVER_PREFIX = "spark.kubernetes.driver.volumes.persistentVolumeClaim"
     sparkAppConf
       .set("spark.kubernetes.driver.master", "local[10]")
@@ -148,7 +151,10 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("A Spark job with two executors with OnDemand PVC volumes", k8sTestTag) {
-    val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
+    val storageClassName = testBackend match {
+      case MinikubeTestBackend => "standard"
+      case _ => "hostpath"
+    }
     val EXECUTOR_PREFIX = "spark.kubernetes.executor.volumes.persistentVolumeClaim"
     sparkAppConf
       .set("spark.executor.instances", "2")
