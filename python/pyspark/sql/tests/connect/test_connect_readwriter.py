@@ -348,10 +348,12 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
     # DataStreamReader.name() tests - require source evolution configs
     def test_stream_reader_name_valid_names(self):
         """Test that various valid source name patterns work correctly."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             valid_names = [
                 "mySource",
                 "my_source",
@@ -376,10 +378,12 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
 
     def test_stream_reader_name_method_chaining(self):
         """Test that name() returns the reader for method chaining."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_chaining_") as tmpdir:
                 self.connect.range(10).write.mode("overwrite").parquet(tmpdir)
                 df = (
@@ -394,10 +398,12 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
 
     def test_stream_reader_name_before_format(self):
         """Test that order doesn't matter - name can be set before format."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_before_format_") as tmpdir:
                 self.connect.range(10).write.mode("overwrite").parquet(tmpdir)
                 df = (
@@ -411,10 +417,12 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
 
     def test_stream_reader_invalid_names(self):
         """Test that various invalid source names are rejected."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             invalid_names = [
                 "",  # empty string
                 "  ",  # whitespace only
@@ -432,9 +440,9 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
                     with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
                         self.connect.range(10).write.mode("overwrite").parquet(tmpdir)
                         with self.assertRaises(PySparkValueError) as context:
-                            self.connect.readStream.format("parquet").schema(
-                                "id LONG"
-                            ).name(invalid_name).load(tmpdir)
+                            self.connect.readStream.format("parquet").schema("id LONG").name(
+                                invalid_name
+                            ).load(tmpdir)
 
                         # The error message should contain information about invalid name
                         self.assertIn("source", str(context.exception).lower())
@@ -450,18 +458,18 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
 
     def test_stream_reader_name_with_different_formats(self):
         """Test that name() works with different streaming data sources."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_name_formats_") as tmpdir:
                 # Create test data
-                self.connect.range(10).write.mode("overwrite").parquet(
-                    tmpdir + "/parquet_data"
-                )
-                self.connect.range(10).selectExpr(
-                    "id", "CAST(id AS STRING) as value"
-                ).write.mode("overwrite").json(tmpdir + "/json_data")
+                self.connect.range(10).write.mode("overwrite").parquet(tmpdir + "/parquet_data")
+                self.connect.range(10).selectExpr("id", "CAST(id AS STRING) as value").write.mode(
+                    "overwrite"
+                ).json(tmpdir + "/json_data")
 
                 # Test with parquet
                 parquet_df = (
@@ -470,9 +478,7 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
                     .schema("id LONG")
                     .load(tmpdir + "/parquet_data")
                 )
-                self.assertTrue(
-                    parquet_df.isStreaming, "Parquet DataFrame should be streaming"
-                )
+                self.assertTrue(parquet_df.isStreaming, "Parquet DataFrame should be streaming")
 
                 # Test with json - specify schema
                 json_df = (
@@ -485,10 +491,12 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
 
     def test_stream_reader_name_persists_through_query(self):
         """Test that the name persists when starting a streaming query."""
-        with self.connect_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.connect_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_name_query_") as tmpdir:
                 data_dir = tmpdir + "/data"
                 checkpoint_dir = tmpdir + "/checkpoint"
