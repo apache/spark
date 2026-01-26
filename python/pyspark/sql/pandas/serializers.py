@@ -1831,27 +1831,27 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     self._update_batch_size_stats(batch)
 
                     flatten_state_table = flatten_columns(batch, "inputData")
-                    data_pandas = [
+                    input_data_series = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(flatten_state_table.itercolumns())
                     ]
 
                     flatten_init_table = flatten_columns(batch, "initState")
-                    init_data_pandas = [
+                    init_state_series = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
-                    assert not (bool(init_data_pandas) and bool(data_pandas))
+                    assert not (bool(init_state_series) and bool(input_data_series))
 
-                    if bool(data_pandas):
-                        for row in PandasBatchTransformer.wrap_series(data_pandas).itertuples(
+                    if bool(input_data_series):
+                        for row in PandasBatchTransformer.wrap_series(input_data_series).itertuples(
                             index=False
                         ):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_data_pandas):
-                        for row in PandasBatchTransformer.wrap_series(init_data_pandas).itertuples(
+                    elif bool(init_state_series):
+                        for row in PandasBatchTransformer.wrap_series(init_state_series).itertuples(
                             index=False
                         ):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
