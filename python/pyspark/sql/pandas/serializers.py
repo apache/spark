@@ -1063,18 +1063,11 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         """
         Flatten the struct into Arrow's record batches.
         """
-        import pyarrow as pa
-
-        def process_group(batches: "Iterator[pa.RecordBatch]"):
-            for batch in batches:
-                struct = batch.column(0)
-                yield pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
-
         for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
-            processed_iter = process_group(batches)
-            yield processed_iter
+            batch_iter = map(ArrowBatchTransformer.flatten_struct, batches)
+            yield batch_iter
             # Make sure the batches are fully iterated before getting the next group
-            for _ in processed_iter:
+            for _ in batch_iter:
                 pass
 
     def __repr__(self):
