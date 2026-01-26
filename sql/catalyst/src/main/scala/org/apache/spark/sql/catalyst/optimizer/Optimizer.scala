@@ -138,10 +138,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
-        BooleanSimplification,
+        // SPARK-55110 : optimal order of application
         SimplifyConditionals,
-        PushFoldableIntoBranches,
         SimplifyBinaryComparison,
+        BooleanSimplification,
+        PushFoldableIntoBranches,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
         SimplifyCasts,

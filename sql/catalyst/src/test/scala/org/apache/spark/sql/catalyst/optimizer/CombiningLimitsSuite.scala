@@ -37,8 +37,8 @@ class CombiningLimitsSuite extends PlanTest {
       Batch("Constant Folding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
-        BooleanSimplification,
-        SimplifyConditionals) :: Nil
+        SimplifyConditionals,
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation.fromExternalRows(

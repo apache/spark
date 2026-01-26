@@ -44,9 +44,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       Batch("Constant Folding", FixedPoint(10),
          NullPropagation,
          ConstantFolding,
-         BooleanSimplification,
          SimplifyConditionals,
          SimplifyBinaryComparison,
+         BooleanSimplification,
          OptimizeUpdateFields,
          SimplifyExtractValueOps) :: Nil
   }
