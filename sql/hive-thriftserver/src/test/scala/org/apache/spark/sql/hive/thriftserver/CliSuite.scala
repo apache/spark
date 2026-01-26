@@ -863,4 +863,18 @@ class CliSuite extends SparkFunSuite {
       extraArgs = "--conf" :: s"spark.plugins=${classOf[RedirectConsolePlugin].getName}" :: Nil)(
       "SELECT 1;" -> "1")
   }
+
+  test("unbound parameter markers in CLI are detected and reported") {
+    // Test that parameter markers without parameters are properly detected in spark-sql CLI
+    // and throw UNBOUND_SQL_PARAMETER error instead of internal errors.
+    // This guards against regression where SparkSQLDriver wasn't using pre-parser.
+    runCliWithin(
+      2.minute,
+      errorResponses = Seq("UNBOUND_SQL_PARAMETER"))(
+      "SELECT :param;" -> "param",
+      "SELECT 'hello' :parm;" -> "parm",
+      "SELECT ?;" -> ""
+    )
+  }
 }
+
