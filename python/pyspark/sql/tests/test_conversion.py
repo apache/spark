@@ -14,12 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import unittest
+from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
+    ArrowTimestampConversion,
+    ArrowBatchTransformer,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -59,6 +63,85 @@ class Score:
 
     def __eq__(self, other):
         return self.score == other.score
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowBatchTransformerTests(unittest.TestCase):
+    def test_flatten_struct_basic(self):
+        """Test flattening a struct column into separate columns."""
+        import pyarrow as pa
+
+        struct_array = pa.StructArray.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
+            names=["x", "y"],
+        )
+        batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
+
+        flattened = ArrowBatchTransformer.flatten_struct(batch)
+
+        self.assertEqual(flattened.num_columns, 2)
+        self.assertEqual(flattened.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(flattened.column(1).to_pylist(), ["a", "b", "c"])
+        self.assertEqual(flattened.schema.names, ["x", "y"])
+
+    def test_flatten_struct_empty_batch(self):
+        """Test flattening an empty batch."""
+        import pyarrow as pa
+
+        struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        struct_array = pa.array([], type=struct_type)
+        batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
+
+        flattened = ArrowBatchTransformer.flatten_struct(batch)
+
+        self.assertEqual(flattened.num_rows, 0)
+        self.assertEqual(flattened.num_columns, 2)
+
+    def test_wrap_struct_basic(self):
+        """Test wrapping columns into a struct."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
+            names=["x", "y"],
+        )
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_columns, 1)
+        self.assertEqual(wrapped.schema.names, ["_0"])
+
+        struct_col = wrapped.column(0)
+        self.assertEqual(len(struct_col), 3)
+        self.assertEqual(struct_col.field(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(struct_col.field(1).to_pylist(), ["a", "b", "c"])
+
+    def test_wrap_struct_empty_columns(self):
+        """Test wrapping a batch with no columns."""
+        import pyarrow as pa
+
+        schema = pa.schema([])
+        batch = pa.RecordBatch.from_arrays([], schema=schema)
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_columns, 1)
+        self.assertEqual(wrapped.num_rows, 0)
+
+    def test_wrap_struct_empty_batch(self):
+        """Test wrapping an empty batch with schema."""
+        import pyarrow as pa
+
+        schema = pa.schema([("x", pa.int64()), ("y", pa.string())])
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([], type=pa.int64()), pa.array([], type=pa.string())],
+            schema=schema,
+        )
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_rows, 0)
+        self.assertEqual(wrapped.num_columns, 1)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -200,6 +283,97 @@ class ConversionTests(unittest.TestCase):
             schema = StructType([StructField("x", row_schema)])
             with self.assertRaises(PySparkValueError):
                 LocalDataToArrowConversion.convert([(value,)], schema, use_large_var_types=False)
+
+    def test_arrow_array_localize_tz(self):
+        import pyarrow as pa
+
+        tz1 = ZoneInfo("Asia/Singapore")
+        tz2 = ZoneInfo("America/Los_Angeles")
+        tz3 = ZoneInfo("UTC")
+
+        ts0 = datetime.datetime(2026, 1, 5, 15, 0, 1)
+        ts1 = datetime.datetime(2026, 1, 5, 15, 0, 1, tzinfo=tz1)
+        ts2 = datetime.datetime(2026, 1, 5, 15, 0, 1, tzinfo=tz2)
+        ts3 = datetime.datetime(2026, 1, 5, 15, 0, 1, tzinfo=tz3)
+
+        # non-timestampe types
+        for arr in [
+            pa.array([1, 2]),
+            pa.array([["x", "y"]]),
+            pa.array([[[3.0, 4.0]]]),
+            pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["x", "y"])], names=["a", "b"]),
+            pa.array([{1: None, 2: "x"}], type=pa.map_(pa.int32(), pa.string())),
+        ]:
+            output = ArrowTimestampConversion.localize_tz(arr)
+            self.assertTrue(output is arr, f"MUST not generate a new array {output.tolist()}")
+
+        # timestampe types
+        for arr, expected in [
+            (pa.array([ts0, None]), pa.array([ts0, None])),  # ts-ntz
+            (pa.array([ts1, None]), pa.array([ts0, None])),  # ts-ltz
+            (pa.array([[ts2, None]]), pa.array([[ts0, None]])),  # array<ts-ltz>
+            (pa.array([[[ts3, None]]]), pa.array([[[ts0, None]]])),  # array<array<ts-ltz>>
+            (
+                pa.StructArray.from_arrays(
+                    [pa.array([1, 2]), pa.array([ts0, None]), pa.array([ts1, None])],
+                    names=["a", "b", "c"],
+                ),
+                pa.StructArray.from_arrays(
+                    [pa.array([1, 2]), pa.array([ts0, None]), pa.array([ts0, None])],
+                    names=["a", "b", "c"],
+                ),
+            ),  # struct<int, ts-ntz, ts-ltz>
+            (
+                pa.StructArray.from_arrays(
+                    [pa.array([1, 2]), pa.array([[ts2], [None]])], names=["a", "b"]
+                ),
+                pa.StructArray.from_arrays(
+                    [pa.array([1, 2]), pa.array([[ts0], [None]])], names=["a", "b"]
+                ),
+            ),  # struct<int, array<ts-ltz>>
+            (
+                pa.StructArray.from_arrays(
+                    [
+                        pa.array([ts2, None]),
+                        pa.StructArray.from_arrays(
+                            [pa.array(["a", "b"]), pa.array([[ts3], [None]])], names=["x", "y"]
+                        ),
+                    ],
+                    names=["a", "b"],
+                ),
+                pa.StructArray.from_arrays(
+                    [
+                        pa.array([ts0, None]),
+                        pa.StructArray.from_arrays(
+                            [pa.array(["a", "b"]), pa.array([[ts0], [None]])], names=["x", "y"]
+                        ),
+                    ],
+                    names=["a", "b"],
+                ),
+            ),  # struct<ts-ltz, struct<str, array<ts-ltz>>>
+            (
+                pa.array(
+                    [{1: None, 2: ts1}],
+                    type=pa.map_(pa.int32(), pa.timestamp("us", tz=tz1)),
+                ),
+                pa.array(
+                    [{1: None, 2: ts0}],
+                    type=pa.map_(pa.int32(), pa.timestamp("us")),
+                ),
+            ),  # map<int, ts-ltz>
+            (
+                pa.array(
+                    [{1: [None], 2: [ts2, None]}],
+                    type=pa.map_(pa.int32(), pa.list_(pa.timestamp("us", tz=tz2))),
+                ),
+                pa.array(
+                    [{1: [None], 2: [ts0, None]}],
+                    type=pa.map_(pa.int32(), pa.list_(pa.timestamp("us"))),
+                ),
+            ),  # map<int, array<ts-ltz>>
+        ]:
+            output = ArrowTimestampConversion.localize_tz(arr)
+            self.assertEqual(output, expected, f"{output.tolist()} != {expected.tolist()}")
 
 
 if __name__ == "__main__":

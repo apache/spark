@@ -2261,6 +2261,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
+  def unfinishedRepartitionDetectedError(batchId: Long, lastCommittedBatchId: Long): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+      messageParameters = Map(
+        "batchId" -> batchId.toString,
+        "lastCommittedBatchId" -> lastCommittedBatchId.toString),
+      cause = null)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }

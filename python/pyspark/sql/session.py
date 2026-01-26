@@ -24,13 +24,16 @@ from threading import RLock
 from types import TracebackType
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     Iterable,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
     Union,
     Set,
     cast,
@@ -77,6 +80,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
     from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
@@ -136,7 +140,10 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-class classproperty(property):
+T = TypeVar("T")
+
+
+class classproperty(Generic[T]):
     """Same as Python's @property decorator, but for class attributes.
 
     Examples
@@ -161,12 +168,13 @@ class classproperty(property):
     True
     """
 
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+    def __init__(self, fget: Callable[[type], T]) -> None:
+        self.fget = fget
+
+    def __get__(self, instance: Any, owner: Optional[type]) -> T:
+        if owner is None:
+            owner = type(instance)
+        return self.fget(owner)
 
 
 class SparkSession(SparkConversionMixin):
@@ -603,12 +611,14 @@ class SparkSession(SparkConversionMixin):
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
-    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    @classproperty
+    def builder(cls: Type["SparkSession"]) -> "Builder":  # type: ignore[misc]
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-    """
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -2005,6 +2015,24 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.streaming import StreamingQueryManager
 
         return StreamingQueryManager(self._jsparkSession.streams())
+
+    @cached_property
+    def _streamingCheckpointManager(self) -> "StreamingCheckpointManager":
+        """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
+
+        .. versionadded:: 4.2.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`StreamingCheckpointManager`
+        """
+        from pyspark.sql.streaming.query import StreamingCheckpointManager
+
+        return StreamingCheckpointManager(self._jsparkSession.streamingCheckpointManager())
 
     @property
     def tvf(self) -> "TableValuedFunction":

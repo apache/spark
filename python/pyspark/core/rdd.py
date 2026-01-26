@@ -5389,7 +5389,7 @@ def _test() -> None:
 
         if Version(np.__version__) >= Version("2"):
             # `legacy="1.25"` only available in `nump>=2`
-            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
     except (ModuleNotFoundError, TypeError):
         pass
 

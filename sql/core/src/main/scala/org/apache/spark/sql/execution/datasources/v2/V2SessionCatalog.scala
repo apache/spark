@@ -137,6 +137,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
     failTimeTravel(ident, loadTable(ident))
   }
 
+  override def tableExists(ident: Identifier): Boolean = {
+    catalog.tableExists(ident.asTableIdentifier)
+  }
+
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
     val nameParts = t match {
       case V1Table(catalogTable) => catalogTable.identifier.nameParts

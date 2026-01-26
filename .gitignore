@@ -18,6 +18,7 @@
 .ensime
 .ensime_cache/
 .ensime_lucene
+.venv
 .generated-mima*
 .idea/
 .idea_modules/
@@ -57,6 +58,7 @@ docs/_site/
 docs/api
 docs/.local_ruby_bundle
 sql/docs
+sql/mkdocs.yml
 sql/site
 lib_managed/
 lint-r-report.log

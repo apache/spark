@@ -1,0 +1,110 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Base image for building Spark releases. Based on Ubuntu 22.04.
+# This image contains common tools shared across all Spark versions:
+# - Build tools (gcc, make, etc.)
+# - R with pinned package versions
+# - Ruby with bundler
+# - TeX for documentation
+# - Node.js for documentation
+#
+# Branch-specific Dockerfiles should use "FROM spark-rm-base:latest" and add:
+# - Java version (8 or 17)
+# - Python version and pip packages
+
+FROM ubuntu:jammy-20250819
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Release Manager Base Image"
+LABEL org.opencontainers.image.version=""
+
+ENV FULL_REFRESH_DATE=20250819
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+
+# Install common system packages and build tools
+# Note: Java and Python are installed in branch-specific Dockerfiles
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    ca-certificates \
+    curl \
+    gfortran \
+    git \
+    subversion \
+    gnupg \
+    libcurl4-openssl-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libfribidi-dev \
+    libgit2-dev \
+    libharfbuzz-dev \
+    libjpeg-dev \
+    liblapack-dev \
+    libopenblas-dev \
+    libpng-dev \
+    libssl-dev \
+    libtiff5-dev \
+    libwebp-dev \
+    libxml2-dev \
+    msmtp \
+    nodejs \
+    npm \
+    pandoc \
+    pkg-config \
+    texlive-latex-base \
+    texlive \
+    texlive-fonts-extra \
+    texinfo \
+    texlive-latex-extra \
+    qpdf \
+    jq \
+    r-base \
+    ruby \
+    ruby-dev \
+    software-properties-common \
+    wget \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up R CRAN repository for latest R packages
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list && \
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
+    gpg -a --export E084DAB9 | apt-key add - && \
+    add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
+
+# Install R packages (same versions across all branches)
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', \
+    'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', \
+    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
+    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+
+# See more in SPARK-39735
+ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+# Install Ruby bundler (same version across all branches)
+RUN gem install --no-document "bundler:2.4.22"
+
+# Create workspace directory
+WORKDIR /opt/spark-rm/output
+
+# Note: Java, Python, and user creation are done in branch-specific Dockerfiles

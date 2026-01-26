@@ -24,8 +24,8 @@ import numpy as np
 from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
 from matplotlib.figure import Figure
 from pandas.core.dtypes.inference import is_list_like
-from pandas.io.formats.printing import pprint_thing
-from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.plotting._matplotlib import (  # type: ignore[import-untyped]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,
     HistPlot as PandasHistPlot,
@@ -37,7 +37,7 @@ from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
     KdePlot as PandasKdePlot,
 )
 from pandas.plotting._core import PlotAccessor
-from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot  # type: ignore[import-untyped]
 
 from pyspark.pandas.plot import (
     TopNPlotBase,

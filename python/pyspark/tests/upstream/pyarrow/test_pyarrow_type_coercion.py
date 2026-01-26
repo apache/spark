@@ -35,12 +35,18 @@ import math
 import unittest
 from typing import Any, List, Tuple
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+
+if have_pyarrow:
+    import pyarrow as pa
+
+    pyarrow_19_or_greater = LooseVersion(pa.__version__) >= LooseVersion("19.0.0")
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -435,6 +441,10 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
     # =========================================================================
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(
+        have_pyarrow and not pyarrow_19_or_greater,
+        "PyArrow < 19 has different type coercion behavior for ArrowDtype-backed Series",
+    )
     def test_pandas_instances_coercion(self):
         """Test type coercion from pandas Series with various backend types."""
         import numpy as np
@@ -753,6 +763,48 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             ),
         ]
         self._run_coercion_tests_with_values(datetime_cases)
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(
+        have_pyarrow and pyarrow_19_or_greater,
+        "PyArrow >= 19 has different type coercion behavior for ArrowDtype-backed Series",
+    )
+    def test_pandas_arrow_dtype_no_coercion_pyarrow18(self):
+        """Test PyArrow < 19 type coercion behavior for ArrowDtype-backed Series.
+
+        In PyArrow < 19, pa.array() with ArrowDtype-backed Series ignores the target type
+        parameter and keeps the original Arrow type from the Series.
+        """
+        import pandas as pd
+        import pyarrow as pa
+
+        # In PyArrow < 19, ArrowDtype-backed Series keeps original type
+        # (data, target_type, expected_type_in_pyarrow18)
+        no_coercion_cases = [
+            # Int types with float target → keeps original int type
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int8())), pa.float64(), pa.int8()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int16())), pa.float64(), pa.int16()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int32())), pa.float64(), pa.int32()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.float64(), pa.int64()),
+            # Float types with int target → keeps original float type
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.int64(), pa.float32()),
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.int64(), pa.float64()),
+            # Float with different float target → keeps original float type
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.float64(), pa.float32()),
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.float32(), pa.float64()),
+            # Int with narrower int target → keeps original int type
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int8(), pa.int64()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int16(), pa.int64()),
+        ]
+
+        for data, target_type, expected_type in no_coercion_cases:
+            arr = pa.array(data, type=target_type)
+            self.assertEqual(
+                arr.type,
+                expected_type,
+                f"PyArrow < 19 keeps original type {expected_type}, "
+                f"PyArrow >= 19 coerces to {target_type}",
+            )
 
     # =========================================================================
     # SECTION 4: NumPy Array Coercion

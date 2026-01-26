@@ -22,7 +22,7 @@ import os
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast, Iterator, Tuple, Any
+from typing import Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
@@ -62,7 +62,7 @@ if have_pyarrow and have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ApplyInPandasTestsMixin:
     @property

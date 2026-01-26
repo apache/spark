@@ -16,10 +16,8 @@
 #
 import inspect
 import os
-import sys
 from typing import IO
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkTypeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -27,30 +25,19 @@ from pyspark.serializers import (
     read_int,
     write_int,
     write_with_length,
-    SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
-    check_python_version,
     read_command,
     pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
     utf8_deserializer,
 )
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for creating a Python data source instance.
 
@@ -67,118 +54,95 @@ def main(infile: IO, outfile: IO) -> None:
     This process then creates a `DataSource` instance using the above information and
     sends the pickled instance as well as the schema back to the JVM.
     """
-    try:
-        check_python_version(infile)
+    # Receive the data source class.
+    data_source_cls = read_command(pickleSer, infile)
+    if not (isinstance(data_source_cls, type) and issubclass(data_source_cls, DataSource)):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "a subclass of DataSource",
+                "actual": f"'{type(data_source_cls).__name__}'",
+            },
+        )
 
-        start_faulthandler_periodic_traceback()
+    # Check the name method is a class method.
+    if not inspect.ismethod(data_source_cls.name):
+        raise PySparkTypeError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "'name()' method to be a classmethod",
+                "actual": f"'{type(data_source_cls.name).__name__}'",
+            },
+        )
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
+    # Receive the provider name.
+    provider = utf8_deserializer.loads(infile)
 
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
-
-        _accumulatorRegistry.clear()
-
-        # Receive the data source class.
-        data_source_cls = read_command(pickleSer, infile)
-        if not (isinstance(data_source_cls, type) and issubclass(data_source_cls, DataSource)):
+    with capture_outputs():
+        # Check if the provider name matches the data source's name.
+        name = data_source_cls.name()
+        if provider.lower() != name.lower():
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": "a subclass of DataSource",
-                    "actual": f"'{type(data_source_cls).__name__}'",
+                    "expected": f"provider with name {name}",
+                    "actual": f"'{provider}'",
                 },
             )
 
-        # Check the name method is a class method.
-        if not inspect.ismethod(data_source_cls.name):
-            raise PySparkTypeError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "'name()' method to be a classmethod",
-                    "actual": f"'{type(data_source_cls.name).__name__}'",
-                },
-            )
-
-        # Receive the provider name.
-        provider = utf8_deserializer.loads(infile)
-
-        with capture_outputs():
-            # Check if the provider name matches the data source's name.
-            name = data_source_cls.name()
-            if provider.lower() != name.lower():
+        # Receive the user-specified schema
+        user_specified_schema = None
+        if read_bool(infile):
+            user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            if not isinstance(user_specified_schema, StructType):
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
-                        "expected": f"provider with name {name}",
-                        "actual": f"'{provider}'",
+                        "expected": "the user-defined schema to be a 'StructType'",
+                        "actual": f"'{type(data_source_cls).__name__}'",
                     },
                 )
 
-            # Receive the user-specified schema
-            user_specified_schema = None
-            if read_bool(infile):
-                user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-                if not isinstance(user_specified_schema, StructType):
-                    raise PySparkAssertionError(
-                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                        messageParameters={
-                            "expected": "the user-defined schema to be a 'StructType'",
-                            "actual": f"'{type(data_source_cls).__name__}'",
-                        },
-                    )
+        # Receive the options.
+        options = CaseInsensitiveDict()
+        num_options = read_int(infile)
+        for _ in range(num_options):
+            key = utf8_deserializer.loads(infile)
+            value = utf8_deserializer.loads(infile)
+            options[key] = value
 
-            # Receive the options.
-            options = CaseInsensitiveDict()
-            num_options = read_int(infile)
-            for _ in range(num_options):
-                key = utf8_deserializer.loads(infile)
-                value = utf8_deserializer.loads(infile)
-                options[key] = value
+        # Instantiate a data source.
+        data_source = data_source_cls(options=options)  # type: ignore
 
-            # Instantiate a data source.
-            data_source = data_source_cls(options=options)  # type: ignore
-
-            # Get the schema of the data source.
-            # If user_specified_schema is not None, use user_specified_schema.
-            # Otherwise, use the schema of the data source.
-            # Throw exception if the data source does not implement schema().
-            is_ddl_string = False
-            if user_specified_schema is None:
-                schema = data_source.schema()
-                if isinstance(schema, str):
-                    # Here we cannot use _parse_datatype_string to parse the DDL string schema.
-                    # as it requires an active Spark session.
-                    is_ddl_string = True
-            else:
-                schema = user_specified_schema  # type: ignore
-
-            assert schema is not None
-
-        # Return the pickled data source instance.
-        pickleSer._write_with_length(data_source, outfile)
-
-        # Return the schema of the data source.
-        write_int(int(is_ddl_string), outfile)
-        if is_ddl_string:
-            write_with_length(schema.encode("utf-8"), outfile)  # type: ignore
+        # Get the schema of the data source.
+        # If user_specified_schema is not None, use user_specified_schema.
+        # Otherwise, use the schema of the data source.
+        # Throw exception if the data source does not implement schema().
+        is_ddl_string = False
+        if user_specified_schema is None:
+            schema = data_source.schema()
+            if isinstance(schema, str):
+                # Here we cannot use _parse_datatype_string to parse the DDL string schema.
+                # as it requires an active Spark session.
+                is_ddl_string = True
         else:
-            write_with_length(schema.json().encode("utf-8"), outfile)  # type: ignore
+            schema = user_specified_schema  # type: ignore
 
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
+        assert schema is not None
 
-    send_accumulator_updates(outfile)
+    # Return the pickled data source instance.
+    pickleSer._write_with_length(data_source, outfile)
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
+    # Return the schema of the data source.
+    write_int(int(is_ddl_string), outfile)
+    if is_ddl_string:
+        write_with_length(schema.encode("utf-8"), outfile)  # type: ignore
     else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+        write_with_length(schema.json().encode("utf-8"), outfile)  # type: ignore
+
+
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":

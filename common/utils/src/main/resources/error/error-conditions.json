@@ -4357,6 +4357,12 @@
     ],
     "sqlState" : "42601"
   },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState" : "54000"
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -5936,6 +5942,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -5982,6 +5994,16 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "DUPLICATE_SOURCE_NAMES" : {
+        "message" : [
+          "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
+        ]
+      },
+      "INVALID_SOURCE_NAME" : {
+        "message" : [
+          "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
+        ]
+      },
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
@@ -6048,6 +6070,13 @@
       "Stateful operators in the metadata: [<OpsInMetadataSeq>]; Stateful operators in current batch: [<OpsInCurBatchSeq>]."
     ],
     "sqlState" : "42K03"
+  },
+  "STREAMING_UNFINISHED_REPARTITION_DETECTED" : {
+    "message" : [
+      "The latest batch <batchId> is for an unfinished state repartitioning i.e. last committed batch is: <lastCommittedBatchId>).",
+      "Please retry the repartitioning operation and let it finish successfully before starting the streaming query."
+    ],
+    "sqlState" : "55019"
   },
   "STREAM_FAILED" : {
     "message" : [

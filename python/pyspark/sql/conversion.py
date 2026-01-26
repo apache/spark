@@ -21,7 +21,12 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.types import (
+    _dedup_names,
+    _deduplicate_field_names,
+    _create_converter_to_pandas,
+    to_arrow_schema,
+)
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
@@ -48,6 +53,45 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    import pandas as pd
+
+
+class ArrowBatchTransformer:
+    """
+    Pure functions that transform RecordBatch -> RecordBatch.
+    They should have no side effects (no I/O, no writing to streams).
+    """
+
+    @staticmethod
+    def flatten_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+        """
+        Flatten a single struct column into a RecordBatch.
+
+        Used by:
+            - ArrowStreamUDFSerializer.load_stream
+            - GroupArrowUDFSerializer.load_stream
+        """
+        import pyarrow as pa
+
+        struct = batch.column(0)
+        return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+
+    @staticmethod
+    def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+        """
+        Wrap a RecordBatch's columns into a single struct column.
+
+        Used by: ArrowStreamUDFSerializer.dump_stream
+        """
+        import pyarrow as pa
+
+        if batch.num_columns == 0:
+            # When batch has no column, it should still create
+            # an empty batch with the number of rows set.
+            struct = pa.array([{}] * batch.num_rows)
+        else:
+            struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
+        return pa.RecordBatch.from_arrays([struct], ["_0"])
 
 
 class LocalDataToArrowConversion:
@@ -845,3 +889,146 @@ class ArrowTableToRowsConversion:
                 return [tuple()] * table.num_rows
             else:
                 return [_create_row(fields, tuple())] * table.num_rows
+
+
+class ArrowTimestampConversion:
+    @classmethod
+    def _need_localization(cls, at: "pa.DataType") -> bool:
+        import pyarrow.types as types
+
+        if types.is_timestamp(at) and at.tz is not None:
+            return True
+        elif (
+            types.is_list(at)
+            or types.is_large_list(at)
+            or types.is_fixed_size_list(at)
+            or types.is_dictionary(at)
+        ):
+            return cls._need_localization(at.value_type)
+        elif types.is_map(at):
+            return any(cls._need_localization(dt) for dt in [at.key_type, at.item_type])
+        elif types.is_struct(at):
+            return any(cls._need_localization(field.type) for field in at)
+        else:
+            return False
+
+    @staticmethod
+    def localize_tz(arr: "pa.Array") -> "pa.Array":
+        """
+        Convert Arrow timezone-aware timestamps to timezone-naive in the specified timezone.
+        This function works on Arrow Arrays, and it recurses to convert nested types.
+        This function is dedicated for Pandas UDF execution.
+
+        Differences from _create_converter_to_pandas + _check_series_convert_timestamps_local_tz:
+        1, respect the timezone field in pyarrow timestamp type;
+        2, do not use local time at any time;
+        3, handle nested types in a consistent way. (_create_converter_to_pandas handles
+        simple timestamp series with session timezone, but handles nested series with
+        datetime.timezone.utc)
+
+        Differences from _check_arrow_array_timestamps_localize:
+        1, respect the timezone field in pyarrow timestamp type;
+        2, do not handle timezone-naive timestamp;
+        3, do not support unit coercion which won't happen in UDF execution.
+
+        Parameters
+        ----------
+        arr : :class:`pyarrow.Array`
+
+        Returns
+        -------
+        :class:`pyarrow.Array`
+
+        Notes
+        -----
+        Arrow UDF (@arrow_udf/mapInArrow/etc) always preserve the original timezone, and thus
+        doesn't need this conversion.
+        """
+        import pyarrow as pa
+        import pyarrow.types as types
+        import pyarrow.compute as pc
+
+        pa_type = arr.type
+        if not ArrowTimestampConversion._need_localization(pa_type):
+            return arr
+
+        if types.is_timestamp(pa_type) and pa_type.tz is not None:
+            # import datetime
+            # from zoneinfo import ZoneInfo
+            # ts = datetime.datetime(2022, 1, 5, 15, 0, 1, tzinfo=ZoneInfo('Asia/Singapore'))
+            # arr = pa.array([ts])
+            # arr[0]
+            # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000+0800'>
+            # arr = pc.local_timestamp(arr)
+            # arr[0]
+            # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000'>
+
+            return pc.local_timestamp(arr)
+        elif types.is_list(pa_type):
+            return pa.ListArray.from_arrays(
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_large_list(pa_type):
+            return pa.LargeListType.from_arrays(
+                offsets=arr.offsets,
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_fixed_size_list(pa_type):
+            return pa.FixedSizeListArray.from_arrays(
+                values=ArrowTimestampConversion.localize_tz(arr.values),
+            )
+        elif types.is_dictionary(pa_type):
+            return pa.DictionaryArray.from_arrays(
+                indices=arr.indices,
+                dictionary=ArrowTimestampConversion.localize_tz(arr.dictionary),
+            )
+        elif types.is_map(pa_type):
+            return pa.MapArray.from_arrays(
+                offsets=arr.offsets,
+                keys=ArrowTimestampConversion.localize_tz(arr.keys),
+                items=ArrowTimestampConversion.localize_tz(arr.items),
+            )
+        elif types.is_struct(pa_type):
+            return pa.StructArray.from_arrays(
+                arrays=[
+                    ArrowTimestampConversion.localize_tz(arr.field(i)) for i in range(len(arr.type))
+                ],
+                names=arr.type.names,
+            )
+        else:  # pragma: no cover
+            assert False, f"Need converter for {pa_type} but failed to find one."
+
+
+class ArrowArrayToPandasConversion:
+    @classmethod
+    def convert_legacy(
+        cls,
+        arr: "pa.Array",
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+    ) -> "pd.Series":
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+        return converter(ser)
