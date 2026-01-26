@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   with AdaptiveSparkPlanHelper {
