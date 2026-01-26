@@ -32,6 +32,7 @@ from typing import (
 )
 
 from pyspark.sql import Row
+from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
@@ -714,24 +715,53 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
-
     def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
         """
-        FIXME: docstring needed
+        Returns the most recent offset available given a read limit. The start offset can be used
+        to figure out how much new data should be read given the limit.
 
-        /**
-        * Returns the most recent offset available given a read limit. The start offset can be used
-        * to figure out how much new data should be read given the limit. Users should implement this
-        * method instead of latestOffset for a MicroBatchStream or getOffset for Source.
-        * <p>
-        * When this method is called on a `Source`, the source can return `null` if there is no
-        * data to process. In addition, for the very first micro-batch, the `startOffset` will be
-        * null as well.
-        * <p>
-        * When this method is called on a MicroBatchStream, the `startOffset` will be `initialOffset`
-        * for the very first micro-batch. The source can return `null` if there is no data to process.
-        */
+        The `start` will be provided from the return value of :meth:`initialOffset()` for
+        the very first micro-batch, and the offset continues from the last micro-batch for the
+        following. The source can return the same offset as start offset if there is no data to
+        process.
+
+        :class:`ReadLimit` can be used by the source to limit the amount of data returned in this
+        call. The implementation should implement :meth:`getDefaultReadLimit()` to provide the
+        proper :class:`ReadLimit` if the source can limit the amount of data returned based on the
+        source options.
+
+        The engine can still call :meth:`latestOffset()` with :class:`ReadAllAvailable` even if the
+        source produces the different read limit from :meth:`getDefaultReadLimit()`, to respect the
+        semantic of trigger. The source must always respect the given readLimit provided by the
+        engine; e.g. if the readLimit is :class:`ReadAllAvailable`, the source must ignore the read
+        limit configured through options.
+
+        NOTE: Previous Spark versions didn't have start offset and read limit parameters for this
+        method. While Spark will ensure the backward compatibility for existing data sources, the
+        new data sources are strongly encouraged to implement this new method signature.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset of the microbatch to continue reading from.
+        readLimit : :class:`ReadLimit`
+            The limit on the amount of data to be returned by this call.
+
+        Returns
+        -------
+        dict
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+
+        Examples
+        --------
+        >>> from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadMaxRows
+        >>> def latestOffset(self, start, readLimit):
+        ...     # Assume the source has 10 new records between start and latest offset
+        ...     if isinstance(readLimit, ReadAllAvailable):
+        ...        return {"index": start["index"] + 10}
+        ...     else:  # e.g., readLimit is ReadMaxRows(5)
+        ...        return {"index": start["index"] + min(10, readLimit.maxRows)}
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
@@ -740,25 +770,33 @@ class DataSourceStreamReader(ABC):
 
     def getDefaultReadLimit(self) -> ReadLimit:
         """
-          FIXME: docstring needed
+        Returns the read limits potentially passed to the data source through options when creating
+        the data source. See the built-in implementations of :class:`ReadLimit` for available read
+        limits.
 
-        /**
-         * Returns the read limits potentially passed to the data source through options when creating
-         * the data source.
-         */
+        Implementing this method is optional. By default, it returns :class:`ReadAllAvailable`,
+        which means there is no limit on the amount of data returned by :meth:`latestOffset()`.
         """
         return ReadAllAvailable()
 
     def reportLatestOffset(self) -> Optional[dict]:
         """
-          FIXME: docstring needed
+        Returns the most recent offset available. The information is used to report the latest
+        offset in the streaming query status.
+        The source can return `None`, if there is no data to process or the source does not support
+        to this method.
 
-        /**
-         * Returns the most recent offset available.
-         * <p>
-         * The source can return `null`, if there is no data to process or the source does not support
-         * to this method.
-         */
+        Returns
+        -------
+        dict or None
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+            Returns `None` if the source does not support reporting latest offset.
+
+        Examples
+        --------
+        >>> def reportLatestOffset(self):
+        ...     return {"partition-1": {"index": 100}, "partition-2": {"index": 200}}
         """
         return None
 

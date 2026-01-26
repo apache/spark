@@ -70,13 +70,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
     ordinary :class:`DataSourceStreamReader`.
 
-    current_offset tracks the latest progress of the record prefetching, it is initialized to be
-    initialOffset() when query start for the first time or initialized to be the end offset of
-    the last planned batch when query restarts.
-
     When streaming engine calls latestOffset(), the wrapper calls read() that starts from
-    current_offset, prefetches and cache the data, then updates the current_offset to be
-    the end offset of the new data.
+    start provided via the parameter of latestOffset(), prefetches and cache the data, then updates
+    the current_offset to be the end offset of the new data.
 
     When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
     from cache and send it to JVM along with the input partitions.
