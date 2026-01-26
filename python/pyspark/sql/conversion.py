@@ -58,6 +58,45 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
+class ArrowBatchTransformer:
+    """
+    Pure functions that transform RecordBatch -> RecordBatch.
+    They should have no side effects (no I/O, no writing to streams).
+    """
+
+    @staticmethod
+    def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
+        """
+        Flatten a struct column at given index into a RecordBatch.
+
+        Used by:
+            - ArrowStreamUDFSerializer.load_stream
+            - GroupArrowUDFSerializer.load_stream
+            - ArrowStreamArrowUDTFSerializer.load_stream
+        """
+        import pyarrow as pa
+
+        struct = batch.column(column_index)
+        return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+
+    @staticmethod
+    def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+        """
+        Wrap a RecordBatch's columns into a single struct column.
+
+        Used by: ArrowStreamUDFSerializer.dump_stream
+        """
+        import pyarrow as pa
+
+        if batch.num_columns == 0:
+            # When batch has no column, it should still create
+            # an empty batch with the number of rows set.
+            struct = pa.array([{}] * batch.num_rows)
+        else:
+            struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
+        return pa.RecordBatch.from_arrays([struct], ["_0"])
+
+
 class LocalDataToArrowConversion:
     """
     Conversion from local data (except pandas DataFrame and numpy ndarray) to Arrow.
