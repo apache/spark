@@ -877,4 +877,3 @@ class CliSuite extends SparkFunSuite {
     )
   }
 }
-
