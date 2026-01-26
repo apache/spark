@@ -5942,6 +5942,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
