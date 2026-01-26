@@ -96,6 +96,59 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
+    @staticmethod
+    def to_pandas(
+        timezone: str,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+        input_types: Optional[List] = None,
+    ) -> Callable[["pa.RecordBatch"], List["pd.Series"]]:
+        """
+        Create a transformer that converts a RecordBatch to a list of pandas Series.
+
+        This is a batch-level transformer that internally uses the column-level
+        converter from ArrowArrayToPandasConversion.create_converter.
+
+        Parameters
+        ----------
+        timezone : str
+            Timezone for timestamp conversion.
+        struct_in_pandas : str
+            How to represent struct in pandas ("dict", "row", etc.)
+        ndarray_as_list : bool
+            Whether to convert ndarray as list.
+        df_for_struct : bool
+            If True, convert struct columns to DataFrame instead of Series.
+        input_types : list, optional
+            Spark types for each column, used for precise type conversion.
+
+        Returns
+        -------
+        callable
+            Function (RecordBatch) -> List[pd.Series]
+
+        Used by: ArrowStreamPandasSerializer.load_stream and subclasses
+        """
+        import pandas as pd
+
+        import pyspark
+
+        converter = ArrowArrayToPandasConversion.create_converter(
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            ndarray_as_list=ndarray_as_list,
+            df_for_struct=df_for_struct,
+            input_types=input_types,
+        )
+
+        def transform(batch: "pa.RecordBatch") -> List["pd.Series"]:
+            if batch.num_columns == 0:
+                return [pd.Series([pyspark._NoValue] * batch.num_rows)]
+            return [converter(batch.column(i), i) for i in range(batch.num_columns)]
+
+        return transform
+
 
 class LocalDataToArrowConversion:
     """
