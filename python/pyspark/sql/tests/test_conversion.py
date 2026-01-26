@@ -24,6 +24,7 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTimestampConversion,
     ArrowBatchTransformer,
+    PandasBatchTransformer,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -142,6 +143,48 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PandasBatchTransformerTests(unittest.TestCase):
+    def test_wrap_series_basic(self):
+        """Test combining multiple Series into a DataFrame."""
+        import pandas as pd
+
+        series_list = [
+            pd.Series([1, 2, 3], name="a"),
+            pd.Series(["x", "y", "z"], name="b"),
+        ]
+
+        result = PandasBatchTransformer.wrap_series(series_list)
+
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(list(result.columns), ["a", "b"])
+        self.assertEqual(result["a"].tolist(), [1, 2, 3])
+        self.assertEqual(result["b"].tolist(), ["x", "y", "z"])
+
+    def test_wrap_series_empty(self):
+        """Test wrapping empty series list."""
+        import pandas as pd
+
+        result = PandasBatchTransformer.wrap_series([])
+
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result.columns), 0)
+
+    def test_reorder_columns(self):
+        """Test reordering DataFrame columns by schema field names."""
+        import pandas as pd
+        import pyarrow as pa
+
+        df = pd.DataFrame({"x": [1, 2], "y": ["a", "b"], "z": [1.0, 2.0]})
+        schema = pa.struct([("z", pa.float64()), ("x", pa.int64())])
+
+        result = PandasBatchTransformer.reorder_columns(df, schema)
+
+        self.assertEqual(list(result.columns), ["z", "x"])
+        self.assertEqual(result["z"].tolist(), [1.0, 2.0])
+        self.assertEqual(result["x"].tolist(), [1, 2])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

@@ -94,6 +94,46 @@ class ArrowBatchTransformer:
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
 
+class PandasBatchTransformer:
+    """
+    Pure functions that transform batch-like pandas structures.
+
+    A "batch" in PySpark's pandas UDF execution can be represented as:
+    - List[pd.Series]: each Series corresponds to one column
+    - pd.DataFrame: a single DataFrame with multiple columns
+
+    These methods convert between different batch representations.
+    They should have no side effects (no I/O, no writing to streams).
+    """
+
+    @staticmethod
+    def wrap_series(series_list: List["pd.Series"]) -> "pd.DataFrame":
+        """
+        Combine multiple Series into a DataFrame (columns).
+
+        Used by:
+            - wrap_grouped_map_pandas_udf
+            - wrap_cogrouped_map_pandas_udf
+            - wrap_grouped_map_pandas_iter_udf
+        """
+        import pandas as pd
+
+        if not series_list:
+            return pd.DataFrame()
+        return pd.concat(series_list, axis=1)
+
+    @staticmethod
+    def reorder_columns(
+        df: "pd.DataFrame", schema: "pa.StructType"
+    ) -> "pd.DataFrame":
+        """
+        Reorder a DataFrame's columns to match the schema field order by name.
+
+        Used by: ArrowStreamPandasUDFSerializer._create_struct_array
+        """
+        return df[[field.name for field in schema]]
+
+
 class LocalDataToArrowConversion:
     """
     Conversion from local data (except pandas DataFrame and numpy ndarray) to Arrow.
