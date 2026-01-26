@@ -34,7 +34,6 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
 )
 from pyspark.sql.streaming.datasource import (
-    SupportsAdmissionControl,
     SupportsTriggerAvailableNow,
 )
 from pyspark.sql.datasource_internal import (
@@ -145,10 +144,18 @@ def check_support_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     if isinstance(reader, _SimpleStreamReaderWrapper):
         # We consider the method of `read` in simple_reader to already have admission control
         # into it.
+        support_flags |= SUPPORTS_ADMISSION_CONTROL
         if isinstance(reader.simple_reader, SupportsTriggerAvailableNow):
             support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
     else:
-        if isinstance(reader, SupportsAdmissionControl):
+        import inspect
+        sig = inspect.signature(reader.latestOffset)
+        if len(sig.parameters) == 0:
+            # old signature of latestOffset()
+            pass
+        else:
+            # we don't check the number/type of parameters here strictly - we leave the python to
+            # raise error when calling the method if the types do not match.
             support_flags |= SUPPORTS_ADMISSION_CONTROL
         if isinstance(reader, SupportsTriggerAvailableNow):
             support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
@@ -186,11 +193,7 @@ def latest_offset_admission_control_func(
 
 
 def get_default_read_limit_func(reader: DataSourceStreamReader, outfile: IO) -> None:
-    if isinstance(reader, SupportsAdmissionControl):
-        limit = reader.getDefaultReadLimit()
-    else:
-        limit = ReadAllAvailable()
-
+    limit = reader.getDefaultReadLimit()
     write_with_length(json.dumps(limit.dump()).encode("utf-8"), outfile)
 
 
@@ -199,14 +202,11 @@ def report_latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> No
         # We do not consider providing latest offset on simple stream reader.
         write_int(0, outfile)
     else:
-        if isinstance(reader, SupportsAdmissionControl):
-            offset = reader.reportLatestOffset()
-            if offset is None:
-                write_int(0, outfile)
-            else:
-                write_with_length(json.dumps(offset).encode("utf-8"), outfile)
-        else:
+        offset = reader.reportLatestOffset()
+        if offset is None:
             write_int(0, outfile)
+        else:
+            write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:

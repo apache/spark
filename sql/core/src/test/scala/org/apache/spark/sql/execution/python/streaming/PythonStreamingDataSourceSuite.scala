@@ -18,14 +18,12 @@ package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
-
 import scala.concurrent.duration._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
-import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonMicroBatchStreamWithAdmissionControl, PythonStreamingSourceOffset}
+import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonMicroBatchStreamWithAdmissionControl, PythonStreamingSourceOffset, PythonStreamingSourceReadLimit}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
@@ -685,12 +683,10 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |    ReadAllAvailable,
        |    ReadLimit,
        |    ReadMaxRows,
-       |    SupportsAdmissionControl,
        |)
        |
        |class TestDataStreamReader(
        |    DataSourceStreamReader,
-       |    SupportsAdmissionControl
        |):
        |    def initialOffset(self):
        |        return {"partition-1": 0}
@@ -732,13 +728,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |    ReadAllAvailable,
        |    ReadLimit,
        |    ReadMaxRows,
-       |    SupportsAdmissionControl,
        |    SupportsTriggerAvailableNow
        |)
        |
        |class TestDataStreamReader(
        |    DataSourceStreamReader,
-       |    SupportsAdmissionControl,
        |    SupportsTriggerAvailableNow
        |):
        |    def initialOffset(self):
@@ -967,13 +961,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     pythonDs.setShortName("ErrorDataSource")
 
     def testMicroBatchStreamError(action: String, msg: String)(
-        func: PythonMicroBatchStream => Unit): Unit = {
+        func: PythonMicroBatchStreamWithAdmissionControl => Unit): Unit = {
       val options = CaseInsensitiveStringMap.empty()
       val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
         pythonDs, errorDataSourceName, inputSchema, options)
       runner.init()
 
-      val stream = new PythonMicroBatchStream(
+      // New default for python stream reader is with Admission Control
+      val stream = new PythonMicroBatchStreamWithAdmissionControl(
         pythonDs,
         errorDataSourceName,
         inputSchema,
@@ -1002,12 +997,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         stream.initialOffset()
     }
 
+    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError("latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") {
       stream =>
-        stream.latestOffset()
+        val readLimit = PythonStreamingSourceReadLimit(
+          PythonStreamingSourceRunner.READ_ALL_AVAILABLE_JSON)
+        stream.latestOffset(offset, readLimit)
     }
 
-    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError("planPartitions", "[NOT_IMPLEMENTED] partitions is not implemented") {
       stream =>
         stream.planInputPartitions(offset, offset)

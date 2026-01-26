@@ -30,7 +30,6 @@ from pyspark.sql.datasource import (
 from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
-    SupportsAdmissionControl,
     ReadMaxBytes,
     ReadMaxRows,
     ReadMinRows,
@@ -65,7 +64,7 @@ class PrefetchedCacheEntry:
         self.iterator = iterator
 
 
-class _SimpleStreamReaderWrapper(DataSourceStreamReader, SupportsAdmissionControl):
+class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     """
     A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an

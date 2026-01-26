@@ -117,52 +117,6 @@ class ReadMaxBytes(ReadLimit):
         return {"max_bytes": self.max_bytes}
 
 
-class SupportsAdmissionControl(ABC):
-    def getDefaultReadLimit(self) -> ReadLimit:
-        """
-          FIXME: docstring needed
-
-        /**
-         * Returns the read limits potentially passed to the data source through options when creating
-         * the data source.
-         */
-        """
-        return ReadAllAvailable()
-
-    @abstractmethod
-    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
-        """
-          FIXME: docstring needed
-
-        /**
-         * Returns the most recent offset available given a read limit. The start offset can be used
-         * to figure out how much new data should be read given the limit. Users should implement this
-         * method instead of latestOffset for a MicroBatchStream or getOffset for Source.
-         * <p>
-         * When this method is called on a `Source`, the source can return `null` if there is no
-         * data to process. In addition, for the very first micro-batch, the `startOffset` will be
-         * null as well.
-         * <p>
-         * When this method is called on a MicroBatchStream, the `startOffset` will be `initialOffset`
-         * for the very first micro-batch. The source can return `null` if there is no data to process.
-         */
-        """
-        pass
-
-    def reportLatestOffset(self) -> Optional[dict]:
-        """
-          FIXME: docstring needed
-
-        /**
-         * Returns the most recent offset available.
-         * <p>
-         * The source can return `null`, if there is no data to process or the source does not support
-         * to this method.
-         */
-        """
-        return None
-
-
 class SupportsTriggerAvailableNow(ABC):
     @abstractmethod
     def prepareForTriggerAvailableNow(self) -> None:
