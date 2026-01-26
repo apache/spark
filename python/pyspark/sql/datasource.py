@@ -716,8 +716,6 @@ class DataSourceStreamReader(ABC):
 
     from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
 
-    # FIXME: Will this work without abstractmethod marker?
-    # @abstractmethod
     def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
         """
         FIXME: docstring needed
