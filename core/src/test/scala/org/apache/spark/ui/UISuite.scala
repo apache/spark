@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
 import java.net.{URI, URL}
+import java.net.{InetSocketAddress, Socket}
 import java.util.Locale
 
 import scala.io.Source
@@ -26,6 +27,7 @@ import scala.io.Source
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.server.SslConnectionFactory
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
@@ -60,7 +62,7 @@ class UISuite extends SparkFunSuite {
     (conf, securityMgr, securityMgr.getSSLOptions("ui"))
   }
 
-  private def sslEnabledConf(sslPort: Option[Int] = None):
+  private def sslEnabledConf(sslPort: Option[Int] = None, disableHttpPort: Option[Boolean] = None):
       (SparkConf, SecurityManager, SSLOptions) = {
     val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
@@ -70,6 +72,9 @@ class UISuite extends SparkFunSuite {
       .set("spark.ssl.ui.keyPassword", "123456")
     sslPort.foreach { p =>
       conf.set("spark.ssl.ui.port", p.toString)
+    }
+    disableHttpPort.foreach { d =>
+      conf.set("spark.ssl.ui.disableHttpPort", d.toString)
     }
     val securityMgr = new SecurityManager(conf)
     (conf, securityMgr, securityMgr.getSSLOptions("ui"))
@@ -352,6 +357,42 @@ class UISuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-55201: should only bind to secure port when disableHttpPort is true") {
+    var socket: ServerSocket = null
+    val (conf, _, sslOptions) = sslEnabledConf(disableHttpPort = Some(true))
+    assert(conf.get("spark.ssl.ui.disableHttpPort") == "true")
+    assert(sslOptions.disableHttpPort.contains(true))
+
+    var serverInfo: ServerInfo = null
+    try {
+      socket = new ServerSocket(0)
+      val httpPort = socket.getLocalPort
+      socket.close()
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", httpPort, sslOptions, conf)
+
+      assert(serverInfo.securePort.isDefined)
+      assert(serverInfo.boundPort == -1)
+
+      val connectors = serverInfo.server.getConnectors
+      assert(connectors.length == 1, "Expected only 1 connector (HTTPS)")
+
+      val connector = connectors.head.asInstanceOf[org.eclipse.jetty.server.ServerConnector]
+      val actualPort = connector.getLocalPort
+
+      assert(actualPort > 0)
+      assert(serverInfo.securePort.contains(actualPort))
+      assert(connector.getConnectionFactory(classOf[SslConnectionFactory]) != null)
+      assert(connector.getDefaultProtocol.equalsIgnoreCase("ssl"),
+        "The default protocol should be SSL")
+
+      assert(!isPortReachable(httpPort))
+      assert(isPortReachable(serverInfo.securePort.get))
+    } finally {
+      stopServer(serverInfo)
+      closeSocket(socket)
+    }
+  }
+
   test("redirect with proxy server support") {
     val proxyRoot = "https://proxy.example.com:443/prefix"
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
@@ -510,6 +551,18 @@ class UISuite extends SparkFunSuite {
     ctx.addServlet(servletHolder, "/root")
     ctx.addServlet(servletHolder, "/")
     (servlet, ctx)
+  }
+
+  private def isPortReachable(port: Int): Boolean = {
+    val socket = new Socket()
+    try {
+      socket.connect(new InetSocketAddress("127.0.0.1", port), 500)
+      true
+    } catch {
+      case _: Exception => false
+    } finally {
+      socket.close()
+    }
   }
 
   def stopServer(info: ServerInfo): Unit = {

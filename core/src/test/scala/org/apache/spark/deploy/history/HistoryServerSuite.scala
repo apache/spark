@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
-import java.net.{HttpURLConnection, URI, URL}
+import java.net.{ConnectException, HttpURLConnection, ServerSocket, URI, URL}
 import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
@@ -106,8 +106,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
+    val httpPort = conf.get(HISTORY_SERVER_UI_PORT)
 
-    server = new HistoryServer(conf, provider, securityManager, 18080)
+    server = new HistoryServer(conf, provider, securityManager, httpPort)
     server.bind()
     provider.start()
     port = server.boundPort
@@ -643,6 +644,30 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         val sc = TestUtils.httpResponseCode(new URI(url).toURL, headers = headers)
         assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
       }
+    }
+  }
+
+  test("SPARK-55201: disable HTTP port when disableHttpPort is true") {
+    stop()
+
+    val socket = new ServerSocket(0)
+    val httpPort = socket.getLocalPort
+    socket.close()
+
+    init(
+      "spark.history.ui.port" -> httpPort.toString,
+      "spark.ssl.historyServer.enabled" -> "true",
+      "spark.ssl.historyServer.port" -> "0",
+      "spark.ssl.historyServer.keyStore" -> getTestResourcePath("spark.keystore"),
+      "spark.ssl.historyServer.keyStorePassword" -> "123456",
+      "spark.ssl.historyServer.keyPassword" -> "123456",
+      "spark.ssl.historyServer.disableHttpPort" -> "true")
+
+    assert(TestUtils.httpResponseCode(new URI(s"https://$localhost:$port").toURL) ===
+      HttpServletResponse.SC_OK)
+
+    intercept[ConnectException] {
+      TestUtils.httpResponseCode(new URI(s"http://$localhost:$httpPort").toURL)
     }
   }
 
