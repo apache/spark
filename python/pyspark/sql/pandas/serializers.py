@@ -346,7 +346,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
 
         if self._assign_cols_by_name:
             batch_iter = (
-                (ArrowBatchTransformer.assign_cols_by_name(batch, arrow_type), arrow_type)
+                (ArrowBatchTransformer.reorder_columns(batch, arrow_type), arrow_type)
                 for batch, arrow_type in batch_iter
             )
 
