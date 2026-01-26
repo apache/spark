@@ -23,6 +23,7 @@ import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.RancherDesktopBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
@@ -102,6 +103,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
   test("A driver-only Spark job with an OnDemand PVC volume", k8sTestTag, commandTestTag) {
     val storageClassName = testBackend match {
       case MinikubeTestBackend => "standard"
+      case RancherDesktopBackend => "local-path"
       case _ => "hostpath"
     }
     val DRIVER_PREFIX = "spark.kubernetes.driver.volumes.persistentVolumeClaim"
@@ -154,6 +156,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
   test("A Spark job with two executors with OnDemand PVC volumes", k8sTestTag, commandTestTag) {
     val storageClassName = testBackend match {
       case MinikubeTestBackend => "standard"
+      case RancherDesktopBackend => "local-path"
       case _ => "hostpath"
     }
     val EXECUTOR_PREFIX = "spark.kubernetes.executor.volumes.persistentVolumeClaim"
