@@ -1845,11 +1845,15 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     assert not (bool(init_data_pandas) and bool(data_pandas))
 
                     if bool(data_pandas):
-                        for row in PandasBatchTransformer.wrap_series(data_pandas).itertuples(index=False):
+                        for row in PandasBatchTransformer.wrap_series(data_pandas).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
                     elif bool(init_data_pandas):
-                        for row in PandasBatchTransformer.wrap_series(init_data_pandas).itertuples(index=False):
+                        for row in PandasBatchTransformer.wrap_series(init_data_pandas).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 

@@ -123,9 +123,7 @@ class PandasBatchTransformer:
         return pd.concat(series_list, axis=1)
 
     @staticmethod
-    def reorder_columns(
-        df: "pd.DataFrame", schema: "pa.StructType"
-    ) -> "pd.DataFrame":
+    def reorder_columns(df: "pd.DataFrame", schema: "pa.StructType") -> "pd.DataFrame":
         """
         Reorder a DataFrame's columns to match the schema field order by name.
 
