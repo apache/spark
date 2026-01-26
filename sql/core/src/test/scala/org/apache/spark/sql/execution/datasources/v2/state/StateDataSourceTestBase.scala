@@ -444,6 +444,27 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       StopStream
     )
   }
+
+  /**
+   * Helper function to create a query that combines deduplication and aggregation.
+   * This creates a more complex query with multiple stateful operators:
+   * 1. Deduplicates based on (key, value) pairs
+   * 2. Groups by key and aggregates (count, sum, max)
+   */
+  protected def getDedupAndAggregationQuery(
+      inputData: MemoryStream[(String, Int)]): DataFrame = {
+    inputData.toDS()
+      .selectExpr("_1 AS key", "_2 AS value")
+      .withColumn("eventTime", (unix_timestamp() + $"value").cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates("key", "value")  // First stateful operator: dedup
+      .groupBy($"key")  // Second stateful operator: aggregation
+      .agg(
+        count("*").as("count"),
+        sum("value").as("sum"),
+        max("value").as("max")
+      )
+  }
 }
 
 case class Event(sessionId: String, timestamp: Timestamp)
