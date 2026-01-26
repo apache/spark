@@ -322,8 +322,13 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
 
-    Loads Arrow record batches as ``[[pyarrow.RecordBatch]]`` (one ``[pyarrow.RecordBatch]`` per
-    group) and serializes ``[([pyarrow.RecordBatch], arrow_type)]``.
+    Used by:
+        - SQL_GROUPED_MAP_ARROW_UDF
+        - SQL_GROUPED_MAP_ARROW_ITER_UDF
+
+    Loads Arrow record batches as ``Iterator[Iterator[pyarrow.RecordBatch]]`` (one inner iterator
+    per group). Each batch contains a single struct column.
+    Serializes ``Iterator[Tuple[pyarrow.RecordBatch, pyarrow.DataType]]``.
 
     Parameters
     ----------
