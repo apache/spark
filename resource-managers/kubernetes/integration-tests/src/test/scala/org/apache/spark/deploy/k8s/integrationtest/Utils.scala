@@ -84,7 +84,6 @@ object Utils extends Logging {
     }
     val listener = new ReadyListener()
     val watch = pod
-      .redirectingInput()
       .writingOutput(out)
       .writingError(System.err)
       .withTTY()
@@ -92,7 +91,6 @@ object Utils extends Logging {
       .exec(cmd.toArray: _*)
     // under load sometimes the stdout isn't connected by the time we try to read from it.
     listener.waitForInputStreamToConnect()
-    System.in.transferTo(watch.getInput)
     listener.waitForClose()
     watch.close()
     out.flush()
