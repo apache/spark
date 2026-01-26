@@ -342,7 +342,7 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     ...     t[0] == np.str_
     True
     >>> t[1]
-    LongType()
+    StringType()
     >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType())
     >>> pandas_on_spark_type(datetime.datetime)
