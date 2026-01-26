@@ -258,6 +258,13 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Project(self._plan, sql_expr), session=self._session)
 
     def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
+        if kwargs:
+            if exprs:
+                raise PySparkValueError(
+                    "Cannot use both positional arguments and keyword arguments"
+                )
+            exprs = (kwargs,)
+
         if not exprs:
             raise PySparkValueError(
                 errorClass="CANNOT_BE_EMPTY",
@@ -309,9 +316,7 @@ class DataFrame(ParentDataFrame):
         return self._session
 
     def count(self) -> int:
-        table, _ = self.agg(
-            F._invoke_function("count", F.lit(1))
-        )._to_table()  # type: ignore[operator]
+        table, _ = self.agg(F._invoke_function("count", F.lit(1)))._to_table()
         return table[0][0].as_py()
 
     def crossJoin(self, other: ParentDataFrame) -> ParentDataFrame:

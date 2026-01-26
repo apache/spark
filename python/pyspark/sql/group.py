@@ -170,7 +170,7 @@ class GroupedData(PandasGroupedOpsMixin):
         +-----+--------+
         |Alice|       2|
         |  Bob|       5|
-        +-----+--------+`
+        +-----+--------+
 
         Group-by name, and calculate the minimum age.
 
