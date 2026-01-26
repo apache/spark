@@ -161,9 +161,7 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         # With struct column
         struct_type = pa.struct([("a", pa.int64()), ("b", pa.string())])
         struct_array = pa.array([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}], type=struct_type)
-        batch = pa.RecordBatch.from_arrays(
-            [pa.array([10, 20]), struct_array], names=["id", "data"]
-        )
+        batch = pa.RecordBatch.from_arrays([pa.array([10, 20]), struct_array], names=["id", "data"])
         target_schema = pa.struct([("data", struct_type), ("id", pa.int64())])
         reordered = ArrowBatchTransformer.reorder_columns(batch, target_schema)
         self.assertEqual(reordered.schema.names, ["data", "id"])
