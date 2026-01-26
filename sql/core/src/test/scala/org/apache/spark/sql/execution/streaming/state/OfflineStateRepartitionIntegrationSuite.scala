@@ -51,7 +51,6 @@ class OfflineStateRepartitionIntegrationSuite
       checkpointDir: String,
       batchId: Long,
       storeName: String,
-      columnFamilyName: String,
       additionalOptions: Map[String, String]): Dataset[Row] = {
     var reader = spark.read
       .format("statestore")
@@ -71,6 +70,7 @@ class OfflineStateRepartitionIntegrationSuite
 
   /**
    * Read states for all specified stores and column families.
+   * @param storeToColumnFamilyToStateSourceOptions: Map[store -> Map [colFamily -> sourceOptions]]
    * Returns Map[store -> Map[columnFamily -> state rows]]
    */
   private def readStateDataByStoreName(
@@ -81,7 +81,7 @@ class OfflineStateRepartitionIntegrationSuite
     storeToColumnFamilyToStateSourceOptions.map { case (storeName, columnFamilyToOptions) =>
       val columnFamilyData = columnFamilyToOptions.map { case (cfName, options) =>
         val stateData = readStateData(
-          checkpointDir, batchId, storeName, cfName, options).collect()
+          checkpointDir, batchId, storeName, options).collect()
         cfName -> stateData
       }
       storeName -> columnFamilyData
@@ -559,8 +559,8 @@ class OfflineStateRepartitionIntegrationSuite
             val query = getStreamStreamJoinQuery(inputData)
             testStream(query)(
               StartStream(checkpointLocation = checkpointDir),
-              AddData(inputData, (11, 16L), (12, 16L), (13, 17L)),
-              CheckNewAnswer((12, 16, 12, 16))
+              AddData(inputData, (6, 10L)),
+              CheckNewAnswer((6, 10, 6, 10), (6, 6, 6, 10))
             )
           },
           storeToColumnFamilyToStateSourceOptions = storeToOptions
