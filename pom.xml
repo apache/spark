@@ -102,10 +102,13 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <!-- Disable Kafka connector modules because we are not using Spark with Kafka at Affirm -->
+    <!--
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
+    -->
     <module>connector/avro</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
@@ -122,6 +125,7 @@
     <asm.version>9.7.1</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
+    <iceberg.version>1.10.1</iceberg.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -135,6 +139,8 @@
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.9.0</kafka.version>
+    <!-- OpenLineage for Spark lineage tracking - bundled in Affirm custom distribution -->
+    <openlineage.version>1.38.0</openlineage.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.2</parquet.version>
@@ -449,6 +455,28 @@
       <groupId>com.github.sbt.junit</groupId>
       <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <version>9.2.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.iceberg</groupId>
+      <artifactId>iceberg-spark-runtime-4.0_2.13</artifactId>
+      <version>${iceberg.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.iceberg</groupId>
+      <artifactId>iceberg-aws-bundle</artifactId>
+      <version>${iceberg.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <version>${hadoop.version}</version>
     </dependency>
   </dependencies>
   <dependencyManagement>

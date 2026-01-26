@@ -115,4 +115,5 @@ case "$1" in
 esac
 
 # Execute the container CMD under tini for better hygiene
-exec /usr/bin/tini -s -- "${CMD[@]}"
+export SPARK_VERSION="4.0.0"
+exec /tini -s -- "${CMD[@]}"
