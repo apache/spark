@@ -33,9 +33,9 @@ import org.apache.spark.sql.types.StructType
  * Validation utilities for DataStreamReader in Connect.
  *
  * Note: This object duplicates validation logic from
- * [[org.apache.spark.sql.catalyst.streaming.StreamingSourceValidation]]
- * because sql/connect/common does not depend on sql/catalyst. If you modify this validation,
- * ensure the logic stays synchronized with StreamingSourceValidation.
+ * [[org.apache.spark.sql.catalyst.streaming.StreamingSourceValidation]] because
+ * sql/connect/common does not depend on sql/catalyst. If you modify this validation, ensure the
+ * logic stays synchronized with StreamingSourceValidation.
  */
 private object DataStreamReader {
   private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
