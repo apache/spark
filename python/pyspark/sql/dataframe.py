@@ -4321,7 +4321,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
+    def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
         """Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy().agg()``).
 
@@ -4345,6 +4345,12 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.agg({"age": "max"}).show()
+        +--------+
+        |max(age)|
+        +--------+
+        |       5|
+        +--------+
+        >>> df.agg(age="max").show()
         +--------+
         |max(age)|
         +--------+

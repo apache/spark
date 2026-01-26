@@ -1162,8 +1162,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> ParentDataFrame:
-        return self.groupBy().agg(*exprs)  # type: ignore[arg-type]
+    def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
+        return self.groupBy().agg(*exprs, **kwargs)  # type: ignore[arg-type]
 
     def observe(
         self,

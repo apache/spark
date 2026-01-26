@@ -257,7 +257,7 @@ class DataFrame(ParentDataFrame):
 
         return DataFrame(plan.Project(self._plan, sql_expr), session=self._session)
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> ParentDataFrame:
+    def agg(self, *exprs: Union[Column, Dict[str, str]], **kwargs: str) -> "DataFrame":
         if not exprs:
             raise PySparkValueError(
                 errorClass="CANNOT_BE_EMPTY",
@@ -271,7 +271,7 @@ class DataFrame(ParentDataFrame):
             # other expressions
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Expression"
             exprs = cast(Tuple[Column, ...], exprs)
-            return self.groupBy().agg(*exprs)
+            return self.groupBy().agg(*exprs, **kwargs)
 
     def alias(self, alias: str) -> ParentDataFrame:
         res = DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
