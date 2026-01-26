@@ -3153,7 +3153,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def mapper(batches: "Iterable[pa.RecordBatch]") -> Any:
+        def mapper(batches):
             # Flatten struct column into separate columns
             flattened = map(ArrowBatchTransformer.flatten_struct, batches)
 
