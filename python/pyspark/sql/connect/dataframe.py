@@ -172,7 +172,7 @@ class DataFrame(ParentDataFrame):
     def __getstate__(self) -> Any:
         return self.__dict__.copy()
 
-    def __setstate__(self, state) -> None:
+    def __setstate__(self, state: Any) -> None:
         self.__dict__.update(state)
 
     def __repr__(self) -> str:
