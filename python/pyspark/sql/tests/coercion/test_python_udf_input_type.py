@@ -61,7 +61,7 @@ if have_pandas:
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
 # e.g.:
 # SPARK_GENERATE_GOLDEN_FILES=1 python/run-tests -k
-# --testnames 'pyspark.sql.tests.coercion.test_pandas_udf_input_type'
+# --testnames 'pyspark.sql.tests.coercion.test_python_udf_input_type'
 # If package tabulate https://pypi.org/project/tabulate/ is installed,
 # it will also re-generate the Markdown files.
 
@@ -73,7 +73,7 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class PandasUDFInputTypeTests(ReusedSQLTestCase):
+class UDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -98,7 +98,7 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase):
 
     @property
     def prefix(self):
-        return "golden_pandas_udf_input_type_coercion"
+        return "golden_python_udf_input_type_coercion"
 
     @property
     def test_cases(self):
@@ -343,13 +343,14 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase):
                 assert values == input_data, f"Input {values} != output {input_data}"
 
                 result.append(str(types))
-                result.append(str(values_str).replace("\n", " "))
+                result.append(str(values_str))
 
             except Exception as e:
-                print("error_msg", e)
-                # Clean up exception message to remove newlines and extra whitespace
-                e = str(e).replace("\n", " ").replace("\r", " ").replace("\t", " ")
-                result.append(f"✗ {e}")
+                print("Exception", e)
+                result.append(f"✗ {str(e)}")
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = [r.replace("\n", " ").replace("\r", " ").replace("\t", " ") for r in result]
 
             error_msg = None
             if testing and result != list(golden.iloc[idx]):
