@@ -136,6 +136,50 @@ class ArrowStreamSerializer(Serializer):
         for batch in reader:
             yield batch
 
+    def _load_group_dataframes(self, stream, num_dfs: int = 1):
+        """
+        Load groups with specified number of dataframes from stream.
+
+        For num_dfs=1, yields a single-element tuple containing a lazy iterator.
+        For num_dfs>1, yields a tuple of eagerly loaded lists to ensure correct
+        stream position when reading multiple dataframes sequentially.
+
+        Parameters
+        ----------
+        stream
+            The input stream to read from
+        num_dfs : int
+            The expected number of dataframes in each group (e.g., 1 for grouped UDFs,
+            2 for cogrouped UDFs)
+
+        Yields
+        ------
+        tuple
+            For num_dfs=1: tuple[Iterator[pa.RecordBatch]]
+            For num_dfs>1: tuple[list[pa.RecordBatch], ...]
+        """
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == num_dfs:
+                if num_dfs == 1:
+                    # Single dataframe: can use lazy iterator
+                    yield (ArrowStreamSerializer.load_stream(self, stream),)
+                else:
+                    # Multiple dataframes: must eagerly load sequentially
+                    # to maintain correct stream position
+                    yield tuple(
+                        list(ArrowStreamSerializer.load_stream(self, stream))
+                        for _ in range(num_dfs)
+                    )
+            elif dataframes_in_group > 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
     def __repr__(self):
         return "ArrowStreamSerializer"
 
@@ -1023,23 +1067,12 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
                 struct = batch.column(0)
                 yield pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
 
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 1:
-                batch_iter = process_group(ArrowStreamSerializer.load_stream(self, stream))
-                yield batch_iter
-                # Make sure the batches are fully iterated before getting the next group
-                for _ in batch_iter:
-                    pass
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            processed_iter = process_group(batches)
+            yield processed_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in processed_iter:
+                pass
 
     def __repr__(self):
         return "GroupArrowUDFSerializer"
@@ -1054,27 +1087,14 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
         Each group yields Iterator[Tuple[pa.Array, ...]], allowing UDF to process batches one by one
         without consuming all batches upfront.
         """
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 1:
-                # Lazily read and convert Arrow batches one at a time from the stream
-                # This avoids loading all batches into memory for the group
-                batch_iter = (
-                    batch.columns for batch in ArrowStreamSerializer.load_stream(self, stream)
-                )
-                yield batch_iter
-                # Make sure the batches are fully iterated before getting the next group
-                for _ in batch_iter:
-                    pass
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            # Lazily read and convert Arrow batches one at a time from the stream
+            # This avoids loading all batches into memory for the group
+            columns_iter = (batch.columns for batch in batches)
+            yield columns_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in columns_iter:
+                pass
 
     def __repr__(self):
         return "ArrowStreamAggArrowUDFSerializer"
@@ -1108,29 +1128,17 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         Each group yields Iterator[Tuple[pd.Series, ...]], allowing UDF to
         process batches one by one without consuming all batches upfront.
         """
-
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 1:
-                # Lazily read and convert Arrow batches to pandas Series one at a time
-                # from the stream. This avoids loading all batches into memory for the group
-                batch_iter = (
-                    tuple(self.arrow_to_pandas(c, i) for i, c in enumerate(batch.columns))
-                    for batch in ArrowStreamSerializer.load_stream(self, stream)
-                )
-                yield batch_iter
-                # Make sure the batches are fully iterated before getting the next group
-                for _ in batch_iter:
-                    pass
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            # Lazily read and convert Arrow batches to pandas Series one at a time
+            # from the stream. This avoids loading all batches into memory for the group
+            series_iter = (
+                tuple(self.arrow_to_pandas(c, i) for i, c in enumerate(batch.columns))
+                for batch in batches
+            )
+            yield series_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in series_iter:
+                pass
 
     def __repr__(self):
         return "ArrowStreamAggPandasUDFSerializer"
@@ -1173,25 +1181,14 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 ]
                 yield series
 
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 1:
-                # Lazily read and convert Arrow batches one at a time from the stream
-                # This avoids loading all batches into memory for the group
-                batch_iter = process_group(ArrowStreamSerializer.load_stream(self, stream))
-                yield batch_iter
-                # Make sure the batches are fully iterated before getting the next group
-                for _ in batch_iter:
-                    pass
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            # Lazily read and convert Arrow batches one at a time from the stream
+            # This avoids loading all batches into memory for the group
+            series_iter = process_group(batches)
+            yield series_iter
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in series_iter:
+                pass
 
     def dump_stream(self, iterator, stream):
         """
@@ -1224,21 +1221,8 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         """
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
         """
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 2:
-                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield batches1, batches2
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+            yield left_batches, right_batches
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
@@ -1249,30 +1233,17 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
 
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 2:
-                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield (
-                    [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batches1).itercolumns())
-                    ],
-                    [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batches2).itercolumns())
-                    ],
-                )
-
-            elif dataframes_in_group != 0:
-                raise PySparkValueError(
-                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
-                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
-                )
+        for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+            yield (
+                [
+                    self.arrow_to_pandas(c, i)
+                    for i, c in enumerate(pa.Table.from_batches(left_batches).itercolumns())
+                ],
+                [
+                    self.arrow_to_pandas(c, i)
+                    for i, c in enumerate(pa.Table.from_batches(right_batches).itercolumns())
+                ],
+            )
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
