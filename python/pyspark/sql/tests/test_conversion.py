@@ -143,6 +143,43 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
 
+    def test_reorder_columns(self):
+        """Test reordering columns to match target schema."""
+        import pyarrow as pa
+
+        # Basic reordering with subset selection
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"]), pa.array([1.0, 2.0, 3.0])],
+            names=["x", "y", "z"],
+        )
+        target_schema = pa.struct([("z", pa.float64()), ("x", pa.int64())])
+        reordered = ArrowBatchTransformer.reorder_columns(batch, target_schema)
+        self.assertEqual(reordered.schema.names, ["z", "x"])
+        self.assertEqual(reordered.column(0).to_pylist(), [1.0, 2.0, 3.0])
+        self.assertEqual(reordered.column(1).to_pylist(), [1, 2, 3])
+
+        # With struct column
+        struct_type = pa.struct([("a", pa.int64()), ("b", pa.string())])
+        struct_array = pa.array([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}], type=struct_type)
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([10, 20]), struct_array], names=["id", "data"]
+        )
+        target_schema = pa.struct([("data", struct_type), ("id", pa.int64())])
+        reordered = ArrowBatchTransformer.reorder_columns(batch, target_schema)
+        self.assertEqual(reordered.schema.names, ["data", "id"])
+        self.assertEqual(reordered.column(0).to_pylist(), [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
+        self.assertEqual(reordered.column(1).to_pylist(), [10, 20])
+
+        # Empty batch
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([], type=pa.int64()), pa.array([], type=pa.string())],
+            names=["x", "y"],
+        )
+        target_schema = pa.struct([("y", pa.string()), ("x", pa.int64())])
+        reordered = ArrowBatchTransformer.reorder_columns(batch, target_schema)
+        self.assertEqual(reordered.num_rows, 0)
+        self.assertEqual(reordered.schema.names, ["y", "x"])
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ConversionTests(unittest.TestCase):
