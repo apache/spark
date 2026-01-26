@@ -26,22 +26,19 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     val offset = SequentialUnionOffset(
       activeSourceName = "source2",
       completedSources = Set("source1"),
-      sourceNames = Seq("source1", "source2", "source3"),
-      version = 1
+      sourceNames = Seq("source1", "source2", "source3")
     )
 
     assert(offset.activeSourceName === "source2")
     assert(offset.completedSources === Set("source1"))
     assert(offset.sourceNames === Seq("source1", "source2", "source3"))
-    assert(offset.version === 1)
   }
 
   test("SequentialUnionOffset - JSON serialization and deserialization") {
     val offset = SequentialUnionOffset(
       activeSourceName = "kafka-live",
       completedSources = Set("delta-historical", "delta-backfill"),
-      sourceNames = Seq("delta-historical", "delta-backfill", "kafka-live"),
-      version = 1
+      sourceNames = Seq("delta-historical", "delta-backfill", "kafka-live")
     )
 
     val json = offset.json()
@@ -50,7 +47,6 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     assert(deserialized.activeSourceName === offset.activeSourceName)
     assert(deserialized.completedSources === offset.completedSources)
     assert(deserialized.sourceNames === offset.sourceNames)
-    assert(deserialized.version === offset.version)
   }
 
   test("SequentialUnionOffset - JSON roundtrip with special characters") {
@@ -58,8 +54,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       activeSourceName = "source-with-dashes_and_underscores",
       completedSources = Set("source.with.dots", "source/with/slashes"),
       sourceNames = Seq("source.with.dots", "source/with/slashes",
-        "source-with-dashes_and_underscores"),
-      version = 1
+        "source-with-dashes_and_underscores")
     )
 
     val json = offset.json()
@@ -73,8 +68,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       SequentialUnionOffset(
         activeSourceName = "source1",
         completedSources = Set.empty,
-        sourceNames = Seq.empty,
-        version = 1
+        sourceNames = Seq.empty
       )
     }
     assert(ex.getMessage.contains("sourceNames must not be empty"))
@@ -85,8 +79,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       SequentialUnionOffset(
         activeSourceName = "nonexistent",
         completedSources = Set.empty,
-        sourceNames = Seq("source1", "source2"),
-        version = 1
+        sourceNames = Seq("source1", "source2")
       )
     }
     assert(ex.getMessage.contains("activeSourceName"))
@@ -98,8 +91,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       SequentialUnionOffset(
         activeSourceName = "source2",
         completedSources = Set("source1", "nonexistent"),
-        sourceNames = Seq("source1", "source2", "source3"),
-        version = 1
+        sourceNames = Seq("source1", "source2", "source3")
       )
     }
     assert(ex.getMessage.contains("completedSources must be a subset"))
@@ -110,8 +102,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       SequentialUnionOffset(
         activeSourceName = "source2",
         completedSources = Set("source1", "source2"),
-        sourceNames = Seq("source1", "source2", "source3"),
-        version = 1
+        sourceNames = Seq("source1", "source2", "source3")
       )
     }
     assert(ex.getMessage.contains("activeSourceName"))
@@ -122,8 +113,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     val offset = SequentialUnionOffset(
       activeSourceName = "source1",
       completedSources = Set.empty,
-      sourceNames = Seq("source1", "source2", "source3"),
-      version = 1
+      sourceNames = Seq("source1", "source2", "source3")
     )
 
     assert(offset.activeSourceName === "source1")
@@ -134,8 +124,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     val offset = SequentialUnionOffset(
       activeSourceName = "source2",
       completedSources = Set("source1"),
-      sourceNames = Seq("source1", "source2", "source3"),
-      version = 1
+      sourceNames = Seq("source1", "source2", "source3")
     )
 
     assert(offset.activeSourceName === "source2")
@@ -146,8 +135,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     val offset = SequentialUnionOffset(
       activeSourceName = "source3",
       completedSources = Set("source1", "source2"),
-      sourceNames = Seq("source1", "source2", "source3"),
-      version = 1
+      sourceNames = Seq("source1", "source2", "source3")
     )
 
     assert(offset.activeSourceName === "source3")
@@ -160,8 +148,7 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
       activeSourceName = "source5",
       completedSources = Set("source1", "source2", "source3", "source4"),
       sourceNames = Seq("source1", "source2", "source3", "source4", "source5",
-        "source6"),
-      version = 1
+        "source6")
     )
 
     val json = offset.json()
@@ -170,30 +157,5 @@ class SequentialUnionOffsetSuite extends SparkFunSuite {
     assert(deserialized.completedSources.size === 4)
     assert(deserialized.completedSources ===
       Set("source1", "source2", "source3", "source4"))
-  }
-
-  test("SequentialUnionOffset - version field preserved") {
-    val offset1 = SequentialUnionOffset(
-      activeSourceName = "source1",
-      completedSources = Set.empty,
-      sourceNames = Seq("source1", "source2"),
-      version = 1
-    )
-
-    val offset2 = SequentialUnionOffset(
-      activeSourceName = "source1",
-      completedSources = Set.empty,
-      sourceNames = Seq("source1", "source2"),
-      version = 2
-    )
-
-    assert(offset1.version === 1)
-    assert(offset2.version === 2)
-
-    val json1 = offset1.json()
-    val json2 = offset2.json()
-
-    assert(SequentialUnionOffset(json1).version === 1)
-    assert(SequentialUnionOffset(json2).version === 2)
   }
 }

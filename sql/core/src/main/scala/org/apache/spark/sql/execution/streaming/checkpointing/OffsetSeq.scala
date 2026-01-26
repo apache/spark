@@ -375,13 +375,11 @@ object OffsetSeqControlBatchInfo {
  * @param activeSourceName The name of the currently active source being processed.
  * @param completedSources Set of source names that have finished processing.
  * @param sourceNames All source names in the order they should be processed.
- * @param version Format version for future compatibility.
  */
 case class SequentialUnionOffset(
     activeSourceName: String,
     completedSources: Set[String],
-    sourceNames: Seq[String],
-    version: Int = 1) extends OffsetV2 {
+    sourceNames: Seq[String]) extends OffsetV2 {
 
   // Validate on construction
   require(sourceNames.nonEmpty, "sourceNames must not be empty")
