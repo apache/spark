@@ -24,7 +24,7 @@ import org.scalatest.time.{Milliseconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
-import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.{DockerForDesktopBackend, RancherDesktopBackend}
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
@@ -34,6 +34,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     val (storageClassName, hostname) = testBackend match {
       case MinikubeTestBackend => ("standard", BACKEND_MINIKUBE)
       case DockerForDesktopBackend => ("hostpath", BACKEND_DOCKER_DESKTOP)
+      case RancherDesktopBackend => ("local-path", "lima-rancher-desktop")
       case _ => ("hostpath", BACKEND_DOCKER_DESKTOP)
     }
     val pvBuilder = new PersistentVolumeBuilder()
@@ -143,7 +144,8 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  ignore("PVs with local hostpath and storageClass on statefulsets", k8sTestTag, pvTestTag) {
+  ignore("PVs with local hostpath and storageClass on statefulsets", k8sTestTag, pvTestTag,
+      commandTestTag) {
     assume(this.getClass.getSimpleName == "KubernetesSuite")
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
