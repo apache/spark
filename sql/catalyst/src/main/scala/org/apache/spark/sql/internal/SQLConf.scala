@@ -2945,6 +2945,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART =
+    buildConf("spark.sql.streaming.checkUnfinishedRepartitionOnRestart")
+      .internal()
+      .doc("When true, checks if the latest batch is for an unfinished state repartitioning " +
+        "operation, on query restart. If so, it will fail the query and require the " +
+        "repartitioning to be complete before restarting the query.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -7217,6 +7227,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
   def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
+    getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

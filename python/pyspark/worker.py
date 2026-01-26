@@ -201,11 +201,12 @@ class RunnerConf:
         return self.get("spark.sql.pyspark.udf.profiler", None)
 
 
-def report_times(outfile, boot, init, finish):
+def report_times(outfile, boot, init, finish, processing_time_ms):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
     write_long(int(1000 * init), outfile)
     write_long(int(1000 * finish), outfile)
+    write_long(processing_time_ms, outfile)
 
 
 def chain(f, g):
@@ -1375,11 +1376,12 @@ def wrap_memory_profiler(f, eval_type, result_id):
     if _is_iter_based(eval_type):
 
         def profiling_func(*args, **kwargs):
-            iterator = iter(f(*args, **kwargs))
+            g = f(*args, **kwargs)
+            iterator = iter(g)
 
             while True:
                 try:
-                    with WorkerMemoryProfiler(accumulator, result_id, f):
+                    with WorkerMemoryProfiler(accumulator, result_id, g.gi_code):
                         item = next(iterator)
                     yield item
                 except StopIteration:
@@ -1525,15 +1527,13 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type, runner_conf):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
-        input_types = [
-            field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        ]
+        input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if runner_conf.use_legacy_pandas_udtf_conversion:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
             ser = ArrowStreamPandasUDTFSerializer(
                 runner_conf.timezone,
                 runner_conf.safecheck,
-                input_types=input_types,
+                input_type=input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         else:
@@ -2456,9 +2456,11 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
             try:
                 converters = [
                     ArrowTableToRowsConversion._create_converter(
-                        dt, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
+                        f.dataType,
+                        none_on_identity=True,
+                        binary_as_bytes=runner_conf.binary_as_bytes,
                     )
-                    for dt in input_types
+                    for f in input_type
                 ]
                 for a in it:
                     pylist = [
@@ -2825,12 +2827,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
         ):
-            input_types = [
-                f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
-            ]
+            input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ser = ArrowBatchUDFSerializer(
                 runner_conf.safecheck,
-                input_types,
+                input_type,
                 runner_conf.int_to_decimal_coercion_enabled,
                 runner_conf.binary_as_bytes,
             )
@@ -2848,8 +2848,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF takes input types
-            input_types = (
-                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
+            input_type = (
+                _parse_datatype_json_string(utf8_deserializer.loads(infile))
                 if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
                 else None
             )
@@ -2862,7 +2862,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 struct_in_pandas,
                 ndarray_as_list,
                 True,
-                input_types,
+                input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
     else:
@@ -3429,11 +3429,13 @@ def main(infile, outfile):
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 
+        processing_start_time = time.time()
         with capture_outputs():
             if profiler:
                 profiler.profile(process)
             else:
                 process()
+        processing_time_ms = int(1000 * (time.time() - processing_start_time))
 
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.
@@ -3443,7 +3445,7 @@ def main(infile, outfile):
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finish_time = time.time()
-    report_times(outfile, boot_time, init_time, finish_time)
+    report_times(outfile, boot_time, init_time, finish_time, processing_time_ms)
     write_long(shuffle.MemoryBytesSpilled, outfile)
     write_long(shuffle.DiskBytesSpilled, outfile)
 
