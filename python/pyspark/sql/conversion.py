@@ -91,6 +91,37 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
+    @staticmethod
+    def assign_cols_by_name(
+        batch: "pa.RecordBatch", arrow_type: "pa.StructType"
+    ) -> "pa.RecordBatch":
+        """
+        Reorder a RecordBatch's columns to match the field order of the given schema.
+
+        This is used when UDF results need to be reordered to match the expected
+        output schema, selecting columns by name rather than by position.
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch
+            The input batch whose columns may be in a different order.
+        arrow_type : pa.StructType
+            The target schema defining the expected column order.
+
+        Returns
+        -------
+        pa.RecordBatch
+            A new batch with columns reordered to match arrow_type's field order.
+
+        Used by: ArrowStreamGroupUDFSerializer.dump_stream
+        """
+        import pyarrow as pa
+
+        return pa.RecordBatch.from_arrays(
+            [batch.column(field.name) for field in arrow_type],
+            names=[field.name for field in arrow_type],
+        )
+
 
 class LocalDataToArrowConversion:
     """
