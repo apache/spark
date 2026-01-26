@@ -186,6 +186,57 @@ class PandasBatchTransformerTests(unittest.TestCase):
         self.assertEqual(result["z"].tolist(), [1.0, 2.0])
         self.assertEqual(result["x"].tolist(), [1, 2])
 
+    def test_to_arrow(self):
+        """Test converting DataFrame to Arrow RecordBatch."""
+        import pandas as pd
+        import pyarrow as pa
+
+        # Basic conversion
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        schema = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        result = PandasBatchTransformer.to_arrow(df, schema)
+        self.assertIsInstance(result, pa.RecordBatch)
+        self.assertEqual(result.num_rows, 3)
+        self.assertEqual(result.num_columns, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, 3.0])
+
+        # With column reordering (columns in different order than schema)
+        df = pd.DataFrame({"b": [1.0, 2.0], "a": [1, 2]})
+        schema = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        result = PandasBatchTransformer.to_arrow(df, schema, assign_cols_by_name=True)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])  # 'a' first
+        self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0])  # 'b' second
+
+        # Empty DataFrame (0 rows)
+        df = pd.DataFrame({"a": [], "b": []})
+        schema = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        result = PandasBatchTransformer.to_arrow(df, schema)
+        self.assertEqual(result.num_rows, 0)
+        self.assertEqual(result.num_columns, 2)
+
+        # Single column
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        schema = pa.struct([("x", pa.int64())])
+        result = PandasBatchTransformer.to_arrow(df, schema)
+        self.assertEqual(result.num_columns, 1)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+
+        # With nulls
+        df = pd.DataFrame({"a": [1, None, 3], "b": [1.0, 2.0, None]})
+        schema = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        result = PandasBatchTransformer.to_arrow(df, schema)
+        self.assertEqual(result.column(0).to_pylist(), [1, None, 3])
+        self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, None])
+
+        # Integer column names (no reorder)
+        df = pd.DataFrame({0: [1, 2], 1: [3.0, 4.0]})
+        schema = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        result = PandasBatchTransformer.to_arrow(df, schema, assign_cols_by_name=True)
+        # Integer names won't match, so no reorder - process by position
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])
+        self.assertEqual(result.column(1).to_pylist(), [3.0, 4.0])
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ConversionTests(unittest.TestCase):

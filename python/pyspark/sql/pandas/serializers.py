@@ -56,7 +56,6 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    import pandas as pd
     import pyarrow as pa
 
 
@@ -599,49 +598,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             )
         return s
 
-    def _create_struct_array(
-        self,
-        df: "pd.DataFrame",
-        arrow_struct_type: "pa.StructType",
-        spark_type: Optional[StructType] = None,
-    ):
-        """
-        Create an Arrow StructArray from the given pandas.DataFrame and arrow struct type.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            A pandas DataFrame
-        arrow_struct_type : pyarrow.StructType
-            pyarrow struct type
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-
-        if len(df.columns) == 0:
-            return pa.array([{}] * len(df), arrow_struct_type)
-
-        # Reorder columns by schema name if user labeled with strings
-        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            df = PandasBatchTransformer.reorder_columns(df, arrow_struct_type)
-
-        # Process columns by position
-        struct_arrs = [
-            # rename ensures the Series has correct name for error messages
-            self._create_array(
-                df[df.columns[i]].rename(field.name),
-                field.type,
-                spark_type=spark_type[i].dataType if spark_type is not None else None,
-                arrow_cast=self._arrow_cast,
-            )
-            for i, field in enumerate(arrow_struct_type)
-        ]
-
-        return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
-
     def _create_batch(self, series):
         """
         Create an Arrow record batch from the given pandas.Series pandas.DataFrame
@@ -694,7 +650,21 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                         "Invalid return type. Please make sure that the UDF returns a "
                         "pandas.DataFrame when the specified return type is StructType."
                     )
-                arrs.append(self._create_struct_array(s, arrow_type, spark_type=spark_type))
+                if len(s.columns) == 0:
+                    arrs.append(pa.array([{}] * len(s), arrow_type))
+                else:
+                    arrs.append(
+                        ArrowBatchTransformer.wrap_struct(
+                            PandasBatchTransformer.to_arrow(
+                                s,
+                                arrow_type,
+                                timezone=self._timezone,
+                                safecheck=self._safecheck,
+                                arrow_cast=self._arrow_cast,
+                                assign_cols_by_name=self._assign_cols_by_name,
+                            )
+                        ).column(0)
+                    )
             else:
                 arrs.append(
                     self._create_array(
@@ -969,7 +939,21 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                     f"a pandas.DataFrame but got: {type(s)}"
                 )
 
-            arrs.append(self._create_struct_array(s, arrow_type, spark_type))
+            if len(s.columns) == 0:
+                arrs.append(pa.array([{}] * len(s), arrow_type))
+            else:
+                arrs.append(
+                    ArrowBatchTransformer.wrap_struct(
+                        PandasBatchTransformer.to_arrow(
+                            s,
+                            arrow_type,
+                            timezone=self._timezone,
+                            safecheck=self._safecheck,
+                            arrow_cast=self._arrow_cast,
+                            assign_cols_by_name=self._assign_cols_by_name,
+                        )
+                    ).column(0)
+                )
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
