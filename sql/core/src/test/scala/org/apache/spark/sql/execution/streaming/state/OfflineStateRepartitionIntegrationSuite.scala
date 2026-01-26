@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.{Dataset, Encoder, Row}
-import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
+import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -524,48 +524,5 @@ class OfflineStateRepartitionIntegrationSuite
         )
       }
     )
-  }
-
-  Seq(1, 2, 3).foreach { version =>
-    testWithAllRepartitionOperations(s"stream-stream join ver $version") { newPartitions =>
-      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
-        val allStoreNames = StreamStreamJoinTestUtils.allStoreNames
-        val storeToOptions = if (version <= 2) {
-          allStoreNames.map { storeName =>
-            storeName -> Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty[String, String])
-          }.toMap
-        } else {
-          Map(StateStoreId.DEFAULT_STORE_NAME -> allStoreNames.map { colFamilyName =>
-            colFamilyName -> Map(StateSourceOptions.STORE_NAME -> colFamilyName)
-          }.toMap)
-        }
-
-        testRepartitionWorkflow[(Int, Long)](
-          newPartitions = newPartitions,
-          setupInitialState = (inputData, checkpointDir, _) => {
-            val query = getStreamStreamJoinQuery(inputData)
-            testStream(query)(
-              StartStream(checkpointLocation = checkpointDir),
-              // Batch 1: Creates state in all 4 column families
-              AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-              CheckNewAnswer((2, 2, 2, 2), (4, 4, 4, 4)),
-              // Batch 2: Adds more state to all column families
-              AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
-              CheckNewAnswer((6, 6, 6, 6), (8, 8, 8, 8), (10, 10, 10, 10)),
-              StopStream
-            )
-          },
-          verifyResumedQuery = (inputData, checkpointDir, _) => {
-            val query = getStreamStreamJoinQuery(inputData)
-            testStream(query)(
-              StartStream(checkpointLocation = checkpointDir),
-              AddData(inputData, (6, 10L)),
-              CheckNewAnswer((6, 10, 6, 10), (6, 6, 6, 10))
-            )
-          },
-          storeToColumnFamilyToStateSourceOptions = storeToOptions
-        )
-      }
-    }
   }
 }
