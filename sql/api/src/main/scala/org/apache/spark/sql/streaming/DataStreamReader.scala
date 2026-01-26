@@ -17,43 +17,10 @@
 package org.apache.spark.sql.streaming
 
 import scala.jdk.CollectionConverters._
-import scala.util.matching.Regex
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders}
 import org.apache.spark.sql.types.StructType
-
-/**
- * Companion object for DataStreamReader with shared validation utilities.
- */
-private[sql] object DataStreamReader {
-
-  /**
-   * Pattern for valid source names. Names must only contain ASCII letters, digits, and
-   * underscores.
-   */
-  private[sql] val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
-
-  /**
-   * Validates that a streaming source name only contains alphanumeric characters and underscores.
-   * This is a shared validation used by both Classic and Connect implementations.
-   *
-   * @param sourceName
-   *   the source name to validate
-   * @throws AnalysisException
-   *   if the source name is null, empty, or contains invalid characters
-   */
-  def validateSourceName(sourceName: String): Unit = {
-    require(sourceName != null, "Source name cannot be null")
-    require(sourceName.nonEmpty, "Source name cannot be empty")
-
-    if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
-      throw new AnalysisException(
-        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        messageParameters = Map("sourceName" -> sourceName))
-    }
-  }
-}
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,

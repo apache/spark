@@ -18,14 +18,39 @@
 package org.apache.spark.sql.connect
 
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.connect.proto.Read.DataSource
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.ConnectConversions._
+import org.apache.spark.sql.connect.DataStreamReader.validateSourceName
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.streaming
-import org.apache.spark.sql.streaming.DataStreamReader.validateSourceName
 import org.apache.spark.sql.types.StructType
+
+/**
+ * Validation utilities for DataStreamReader in Connect.
+ *
+ * Note: This object duplicates validation logic from
+ * [[org.apache.spark.sql.catalyst.streaming.StreamingSourceValidation]]
+ * because sql/connect/common does not depend on sql/catalyst. If you modify this validation,
+ * ensure the logic stays synchronized with StreamingSourceValidation.
+ */
+private object DataStreamReader {
+  private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
+
+  def validateSourceName(sourceName: String): Unit = {
+    require(sourceName != null, "Source name cannot be null")
+    require(sourceName.nonEmpty, "Source name cannot be empty")
+
+    if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
+      throw new AnalysisException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        messageParameters = Map("sourceName" -> sourceName))
+    }
+  }
+}
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
