@@ -92,32 +92,6 @@ class DataStreamReader(OptionUtils):
     options.__doc__ = PySparkDataStreamReader.options.__doc__
 
     def name(self, source_name: str) -> "DataStreamReader":
-        """Specifies a name for the streaming source.
-
-        This name is used to identify the source in checkpoint metadata and enables
-        stable checkpoint locations for source evolution.
-
-        .. versionadded:: 4.2.0
-
-        Parameters
-        ----------
-        source_name : str
-            the name to assign to this streaming source. Must contain only ASCII letters,
-            digits, and underscores.
-
-        Returns
-        -------
-        :class:`DataStreamReader`
-
-        Notes
-        -----
-        This API is experimental.
-
-        Examples
-        --------
-        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
-        <...streaming.readwriter.DataStreamReader object ...>
-        """
         if not isinstance(source_name, str):
             raise PySparkTypeError(
                 errorClass="NOT_STR",
@@ -136,6 +110,8 @@ class DataStreamReader(OptionUtils):
 
         self._source_name = source_name
         return self
+
+    name.__doc__ = PySparkDataStreamReader.name.__doc__
 
     def load(
         self,
