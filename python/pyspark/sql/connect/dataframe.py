@@ -169,10 +169,12 @@ class DataFrame(ParentDataFrame):
             },
         )
 
-    def __getstate__(self) -> Any:
-        return self.__dict__.copy()
-
     def __setstate__(self, state: Any) -> None:
+        # state {'_support_repr_html': False, '_cached_schema': None}
+        # the state is defined by the 3rd item of __reduce__
+        # see https://docs.python.org/3/library/pickle.html#object.__reduce__
+        # This method is to avoid __getattr__ being invoked on unpickling,
+        # which always return True and fail the deserialization.
         self.__dict__.update(state)
 
     def __repr__(self) -> str:
