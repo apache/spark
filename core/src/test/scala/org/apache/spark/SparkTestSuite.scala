@@ -73,23 +73,25 @@ trait SparkTestSuite
     with Logging {
   // scalastyle:on
 
+  // Initialize the logger forcibly to let the logger log timestamp
+  // based on the local time zone depending on environments.
+  // The default time zone will be set to America/Los_Angeles later
+  // so this initialization is necessary here.
+  log
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  // This must be set at class construction time, not in beforeAll(), because some tests
+  // create timezone-sensitive objects (like Timestamp) during test registration.
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
+
   protected def enableAutoThreadAudit = true
 
   protected def regenerateGoldenFiles: Boolean =
     System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected override def beforeAll(): Unit = {
-    // Initialize the logger forcibly to let the logger log timestamp
-    // based on the local time zone depending on environments.
-    // The default time zone will be set to America/Los_Angeles later
-    // so this initialization is necessary here.
-    log
-
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
-
     System.setProperty(IS_TESTING.key, "true")
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
