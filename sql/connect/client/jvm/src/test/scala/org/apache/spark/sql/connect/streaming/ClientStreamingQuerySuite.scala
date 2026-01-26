@@ -803,72 +803,41 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  test("stream reader invalid source name - contains hyphen") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
+  // Seq of (sourceName, expectedExceptionClass, expectedConditionOpt)
+  val invalidSourceNames = Seq(
+    ("my-source", classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    ("my space", classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    ("my.source", classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    ("", classOf[IllegalArgumentException], None) // empty string case
+  )
 
-      checkError(
-        exception = intercept[AnalysisException] {
+  invalidSourceNames.foreach { case (sourceName, exceptionClass, conditionOpt) =>
+    test(s"stream reader invalid source name - '$sourceName'") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).write.parquet(path)
+
+        val thrown = intercept[Exception] {
           spark.readStream
             .format("parquet")
             .schema("id LONG")
-            .name("my-source")
+            .name(sourceName)
             .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my-source"))
-    }
-  }
+        }
 
-  test("stream reader invalid source name - contains space") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
+        // Verify exception type
+        assert(exceptionClass.isInstance(thrown))
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("parquet")
-            .schema("id LONG")
-            .name("my space")
-            .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my space"))
-    }
-  }
-
-  test("stream reader invalid source name - contains dot") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("parquet")
-            .schema("id LONG")
-            .name("my.source")
-            .load(path)
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        parameters = Map("sourceName" -> "my.source"))
-    }
-  }
-
-  test("stream reader invalid source name - empty string") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(10).write.parquet(path)
-
-      // Empty string triggers require() check which throws IllegalArgumentException
-      intercept[IllegalArgumentException] {
-        spark.readStream
-          .format("parquet")
-          .schema("id LONG")
-          .name("")
-          .load(path)
+        // Verify error condition only for AnalysisException cases
+        conditionOpt.foreach { condition =>
+          checkError(
+            exception = thrown.asInstanceOf[AnalysisException],
+            condition = condition,
+            parameters = Map("sourceName" -> sourceName))
+        }
       }
     }
   }
