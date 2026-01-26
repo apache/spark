@@ -335,6 +335,16 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         super().__init__()
         self._assign_cols_by_name = assign_cols_by_name
 
+    def load_stream(self, stream):
+        """
+        Load grouped Arrow record batches from stream.
+        """
+        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+            yield batches
+            # Make sure the batches are fully iterated before getting the next group
+            for _ in batches:
+                pass
+
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
 
@@ -1056,22 +1066,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasUDTFSerializer"
-
-
-class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
-    def load_stream(self, stream):
-        """
-        Flatten the struct into Arrow's record batches.
-        """
-        for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
-            batch_iter = map(ArrowBatchTransformer.flatten_struct, batches)
-            yield batch_iter
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in batch_iter:
-                pass
-
-    def __repr__(self):
-        return "GroupArrowUDFSerializer"
 
 
 # Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF,

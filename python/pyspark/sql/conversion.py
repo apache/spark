@@ -69,7 +69,8 @@ class ArrowBatchTransformer:
 
         Used by:
             - ArrowStreamUDFSerializer.load_stream
-            - GroupArrowUDFSerializer.load_stream
+            - SQL_GROUPED_MAP_ARROW_UDF mapper
+            - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
         """
         import pyarrow as pa
 
