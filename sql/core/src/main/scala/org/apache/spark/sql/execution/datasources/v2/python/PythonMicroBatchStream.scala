@@ -31,16 +31,14 @@ case class PythonStreamingSourceOffset(json: String) extends Offset
 
 case class PythonStreamingSourceReadLimit(json: String) extends ReadLimit
 
-class PythonMicroBatchStream(
+abstract class PythonMicroBatchStreamBase(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
-    runner: PythonStreamingSourceRunner
-  )
+    runner: PythonStreamingSourceRunner)
   extends MicroBatchStream
-  with Logging
-  with AcceptsLatestSeenOffset {
+  with Logging {
 
   private val streamId = nextStreamId
   private var nextBlockId = 0L
@@ -80,12 +78,6 @@ class PythonMicroBatchStream(
     }
   }
 
-  override def setLatestSeenOffset(offset: Offset): Unit = {
-    // Call planPartition on python with an empty offset range to initialize the start offset
-    // for the prefetching of simple reader.
-    runner.partitions(offset.json(), offset.json())
-  }
-
   private lazy val readInfo: PythonDataSourceReadInfo = {
     ds.getOrCreateReadInfo(shortName, options, outputSchema, isStreaming = true)
   }
@@ -107,13 +99,29 @@ class PythonMicroBatchStream(
   override def deserializeOffset(json: String): Offset = PythonStreamingSourceOffset(json)
 }
 
+class PythonMicroBatchStream(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap,
+    runner: PythonStreamingSourceRunner)
+  extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
+  with AcceptsLatestSeenOffset {
+
+  override def setLatestSeenOffset(offset: Offset): Unit = {
+    // Call planPartition on python with an empty offset range to initialize the start offset
+    // for the prefetching of simple reader.
+    runner.partitions(offset.json(), offset.json())
+  }
+}
+
 class PythonMicroBatchStreamWithAdmissionControl(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     runner: PythonStreamingSourceRunner)
-  extends PythonMicroBatchStream(ds, shortName, outputSchema, options, runner)
+  extends PythonMicroBatchStreamBase(ds, shortName, outputSchema, options, runner)
   with SupportsAdmissionControl {
 
   override def latestOffset(): Offset = {

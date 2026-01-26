@@ -20,12 +20,15 @@ package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 import java.nio.channels.Channels
+
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.{LogKeys, Logging}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
@@ -36,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.v2.python.PythonStreamingSourc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the

@@ -18,7 +18,9 @@ package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
+
 import scala.concurrent.duration._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
@@ -697,7 +699,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |        if isinstance(readLimit, ReadAllAvailable):
        |            end_offset = start_idx + 10
        |        else:
-       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read limit but got "
+       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read "
+       |                                                        "limit but got "
        |                                                        + str(type(readLimit)))
        |            end_offset = start_idx + readLimit.max_rows
        |        return {"partition-1": end_offset}
@@ -744,7 +747,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |        if isinstance(readLimit, ReadAllAvailable):
        |            end_offset = start_idx + 5
        |        else:
-       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read limit but got "
+       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read "
+       |                                                        "limit but got "
        |                                                        + str(type(readLimit)))
        |            end_offset = start_idx + readLimit.max_rows
        |        end_offset = min(end_offset, self.desired_end_offset)

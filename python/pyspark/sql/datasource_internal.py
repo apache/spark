@@ -87,42 +87,26 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def __init__(self, simple_reader: SimpleDataSourceStreamReader):
         self.simple_reader = simple_reader
-        self.initial_offset: Optional[dict] = None
-        self.current_offset: Optional[dict] = None
         self.cache: List[PrefetchedCacheEntry] = []
 
     def initialOffset(self) -> dict:
-        if self.initial_offset is None:
-            self.initial_offset = self.simple_reader.initialOffset()
-        return self.initial_offset
+        return self.simple_reader.initialOffset()
 
     def getDefaultReadLimit(self) -> ReadLimit:
         # We do not consider providing different read limit on simple stream reader.
         return ReadAllAvailable()
 
     def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:  # type: ignore[override]
-        if self.current_offset is None:
-            assert start is not None, "start offset should not be None"
-            self.current_offset = start
-        else:
-            assert self.current_offset == start, (
-                "start offset does not match current offset. "
-                f"current: {self.current_offset}, start: {start}"
-            )
-
+        assert start is not None, "start offset should not be None"
         assert isinstance(readLimit, ReadAllAvailable), (
-            "simple stream reader does not " "support read limit"
+            "simple stream reader does not support read limit"
         )
 
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
+        (iter, end) = self.simple_reader.read(start)
+        self.cache.append(PrefetchedCacheEntry(start, end, iter))
         return end
 
     def commit(self, end: dict) -> None:
-        if self.current_offset is None:
-            self.current_offset = end
-
         end_idx = -1
         for idx, entry in enumerate(self.cache):
             if json.dumps(entry.end) == json.dumps(end):
@@ -134,11 +118,6 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.simple_reader.commit(end)
 
     def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
-        # when query restart from checkpoint, use the last committed offset as the start offset.
-        # This depends on the streaming engine calling planInputPartitions() of the last batch
-        # in offset log when query restart.
-        if self.current_offset is None:
-            self.current_offset = end
         if len(self.cache) > 0:
             assert self.cache[-1].end == end
         return [SimpleInputPartition(start, end)]
