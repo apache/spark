@@ -1264,6 +1264,40 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("continue handler - continue when exception happens in simple case body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE x INT = 1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |  BEGIN
+        |    SELECT 22;
+        |    SET flag = 1;
+        |  END;
+        |
+        |  CASE x
+        |    WHEN flag THEN
+        |      SELECT 10;
+        |    WHEN 1 THEN
+        |      SELECT 11;
+        |      SELECT 1/0;
+        |      SELECT 33;
+        |    ELSE
+        |      SELECT 12;
+        |  END CASE;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(11)),
+      Seq(Row(22)),
+      Seq(Row(33)),
+      Seq(Row(1))
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   test("exit handler - exit resolve when simple case condition computation fails") {
     val sqlScript =
       """

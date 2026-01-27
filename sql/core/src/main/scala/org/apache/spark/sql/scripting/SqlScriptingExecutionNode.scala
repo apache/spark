@@ -746,6 +746,7 @@ class SimpleCaseStatementExec(
       caseVariableLiteral = Literal(values.head.get(0))
       conditionBodyTupleIterator = createConditionBodyIterator
       isCacheValid = true
+      hasStartedCaseVariableEvaluation = false
     }
   }
 
@@ -1077,12 +1078,16 @@ class ForStatementExec(
   }
   private var state = ForState.VariableAssignment
 
+  // Flag to track if FOR query evaluation has been attempted. Used by CONTINUE handler
+  // mechanism to determine if an exception occurred during query evaluation vs. before
+  // the FOR statement was reached.
   protected[scripting] var hasStartedQueryEvaluation = false
   private var queryResult: util.Iterator[Row] = _
   private var queryColumnNameToDataType: Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
+      // Set flag before evaluation so CONTINUE handler can detect if exception happened here.
       hasStartedQueryEvaluation = true
       val df = query.buildDataFrame(session)
       queryResult = df.toLocalIterator()
@@ -1090,6 +1095,7 @@ class ForStatementExec(
 
       query.isExecuted = true
       isResultCacheValid = true
+      hasStartedQueryEvaluation = false
     }
     queryResult
   }
