@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util.geo;
+package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;

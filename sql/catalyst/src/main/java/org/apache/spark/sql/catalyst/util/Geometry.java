@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util.geo;
+package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.GeometryModel;
+import org.apache.spark.sql.catalyst.util.geo.WkbReader;
+import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.unsafe.types.GeometryVal;
 
 import java.nio.ByteBuffer;

@@ -26,8 +26,9 @@ import java.nio.ByteOrder;
  * This class is designed to support reuse of a single instance to write multiple
  * geometries efficiently. This class is NOT thread-safe; each thread should create
  * its own instance.
+ * This class should be catalyst-internal.
  */
-class WkbWriter {
+public class WkbWriter {
 
   /**
    * Gets the WKB type code for a geometry, including dimension offset.
@@ -55,7 +56,7 @@ class WkbWriter {
   /**
    * Writes a geometry to WKB format.
    */
-  byte[] write(GeometryModel geometry) {
+  public byte[] write(GeometryModel geometry) {
     return write(geometry, ByteOrder.LITTLE_ENDIAN);
   }
 
@@ -65,7 +66,7 @@ class WkbWriter {
    * This method reuses an internal buffer to reduce GC pressure when writing
    * many geometries. The returned byte array is a copy of the internal buffer.
    */
-  byte[] write(GeometryModel geometry, ByteOrder byteOrder) {
+  public byte[] write(GeometryModel geometry, ByteOrder byteOrder) {
     // Calculate size first
     int size = calculateSize(geometry);
     ByteBuffer buffer = ByteBuffer.allocate(size);

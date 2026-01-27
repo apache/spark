@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
-import org.apache.spark.sql.catalyst.util.geo.STUtils
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2250,7 +2249,7 @@ case class Cast(
     from match {
       case _: GeographyType =>
         (c, evPrim, _) =>
-          code"$evPrim = org.apache.spark.sql.catalyst.util.geo.STUtils.geographyToGeometry($c);"
+          code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geographyToGeometry($c);"
       case _: GeometryType =>
         (c, evPrim, _) =>
           code"$evPrim = $c;"

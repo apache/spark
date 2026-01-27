@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.util.geo;
 
 
+import org.apache.spark.sql.catalyst.util.Geometry;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -26,8 +28,9 @@ import java.util.List;
  * Reader for parsing Well-Known Binary (WKB) format geometries.
  * This class implements the OGC Simple Features specification for WKB parsing.
  * This class is not thread-safe. Create a new instance for each thread.
+ * This class should be catalyst-internal.
  */
-class WkbReader {
+public class WkbReader {
   private ByteBuffer buffer;
   private final int validationLevel;
   private byte[] currentWkb;
@@ -35,7 +38,7 @@ class WkbReader {
   /**
    * Constructor for WkbReader with default validation level (1 = basic validation).
    */
-  WkbReader() {
+  public WkbReader() {
     this(1);
   }
 
@@ -43,7 +46,7 @@ class WkbReader {
    * Constructor for WkbReader with specified validation level.
    * @param validationLevel validation level (0 = no validation, 1 = basic validation)
    */
-  WkbReader(int validationLevel) {
+  public WkbReader(int validationLevel) {
     this.validationLevel = validationLevel;
   }
 
@@ -69,7 +72,7 @@ class WkbReader {
   /**
    * Reads a geometry from WKB bytes.
    */
-  GeometryModel read(byte[] wkb) {
+  public GeometryModel read(byte[] wkb) {
     try {
       currentWkb = wkb;
       return readGeometry(Geometry.DEFAULT_SRID);
@@ -83,7 +86,7 @@ class WkbReader {
   /**
    * Reads a geometry from WKB bytes with a specified SRID.
    */
-  GeometryModel read(byte[] wkb, int srid) {
+  public GeometryModel read(byte[] wkb, int srid) {
     try {
       currentWkb = wkb;
       return readGeometry(srid);

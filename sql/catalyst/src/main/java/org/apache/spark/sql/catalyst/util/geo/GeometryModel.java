@@ -17,10 +17,11 @@
 package org.apache.spark.sql.catalyst.util.geo;
 
 /**
- * Abstract base class for specific geometry types (Point, LineString, Polygon, etc.).
+ * Base class for specific geometry types (Point, LineString, Polygon, etc.).
  * This class provides common functionality needed by geometry subclasses.
+ * This class should be catalyst-internal.
  */
-abstract class GeometryModel {
+public abstract class GeometryModel {
 
   /** GeometryModel internal implementation. */
 
