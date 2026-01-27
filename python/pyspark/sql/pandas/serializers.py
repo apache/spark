@@ -1743,7 +1743,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                 iter_pdf = iter_pdf_with_type[0]
                 pdf_type = iter_pdf_with_type[1]
                 for pdf in iter_pdf:
-                    yield (pdf, pdf_type)
+                    yield [(pdf, pdf_type)]
 
         super().dump_stream(flatten_iterator(), stream)
 
