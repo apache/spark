@@ -507,11 +507,11 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
-        a list of series accompanied by an optional pyarrow type to coerce the data to.
+        Make ArrowRecordBatches from Pandas Series and serialize.
+        Input is a list of (series, spark_type) tuples.
         """
         batches = (
-            self._create_batch([series], prefers_large_types=self._prefers_large_types)
+            self._create_batch(series, prefers_large_types=self._prefers_large_types)
             for series in iterator
         )
         super().dump_stream(batches, stream)
