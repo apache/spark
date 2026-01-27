@@ -143,6 +143,16 @@ class DataSourceV2SQLSuiteV1Filter
     assert(spark.sessionState.catalogManager.currentCatalog.name() == expectedName)
   }
 
+  private def checkSetCatalogNotFoundError(catalogName: String, identifierStr: String): Unit =
+  checkError(
+    exception = intercept[CatalogNotFoundException] {
+      sql(s"SET CATALOG $identifierStr")
+    },
+    condition = "CATALOG_NOT_FOUND",
+    parameters = Map(
+      "catalogName" -> s"`${catalogName}`",
+      "config" -> s""""spark.sql.catalog.${catalogName}""""))
+
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
 
@@ -3000,14 +3010,7 @@ class DataSourceV2SQLSuiteV1Filter
     sql("SET CATALOG \"testcat4\"")
     assertCurrentCatalog("testcat4")
 
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG not_exist_catalog")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map(
-        "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
+    checkSetCatalogNotFoundError("not_exist_catalog", "not_exist_catalog")
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER should work") {
@@ -3019,14 +3022,7 @@ class DataSourceV2SQLSuiteV1Filter
     spark.sql("SET CATALOG IDENTIFIER(:param)", Map("param" -> "testcat2"))
     assertCurrentCatalog("testcat2")
 
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG IDENTIFIER('not_exist_catalog')")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map(
-        "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
+    checkSetCatalogNotFoundError("not_exist_catalog", "IDENTIFIER('not_exist_catalog')")
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER with multipart name should fail") {
@@ -3056,33 +3052,10 @@ class DataSourceV2SQLSuiteV1Filter
   test("SPARK-55155: SET CATALOG statement is case-sensitive") {
     assertCurrentCatalog(SESSION_CATALOG_NAME)
 
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG teStCaT")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\""))
-
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG 'teStCaT'")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\""))
-
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG IDENTIFIER('teStCaT')")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\""))
-
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG CONCAT('teSt', 'CaT')")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map("catalogName" -> "`teStCaT`", "config" -> "\"spark.sql.catalog.teStCaT\""))
+    checkSetCatalogNotFoundError("teStCaT", "teStCaT")
+    checkSetCatalogNotFoundError("teStCaT", "'teStCaT'")
+    checkSetCatalogNotFoundError("teStCaT", "IDENTIFIER('teStCaT')")
+    checkSetCatalogNotFoundError("teStCaT", "CONCAT('teSt', 'CaT')")
   }
 
   test("SPARK-55155: SET CATALOG with session temp variable") {
@@ -3125,6 +3098,16 @@ class DataSourceV2SQLSuiteV1Filter
       ))
   }
 
+  test("SPARK-55155: SET CATALOG with unresolved expressions should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG substring(foo, 1, 3)")
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`foo`"),
+      queryContext = Array(ExpectedContext(fragment = "foo", start = 22, stop = 24)))
+  }
+
   test("SPARK-55155: SET CATALOG with non-deterministic expressions should fail") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -3132,7 +3115,8 @@ class DataSourceV2SQLSuiteV1Filter
       },
       condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map("sqlExprs" -> "\"rand()\""),
-      queryContext = Array(ExpectedContext(fragment = "rand()", start = 12, stop = 17)))
+      queryContext =
+        Array(ExpectedContext(fragment = "SET CATALOG rand()", start = 0, stop = 17)))
   }
 
   test("SPARK-55155: SET CATALOG with null values should fail") {

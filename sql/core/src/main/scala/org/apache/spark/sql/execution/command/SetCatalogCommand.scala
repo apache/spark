@@ -38,21 +38,25 @@ case class SetCatalogCommand(catalogNameExpr: Expression)
   extends LeafRunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  /**
+   * Extracts the catalog name from the catalogNameExpr.
+   * This method evaluates the expression and returns the catalog name string.
+   */
+  def getCatalogName(): String = {
     // Use IdentifierResolution to evaluate and validate the expression.
     // This handles: foldability, StringType validation, null checks, and
     // parsing. By this point, all expressions (including identifier()) are
     // resolved by earlier analysis rules, so evalIdentifierExpr will work
     // correctly.
     val nameParts = IdentifierResolution.evalIdentifierExpr(catalogNameExpr)
-
-    // Validate single-part identifier (catalog names cannot be multi-part).
     if (nameParts.length > 1) {
       throw QueryCompilationErrors.multipartCatalogNameNotAllowed(nameParts)
     }
+    nameParts.head
+  }
 
-    val catalogName = nameParts.head
-    sparkSession.sessionState.catalogManager.setCurrentCatalog(catalogName)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalogManager.setCurrentCatalog(getCatalogName())
     Seq.empty
   }
 }

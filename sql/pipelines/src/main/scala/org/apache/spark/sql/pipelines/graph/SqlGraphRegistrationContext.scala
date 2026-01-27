@@ -530,7 +530,7 @@ class SqlGraphRegistrationContext(
 
   private object SetCatalogCommandHandler {
     def handle(setCatalogCommand: SetCatalogCommand): Unit = {
-      context.setCurrentCatalog(setCatalogCommand.catalogName)
+      context.setCurrentCatalog(setCatalogCommand.getCatalogName())
       context.clearCurrentDatabase()
     }
   }
