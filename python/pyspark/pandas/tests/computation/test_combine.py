@@ -399,31 +399,26 @@ class FrameCombineMixin:
         left = ps.DataFrame({"A": [1, 2], "B": ["a", "b"]})
         right = ps.DataFrame({"C": [3, 4], "D": ["c", "d"]})
 
-        # Cannot specify 'on' with cross merge
         with self.assertRaisesRegex(
             ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
         ):
             left.merge(right, how="cross", on="A")
 
-        # Cannot specify 'left_on' with cross merge
         with self.assertRaisesRegex(
             ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
         ):
             left.merge(right, how="cross", left_on="A", right_on="C")
 
-        # Cannot specify 'right_on' with cross merge
         with self.assertRaisesRegex(
             ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
         ):
             left.merge(right, how="cross", right_on="C")
 
-        # Cannot specify 'left_index' with cross merge
         with self.assertRaisesRegex(
             ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
         ):
             left.merge(right, how="cross", left_index=True)
 
-        # Cannot specify 'right_index' with cross merge
         with self.assertRaisesRegex(
             ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
         ):
