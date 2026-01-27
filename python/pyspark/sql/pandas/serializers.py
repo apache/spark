@@ -563,9 +563,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         int_to_decimal_coercion_enabled: bool = False,
         prefers_large_types: bool = False,
     ):
-        super().__init__(
-            timezone, safecheck, int_to_decimal_coercion_enabled, prefers_large_types
-        )
+        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled, prefers_large_types)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
