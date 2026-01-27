@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
-import scala.util.matching.Regex
-
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -68,31 +65,3 @@ case class FlowAssigned(name: String) extends StreamingSourceIdentifyingName
  * No name has been assigned yet. The analyzer will auto-generate one if needed.
  */
 case object Unassigned extends StreamingSourceIdentifyingName
-
-/**
- * Validation utilities for streaming source names.
- */
-object StreamingSourceValidation {
-  /**
-   * Pattern for valid source names. Names must only contain ASCII letters, digits, and
-   * underscores.
-   */
-  private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
-
-  /**
-   * Validates that a streaming source name only contains alphanumeric characters and underscores.
-   *
-   * @param sourceName the source name to validate
-   * @throws AnalysisException if the source name is null, empty, or contains invalid characters
-   */
-  def validateSourceName(sourceName: String): Unit = {
-    require(sourceName != null, "Source name cannot be null")
-    require(sourceName.nonEmpty, "Source name cannot be empty")
-
-    if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
-      throw new AnalysisException(
-        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        messageParameters = Map("sourceName" -> sourceName))
-    }
-  }
-}
