@@ -884,6 +884,10 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
         def py_to_batch():
             for packed in iterator:
+                # Normalize to list to support both generator and tuple inputs
+                if not isinstance(packed, (list, tuple)):
+                    packed = list(packed)
+
                 if len(packed) == 3 and isinstance(packed[1], pa.DataType):
                     # single array UDF in a projection
                     yield create_array(packed[0], packed[1], packed[2]), packed[1]
@@ -1171,7 +1175,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         Flatten the grouped iterator structure.
         """
-        # Flatten: Iterator[Iterator[(df, spark_type)]] -> Iterator[(df, spark_type)]
+        # Flatten: Iterator[Iterator[[(df, spark_type)]]] -> Iterator[[(df, spark_type)]]
         flattened_iter = (batch for generator in iterator for batch in generator)
         super().dump_stream(flattened_iter, stream)
 
@@ -1962,22 +1966,31 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         """
         import pyarrow as pa
 
+        from pyspark.sql.pandas.types import to_arrow_type
+
         def flatten_iterator():
-            # iterator: iter[list[(iter[Row], pdf_type)]]
+            # iterator: iter[list[(iter[Row], spark_type)]]
             for packed in iterator:
                 iter_row_with_type = packed[0]
                 iter_row = iter_row_with_type[0]
-                pdf_type = iter_row_with_type[1]
+                spark_type = iter_row_with_type[1]
+
+                # Convert spark type to arrow type
+                arrow_type = to_arrow_type(
+                    spark_type,
+                    timezone=self._timezone,
+                    prefers_large_types=self._prefers_large_types,
+                )
 
                 rows_as_dict = []
                 for row in iter_row:
                     row_as_dict = row.asDict(True)
                     rows_as_dict.append(row_as_dict)
 
-                pdf_schema = pa.schema(list(pdf_type))
+                pdf_schema = pa.schema(list(arrow_type))
                 record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
 
-                yield (record_batch, pdf_type)
+                yield (record_batch, arrow_type)
 
         return ArrowStreamUDFSerializer.dump_stream(self, flatten_iterator(), stream)
 

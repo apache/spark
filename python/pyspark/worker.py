@@ -840,9 +840,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         yield result
 
     def flatten_wrapper(k, v):
-        # Return Iterator[(df, spark_type)] directly
+        # Return Iterator[[(df, spark_type)]] directly
         for df in wrapped(k, v):
-            yield (df, return_type)
+            yield [(df, return_type)]
 
     return flatten_wrapper
 
@@ -873,9 +873,9 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         yield from map(verify_element, result)
 
     def flatten_wrapper(k, v):
-        # Return Iterator[(df, spark_type)] directly
+        # Return Iterator[[(df, spark_type)]] directly
         for df in wrapped(k, v):
-            yield (df, return_type)
+            yield [(df, return_type)]
 
     return flatten_wrapper
 
@@ -940,7 +940,7 @@ def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf
 
         return result_iter
 
-    return lambda p, m, k, v: (wrapped(p, m, k, v), return_type)
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
@@ -3306,7 +3306,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
     else:
 
         def mapper(a):
-            # Yields (data, type) tuples for ArrowStreamPandasUDFSerializer
+            # Yields (data, type) tuples for serializers
             for arg_offsets, f in udfs:
                 yield f(*[a[o] for o in arg_offsets])
 
