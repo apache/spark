@@ -330,7 +330,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 case_id = f"{source_type_name}->{tgt_type_name}[{i}]"
 
                 # Test both safe=True and safe=False
-                for safe_mode, expected in [(True, expected_safe_true), (False, expected_safe_false)]:
+                for safe_mode, expected in [
+                    (True, expected_safe_true),
+                    (False, expected_safe_false),
+                ]:
                     mode_str = "safe=True" if safe_mode else "safe=False"
                     case_id_with_mode = f"{case_id} ({mode_str})"
 
@@ -432,14 +435,30 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "uint32": [
                 (pa.array([0, 1, 127, None], pa.int8()), pa.array([0, 1, 127, None], pa.uint32())),
                 # Negative values overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int8()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
-                (pa.array([-128], pa.int8()), pa.lib.ArrowInvalid, pa.array([4294967168], pa.uint32())),
+                (
+                    pa.array([-1], pa.int8()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
+                (
+                    pa.array([-128], pa.int8()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967168], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (pa.array([0, 1, 127, None], pa.int8()), pa.array([0, 1, 127, None], pa.uint64())),
                 # Negative values overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int8()), pa.lib.ArrowInvalid, pa.array([18446744073709551615], pa.uint64())),
-                (pa.array([-128], pa.int8()), pa.lib.ArrowInvalid, pa.array([18446744073709551488], pa.uint64())),
+                (
+                    pa.array([-1], pa.int8()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709551615], pa.uint64()),
+                ),
+                (
+                    pa.array([-128], pa.int8()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709551488], pa.uint64()),
+                ),
             ],
             # int8 -> floats
             "float16": [
@@ -599,7 +618,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
                 (pa.array([-1], pa.int16()), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
-                (pa.array([-32768], pa.int16()), pa.lib.ArrowInvalid, pa.array([32768], pa.uint16())),
+                (
+                    pa.array([-32768], pa.int16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([32768], pa.uint16()),
+                ),
             ],
             "uint32": [
                 (
@@ -607,8 +630,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 32767, None], pa.uint32()),
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int16()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
-                (pa.array([-32768], pa.int16()), pa.lib.ArrowInvalid, pa.array([4294934528], pa.uint32())),
+                (
+                    pa.array([-1], pa.int16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
+                (
+                    pa.array([-32768], pa.int16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294934528], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -616,8 +647,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 32767, None], pa.uint64()),
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int16()), pa.lib.ArrowInvalid, pa.array([18446744073709551615], pa.uint64())),
-                (pa.array([-32768], pa.int16()), pa.lib.ArrowInvalid, pa.array([18446744073709518848], pa.uint64())),
+                (
+                    pa.array([-1], pa.int16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709551615], pa.uint64()),
+                ),
+                (
+                    pa.array([-32768], pa.int16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709518848], pa.uint64()),
+                ),
             ],
             # int16 -> floats
             "float16": [
@@ -752,7 +791,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([128], pa.int32()), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
-                (pa.array([2147483647], pa.int32()), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
+                (
+                    pa.array([2147483647], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
             ],
             "int16": [
                 (
@@ -760,8 +803,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, 32767, -32768, None], pa.int16()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([32768], pa.int32()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
-                (pa.array([-32769], pa.int32()), pa.lib.ArrowInvalid, pa.array([32767], pa.int16())),
+                (
+                    pa.array([32768], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
+                (
+                    pa.array([-32769], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([32767], pa.int16()),
+                ),
             ],
             "int32": [
                 (pa.array([0, 1, -1, None], pa.int32()), pa.array([0, 1, -1, None], pa.int32())),
@@ -800,8 +851,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 2147483647, None], pa.uint32()),
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int32()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
-                (pa.array([-2147483648], pa.int32()), pa.lib.ArrowInvalid, pa.array([2147483648], pa.uint32())),
+                (
+                    pa.array([-1], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
+                (
+                    pa.array([-2147483648], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483648], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -809,8 +868,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 2147483647, None], pa.uint64()),
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int32()), pa.lib.ArrowInvalid, pa.array([18446744073709551615], pa.uint64())),
-                (pa.array([-2147483648], pa.int32()), pa.lib.ArrowInvalid, pa.array([18446744071562067968], pa.uint64())),
+                (
+                    pa.array([-1], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709551615], pa.uint64()),
+                ),
+                (
+                    pa.array([-2147483648], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744071562067968], pa.uint64()),
+                ),
             ],
             "float16": [
                 (
@@ -819,7 +886,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 (pa.array([2048], pa.int32()), _make_float16_array([2048.0])),
                 # Large int overflows to inf with safe=False
-                (pa.array([2147483647], pa.int32()), pa.lib.ArrowInvalid, _make_float16_array([float('inf')])),
+                (
+                    pa.array([2147483647], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    _make_float16_array([float("inf")]),
+                ),
             ],
             "float32": [
                 (
@@ -828,7 +899,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 (pa.array([16777216], pa.int32()), pa.array([16777216.0], pa.float32())),
                 # Large int loses precision with safe=False
-                (pa.array([2147483647], pa.int32()), pa.lib.ArrowInvalid, pa.array([2147483648.0], pa.float32())),
+                (
+                    pa.array([2147483647], pa.int32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483648.0], pa.float32()),
+                ),
             ],
             "float64": [
                 (
@@ -968,7 +1043,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([128], pa.int64()), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
-                (pa.array([9223372036854775807], pa.int64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
+                (
+                    pa.array([9223372036854775807], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
             ],
             "int16": [
                 (
@@ -976,8 +1055,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, 32767, -32768, None], pa.int16()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([32768], pa.int64()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
-                (pa.array([-32769], pa.int64()), pa.lib.ArrowInvalid, pa.array([32767], pa.int16())),
+                (
+                    pa.array([32768], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
+                (
+                    pa.array([-32769], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([32767], pa.int16()),
+                ),
             ],
             "int32": [
                 (
@@ -985,8 +1072,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, 2147483647, -2147483648, None], pa.int32()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([2147483648], pa.int64()), pa.lib.ArrowInvalid, pa.array([-2147483648], pa.int32())),
-                (pa.array([-2147483649], pa.int64()), pa.lib.ArrowInvalid, pa.array([2147483647], pa.int32())),
+                (
+                    pa.array([2147483648], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-2147483648], pa.int32()),
+                ),
+                (
+                    pa.array([-2147483649], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483647], pa.int32()),
+                ),
             ],
             "int64": [
                 (pa.array([0, 1, -1, None], pa.int64()), pa.array([0, 1, -1, None], pa.int64())),
@@ -1017,8 +1112,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 4294967295, None], pa.uint32()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([4294967296], pa.int64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
-                (pa.array([-1], pa.int64()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
+                (
+                    pa.array([4294967296], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint32()),
+                ),
+                (
+                    pa.array([-1], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -1026,8 +1129,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 9223372036854775807, None], pa.uint64()),
                 ),
                 # Negative overflow: safe=True raises, safe=False wraps
-                (pa.array([-1], pa.int64()), pa.lib.ArrowInvalid, pa.array([18446744073709551615], pa.uint64())),
-                (pa.array([-9223372036854775808], pa.int64()), pa.lib.ArrowInvalid, pa.array([9223372036854775808], pa.uint64())),
+                (
+                    pa.array([-1], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([18446744073709551615], pa.uint64()),
+                ),
+                (
+                    pa.array([-9223372036854775808], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9223372036854775808], pa.uint64()),
+                ),
             ],
             "float16": [
                 (
@@ -1036,7 +1147,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 (pa.array([2048], pa.int64()), _make_float16_array([2048.0])),
                 # Large int overflows to inf with safe=False
-                (pa.array([9223372036854775807], pa.int64()), pa.lib.ArrowInvalid, _make_float16_array([float('inf')])),
+                (
+                    pa.array([9223372036854775807], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    _make_float16_array([float("inf")]),
+                ),
             ],
             "float32": [
                 (
@@ -1045,7 +1160,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 (pa.array([16777216], pa.int64()), pa.array([16777216.0], pa.float32())),
                 # Large int loses precision with safe=False
-                (pa.array([9223372036854775807], pa.int64()), pa.lib.ArrowInvalid, pa.array([9.223372036854776e+18], pa.float32())),
+                (
+                    pa.array([9223372036854775807], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9.223372036854776e18], pa.float32()),
+                ),
             ],
             "float64": [
                 (
@@ -1057,7 +1176,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([9007199254740992.0], pa.float64()),
                 ),
                 # Precision loss: safe=True raises, safe=False truncates
-                (pa.array([9007199254740993], pa.int64()), pa.lib.ArrowInvalid, pa.array([9007199254740992.0], pa.float64())),
+                (
+                    pa.array([9007199254740993], pa.int64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9007199254740992.0], pa.float64()),
+                ),
             ],
             # === Non-numerical types ===
             "bool": [
@@ -1435,7 +1558,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 32767, None], pa.int16()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([32768], pa.uint16()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
+                (
+                    pa.array([32768], pa.uint16()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
                 (pa.array([65535], pa.uint16()), pa.lib.ArrowInvalid, pa.array([-1], pa.int16())),
             ],
             "int32": [
@@ -1594,7 +1721,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([0, 1, 127, None], pa.uint32()), pa.array([0, 1, 127, None], pa.int8())),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([128], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
             ],
             "int16": [
                 (
@@ -1602,8 +1733,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 32767, None], pa.int16()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([32768], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-1], pa.int16())),
+                (
+                    pa.array([32768], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int16()),
+                ),
             ],
             "int32": [
                 (
@@ -1611,8 +1750,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 2147483647, None], pa.int32()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([2147483648], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-2147483648], pa.int32())),
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([-1], pa.int32())),
+                (
+                    pa.array([2147483648], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-2147483648], pa.int32()),
+                ),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int32()),
+                ),
             ],
             "int64": [
                 (
@@ -1626,7 +1773,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([0, 1, 255, None], pa.uint32()), pa.array([0, 1, 255, None], pa.uint8())),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([256], pa.uint32()), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([255], pa.uint8())),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([255], pa.uint8()),
+                ),
             ],
             "uint16": [
                 (
@@ -1635,7 +1786,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([65536], pa.uint32()), pa.lib.ArrowInvalid, pa.array([0], pa.uint16())),
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([65535], pa.uint16()),
+                ),
             ],
             "uint32": [
                 (
@@ -1657,13 +1812,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([0, 1, None], pa.uint32()), _make_float16_array([0.0, 1.0, None])),
                 (pa.array([2048], pa.uint32()), _make_float16_array([2048.0])),
                 # Large uint overflows to inf with safe=False
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, _make_float16_array([float('inf')])),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    _make_float16_array([float("inf")]),
+                ),
             ],
             "float32": [
                 (pa.array([0, 1, None], pa.uint32()), pa.array([0.0, 1.0, None], pa.float32())),
                 (pa.array([16777216], pa.uint32()), pa.array([16777216.0], pa.float32())),
                 # Large uint loses precision with safe=False
-                (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid, pa.array([4294967296.0], pa.float32())),
+                (
+                    pa.array([4294967295], pa.uint32()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967296.0], pa.float32()),
+                ),
             ],
             "float64": [
                 (
@@ -1764,7 +1927,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([0, 1, 127, None], pa.uint64()), pa.array([0, 1, 127, None], pa.int8())),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([128], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
             ],
             "int16": [
                 (
@@ -1772,8 +1939,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 32767, None], pa.int16()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([32768], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int16())),
+                (
+                    pa.array([32768], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int16()),
+                ),
             ],
             "int32": [
                 (
@@ -1781,8 +1956,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 2147483647, None], pa.int32()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([2147483648], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-2147483648], pa.int32())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int32())),
+                (
+                    pa.array([2147483648], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-2147483648], pa.int32()),
+                ),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int32()),
+                ),
             ],
             "int64": [
                 (
@@ -1790,14 +1973,26 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 9223372036854775807, None], pa.int64()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([9223372036854775808], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-9223372036854775808], pa.int64())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int64())),
+                (
+                    pa.array([9223372036854775808], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-9223372036854775808], pa.int64()),
+                ),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int64()),
+                ),
             ],
             "uint8": [
                 (pa.array([0, 1, 255, None], pa.uint64()), pa.array([0, 1, 255, None], pa.uint8())),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([256], pa.uint64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([255], pa.uint8())),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([255], pa.uint8()),
+                ),
             ],
             "uint16": [
                 (
@@ -1806,7 +2001,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 ),
                 # Overflow: safe=True raises, safe=False wraps
                 (pa.array([65536], pa.uint64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint16())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([65535], pa.uint16()),
+                ),
             ],
             "uint32": [
                 (
@@ -1814,8 +2013,16 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 4294967295, None], pa.uint32()),
                 ),
                 # Overflow: safe=True raises, safe=False wraps
-                (pa.array([4294967296], pa.uint64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
+                (
+                    pa.array([4294967296], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint32()),
+                ),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -1832,13 +2039,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([0, 1, None], pa.uint64()), _make_float16_array([0.0, 1.0, None])),
                 (pa.array([2048], pa.uint64()), _make_float16_array([2048.0])),
                 # Large uint overflows to inf with safe=False
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, _make_float16_array([float('inf')])),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    _make_float16_array([float("inf")]),
+                ),
             ],
             "float32": [
                 (pa.array([0, 1, None], pa.uint64()), pa.array([0.0, 1.0, None], pa.float32())),
                 (pa.array([16777216], pa.uint64()), pa.array([16777216.0], pa.float32())),
                 # Large uint loses precision with safe=False
-                (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid, pa.array([1.8446744073709552e+19], pa.float32())),
+                (
+                    pa.array([18446744073709551615], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([1.8446744073709552e19], pa.float32()),
+                ),
             ],
             "float64": [
                 (pa.array([0, 1, None], pa.uint64()), pa.array([0.0, 1.0, None], pa.float64())),
@@ -1847,7 +2062,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([9007199254740992.0], pa.float64()),
                 ),
                 # Precision loss: safe=True raises, safe=False truncates
-                (pa.array([9007199254740993], pa.uint64()), pa.lib.ArrowInvalid, pa.array([9007199254740992.0], pa.float64())),
+                (
+                    pa.array([9007199254740993], pa.uint64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9007199254740992.0], pa.float64()),
+                ),
             ],
             # === Non-numerical types ===
             "bool": [
@@ -1950,13 +2169,25 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, 127, -128, None], pa.int8()),
                 ),
                 # fractional values: safe=False truncates
-                (_make_float16_array([1.5, -0.5]), pa.lib.ArrowInvalid, pa.array([1, 0], pa.int8())),
+                (
+                    _make_float16_array([1.5, -0.5]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([1, 0], pa.int8()),
+                ),
                 # overflow int8 range: safe=False wraps
                 (_make_float16_array([128.0]), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
                 (_make_float16_array([-129.0]), pa.lib.ArrowInvalid, pa.array([127], pa.int8())),
                 # special: NaN, Inf: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.int8())),
-                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int8()),
+                ),
+                (
+                    _make_float16_array([float("inf")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
             ],
             "int16": [
                 # Note: float16 can only represent integers exactly up to 2048
@@ -1969,7 +2200,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # float16 max (65504) overflows int16 max (32767): safe=False wraps
                 (_make_float16_array([f16_max]), pa.lib.ArrowInvalid, pa.array([-32], pa.int16())),
                 # NaN: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.int16())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int16()),
+                ),
             ],
             "int32": [
                 (
@@ -1979,9 +2214,17 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (_make_float16_array([1.5]), pa.lib.ArrowInvalid, pa.array([1], pa.int32())),
                 # inf: safe=False produces implementation-defined value
-                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid, pa.array([2147483647], pa.int32())),
+                (
+                    _make_float16_array([float("inf")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483647], pa.int32()),
+                ),
                 # NaN: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.int32())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int32()),
+                ),
             ],
             "int64": [
                 (
@@ -1991,9 +2234,17 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (_make_float16_array([1.5]), pa.lib.ArrowInvalid, pa.array([1], pa.int64())),
                 # -inf: safe=False produces implementation-defined value
-                (_make_float16_array([float("-inf")]), pa.lib.ArrowInvalid, pa.array([-9223372036854775808], pa.int64())),
+                (
+                    _make_float16_array([float("-inf")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-9223372036854775808], pa.int64()),
+                ),
                 # NaN: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.int64())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int64()),
+                ),
             ],
             "uint8": [
                 (
@@ -2005,7 +2256,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # overflow uint8 range: safe=False wraps
                 (_make_float16_array([256.0]), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
                 # NaN: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint8()),
+                ),
             ],
             "uint16": [
                 # Note: float16 can only represent integers exactly up to 2048
@@ -2018,7 +2273,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (_make_float16_array([1.5]), pa.lib.ArrowInvalid, pa.array([1], pa.uint16())),
                 # inf: safe=False produces implementation-defined value
-                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
+                (
+                    _make_float16_array([float("inf")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([65535], pa.uint16()),
+                ),
             ],
             "uint32": [
                 (
@@ -2030,7 +2289,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (_make_float16_array([1.5]), pa.lib.ArrowInvalid, pa.array([1], pa.uint32())),
                 # NaN: safe=False produces implementation-defined value
-                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
+                (
+                    _make_float16_array([float("nan")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -2042,7 +2305,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (_make_float16_array([1.5]), pa.lib.ArrowInvalid, pa.array([1], pa.uint64())),
                 # -inf: safe=False produces implementation-defined value
-                (_make_float16_array([float("-inf")]), pa.lib.ArrowInvalid, pa.array([0], pa.uint64())),
+                (
+                    _make_float16_array([float("-inf")]),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint64()),
+                ),
             ],
             "float16": [
                 # identity cast: normal values + special values
@@ -2448,17 +2715,41 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, -1, 127, -128, None], pa.int8()),
                 ),
                 # fractional: safe=False truncates
-                (pa.array([1.5, 0.1, 127.9], pa.float64()), pa.lib.ArrowInvalid, pa.array([1, 0, 127], pa.int8())),
+                (
+                    pa.array([1.5, 0.1, 127.9], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([1, 0, 127], pa.int8()),
+                ),
                 # overflow: safe=False wraps
                 (pa.array([128.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([-128], pa.int8())),
                 (pa.array([-129.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([127], pa.int8())),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int8())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int8())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int8())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int8()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int8()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int8()),
+                ),
                 # mixed array with special value
-                (pa.array([1.0, float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([1, 0], pa.int8())),
-                (pa.array([0.0, float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0, -1], pa.int8())),
+                (
+                    pa.array([1.0, float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([1, 0], pa.int8()),
+                ),
+                (
+                    pa.array([0.0, float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0, -1], pa.int8()),
+                ),
             ],
             "int16": [
                 (
@@ -2468,12 +2759,32 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (pa.array([1.5], pa.float64()), pa.lib.ArrowInvalid, pa.array([1], pa.int16())),
                 # overflow: safe=False wraps
-                (pa.array([32768.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([-32768], pa.int16())),
-                (pa.array([-32769.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([32767], pa.int16())),
+                (
+                    pa.array([32768.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-32768], pa.int16()),
+                ),
+                (
+                    pa.array([-32769.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([32767], pa.int16()),
+                ),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int16())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([-1], pa.int16())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int16())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int16()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-1], pa.int16()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int16()),
+                ),
             ],
             "int32": [
                 (
@@ -2483,12 +2794,32 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # fractional: safe=False truncates
                 (pa.array([1.5], pa.float64()), pa.lib.ArrowInvalid, pa.array([1], pa.int32())),
                 # overflow: safe=False wraps/saturates
-                (pa.array([2147483648.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([2147483647], pa.int32())),
-                (pa.array([-2147483649.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([-2147483648], pa.int32())),
+                (
+                    pa.array([2147483648.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483647], pa.int32()),
+                ),
+                (
+                    pa.array([-2147483649.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-2147483648], pa.int32()),
+                ),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int32())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([2147483647], pa.int32())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([-2147483648], pa.int32())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int32()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([2147483647], pa.int32()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-2147483648], pa.int32()),
+                ),
             ],
             "int64": [
                 (
@@ -2503,11 +2834,27 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     _get_float_to_int_boundary_expected(pa.int64()),
                 ),
                 # truly overflow: safe=False saturates
-                (pa.array([1e19], pa.float64()), pa.lib.ArrowInvalid, pa.array([9223372036854775807], pa.int64())),
+                (
+                    pa.array([1e19], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9223372036854775807], pa.int64()),
+                ),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.int64())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([9223372036854775807], pa.int64())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([-9223372036854775808], pa.int64())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.int64()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([9223372036854775807], pa.int64()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([-9223372036854775808], pa.int64()),
+                ),
                 # large but valid: 2^53 is exactly representable in float64
                 (
                     pa.array([9007199254740992.0], pa.float64()),
@@ -2524,9 +2871,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # overflow: safe=False wraps
                 (pa.array([256.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([255], pa.uint8())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint8())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint8()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([255], pa.uint8()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint8()),
+                ),
             ],
             "uint16": [
                 (
@@ -2534,13 +2893,33 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 65535, None], pa.uint16()),
                 ),
                 # negative: safe=False wraps
-                (pa.array([-1.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
+                (
+                    pa.array([-1.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([65535], pa.uint16()),
+                ),
                 # overflow: safe=False wraps
-                (pa.array([65536.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint16())),
+                (
+                    pa.array([65536.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint16()),
+                ),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([65535], pa.uint16())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint16())),
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint16())),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([65535], pa.uint16()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint16()),
+                ),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint16()),
+                ),
             ],
             "uint32": [
                 (
@@ -2550,11 +2929,27 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # negative: safe=False wraps
                 (pa.array([-1.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
                 # overflow: safe=False wraps
-                (pa.array([4294967296.0], pa.float64()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
+                (
+                    pa.array([4294967296.0], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
                 # === SPECIAL VALUES: safe=False produces implementation-defined values ===
-                (pa.array([float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
-                (pa.array([float("inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([4294967295], pa.uint32())),
-                (pa.array([float("-inf")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0], pa.uint32())),
+                (
+                    pa.array([float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint32()),
+                ),
+                (
+                    pa.array([float("inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([4294967295], pa.uint32()),
+                ),
+                (
+                    pa.array([float("-inf")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0], pa.uint32()),
+                ),
             ],
             "uint64": [
                 (
@@ -2562,7 +2957,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([0, 1, 9007199254740992, None], pa.uint64()),
                 ),
                 # negative/fractional/nan: safe=False wraps/truncates
-                (pa.array([-1.0, 1.5, float("nan")], pa.float64()), pa.lib.ArrowInvalid, pa.array([0, 1, 0], pa.uint64())),
+                (
+                    pa.array([-1.0, 1.5, float("nan")], pa.float64()),
+                    pa.lib.ArrowInvalid,
+                    pa.array([0, 1, 0], pa.uint64()),
+                ),
             ],
             "float16": [
                 # normal values + special values
@@ -4765,7 +5164,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([ts_lossy], pa.timestamp("us")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_us_lossless // 1000000], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000], pa.timestamp("s", tz="America/New_York")
+                    ),
                 ),
             ],
             "timestamp_s_tz_shanghai": [
@@ -5030,7 +5431,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([epoch_ns_lossy], pa.timestamp("ns")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="America/New_York")
+                    ),
                 ),
             ],
             "timestamp_s_tz_shanghai": [
@@ -5045,7 +5448,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([epoch_ns_lossy], pa.timestamp("ns")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
                 ),
             ],
             # timestamp[ns] -> duration (not supported)
@@ -5822,7 +6227,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([epoch_us_lossy], pa.timestamp("us", tz="UTC")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_us_lossless // 1000000], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(
+                        [epoch_us_lossless // 1000000], pa.timestamp("s", tz="America/New_York")
+                    ),
                 ),
             ],
             "timestamp_s_tz_shanghai": [
@@ -6144,7 +6551,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="America/New_York")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="America/New_York")
+                    ),
                 ),
             ],
             "timestamp_s_tz_shanghai": [
@@ -6159,7 +6568,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (
                     pa.array([epoch_ns_lossy], pa.timestamp("ns", tz="UTC")),
                     pa.lib.ArrowInvalid,
-                    pa.array([epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="Asia/Shanghai")),
+                    pa.array(
+                        [epoch_ns_lossless // 1000000000], pa.timestamp("s", tz="Asia/Shanghai")
+                    ),
                 ),
             ],
             # timestamp[ns,tz] -> duration (not supported)
@@ -7412,7 +7823,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([t_lossless, None], pa.time32("s")),
                 ),
                 # Lossy: safe=False truncates
-                (pa.array([t], pa.time32("ms")), pa.lib.ArrowInvalid, pa.array([t_lossless], pa.time32("s"))),
+                (
+                    pa.array([t], pa.time32("ms")),
+                    pa.lib.ArrowInvalid,
+                    pa.array([t_lossless], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
                 (pa.array([t, None], pa.time32("ms")), pa.array([t, None], pa.time32("ms"))),
@@ -7505,7 +7920,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([t_lossless, None], pa.time32("s")),
                 ),
                 # Lossy: safe=False truncates
-                (pa.array([t], pa.time64("us")), pa.lib.ArrowInvalid, pa.array([t_lossless], pa.time32("s"))),
+                (
+                    pa.array([t], pa.time64("us")),
+                    pa.lib.ArrowInvalid,
+                    pa.array([t_lossless], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
                 (
@@ -7617,7 +8036,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([t_lossless, None], pa.time32("s")),
                 ),
                 # Lossy: safe=False truncates
-                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowInvalid, pa.array([t_lossless], pa.time32("s"))),
+                (
+                    pa.array([t_ns], pa.time64("ns")),
+                    pa.lib.ArrowInvalid,
+                    pa.array([t_lossless], pa.time32("s")),
+                ),
             ],
             "time32_ms": [
                 (
@@ -7637,7 +8060,11 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                     pa.array([t_lossless, None], pa.time64("us")),
                 ),
                 # Lossy: safe=False truncates (keeps us precision)
-                (pa.array([t_ns], pa.time64("ns")), pa.lib.ArrowInvalid, pa.array([t], pa.time64("us"))),
+                (
+                    pa.array([t_ns], pa.time64("ns")),
+                    pa.lib.ArrowInvalid,
+                    pa.array([t], pa.time64("us")),
+                ),
             ],
             "time64_ns": [
                 (pa.array([t_ns, None], pa.time64("ns")), pa.array([t, None], pa.time64("ns"))),
