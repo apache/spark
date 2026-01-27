@@ -271,9 +271,10 @@ private[client] object GrpcExceptionConverter {
     errorConstructor(params =>
       new AnalysisException(
         message = params.message,
+        errorClass = Option(params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3100")),
+        messageParameters = errorParamsToMessageParameters(params.copy(errorClass =
+          Option(params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3100")))),
         cause = params.cause,
-        errorClass = resolveParams(params).errorClass,
-        messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext,
         sqlState = getSqlStateOrFallback(params))),
     errorConstructor(params =>
