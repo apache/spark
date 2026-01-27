@@ -3306,9 +3306,13 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
     else:
 
         def mapper(a):
-            # Yields (data, type) tuples for serializers
-            for arg_offsets, f in udfs:
-                yield f(*[a[o] for o in arg_offsets])
+            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
 
     def func(_, it):
         return map(mapper, it)

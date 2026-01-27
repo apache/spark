@@ -656,12 +656,14 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given iterator of (data, spark_type) tuples.
+        Create an Arrow record batch from the given pandas.Series, pandas.DataFrame,
+        or list of Series/DataFrame, with optional Spark type.
 
         Parameters
         ----------
-        series : iterable
-            Iterable of (series or dataframe, spark_type) tuples.
+        series : pandas.Series or pandas.DataFrame or list
+            A single series or dataframe, list of series or dataframe,
+            or list of (series or dataframe, spark_type) tuples.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -672,6 +674,16 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         """
         import pandas as pd
         import pyarrow as pa
+
+        # Normalize input to list of (data, spark_type) tuples
+        # Handle: single series, (series, type) tuple, or list of tuples
+        if (
+            not isinstance(series, (list, tuple))
+            or (len(series) == 2 and isinstance(series[1], DataType))
+        ):
+            series = [series]
+        # Ensure each element is a (data, spark_type) tuple
+        series = [(s, None) if not isinstance(s, (list, tuple)) else s for s in series]
 
         arrs = []
         for s, spark_type in series:
@@ -884,10 +896,6 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
         def py_to_batch():
             for packed in iterator:
-                # Normalize to list to support both generator and tuple inputs
-                if not isinstance(packed, (list, tuple)):
-                    packed = list(packed)
-
                 if len(packed) == 3 and isinstance(packed[1], pa.DataType):
                     # single array UDF in a projection
                     yield create_array(packed[0], packed[1], packed[2]), packed[1]
