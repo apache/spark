@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, FloatType, StringType}
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
-       0.97463185
+       0.9746319
   """,
   since = "4.2.0",
   group = "vector_funcs"
