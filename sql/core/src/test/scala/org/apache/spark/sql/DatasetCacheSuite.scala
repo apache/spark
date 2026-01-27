@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
@@ -35,7 +35,6 @@ import org.apache.spark.tags.SlowSQLTest
 @SlowSQLTest
 class DatasetCacheSuite extends QueryTest
   with SharedSparkSession
-  with SQLTestUtils
   with TimeLimits
   with AdaptiveSparkPlanHelper {
   import testImplicits._
