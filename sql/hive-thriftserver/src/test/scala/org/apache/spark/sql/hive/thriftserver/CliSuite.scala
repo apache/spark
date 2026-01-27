@@ -863,4 +863,22 @@ class CliSuite extends SparkFunSuite {
       extraArgs = "--conf" :: s"spark.plugins=${classOf[RedirectConsolePlugin].getName}" :: Nil)(
       "SELECT 1;" -> "1")
   }
+
+  test("SPARK-54876: The splitSemiColon function should correctly split SQL statements") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("SPARK-54876")
+    val sparkContext = new SparkContext(sparkConf)
+    SparkSQLEnv.sparkContext = sparkContext
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
+    val sessionState = new CliSessionState(cliConf)
+    SessionState.setCurrentSessionState(sessionState)
+    val cli = new SparkSQLCLIDriver
+    Seq("SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", " SELECT 2 /* comment */")).foreach {
+      case (query, ret) => assert(cli.splitSemiColon(query).asScala === ret)
+    }
+    sessionState.close()
+    SparkSQLEnv.stop()
+  }
 }
