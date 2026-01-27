@@ -21,10 +21,9 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Integration test suite for stream-stream join operator repartitioning.
- * Tests state repartitioning (increase and decrease partitions) for join operations.
  */
 class OfflineStateRepartitionIntegrationJoinSuite
-  extends OfflineStateRepartitionIntegrationSuite {
+  extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
 
