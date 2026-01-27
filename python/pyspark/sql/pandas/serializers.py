@@ -423,7 +423,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series : pandas.Series
             A single series
         spark_type : DataType, optional
-            The Spark type (ground truth). If None, pyarrow's inferred type will be used.
+            The Spark type to use. If None, pyarrow's inferred type will be used.
         arrow_cast : bool, optional
             Whether to apply Arrow casting when the user-specified return type mismatches the
             actual return values.
@@ -440,7 +440,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         if isinstance(series.dtype, pd.CategoricalDtype):
             series = series.astype(series.dtypes.categories.dtype)
 
-        # Derive arrow_type from spark_type (ground truth)
+        # Derive arrow_type from spark_type
         arrow_type = (
             to_arrow_type(
                 spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
@@ -633,7 +633,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         df : pandas.DataFrame
             A pandas DataFrame
         spark_type : StructType
-            The Spark StructType (ground truth)
+            The Spark StructType to use
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -643,7 +643,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         """
         import pyarrow as pa
 
-        # Derive arrow_struct_type from spark_type (ground truth)
+        # Derive arrow_struct_type from spark_type
         arrow_struct_type = to_arrow_type(
             spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
         )
@@ -743,7 +743,17 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         This should be sent after creating the first record batch so in case of an error, it can
         be sent back to the JVM before the Arrow stream starts.
         """
-        batches = self._write_stream_start(map(self._create_batch, iterator), stream)
+        batches = self._write_stream_start(
+            (
+                self._create_batch(
+                    series,
+                    arrow_cast=self._arrow_cast,
+                    prefers_large_types=self._prefers_large_types,
+                )
+                for series in iterator
+            ),
+            stream,
+        )
         return ArrowStreamSerializer.dump_stream(self, batches, stream)
 
     def __repr__(self):
@@ -991,7 +1001,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         series : pandas.Series
             A single series
         spark_type : DataType, optional
-            The Spark type (ground truth). If None, pyarrow's inferred type will be used.
+            The Spark type to use. If None, pyarrow's inferred type will be used.
         arrow_cast : bool, optional
             Whether to apply Arrow casting when the user-specified return type mismatches the
             actual return values.
@@ -1008,7 +1018,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         if isinstance(series.dtype, pd.CategoricalDtype):
             series = series.astype(series.dtypes.categories.dtype)
 
-        # Derive arrow_type from spark_type (ground truth)
+        # Derive arrow_type from spark_type
         arrow_type = (
             to_arrow_type(
                 spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
