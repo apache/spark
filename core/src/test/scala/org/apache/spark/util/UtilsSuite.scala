@@ -1669,26 +1669,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!st1.exists(_.getMethodName == "callDoTry"))
     assert(st1.exists(_.getMethodName == "callGetTry"))
 
-    // The original stack trace with callDoTry should be in the suppressed exceptions.
-    // Example:
-    // scalastyle:off line.size.limit
-    // Suppressed: java.lang.Exception: Full stacktrace of original doTryWithCallerStacktrace caller
-    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
-    //   at scala.util.Try$.apply(Try.scala:213)
-    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
-    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
-    //   ... 56 more
-    // scalastyle:on line.size.limit
-    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
-    assert(origSt.isDefined)
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
-
-    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
-    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
-      .doTryWithCallerStacktraceDepth == 4)
+    // No suppressed exception should be added - the wrapper is used internally only
+    assert(!e1.getSuppressed.exists(_.isInstanceOf[Utils.OriginalTryStackTraceException]))
 
     val e2 = intercept[Exception] {
       callGetTryAgain(t)
@@ -1760,20 +1742,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
       //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
       // ...
-      // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
-      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
-      //  at scala.util.Try$.apply(Try.scala:217)
-      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
-      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
-      //  ...
       // scalastyle:on line.size.limit
 
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1821,7 +1796,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1865,7 +1841,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(e.getStackTrace.exists(_.getMethodName == "callGetTry"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
-    assert(e.getSuppressed.length == 1)
+    // No suppressed exception - the wrapper is used internally only
+    assert(e.getSuppressed.length == 0)
   }
 }
 
