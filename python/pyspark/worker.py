@@ -227,10 +227,6 @@ def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
 def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
@@ -259,7 +255,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
         args_kwargs_offsets,
         lambda *a: (
             verify_result_length(verify_result_type(func(*a)), len(a[0])),
-            arrow_return_type,
+            return_type,
         ),
     )
 
@@ -386,10 +382,6 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
         args_kwargs_offsets = (0,)  # Series([pyspark._NoValue, ...]) is used for 0-arg execution.
         zero_arg_exec = True
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
     # optimization.
     # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
@@ -441,14 +433,11 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
 
     return (
         args_kwargs_offsets,
-        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), return_type),
     )
 
 
 def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
     iter_type_label = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
 
     def verify_result(result):
@@ -481,7 +470,7 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
         return elem
 
     return lambda *iterator: map(
-        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
+        lambda res: (res, return_type), map(verify_element, verify_result(f(*iterator)))
     )
 
 
@@ -844,14 +833,10 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
         yield result
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def flatten_wrapper(k, v):
-        # Return Iterator[[(df, arrow_type)]] directly
+        # Return Iterator[[(df, spark_type)]] directly
         for df in wrapped(k, v):
-            yield [(df, arrow_return_type)]
+            yield [(df, return_type)]
 
     return flatten_wrapper
 
@@ -881,14 +866,10 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
 
         yield from map(verify_element, result)
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def flatten_wrapper(k, v):
-        # Return Iterator[[(df, arrow_type)]] directly
+        # Return Iterator[[(df, spark_type)]] directly
         for df in wrapped(k, v):
-            yield [(df, arrow_return_type)]
+            yield [(df, return_type)]
 
     return flatten_wrapper
 
@@ -902,10 +883,7 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
@@ -925,10 +903,7 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
@@ -940,10 +915,7 @@ def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf):
@@ -962,10 +934,7 @@ def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
@@ -1057,18 +1026,11 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
             state,
         )
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda k, v, s: [(wrapped(k, v, s), arrow_return_type)]
+    return lambda k, v, s: [(wrapped(k, v, s), return_type)]
 
 
 def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
 
     def wrapped(*series):
         import pandas as pd
@@ -1078,7 +1040,7 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
 
     return (
         args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
+        lambda *a: (wrapped(*a), return_type),
     )
 
 
@@ -1124,10 +1086,6 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
 def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def wrapped(series_iter):
         import pandas as pd
 
@@ -1139,7 +1097,7 @@ def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_typ
 
     return (
         args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
+        lambda *a: (wrapped(*a), return_type),
     )
 
 
@@ -1192,10 +1150,6 @@ def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return
     # is that window_agg_pandas_udf needs to repeat the return value
     # to match window length, where grouped_agg_pandas_udf just returns
     # the scalar value.
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def wrapped(*series):
         import pandas as pd
 
@@ -1204,7 +1158,7 @@ def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return
 
     return (
         args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
+        lambda *a: (wrapped(*a), return_type),
     )
 
 
@@ -1233,10 +1187,6 @@ def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_t
     # args_offsets should have at least 2 for begin_index, end_index.
     assert len(args_offsets) >= 2, len(args_offsets)
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets[2:], kwargs_offsets)
-
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
 
     def wrapped(begin_index, end_index, *series):
         import pandas as pd
@@ -1269,7 +1219,7 @@ def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_t
 
     return (
         args_offsets[:2] + args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
+        lambda *a: (wrapped(*a), return_type),
     )
 
 
@@ -2184,9 +2134,6 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
         def wrap_arrow_udtf(f, return_type):
             import pandas as pd
 
-            arrow_return_type = to_arrow_type(
-                return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-            )
             return_type_size = len(return_type)
 
             def verify_result(result):
@@ -2258,7 +2205,6 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                     for _ in range(num_rows):
                         yield (
                             verify_result(pd.DataFrame(list(check_return_value(func())))),
-                            arrow_return_type,
                             return_type,
                         )
                 else:
@@ -2268,7 +2214,6 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                     for row in row_tuples:
                         yield (
                             verify_result(pd.DataFrame(list(check_return_value(func(*row))))),
-                            arrow_return_type,
                             return_type,
                         )
 
