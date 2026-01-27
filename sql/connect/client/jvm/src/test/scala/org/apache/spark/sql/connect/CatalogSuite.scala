@@ -323,7 +323,9 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
       val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
       assert(cachedColumns.contains("c1"))
       assert(cachedColumns.contains("c2"))
-      assert(!cachedColumns.contains("c3"), "DESCRIBE column df should not reflect the new column")
+      assert(
+        !cachedColumns.contains("c3"),
+        "DESCRIBE column df should not reflect the new column")
 
       // A fresh DESCRIBE TABLE call should show the new schema (with c3)
       // because Describe command is not cached
