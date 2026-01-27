@@ -1737,8 +1737,8 @@ class DataFrame(ParentDataFrame):
             )
 
         # Only eagerly validate the column name when:
-        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set; or
-        # 2, name starts with __, because this is likely a python internal method and
+        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
+        # 2, name starting with '__', because this is likely a python internal method and
         # an AttributeError is expected, for example,
         # pickle will internally invoke __getattr__("__setstate__"), returning a column
         # self._col("__setstate__") in this case will break the serialization of connect

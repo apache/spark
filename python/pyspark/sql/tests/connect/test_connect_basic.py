@@ -175,13 +175,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertTrue(hasattr(cdf, "_simple_extension"))
 
-        with self.temp_env({"PYSPARK_VALIDATE_COLUMN_NAME_LEGACY": "0"}):
+        with self.temp_env({"PYSPARK_VALIDATE_COLUMN_NAME_LEGACY": None}):
             self.assertTrue(hasattr(cdf, "_simple_extension_does_not_exsit"))
             self.assertIsInstance(getattr(cdf, "_simple_extension_does_not_exsit"), Column)
             self.assertIsInstance(cdf._simple_extension_does_not_exsit, Column)
 
+            # For name starting with '__', still validate it eagerly
+            self.assertFalse(hasattr(cdf, "__simple_extension_does_not_exsit"))
+
         with self.temp_env({"PYSPARK_VALIDATE_COLUMN_NAME_LEGACY": "1"}):
             self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
+            self.assertFalse(hasattr(cdf, "__simple_extension_does_not_exsit"))
 
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
