@@ -41,6 +41,10 @@ class WkbUtil {
   static final int DOUBLE_SIZE = 8;
   static final int TYPE_SIZE = INT_SIZE; // WKB type is a 4-byte integer
 
+  private WkbUtil() {
+    // Utility class, no instances
+  }
+
   /**
    * Returns true if the type value is a valid base type (1-7).
    */
@@ -125,10 +129,5 @@ class WkbUtil {
     return offset == WkbUtil.DIM_OFFSET_2D || offset == WkbUtil.DIM_OFFSET_Z
       || offset == WkbUtil.DIM_OFFSET_M || offset == WkbUtil.DIM_OFFSET_ZM;
   }
-
-  private WkbUtil() {
-    // Utility class, no instances
-  }
 }
-
 

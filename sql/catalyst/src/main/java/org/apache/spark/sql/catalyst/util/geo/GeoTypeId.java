@@ -52,4 +52,3 @@ enum GeoTypeId {
     throw new IllegalArgumentException("Invalid GeoTypeId value: " + value);
   }
 }
-

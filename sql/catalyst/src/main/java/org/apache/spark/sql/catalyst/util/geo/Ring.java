@@ -67,4 +67,3 @@ class Ring {
     return true;
   }
 }
-

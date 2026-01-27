@@ -183,4 +183,3 @@ public final class Geometry implements Geo {
   }
 
 }
-

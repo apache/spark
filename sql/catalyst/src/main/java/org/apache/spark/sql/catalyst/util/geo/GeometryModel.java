@@ -176,4 +176,3 @@ abstract class GeometryModel {
       "Cannot cast " + getClass().getSimpleName() + " to GeometryCollection");
   }
 }
-

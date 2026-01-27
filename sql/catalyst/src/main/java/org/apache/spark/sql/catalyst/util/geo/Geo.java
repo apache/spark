@@ -82,4 +82,3 @@ interface Geo {
   void setSrid(int srid);
 
 }
-

@@ -56,4 +56,3 @@ class WkbParseException extends RuntimeException {
     return wkbString;
   }
 }
-

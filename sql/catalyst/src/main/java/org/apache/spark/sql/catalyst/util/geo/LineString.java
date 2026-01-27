@@ -62,4 +62,3 @@ class LineString extends GeometryModel {
     return sb.toString();
   }
 }
-

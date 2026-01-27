@@ -99,4 +99,3 @@ class Point extends GeometryModel {
     return coordinates.length;
   }
 }
-

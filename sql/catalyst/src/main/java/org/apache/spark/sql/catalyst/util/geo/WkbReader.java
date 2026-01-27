@@ -428,4 +428,3 @@ class WkbReader {
     return new GeometryCollection(geometries, srid, hasZ, hasM);
   }
 }
-

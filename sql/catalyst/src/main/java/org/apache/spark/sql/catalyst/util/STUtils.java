@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.Geography;
+import org.apache.spark.sql.catalyst.util.geo.Geometry;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
