@@ -1908,6 +1908,50 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
+  testVector("VariantType", 10, VariantType) { column =>
+    val dt = VariantType
+
+    // Get the child vectors for Value and Metadata
+    val valueChild = column.getChild(0).asInstanceOf[WritableColumnVector]
+    val metadataChild = column.getChild(1).asInstanceOf[WritableColumnVector]
+
+    // Create test VariantVal instances
+    val variantVal1 = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5))
+    val variantVal2 = new VariantVal(Array[Byte](6, 7), Array[Byte](8, 9, 10))
+    val variantVal3 = new VariantVal(Array[Byte](11), Array[Byte](12))
+
+    // Put variant values in the column using the child-access pattern
+    val variants = Array(variantVal1, variantVal2, variantVal3)
+    variants.zipWithIndex.foreach { case (v, i) =>
+      column.putNotNull(i)
+      valueChild.putByteArray(i, v.getValue)
+      metadataChild.putByteArray(i, v.getMetadata)
+    }
+
+    val batchRow = new ColumnarBatchRow(Array(column))
+
+    // Helper to extract VariantVal and get debug string to stay under 100 chars
+    def getV(row: InternalRow): String = {
+      row.get(0, dt).asInstanceOf[VariantVal].debugString()
+    }
+
+    // Verify each row
+    batchRow.rowId = 0
+    assert(getV(batchRow) === variantVal1.debugString())
+    val batchRowCopy1 = batchRow.copy()
+    assert(getV(batchRowCopy1) === variantVal1.debugString())
+
+    batchRow.rowId = 1
+    assert(getV(batchRow) === variantVal2.debugString())
+    val batchRowCopy2 = batchRow.copy()
+    assert(getV(batchRowCopy2) === variantVal2.debugString())
+
+    batchRow.rowId = 2
+    assert(getV(batchRow) === variantVal3.debugString())
+    val batchRowCopy3 = batchRow.copy()
+    assert(getV(batchRowCopy3) === variantVal3.debugString())
+  }
+  
   testVector("Decimal API", 4, DecimalType.IntDecimal) {
     column =>
 
