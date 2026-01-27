@@ -37,6 +37,7 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
+    PandasBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -55,7 +56,6 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    import pandas as pd
     import pyarrow as pa
 
 
@@ -584,8 +584,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             and types.is_struct(arrow_column.type)
             and not is_variant(arrow_column.type)
         ):
-            import pandas as pd
-
             series = [
                 # Need to be explicit here because it's in a comprehension
                 super(ArrowStreamPandasUDFSerializer, self)
@@ -603,7 +601,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 .rename(field.name)
                 for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
             ]
-            s = pd.concat(series, axis=1)
+            s = PandasBatchTransformer.wrap_series(series)
         else:
             s = super().arrow_to_pandas(
                 arrow_column,
@@ -613,59 +611,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 spark_type=self._input_type[idx].dataType if self._input_type is not None else None,
             )
         return s
-
-    def _create_struct_array(
-        self,
-        df: "pd.DataFrame",
-        arrow_struct_type: "pa.StructType",
-        spark_type: Optional[StructType] = None,
-    ):
-        """
-        Create an Arrow StructArray from the given pandas.DataFrame and arrow struct type.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            A pandas DataFrame
-        arrow_struct_type : pyarrow.StructType
-            pyarrow struct type
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-
-        if len(df.columns) == 0:
-            return pa.array([{}] * len(df), arrow_struct_type)
-        # Assign result columns by schema name if user labeled with strings
-        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            struct_arrs = [
-                self._create_array(
-                    df[field.name],
-                    field.type,
-                    spark_type=(
-                        spark_type[field.name].dataType if spark_type is not None else None
-                    ),
-                    arrow_cast=self._arrow_cast,
-                )
-                for field in arrow_struct_type
-            ]
-        # Assign result columns by position
-        else:
-            struct_arrs = [
-                # the selected series has name '1', so we rename it to field.name
-                # as the name is used by _create_array to provide a meaningful error message
-                self._create_array(
-                    df[df.columns[i]].rename(field.name),
-                    field.type,
-                    spark_type=spark_type[i].dataType if spark_type is not None else None,
-                    arrow_cast=self._arrow_cast,
-                )
-                for i, field in enumerate(arrow_struct_type)
-            ]
-
-        return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
 
     def _create_batch(self, series):
         """
@@ -719,7 +664,22 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                         "Invalid return type. Please make sure that the UDF returns a "
                         "pandas.DataFrame when the specified return type is StructType."
                     )
-                arrs.append(self._create_struct_array(s, arrow_type, spark_type=spark_type))
+                if len(s.columns) == 0:
+                    arrs.append(pa.array([{}] * len(s), arrow_type))
+                else:
+                    arrs.append(
+                        ArrowBatchTransformer.wrap_struct(
+                            PandasBatchTransformer.to_arrow(
+                                s,
+                                arrow_type,
+                                timezone=self._timezone,
+                                safecheck=self._safecheck,
+                                arrow_cast=self._arrow_cast,
+                                assign_cols_by_name=self._assign_cols_by_name,
+                                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                            )
+                        ).column(0)
+                    )
             else:
                 arrs.append(
                     self._create_array(
@@ -978,7 +938,22 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                     f"a pandas.DataFrame but got: {type(s)}"
                 )
 
-            arrs.append(self._create_struct_array(s, arrow_type, spark_type))
+            if len(s.columns) == 0:
+                arrs.append(pa.array([{}] * len(s), arrow_type))
+            else:
+                arrs.append(
+                    ArrowBatchTransformer.wrap_struct(
+                        PandasBatchTransformer.to_arrow(
+                            s,
+                            arrow_type,
+                            timezone=self._timezone,
+                            safecheck=self._safecheck,
+                            arrow_cast=self._arrow_cast,
+                            assign_cols_by_name=self._assign_cols_by_name,
+                            int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                        )
+                    ).column(0)
+                )
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
@@ -1692,11 +1667,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             def row_stream():
                 for batch in batches:
                     self._update_batch_size_stats(batch)
-                    data_pandas = [
+                    series = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
                     ]
-                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    for row in PandasBatchTransformer.wrap_series(series).itertuples(index=False):
                         batch_key = tuple(row[s] for s in self.key_offsets)
                         yield (batch_key, row)
 
@@ -1822,25 +1797,29 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     self._update_batch_size_stats(batch)
 
                     flatten_state_table = flatten_columns(batch, "inputData")
-                    data_pandas = [
+                    input_data_series = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(flatten_state_table.itercolumns())
                     ]
 
                     flatten_init_table = flatten_columns(batch, "initState")
-                    init_data_pandas = [
+                    init_state_series = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
-                    assert not (bool(init_data_pandas) and bool(data_pandas))
+                    assert not (bool(init_state_series) and bool(input_data_series))
 
-                    if bool(data_pandas):
-                        for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    if bool(input_data_series):
+                        for row in PandasBatchTransformer.wrap_series(input_data_series).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_data_pandas):
-                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                    elif bool(init_state_series):
+                        for row in PandasBatchTransformer.wrap_series(init_state_series).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 

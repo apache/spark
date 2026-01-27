@@ -47,7 +47,11 @@ from pyspark.serializers import (
     CPickleSerializer,
     BatchedSerializer,
 )
-from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
+from pyspark.sql.conversion import (
+    LocalDataToArrowConversion,
+    ArrowTableToRowsConversion,
+    PandasBatchTransformer,
+)
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
@@ -645,10 +649,8 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     def wrapped(left_key_series, left_value_series, right_key_series, right_value_series):
-        import pandas as pd
-
-        left_df = pd.concat(left_value_series, axis=1)
-        right_df = pd.concat(right_value_series, axis=1)
+        left_df = PandasBatchTransformer.wrap_series(left_value_series)
+        right_df = PandasBatchTransformer.wrap_series(right_value_series)
 
         if len(argspec.args) == 2:
             result = f(left_df, right_df)
@@ -825,10 +827,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         # Convert value_batches (Iterator[list[pd.Series]]) to a single DataFrame
         # Each value_series is a list of Series (one per column) for one batch
         # Concatenate Series within each batch (axis=1), then concatenate batches (axis=0)
-        value_dataframes = []
-        for value_series in value_batches:
-            value_dataframes.append(pd.concat(value_series, axis=1))
-
+        value_dataframes = list(map(PandasBatchTransformer.wrap_series, value_batches))
         value_df = pd.concat(value_dataframes, axis=0) if value_dataframes else pd.DataFrame()
 
         if len(argspec.args) == 1:
@@ -858,20 +857,16 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     def wrapped(key_series, value_batches):
-        import pandas as pd
-
         # value_batches is an Iterator[list[pd.Series]] (one list per batch)
         # Convert each list of Series into a DataFrame
-        def dataframe_iter():
-            for value_series in value_batches:
-                yield pd.concat(value_series, axis=1)
+        dataframe_iter = map(PandasBatchTransformer.wrap_series, value_batches)
 
         if len(argspec.args) == 1:
-            result = f(dataframe_iter())
+            result = f(dataframe_iter)
         elif len(argspec.args) == 2:
             # Extract key from pandas Series, preserving numpy types
             key = tuple(s.iloc[0] for s in key_series)
-            result = f(key, dataframe_iter())
+            result = f(key, dataframe_iter)
 
         def verify_element(df):
             verify_pandas_result(
@@ -1000,11 +995,10 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
 
         if state.hasTimedOut:
             # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
-            values = [
-                pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns),
-            ]
+            first_df = PandasBatchTransformer.wrap_series(next(value_series_gen))
+            values = [pd.DataFrame(columns=first_df.columns)]
         else:
-            values = (pd.concat(x, axis=1) for x in value_series_gen)
+            values = map(PandasBatchTransformer.wrap_series, value_series_gen)
 
         result_iter = f(key, values, state)
 
