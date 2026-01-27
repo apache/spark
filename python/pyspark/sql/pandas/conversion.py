@@ -886,7 +886,9 @@ class SparkConversionMixin:
 
         jsparkSession = self._jsparkSession
 
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
+        ser = ArrowStreamPandasSerializer(
+            timezone, safecheck, False, prefers_large_types=prefers_large_var_types
+        )
 
         @no_type_check
         def reader_func(temp_filename):

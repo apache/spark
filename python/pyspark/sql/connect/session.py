@@ -630,12 +630,18 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
+            ser = ArrowStreamPandasSerializer(
+                cast(str, timezone),
+                safecheck == "true",
+                False,
+                prefers_large_types=prefers_large_types,
+            )
 
             _table = pa.Table.from_batches(
                 [
                     ser._create_batch(
-                        [(c, st) for (_, c), st in zip(data.items(), spark_types)]
+                        [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                        prefers_large_types=prefers_large_types,
                     )
                 ]
             )

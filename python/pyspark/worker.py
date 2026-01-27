@@ -2809,6 +2809,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 True,
                 input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                prefers_large_types=runner_conf.use_large_var_types,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))

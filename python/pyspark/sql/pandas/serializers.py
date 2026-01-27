@@ -378,13 +378,18 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     int_to_decimal_coercion_enabled : bool
         If True, applies additional coercions in Python before converting to Arrow
         This has performance penalties.
+    prefers_large_types : bool
+        If True, prefer large Arrow types (e.g., large_string instead of string).
     """
 
-    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
+    def __init__(
+        self, timezone, safecheck, int_to_decimal_coercion_enabled, prefers_large_types=False
+    ):
         super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._prefers_large_types = prefers_large_types
 
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
@@ -514,7 +519,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
-        batches = (self._create_batch(series) for series in iterator)
+        batches = (
+            self._create_batch(series, prefers_large_types=self._prefers_large_types)
+            for series in iterator
+        )
         super().dump_stream(batches, stream)
 
     def load_stream(self, stream):
@@ -553,8 +561,11 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         arrow_cast: bool = False,
         input_type: Optional[StructType] = None,
         int_to_decimal_coercion_enabled: bool = False,
+        prefers_large_types: bool = False,
     ):
-        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
+        super().__init__(
+            timezone, safecheck, int_to_decimal_coercion_enabled, prefers_large_types
+        )
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
@@ -736,7 +747,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         def init_stream_yield_batches():
             should_write_start_length = True
             for series in iterator:
-                batch = self._create_batch(series)
+                batch = self._create_batch(series, prefers_large_types=self._prefers_large_types)
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
@@ -1291,6 +1302,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             assign_cols_by_name,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             arrow_cast=True,
+            prefers_large_types=prefers_large_var_types,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
