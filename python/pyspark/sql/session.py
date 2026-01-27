@@ -609,11 +609,7 @@ class SparkSession(SparkConversionMixin):
                     for key, value in self._options.items():
                         sparkConf.set(key, str(value))
 
-                    sc = (
-                        self._sc
-                        if getattr(self, "_sc", None) is not None and self._sc._jsc is not None
-                        else SparkContext.getOrCreate(sparkConf)
-                    )
+                    sc = SparkContext.getOrCreate(sparkConf)
                     jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
                     # Create a new SparkSession in the JVM
                     jSparkSession = jSparkSessionClass.builder().config(self._options).create()
