@@ -276,7 +276,7 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
+      test(newTestName, testTags: _*) {
         testBody(enableStateStoreCheckpointIds)
       }
     }
@@ -3286,7 +3286,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // upload snapshot 4.zip
         db.doMaintenance()
       }
-      withDB(remoteDir, version = 4, conf = conf) { db =>
+      withDB(remoteDir, version = 4, conf = conf,
+          enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+          versionToUniqueId = versionToUniqueId) { db =>
+        db.close()
       }
     })
   }
@@ -3315,7 +3318,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.doMaintenance()
     }
 
-    withDB(remoteDir, version = 4, conf = conf) { db =>
+    withDB(remoteDir, version = 4, conf = conf,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+        versionToUniqueId = versionToUniqueId) { db =>
+      db.close()
     }
   }
 
@@ -4177,7 +4183,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // So still do a versionToUniqueId.get
       ckptId match {
         case Some(_) => super.load(version, ckptId, readOnly, loadEmpty)
-        case None => super.load(version, versionToUniqueId.get(version), readOnly, loadEmpty)
+        case None => super.load(
+          version,
+          if (!loadEmpty) versionToUniqueId.get(version) else None,
+          readOnly,
+          loadEmpty)
       }
     }
 
