@@ -205,9 +205,7 @@ class PandasBatchTransformer:
             # Convert to Arrow array
             try:
                 try:
-                    arr = pa.Array.from_pandas(
-                        series, mask=mask, type=arrow_type, safe=safecheck
-                    )
+                    arr = pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
                 except pa.lib.ArrowInvalid:
                     if arrow_cast:
                         arr = pa.Array.from_pandas(series, mask=mask).cast(
