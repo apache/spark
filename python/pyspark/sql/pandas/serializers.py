@@ -662,6 +662,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                                 safecheck=self._safecheck,
                                 arrow_cast=self._arrow_cast,
                                 assign_cols_by_name=self._assign_cols_by_name,
+                                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
                             )
                         ).column(0)
                     )
@@ -951,6 +952,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                             safecheck=self._safecheck,
                             arrow_cast=self._arrow_cast,
                             assign_cols_by_name=self._assign_cols_by_name,
+                            int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
                         )
                     ).column(0)
                 )

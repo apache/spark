@@ -140,6 +140,7 @@ class PandasBatchTransformer:
         safecheck: bool = True,
         arrow_cast: bool = False,
         assign_cols_by_name: bool = False,
+        int_to_decimal_coercion_enabled: bool = False,
     ) -> "pa.RecordBatch":
         """
         Convert a pandas DataFrame to an Arrow RecordBatch.
@@ -158,6 +159,8 @@ class PandasBatchTransformer:
             Whether to allow Arrow casting on type mismatch (default False)
         assign_cols_by_name : bool
             Whether to reorder columns by name to match schema (default False)
+        int_to_decimal_coercion_enabled : bool
+            Whether to enable int to decimal coercion (default False)
 
         Returns
         -------
@@ -189,6 +192,7 @@ class PandasBatchTransformer:
                     spark_type,
                     timezone=timezone,
                     error_on_duplicated_field_names=False,
+                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                 )
                 series = conv(series)
 
