@@ -255,6 +255,33 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  test("Legacy error class is set") {
+    Seq(
+      ("org.apache.spark.sql.AnalysisException", "_LEGACY_ERROR_TEMP_3100"),
+      ("java.lang.NumberFormatException", "_LEGACY_ERROR_TEMP_3104"),
+      ("java.lang.IllegalArgumentException", "_LEGACY_ERROR_TEMP_3105"),
+      ("java.lang.ArithmeticException", "_LEGACY_ERROR_TEMP_3106"),
+      ("java.lang.UnsupportedOperationException", "_LEGACY_ERROR_TEMP_3107"),
+      ("java.lang.ArrayIndexOutOfBoundsException", "_LEGACY_ERROR_TEMP_3108"),
+      ("java.time.DateTimeException", "_LEGACY_ERROR_TEMP_3109")
+    ).foreach { case (className, legacyErrorClass) =>
+      val baseParams = GrpcExceptionConverter.ErrorParams(
+        message = "Test error message",
+        cause = None,
+        errorClass = None,
+        messageParameters = Map.empty,
+        queryContext = Array.empty,
+        sqlState = None
+      )
+
+      val error = GrpcExceptionConverter.errorFactory(className)(baseParams)
+        .asInstanceOf[SparkThrowable]
+      assert(error.asInstanceOf[Exception].getMessage.contains("Test error message"))
+      assert(error.getCondition == legacyErrorClass)
+      assert(error.getSqlState == "XXKCM")
+    }
+  }
+
   private case class TestPackURI(
       connectionString: String,
       isCorrect: Boolean,
