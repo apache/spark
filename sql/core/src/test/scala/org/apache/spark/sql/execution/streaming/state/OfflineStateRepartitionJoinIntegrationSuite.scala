@@ -25,7 +25,6 @@ import org.apache.spark.sql.internal.SQLConf
 class OfflineStateRepartitionJoinIntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
-  import testImplicits._
 
   // Test stream-stream join operator repartitioning
   Seq(1).foreach { version =>
