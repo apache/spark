@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only, Classic-only (master, Python 3.11)"
+name: "Build / Python-only (master, Python 3.12, ARM)"
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'
+    - cron: '0 22 */3 * *'
   workflow_dispatch:
 
 jobs:
@@ -29,19 +29,7 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/build_and_test.yml
+    uses: ./.github/workflows/python_hosted_runner_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
-      branch: master
-      hadoop: hadoop3
-      envs: >-
-        {
-          "PYSPARK_IMAGE_TO_TEST": "python-311-classic-only",
-          "PYTHON_TO_TEST": "python3.11"
-        }
-      jobs: >-
-        {
-          "pyspark": "true",
-          "pyspark-pandas": "true"
-        }
+      os: ubuntu-24.04-arm

@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.api.extensions import no_default
 from pandas.api.types import (
     is_list_like,
     is_hashable,
@@ -56,6 +57,7 @@ from pandas.api.types import (
 )
 from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import (
     functions as F,
     Column as PySparkColumn,
@@ -415,7 +417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     """
 
     def __init__(  # type: ignore[no-untyped-def]
-        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=no_default
     ):
         assert data is not None
 
@@ -425,14 +427,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert dtype is None
             assert name is None
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             self._anchor = data
             self._col_label = index
 
         elif isinstance(data, Series):
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             if name:
                 data = data.rename(name)
@@ -453,7 +455,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 assert dtype is None
                 assert name is None
                 assert not copy
-                assert not fastpath
+                assert fastpath is no_default
                 s = data
             else:
                 from pyspark.pandas.indexes.base import Index
@@ -464,9 +466,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         "Try pandas index or array-like."
                     )
 
-                s = pd.Series(
-                    data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
-                )
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0"):
+                    s = pd.Series(
+                        data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
+                    )
+                else:
+                    # fastpath is removed since pandas 3.0.0
+                    s = pd.Series(data=data, index=index, dtype=dtype, name=name, copy=copy)
             internal = InternalFrame.from_pandas(pd.DataFrame(s))
             if s.name is None:
                 internal = internal.copy(column_labels=[None])

@@ -2955,6 +2955,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS =
+    buildConf("spark.sql.streaming.checkpoint.verifyMetadataExists.enabled")
+      .internal()
+      .doc("When true, validates that the checkpoint metadata file exists when offset " +
+        "or commit logs contain data. This prevents generating a new query ID when " +
+        "checkpoint data already exists, which would cause data duplication in " +
+        "exactly-once sinks.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()

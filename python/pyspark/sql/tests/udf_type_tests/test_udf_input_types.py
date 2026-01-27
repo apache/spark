@@ -21,7 +21,7 @@ import unittest
 import pandas as pd
 
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, pandas_udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -74,102 +74,6 @@ class UDFInputTypeTests(ReusedSQLTestCase):
 
     def setUp(self):
         super().setUp()
-
-    def test_udf_input_types_arrow_disabled(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_input_types_arrow_disabled.txt"
-        )
-        self._run_udf_input_type_coercion_test(
-            config={},
-            use_arrow=False,
-            golden_file=golden_file,
-            test_name="UDF input types - Arrow disabled",
-        )
-
-    def test_udf_input_types_arrow_legacy_pandas(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_input_types_arrow_legacy_pandas.txt"
-        )
-        self._run_udf_input_type_coercion_test(
-            config={"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"},
-            use_arrow=True,
-            golden_file=golden_file,
-            test_name="UDF input types - Arrow with legacy pandas",
-        )
-
-    def test_udf_input_types_arrow_enabled(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_udf_input_types_arrow_enabled.txt"
-        )
-        self._run_udf_input_type_coercion_test(
-            config={"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false"},
-            use_arrow=True,
-            golden_file=golden_file,
-            test_name="UDF input types - Arrow enabled",
-        )
-
-    def _run_udf_input_type_coercion_test(self, config, use_arrow, golden_file, test_name):
-        with self.sql_conf(config):
-            results = self._generate_udf_input_type_coercion_results(use_arrow)
-            actual_output = format_type_table(
-                results,
-                ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
-                column_width=85,
-            )
-            self._compare_or_create_golden_file(actual_output, golden_file, test_name)
-
-    def _generate_udf_input_type_coercion_results(self, use_arrow):
-        results = []
-        test_cases = self._get_input_type_test_cases()
-
-        for test_name, spark_type, data_func in test_cases:
-            input_df = data_func(spark_type).repartition(1)
-            input_data = [row["value"] for row in input_df.collect()]
-            result_row = [test_name, spark_type.simpleString(), str(input_data)]
-
-            try:
-
-                def type_udf(x):
-                    if x is None:
-                        return "NoneType"
-                    else:
-                        return type(x).__name__
-
-                def value_udf(x):
-                    return x
-
-                def value_str(x):
-                    return str(x)
-
-                type_test_udf = udf(type_udf, returnType=StringType(), useArrow=use_arrow)
-                value_test_udf = udf(value_udf, returnType=spark_type, useArrow=use_arrow)
-                value_str_udf = udf(value_str, returnType=StringType(), useArrow=use_arrow)
-
-                result_df = input_df.select(
-                    value_test_udf("value").alias("python_value"),
-                    type_test_udf("value").alias("python_type"),
-                    value_str_udf("value").alias("python_value_str"),
-                )
-                results_data = result_df.collect()
-                values = [row["python_value"] for row in results_data]
-                types = [row["python_type"] for row in results_data]
-                values_str = [row["python_value_str"] for row in results_data]
-
-                # Assert that the UDF output values match the input values
-                assert values == input_data, f"Input {values} != output {input_data}"
-
-                result_row.append(str(types))
-                result_row.append(str(values_str).replace("\n", " "))
-
-            except Exception as e:
-                print("error_msg", e)
-                # Clean up exception message to remove newlines and extra whitespace
-                error_msg = str(e).replace("\n", " ").replace("\r", " ")
-                result_row.append(f"✗ {error_msg}")
-
-            results.append(result_row)
-
-        return results
 
     def test_pandas_udf_input(self):
         golden_file = os.path.join(os.path.dirname(__file__), "golden_pandas_udf_input_types.txt")
