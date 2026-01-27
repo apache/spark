@@ -263,22 +263,22 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       ("java.lang.ArithmeticException", "_LEGACY_ERROR_TEMP_3106"),
       ("java.lang.UnsupportedOperationException", "_LEGACY_ERROR_TEMP_3107"),
       ("java.lang.ArrayIndexOutOfBoundsException", "_LEGACY_ERROR_TEMP_3108"),
-      ("java.time.DateTimeException", "_LEGACY_ERROR_TEMP_3109")
-    ).foreach { case (className, legacyErrorClass) =>
-      val baseParams = GrpcExceptionConverter.ErrorParams(
-        message = "Test error message",
-        cause = None,
-        errorClass = None,
-        messageParameters = Map.empty,
-        queryContext = Array.empty,
-        sqlState = None
-      )
+      ("java.time.DateTimeException", "_LEGACY_ERROR_TEMP_3109")).foreach {
+      case (className, legacyErrorClass) =>
+        val baseParams = GrpcExceptionConverter.ErrorParams(
+          message = "Test error message",
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          queryContext = Array.empty,
+          sqlState = None)
 
-      val error = GrpcExceptionConverter.errorFactory(className)(baseParams)
-        .asInstanceOf[SparkThrowable]
-      assert(error.asInstanceOf[Exception].getMessage.contains("Test error message"))
-      assert(error.getCondition == legacyErrorClass)
-      assert(error.getSqlState == "XXKCM")
+        val error = GrpcExceptionConverter
+          .errorFactory(className)(baseParams)
+          .asInstanceOf[SparkThrowable]
+        assert(error.asInstanceOf[Exception].getMessage.contains("Test error message"))
+        assert(error.getCondition == legacyErrorClass)
+        assert(error.getSqlState == "XXKCM")
     }
   }
 

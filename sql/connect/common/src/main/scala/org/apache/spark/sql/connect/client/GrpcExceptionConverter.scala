@@ -379,15 +379,15 @@ private[client] object GrpcExceptionConverter {
         sqlState = getSqlStateOrFallback(params))))
 
   // Explicitly deal with cases where there are fallback legacy error classes
-  private def getParamsWithLegacyErrorClass(params: ErrorParams,
-    fallbackErrorClass: String): ErrorParams = {
+  private def getParamsWithLegacyErrorClass(
+      params: ErrorParams,
+      fallbackErrorClass: String): ErrorParams = {
     if (params.errorClass.isDefined) {
       return params
     }
     params.copy(
       errorClass = Some(fallbackErrorClass),
-      messageParameters = Map("message" -> params.message)
-    )
+      messageParameters = Map("message" -> params.message))
   }
 
   /**
