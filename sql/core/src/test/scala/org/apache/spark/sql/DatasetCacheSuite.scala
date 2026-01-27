@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
@@ -339,8 +339,7 @@ class DatasetCacheSuite extends QueryTest
     assert(value == LocalTime.of(13, 33, 33))
   }
 
-  test("SPARK-54812: SHOW TABLES cached result should continue to reflect state at cache time" +
-    "for legacy reasons.") {
+  test("SPARK-54812: SHOW TABLES should be a no-op.") {
     val t1 = "show_tables_test_t1"
     val t2 = "show_tables_test_t2"
     withTable(t1, t2) {
@@ -359,7 +358,7 @@ class DatasetCacheSuite extends QueryTest
       // Verify cached result reflects the latest state (includes t2)
       val cachedTables = showTablesDf.select("tableName").collect().map(_.getString(0)).toSet
       assert(cachedTables.contains(t1))
-      assert(cachedTables.contains(t2))
+      assert(!cachedTables.contains(t2))
 
       // A fresh SHOW TABLES call should also show both tables
       val freshShowTablesDf = sql("SHOW TABLES")

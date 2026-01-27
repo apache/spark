@@ -892,7 +892,7 @@ case class ShowTablesCommand(
     override val output: Seq[Attribute],
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None)
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
@@ -953,7 +953,7 @@ case class ShowTablePropertiesCommand(
     table: TableIdentifier,
     propertyKey: Option[String],
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -991,7 +991,7 @@ case class ShowColumnsCommand(
     databaseName: Option[String],
     tableName: TableIdentifier,
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1023,7 +1023,7 @@ case class ShowPartitionsCommand(
     tableName: TableIdentifier,
     override val output: Seq[Attribute],
     spec: Option[TablePartitionSpec])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1158,7 +1158,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
 case class ShowCreateTableCommand(
     table: TableIdentifier,
     override val output: Seq[Attribute])
-    extends LeafRunnableCommand with ShowCreateTableCommandBase with UsesCachedData {
+    extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1300,7 +1300,7 @@ case class ShowCreateTableCommand(
 case class ShowCreateTableAsSerdeCommand(
     table: TableIdentifier,
     override val output: Seq[Attribute])
-    extends LeafRunnableCommand with ShowCreateTableCommandBase with UsesCachedData {
+    extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

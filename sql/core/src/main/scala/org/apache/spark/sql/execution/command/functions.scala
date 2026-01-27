@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.UsesCachedData
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -171,7 +170,7 @@ case class ShowFunctionsCommand(
     showUserFunctions: Boolean,
     showSystemFunctions: Boolean,
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If pattern is not specified, we use '*', which is used to

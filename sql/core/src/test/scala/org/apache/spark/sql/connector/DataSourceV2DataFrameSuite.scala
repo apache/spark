@@ -2047,7 +2047,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-
   test("SPARK-54812: caching dataframe created from CREATE shouldn't re-execute the command") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

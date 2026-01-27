@@ -1222,7 +1222,7 @@ case class ShowTables(
     namespace: LogicalPlan,
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowTables.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTables =
     copy(namespace = newChild)
@@ -1242,7 +1242,7 @@ case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
     override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
@@ -1263,7 +1263,7 @@ case class ShowTablePartition(
     table: LogicalPlan,
     partitionSpec: PartitionSpec,
     override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
-  extends V2PartitionCommand with UsesCachedData {
+  extends V2PartitionCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablePartition =
     copy(table = newChild)
 }
@@ -1278,7 +1278,7 @@ case class ShowViews(
     namespace: LogicalPlan,
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowViews.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowViews =
     copy(namespace = newChild)
@@ -1315,7 +1315,7 @@ case class ShowTableProperties(
     table: LogicalPlan,
     propertyKey: Option[String],
     override val output: Seq[Attribute] = ShowTableProperties.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
@@ -1410,7 +1410,7 @@ case class ShowFunctions(
     systemScope: Boolean,
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowFunctions =
     copy(namespace = newChild)
@@ -1535,7 +1535,7 @@ case class ShowCreateTable(
     child: LogicalPlan,
     asSerde: Boolean = false,
     override val output: Seq[Attribute] = ShowCreateTable.getoutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowCreateTable =
     copy(child = newChild)
 }
@@ -1553,7 +1553,7 @@ case class ShowColumns(
     child: LogicalPlan,
     namespace: Option[Seq[String]],
     override val output: Seq[Attribute] = ShowColumns.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+  extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowColumns =
     copy(child = newChild)
 }
@@ -1591,7 +1591,7 @@ case class ShowPartitions(
     table: LogicalPlan,
     pattern: Option[PartitionSpec],
     override val output: Seq[Attribute] = ShowPartitions.getOutputAttrs)
-  extends V2PartitionCommand with UsesCachedData {
+  extends V2PartitionCommand {
   override def allowPartialPartitionSpec: Boolean = true
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowPartitions =
     copy(table = newChild)
