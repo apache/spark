@@ -169,14 +169,6 @@ class DataFrame(ParentDataFrame):
             },
         )
 
-    def __setstate__(self, state: Any) -> None:
-        # state {'_support_repr_html': False, '_cached_schema': None}
-        # the state is defined by the 3rd item of __reduce__
-        # see https://docs.python.org/3/library/pickle.html#object.__reduce__
-        # This method is to avoid __getattr__ being invoked on unpickling,
-        # which always return True and fail the deserialization.
-        self.__dict__.update(state)
-
     def __repr__(self) -> str:
         if not self._support_repr_html:
             (
@@ -1744,13 +1736,19 @@ class DataFrame(ParentDataFrame):
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if (
-            os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1"
-            and name not in self.columns
-        ):
-            raise PySparkAttributeError(
-                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
-            )
+        # Only eagerly validate the column name when:
+        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set; or
+        # 2, name starts with __, because this is likely a python internal method and
+        # an AttributeError is expected, for example,
+        # pickle will internally invoke __getattr__("__setstate__"), returning a column
+        # self._col("__setstate__") in this case will break the serialization of connect
+        # dataframe and features built atop it (e.g. FEB).
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
+            if name not in self.columns:
+                raise PySparkAttributeError(
+                    errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
+                )
+
         return self._col(name)
 
     @overload
