@@ -25,16 +25,14 @@ import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /**
- * Integration test suite for OfflineStateRepartitionRunner with stateful operators.
+ * Integration test suite helper class for OfflineStateRepartitionRunner with stateful operators.
  * Tests state repartitioning (increase and decrease partitions) and validates:
  * 1. State data remains identical after repartitioning
  * 2. Offset and commit logs are updated correctly
  * 3. Query can resume successfully and compute correctly with repartitioned state
  */
-class OfflineStateRepartitionIntegrationSuite
-  extends StateDataSourceTestBase {
+trait OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBase {
 
-  import testImplicits._
   import OfflineStateRepartitionTestUtils._
 
   override def beforeAll(): Unit = {
@@ -233,7 +231,13 @@ class OfflineStateRepartitionIntegrationSuite
       }
     }
   }
+}
 
+/**
+ * Integration test suite for OfflineStateRepartitionRunner with single-column family operators.
+ */
+class OfflineStateRepartitionIntegrationSuite extends OfflineStateRepartitionIntegrationSuiteBase {
+  import testImplicits._
   // Test aggregation operator repartitioning
   StreamingAggregationStateManager.supportedVersions.foreach { version =>
     testWithAllRepartitionOperations(s"aggregation state v$version") { newPartitions =>
