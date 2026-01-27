@@ -11475,7 +11475,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              A    B
         0  1.0  2.0
         1  1.0  2.0
-        2  1.0  2.0
+        2  1.5  1.5
         3  2.0  1.0
         """
         axis = validate_axis(axis)
@@ -11502,7 +11502,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 pdf_rank = pdf.rank(method=method, ascending=ascending, axis=1, numeric_only=False)
                 return DataFrame(InternalFrame.from_pandas(pdf_rank))
 
-            column_label_strings = [name_like_string(label) for label in psdf._internal.column_labels]
+            column_label_strings = [
+                name_like_string(label) for label in psdf._internal.column_labels
+            ]
 
             @pandas_udf(  # type: ignore[call-overload]
                 returnType=StructType(
@@ -11514,14 +11516,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             def rank_axis_1(*cols: pd.Series) -> pd.DataFrame:
                 pdf_row = pd.concat(cols, axis=1, keys=column_label_strings)
-                return pdf_row.rank(
-                    method=method, ascending=ascending, axis=1
-                ).rename(columns=dict(zip(pdf_row.columns, column_label_strings)))
+                return pdf_row.rank(method=method, ascending=ascending, axis=1).rename(
+                    columns=dict(zip(pdf_row.columns, column_label_strings))
+                )
 
             ranked_struct_col = rank_axis_1(*psdf._internal.data_spark_columns)
             new_data_columns = [
-                ranked_struct_col[col_name].alias(col_name)
-                for col_name in column_label_strings
+                ranked_struct_col[col_name].alias(col_name) for col_name in column_label_strings
             ]
             sdf = psdf._internal.spark_frame.select(
                 psdf._internal.index_spark_columns + new_data_columns
@@ -11541,7 +11542,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_names=psdf._internal.index_names,
                 index_fields=psdf._internal.index_fields,
                 column_labels=psdf._internal.column_labels,
-                data_spark_columns=[scol_for(sdf, name_like_string(label)) for label in psdf._internal.column_labels],
+                data_spark_columns=[
+                    scol_for(sdf, name_like_string(label)) for label in psdf._internal.column_labels
+                ],
                 data_fields=data_fields,
                 column_label_names=psdf._internal.column_label_names,
             )
