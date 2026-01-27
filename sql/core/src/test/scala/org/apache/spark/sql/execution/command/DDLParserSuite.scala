@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, Fun
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.expressions.{JsonTuple, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
@@ -802,13 +802,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   test("SET CATALOG") {
     comparePlans(
       parser.parsePlan("SET CATALOG abc"),
-      SetCatalogCommand("abc"))
+      SetCatalogCommand(UnresolvedAttribute("abc")))
     comparePlans(
       parser.parsePlan("SET CATALOG 'a b c'"),
-      SetCatalogCommand("a b c"))
+      SetCatalogCommand(Literal("a b c")))
     comparePlans(
       parser.parsePlan("SET CATALOG `a b c`"),
-      SetCatalogCommand("a b c"))
+      SetCatalogCommand(UnresolvedAttribute(Seq("a b c"))))
   }
 
   test("SHOW CATALOGS") {
