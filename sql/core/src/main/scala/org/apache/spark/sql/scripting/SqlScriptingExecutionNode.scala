@@ -556,6 +556,18 @@ class WhileStatementExec(
                 throw SparkException.internalError("Unexpected statement type in WHILE condition.")
             }
           case WhileState.Body =>
+            // Check if body has more statements before calling next(). When an exception in a
+            // conditional statement's condition is handled by a CONTINUE handler, the conditional
+            // is interrupted. If it's the last statement in the loop body, calling next() on the
+            // exhausted iterator would fail. Instead, we return NoOpStatementExec and transition
+            // back to the condition.
+            if (!body.getTreeIterator.hasNext) {
+              state = WhileState.Condition
+              curr = Some(condition)
+              condition.reset()
+              return new NoOpStatementExec
+            }
+
             val retStmt = body.getTreeIterator.next()
 
             // Handle LEAVE or ITERATE statement if it has been encountered.
@@ -718,9 +730,16 @@ class SimpleCaseStatementExec(
   private var conditionBodyTupleIterator: Iterator[(SingleStatementExec, CompoundBodyExec)] = _
   private var caseVariableLiteral: Literal = _
 
+  // Flag to track if case variable evaluation has been attempted. Used by CONTINUE handler
+  // mechanism to determine if an exception occurred during case variable evaluation vs. before
+  // the CASE statement was reached.
+  protected[scripting] var hasStartedCaseVariableEvaluation: Boolean = false
+
   private var isCacheValid = false
   private def validateCache(): Unit = {
     if (!isCacheValid) {
+      // Set flags before evaluation so CONTINUE handler can detect if exception happened here.
+      hasStartedCaseVariableEvaluation = true
       val values = caseVariableExec.buildDataFrame(session).collect()
       caseVariableExec.isExecuted = true
 
@@ -828,6 +847,7 @@ class SimpleCaseStatementExec(
     caseVariableExec.reset()
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
+    hasStartedCaseVariableEvaluation = false
   }
 }
 
@@ -878,6 +898,18 @@ class RepeatStatementExec(
               throw SparkException.internalError("Unexpected statement type in REPEAT condition.")
           }
         case RepeatState.Body =>
+          // Check if body has more statements before calling next(). When an exception in a
+          // conditional statement's condition is handled by a CONTINUE handler, the conditional
+          // is interrupted. If it's the last statement in the loop body, calling next() on the
+          // exhausted iterator would fail. Instead, we return NoOpStatementExec and transition
+          // back to the condition.
+          if (!body.getTreeIterator.hasNext) {
+            state = RepeatState.Condition
+            curr = Some(condition)
+            condition.reset()
+            return new NoOpStatementExec
+          }
+
           val retStmt = body.getTreeIterator.next()
 
           retStmt match {
@@ -1045,11 +1077,13 @@ class ForStatementExec(
   }
   private var state = ForState.VariableAssignment
 
+  protected[scripting] var hasStartedQueryEvaluation = false
   private var queryResult: util.Iterator[Row] = _
   private var queryColumnNameToDataType: Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
+      hasStartedQueryEvaluation = true
       val df = query.buildDataFrame(session)
       queryResult = df.toLocalIterator()
       queryColumnNameToDataType = df.schema.fields.map(f => f.name -> f.dataType).toMap
@@ -1253,6 +1287,7 @@ class ForStatementExec(
     curr = None
     bodyWithVariables = None
     firstIteration = true
+    hasStartedQueryEvaluation = false
   }
 }
 

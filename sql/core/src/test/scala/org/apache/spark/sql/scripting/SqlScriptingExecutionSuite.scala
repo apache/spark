@@ -402,6 +402,298 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("continue handler - Exception in FOR loop query evaluation") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i = 0;
+        |  DECLARE handled = 0;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |    SET handled = handled + 1;
+        |
+        |  WHILE i < 2 DO
+        |    SET i = i + 1;
+        |    FOR o AS SELECT 1/0 DO
+        |      SELECT 1;
+        |    END FOR;
+        |  END WHILE;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(2)))
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - WHILE loop with exception in IF condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |    SELECT 22;
+        |
+        |  WHILE i < 2 DO
+        |    SET i = i + 1;
+        |
+        |    IF (1/0)==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  END WHILE;
+        |
+        |  SELECT i, s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),  // handler executed on first iteration
+      Seq(Row(22)),  // handler executed on second iteration
+      Seq(Row(2, 0)) // final select: i=2, s=0 (never incremented)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - REPEAT loop with exception in IF condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |    SELECT 22;
+        |
+        |  REPEAT
+        |    SET i = i + 1;
+        |
+        |    IF (1/0)==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  UNTIL i >= 2
+        |  END REPEAT;
+        |
+        |  SELECT i, s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),  // handler executed on first iteration
+      Seq(Row(22)),  // handler executed on second iteration
+      Seq(Row(2, 0)) // final select: i=2, s=0 (never incremented)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - WHILE loop with SIGNAL before IF") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |    SELECT 22;
+        |
+        |  WHILE i < 2 DO
+        |    SET i = i + 1;
+        |
+        |    SIGNAL SQLSTATE '02000';
+        |
+        |    IF 1==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  END WHILE;
+        |
+        |  SELECT i, s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),   // handler executed on first iteration
+      Seq(Row(22)),   // handler executed on second iteration
+      Seq(Row(2, 10)) // final select: i=2, s=10 (incremented twice)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - REPEAT loop with SIGNAL before IF") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |    SELECT 22;
+        |
+        |  REPEAT
+        |    SET i = i + 1;
+        |
+        |    SIGNAL SQLSTATE '02000';
+        |
+        |    IF 1==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  UNTIL i >= 2
+        |  END REPEAT;
+        |
+        |  SELECT i, s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),   // handler executed on first iteration
+      Seq(Row(22)),   // handler executed on second iteration
+      Seq(Row(2, 10)) // final select: i=2, s=10 (incremented twice)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - FOR loop with exception in IF condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |    SELECT 22;
+        |
+        |  FOR i AS VALUES (1), (2) DO
+        |    SELECT 1;
+        |    IF (1/0)==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  END FOR;
+        |
+        |  SELECT s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)),   // SELECT 1 on first iteration
+      Seq(Row(22)),  // handler executed on first iteration
+      Seq(Row(1)),   // SELECT 1 on second iteration
+      Seq(Row(22)),  // handler executed on second iteration
+      Seq(Row(0))    // final select: i=2, s=0 (never incremented)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - FOR loop with signal before IF") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |    SELECT 22;
+        |
+        |  FOR i AS VALUES (1), (2) DO
+        |    SELECT 1;
+        |    SIGNAL SQLSTATE '02000';
+        |
+        |    IF 1==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  END FOR;
+        |
+        |  SELECT 10;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)),   // SELECT 1 on first iteration
+      Seq(Row(22)),  // handler executed on first iteration
+      Seq(Row(1)),   // SELECT 1 on second iteration
+      Seq(Row(22)),  // handler executed on second iteration
+      Seq(Row(10))   // final select: s=10 (incremented twice)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - SIGNAL before FOR loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE s INT DEFAULT 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |    SELECT 22;
+        |
+        |  SIGNAL SQLSTATE '02000';
+        |
+        |  FOR i AS VALUES (1), (2) DO
+        |    SELECT 1;
+        |    IF 1==1 THEN
+        |      SET s = s + 5;
+        |    END IF;
+        |  END FOR;
+        |
+        |  SELECT s;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),  // handler executed
+      Seq(Row(1)),   // SELECT 1 on first iteration
+      Seq(Row(1)),   // SELECT 1 on second iteration
+      Seq(Row(10))   // final select: s=10 (incremented twice)
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - SIGNAL before simple case") {
+    withTable("t") {
+      val commands =
+        """
+          |BEGIN
+          |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+          |    SELECT 22;
+          |
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  INSERT INTO t VALUES (1, 'a', 1.0);
+          |  INSERT INTO t VALUES (2, 'b', 2.0);
+          |
+          |  SIGNAL SQLSTATE '02000';
+          |  CASE (SELECT COUNT(*) FROM t)
+          |   WHEN 1 THEN
+          |     SELECT 42;
+          |   WHEN 3 THEN
+          |     SELECT 43;
+          |   ELSE
+          |     SELECT 44;
+          |  END CASE;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(22)),  // handler executed
+        Seq(Row(44))
+      )
+      verifySqlScriptResult(commands, expected)
+    }
+  }
+
+  test("continue handler - SIGNAL before searched case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |    SELECT 22;
+        |
+        |  SIGNAL SQLSTATE '02000';
+        |
+        |  CASE
+        |    WHEN 1 = (SELECT 2) THEN
+        |      SELECT 1;
+        |    WHEN 2 = 2 THEN
+        |      SELECT 42;
+        |    WHEN (SELECT * FROM t) THEN
+        |      SELECT * FROM b;
+        |  END CASE;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(22)),  // handler executed
+      Seq(Row(42))
+    )
+    verifySqlScriptResult(commands, expected)
+  }
+
   test("handler - exit resolve in outer block") {
     val sqlScript =
       """
