@@ -1739,10 +1739,12 @@ class DataFrame(ParentDataFrame):
         # Only eagerly validate the column name when:
         # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
         # 2, name starting with '__', because this is likely a python internal method and
-        # an AttributeError is expected, for example,
-        # pickle will internally invoke __getattr__("__setstate__"), returning a column
-        # self._col("__setstate__") in this case will break the serialization of connect
-        # dataframe and features built atop it (e.g. FEB).
+        # an AttributeError might be expected to make getattr(df, name) work.
+        # For example:
+        # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
+        # and it internally invokes __getattr__("__setstate__").
+        # Returning a dataframe column self._col("__setstate__") in this case will break
+        # the serialization of connect dataframe and features built atop it (e.g. FEB).
         if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
             if name not in self.columns:
                 raise PySparkAttributeError(
