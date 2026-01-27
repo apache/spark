@@ -1739,7 +1739,7 @@ class DataFrame(ParentDataFrame):
         # Only eagerly validate the column name when:
         # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
         # 2, name starting with '__', because this is likely a python internal method and
-        # an AttributeError might be expected to make getattr(df, name) work.
+        # an AttributeError might be expected to make hasattr(df, name) work.
         # For example:
         # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
         # and it internally invokes __getattr__("__setstate__").
