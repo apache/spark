@@ -237,7 +237,9 @@ trait OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBas
  * Integration test suite for OfflineStateRepartitionRunner with single-column family operators.
  */
 class OfflineStateRepartitionIntegrationSuite extends OfflineStateRepartitionIntegrationSuiteBase {
+
   import testImplicits._
+
   // Test aggregation operator repartitioning
   StreamingAggregationStateManager.supportedVersions.foreach { version =>
     testWithAllRepartitionOperations(s"aggregation state v$version") { newPartitions =>
