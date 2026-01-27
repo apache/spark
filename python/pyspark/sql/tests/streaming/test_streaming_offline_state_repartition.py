@@ -29,6 +29,10 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    TTLStatefulProcessorFactory,
+    SimpleStatefulProcessorWithInitialStateFactory,
+)
 
 if have_pandas:
     import pandas as pd
@@ -320,6 +324,83 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             verify_after_decrease=verify_after_decrease,
         )
 
+    def _run_tws_repartition_test(self, processor_factory, is_pandas):
+        """Helper method to run repartition test with a given processor factory method"""
+        from pyspark.sql.functions import split
+
+        def create_streaming_df(df):
+            # Parse text input format "id,temperature" into structured columns
+            parsed_df = df.select(
+                split(df["value"], ",").getItem(0).alias("id"),
+                split(df["value"], ",").getItem(1).cast("integer").alias("temperature")
+            )
+
+            output_schema = StructType(
+                [
+                    StructField("id", StringType(), True),
+                    StructField("value", StringType(), True),
+                ]
+            )
+            return parsed_df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=processor_factory.pandas(),
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=None,
+            ) if is_pandas else parsed_df.groupBy("id").transformWithState(
+                statefulProcessor=processor_factory.row(),
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+                initialState=None,
+            )
+
+        def verify_initial(results):
+            # SimpleStatefulProcessorWithInitialState accumulates temperature values
+            values = {row.id: row.value for row in results}
+            self.assertEqual(values.get("a"), "270", "a: 120 + 150 = 270")
+            self.assertEqual(values.get("b"), "50", "b: 50")
+            self.assertEqual(values.get("c"), "30", "c: 30")
+
+        def verify_after_increase(results):
+            # After repartition, state should be preserved and accumulated
+            values = {row.id: row.value for row in results}
+            self.assertEqual(values.get("a"), "371", "State for 'a': 270 + 101 = 371")
+            self.assertEqual(values.get("b"), "152", "State for 'b': 50 + 102 = 152")
+            self.assertEqual(values.get("d"), "103", "New key 'd' should have value 103")
+
+        def verify_after_decrease(results):
+            # After repartition, state should still be preserved
+            values = {row.id: row.value for row in results}
+            self.assertEqual(values.get("a"), "475", "State for 'a': 371 + 104 = 475")
+            self.assertEqual(values.get("c"), "135", "State for 'c': 30 + 105 = 135")
+            self.assertEqual(values.get("e"), "106", "New key 'e' should have value 106")
+
+        OfflineStateRepartitionTestUtils.run_repartition_test(
+            spark=self.spark,
+            num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
+            create_streaming_df=create_streaming_df,
+            output_mode="update",
+            batch1_data="a,120\na,150\nb,50\nc,30\n",  # a:270, b:50, c:30
+            batch2_data="a,101\nb,102\nd,103\n",  # a:371, b:152, d:103 (new)
+            batch3_data="a,104\nc,105\ne,106\n",  # a:475, c:135, e:106 (new)
+            verify_initial=verify_initial,
+            verify_after_increase=verify_after_increase,
+            verify_after_decrease=verify_after_decrease,
+        )
+
+    def test_repartition_with_streaming_tws(self):
+        """Test repartition for streaming transformWithState with both row and pandas processors"""
+        self._run_tws_repartition_test(
+            SimpleStatefulProcessorWithInitialStateFactory(),
+            is_pandas = False
+        )
+
+    def test_repartition_with_streaming_tws_in_pandas(self):
+        self._run_tws_repartition_test(
+            SimpleStatefulProcessorWithInitialStateFactory(),
+            is_pandas = True
+        )
 
 if __name__ == "__main__":
     from pyspark.testing import main

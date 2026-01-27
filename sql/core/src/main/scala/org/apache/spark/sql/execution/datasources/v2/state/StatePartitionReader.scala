@@ -299,6 +299,16 @@ class StatePartitionAllColumnFamiliesReader(
     isTWSOperator(operatorName) && colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME
   }
 
+
+  private def checkIfUseColumnFamily(schema: Set[StateStoreColFamilySchema]): Boolean = {
+    // This will not catch the edge case where user passes in a single DEFAULT column family in
+    // colFamilyToWriterInfoMap for multi-cf operator, or pass in a non-DEFAULT column family
+    // for a single-cf operator. It should be okay here since StatePartitionAllColumnFamiliesReader
+    // is used internally and we expect user to pass in the correct allColumnFamiliesReaderInfo
+    // for each operator
+    schema.exists(_.colFamilyName != StateStoreId.DEFAULT_STORE_NAME)
+  }
+
   // Create extractors for each column family - each column family may have different key schema
   private lazy val cfPartitionKeyExtractors: Map[String, StatePartitionKeyExtractor] = {
 
@@ -331,7 +341,7 @@ class StatePartitionAllColumnFamiliesReader(
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val useColumnFamilies = stateStoreColFamilySchemas.size > 1
+    val useColumnFamilies = checkIfUseColumnFamily(stateStoreColFamilySchemas)
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
@@ -373,7 +383,7 @@ class StatePartitionAllColumnFamiliesReader(
     )
 
     // Register all column families from the schema
-    if (stateStoreColFamilySchemas.size > 1) {
+    if (checkIfUseColumnFamily(stateStoreColFamilySchemas)) {
       checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName).toList, stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
