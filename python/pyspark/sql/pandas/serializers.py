@@ -397,9 +397,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             ndarray_as_list=ndarray_as_list,
         )
 
-    def _create_array(
-        self, series, spark_type, *, arrow_cast=False, prefers_large_types=False
-    ):
+    def _create_array(self, series, spark_type, *, arrow_cast=False, prefers_large_types=False):
         """
         Create an Arrow Array from the given pandas.Series and Spark type.
 
@@ -991,9 +989,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
-    def _create_array(
-        self, series, spark_type, *, arrow_cast=False, prefers_large_types=False
-    ):
+    def _create_array(self, series, spark_type, *, arrow_cast=False, prefers_large_types=False):
         """
         Override the `_create_array` method in the superclass to create an Arrow Array
         from a given pandas.Series and Spark type. The difference here is that we always
