@@ -118,6 +118,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def multipartCatalogNameNotAllowed(nameParts: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      messageParameters = Map(
+        "statement" -> toSQLStmt("SET CATALOG"),
+        "name" -> toSQLId(nameParts))
+    )
+  }
+
   def unexpectedPositionalArgument(
       routineName: String,
       precedingNamedArgument: String): Throwable = {

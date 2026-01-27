@@ -1029,7 +1029,6 @@ class PythonPipelineSuite
 
   // List of unsupported SQL commands that should result in a failure.
   private val unsupportedSqlCommandList: Seq[String] = Seq(
-    "SET CATALOG some_catalog",
     "USE SCHEMA some_schema",
     "SET `test_conf` = `true`",
     "CREATE TABLE some_table (id INT)",
@@ -1079,6 +1078,7 @@ class PythonPipelineSuite
     "SHOW VIEWS",
     "SHOW CATALOGS",
     "SHOW CREATE TABLE spark_catalog.default.src",
+    "SET CATALOG spark_catalog",
     "SELECT * FROM RANGE(5)",
     "SELECT * FROM spark_catalog.default.src")
 

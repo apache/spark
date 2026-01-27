@@ -78,36 +78,6 @@ case class PlanWithUnresolvedIdentifier(
 }
 
 /**
- * Similar to [[PlanWithUnresolvedIdentifier]], but uses fallbackIdentifier if expression
- * cannot be resolved. This enables commands like SET CATALOG to accept both variables
- * and literal identifiers.
- */
-case class PlanWithUnresolvedIdentifierAndFallback(
-    identifierExpr: Expression,
-    fallbackIdentifier: Seq[String],
-    children: Seq[LogicalPlan],
-    planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-  extends UnresolvedNode {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
-    copy(identifierExpr, fallbackIdentifier, newChildren, planBuilder)
-
-  /**
-   * Returns evaluated identifier if expression is resolved, otherwise returns fallback.
-   */
-  def getIdentifier: Seq[String] = {
-    if (identifierExpr.resolved) {
-      IdentifierResolution.evalIdentifierExpr(identifierExpr)
-    } else {
-      fallbackIdentifier
-    }
-  }
-}
-
-/**
  * An expression placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual expression with the evaluated identifier string.
  *

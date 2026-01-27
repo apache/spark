@@ -723,13 +723,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
-      ctx)
-  }
-
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION", ctx)
   }

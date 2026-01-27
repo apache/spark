@@ -27,10 +27,10 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView,
-  LocalTempView, PersistedView, PlanWithUnresolvedIdentifier,
-  PlanWithUnresolvedIdentifierAndFallback, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
+  GlobalTempView, LocalTempView, PersistedView,
+  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -411,48 +411,10 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[SetCatalogCommand]] logical command.
-   *
-   * SET CATALOG is case-sensitive and supports multiple forms:
-   *
-   *   - Session temp variable: SET CATALOG var_name (where var_name is a declared variable)
-   *   - Simple identifier: SET CATALOG my_catalog
-   *     (tries to resolve as session temp variable first, then uses as literal catalog name)
-   *   - String literal: SET CATALOG 'my_catalog'
-   *   - identifier() function: SET CATALOG IDENTIFIER('my_catalog') or IDENTIFIER(var_name)
-   *   - Other foldable expressions: SET CATALOG CAST('my_catalog' AS STRING),
-   *     CONCAT('my', '_catalog')
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
     val expr = expression(ctx.expression())
-
-    def buildSetCatalogCommand(nameParts: Seq[String]): SetCatalogCommand = {
-      if (nameParts.size > 1) {
-        throw QueryParsingErrors.invalidNameForSetCatalog(nameParts, ctx)
-      }
-      SetCatalogCommand(nameParts.head)
-    }
-
-    expr match {
-      // UnresolvedAttribute - try to resolve as variable, fallback to literal
-      // Resolution order: (1) session temp variable, (2) literal catalog name
-      case UnresolvedAttribute(nameParts) =>
-        PlanWithUnresolvedIdentifierAndFallback(
-          expr,
-          fallbackIdentifier = nameParts,
-          Nil,
-          (identifiers, _) => buildSetCatalogCommand(identifiers)
-        )
-
-      // All other expressions (IDENTIFIER(), Literal, foldable) - standard resolution
-      // Note that we cannot check foldability and evaluate the expression here
-      // as expression plans like UnresolvedFunction need to be resolved in the analysis phase
-      case _ =>
-        PlanWithUnresolvedIdentifier(
-          expr,
-          Nil,
-          (identifiers, _) => buildSetCatalogCommand(identifiers)
-        )
-    }
+    SetCatalogCommand(expr)
   }
 
   /**

@@ -1963,7 +1963,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("position mapping - parse error with identifier clause - SPARK-49757 regression test") {
     val sqlText = "SET CATALOG IDENTIFIER(:param)"
-    val exception = checkParameterError[ParseException](
+    val exception = checkParameterError[AnalysisException](
       sqlText,
       params = Map("param" -> "testcat.ns1")
     )
@@ -1987,18 +1987,13 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     // This is the SPARK-49757 regression test - multipart names in IDENTIFIER should fail
     val sqlText = "SET CATALOG IDENTIFIER(:catalogName)"
     checkError(
-      exception = intercept[ParseException] {
+      exception = intercept[AnalysisException] {
         spark.sql(sqlText, Map("catalogName" -> "catalog.namespace"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       parameters = Map(
         "name" -> "`catalog`.`namespace`",
         "statement" -> "SET CATALOG"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1
       )
     )
   }
