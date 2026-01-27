@@ -880,7 +880,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.1</version>
+        <version>1.10.3</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -1236,13 +1236,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.17.6</version>
+        <version>1.18.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.17.6</version>
+        <version>1.18.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>

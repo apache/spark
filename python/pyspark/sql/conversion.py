@@ -63,9 +63,9 @@ class ArrowBatchTransformer:
     """
 
     @staticmethod
-    def flatten_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+    def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
         """
-        Flatten a single struct column into a RecordBatch.
+        Flatten a struct column at given index into a RecordBatch.
 
         Used by:
             - ArrowStreamUDFSerializer.load_stream
@@ -74,7 +74,7 @@ class ArrowBatchTransformer:
         """
         import pyarrow as pa
 
-        struct = batch.column(0)
+        struct = batch.column(column_index)
         return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
 
     @staticmethod
