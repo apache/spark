@@ -364,10 +364,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    assign_cols_by_name : bool
-        If True, then Pandas DataFrames will get columns by name
     int_to_decimal_coercion_enabled : bool
-        If True, applies additional coercions in Python before converting to Arrow
+        If True, applies additional coercions in Python before converting to Arrow.
         This has performance penalties.
     prefers_large_types : bool
         If True, prefer large Arrow types (e.g., large_string instead of string).

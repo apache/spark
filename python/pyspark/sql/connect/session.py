@@ -622,9 +622,9 @@ class SparkSession:
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
             ser = ArrowStreamPandasSerializer(
-                cast(str, timezone),
-                safecheck == "true",
-                False,
+                timezone=cast(str, timezone),
+                safecheck=safecheck == "true",
+                int_to_decimal_coercion_enabled=False,
                 prefers_large_types=prefers_large_types,
             )
 

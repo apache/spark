@@ -886,7 +886,10 @@ class SparkConversionMixin:
         jsparkSession = self._jsparkSession
 
         ser = ArrowStreamPandasSerializer(
-            timezone, safecheck, False, prefers_large_types=prefers_large_var_types
+            timezone=timezone,
+            safecheck=safecheck,
+            int_to_decimal_coercion_enabled=False,
+            prefers_large_types=prefers_large_var_types,
         )
 
         @no_type_check
