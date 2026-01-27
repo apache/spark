@@ -301,7 +301,7 @@ abstract class DataStreamReader {
    * @throws IllegalArgumentException
    *   if the source name is null, empty, or contains invalid characters
    */
-  protected def validateSourceName(sourceName: String): Unit = {
+  private[sql] def validateSourceName(sourceName: String): Unit = {
     require(sourceName != null, "Source name cannot be null")
     require(sourceName.nonEmpty, "Source name cannot be empty")
 
