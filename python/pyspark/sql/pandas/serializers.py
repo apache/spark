@@ -494,6 +494,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pyarrow.RecordBatch
             Arrow RecordBatch
         """
+        import pyarrow as pa
+
         # Make input conform to [(series1, spark_type1), (series2, spark_type2), ...]
         if not isinstance(series, (list, tuple)) or (
             len(series) == 2 and isinstance(series[1], DataType)

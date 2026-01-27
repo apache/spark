@@ -635,10 +635,7 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [
                     ser._create_batch(
-                        [
-                            (c, at, st)
-                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-                        ]
+                        [(c, st) for (_, c), st in zip(data.items(), spark_types)]
                     )
                 ]
             )

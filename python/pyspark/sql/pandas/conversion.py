@@ -878,18 +878,9 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
+        # Create list of (columns, spark_type) for serializer dump_stream
         arrow_data = [
-            [
-                (
-                    c,
-                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types)
-                    if t is not None
-                    else None,
-                    t,
-                )
-                for (_, c), t in zip(pdf_slice.items(), spark_types)
-            ]
+            [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)]
             for pdf_slice in pdf_slices
         ]
 
