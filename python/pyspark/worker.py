@@ -2873,7 +2873,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                     raise PySparkRuntimeError(
                         errorClass="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                     )
-                yield (result_batch, result_type)
+                # Yield single-element tuple for _create_batch (expects iterable of tuples)
+                yield ((result_batch, result_type),)
 
             if is_scalar_iter:
                 try:
@@ -3305,13 +3306,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
     else:
 
         def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
+            # Yields (data, type) tuples for ArrowStreamPandasUDFSerializer
+            for arg_offsets, f in udfs:
+                yield f(*[a[o] for o in arg_offsets])
 
     def func(_, it):
         return map(mapper, it)

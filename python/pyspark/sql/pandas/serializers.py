@@ -475,12 +475,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given list of (series, spark_type) tuples.
+        Create an Arrow record batch from the given iterable of (series, spark_type) tuples.
 
         Parameters
         ----------
-        series : list
-            List of (series, spark_type) tuples
+        series : iterable
+            Iterable of (series, spark_type) tuples.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -500,7 +500,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize.
-        Input is a list of (series, spark_type) tuples.
+        Each element in iterator is an iterable of (series, spark_type) tuples.
         """
         batches = (
             self._create_batch(series, prefers_large_types=self._prefers_large_types)
@@ -658,12 +658,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given list of (data, spark_type) tuples.
+        Create an Arrow record batch from the given iterator of (data, spark_type) tuples.
 
         Parameters
         ----------
-        series : list
-            List of (series or dataframe, spark_type) tuples
+        series : iterable
+            Iterable of (series or dataframe, spark_type) tuples.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -713,7 +713,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         def init_stream_yield_batches():
             should_write_start_length = True
             for series in iterator:
-                batch = self._create_batch([series], prefers_large_types=self._prefers_large_types)
+                batch = self._create_batch(series, prefers_large_types=self._prefers_large_types)
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
@@ -928,12 +928,12 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given list of (dataframe, spark_type) tuples.
+        Create an Arrow record batch from the given iterable of (dataframe, spark_type) tuples.
 
         Parameters
         ----------
-        series : list
-            List of (dataframe, spark_type) tuples
+        series : iterable
+            Iterable of (dataframe, spark_type) tuples.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
