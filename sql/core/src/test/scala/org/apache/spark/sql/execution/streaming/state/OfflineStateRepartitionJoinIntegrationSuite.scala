@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Integration test suite for stream-stream join operator repartitioning.
  */
-class OfflineStateRepartitionIntegrationJoinSuite
+class OfflineStateRepartitionJoinIntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
