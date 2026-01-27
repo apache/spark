@@ -66,7 +66,8 @@ class ErrorParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("SET CATALOG test-test"),
       condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
-      parameters = Map("sqlText" -> "SET CATALOG test-test"))
+      parameters = Map("sqlText" -> "SET CATALOG test-test"),
+      context = ExpectedContext(fragment = "SET CATALOG test-test", start = 0, stop = 20))
     checkError(
       exception = parseException("CREATE DATABASE IF NOT EXISTS my-database"),
       condition = "INVALID_IDENTIFIER",

@@ -116,11 +116,14 @@ class SqlGraphRegistrationContext(
       sqlFileText = sqlText,
       sqlFilePath = sqlFilePath
     ).foreach { case SqlQueryPlanWithOrigin(logicalPlan, queryOrigin) =>
-      processSqlQuery(logicalPlan, queryOrigin)
+      processSqlQuery(logicalPlan, queryOrigin, spark)
     }
   }
 
-  private def processSqlQuery(queryPlan: LogicalPlan, queryOrigin: QueryOrigin): Unit = {
+  private def processSqlQuery(
+      queryPlan: LogicalPlan,
+      queryOrigin: QueryOrigin,
+      spark: SparkSession): Unit = {
     queryPlan match {
       case setCommand: SetCommand =>
         // SET [ key | 'key' ] [ value | 'value' ]
@@ -139,7 +142,7 @@ class SqlGraphRegistrationContext(
         // objects such as tables are resolved from said catalog, until overwritten, within this
         // SQL processor scope. Note that the schema is cleared when the catalog is set, and must
         // be explicitly set again in order to implicitly qualify identifiers.
-        SetCatalogCommandHandler.handle(setCatalogCommand)
+        SetCatalogCommandHandler.handle(setCatalogCommand, spark)
       case createPersistedViewCommand: CreateView =>
         // CREATE VIEW [ persisted_view_name ] [ options ] AS [ query ]
         CreatePersistedViewCommandHandler.handle(createPersistedViewCommand, queryOrigin)
@@ -529,8 +532,12 @@ class SqlGraphRegistrationContext(
   }
 
   private object SetCatalogCommandHandler {
-    def handle(setCatalogCommand: SetCatalogCommand): Unit = {
-      context.setCurrentCatalog(setCatalogCommand.getCatalogName())
+    def handle(setCatalogCommand: SetCatalogCommand, spark: SparkSession): Unit = {
+      // Analyze unresolved references in the expression of the SET CATALOG command.
+      // before handling the command.
+      val analyzedSetCatalogCommand = spark.sessionState.analyzer.execute(setCatalogCommand)
+        .asInstanceOf[SetCatalogCommand]
+      context.setCurrentCatalog(analyzedSetCatalogCommand.getCatalogName())
       context.clearCurrentDatabase()
     }
   }
