@@ -3036,7 +3036,7 @@ object CustomPathEncoder {
   }
 
   test("zipWithIndex should throw if column name already exists") {
-    val ds = Seq(("a", 1), ("b", 2)).toDS().withColumnRenamed("_1", "index")
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
     val ex = intercept[AnalysisException] {
       ds.zipWithIndex()
     }
