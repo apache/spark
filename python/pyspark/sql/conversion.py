@@ -1043,7 +1043,7 @@ class ArrowArrayToPandasConversion:
                 for field_arr, field in zip(arr.flatten(), spark_type)
             ]
             pdf = pd.concat(series, axis=1)
-            pdf.columns = spark_type.names
+            pdf.columns = spark_type.names  # type: ignore[assignment]
             return pdf
 
         # If the given column is a date type column, creates a series of datetime.date directly

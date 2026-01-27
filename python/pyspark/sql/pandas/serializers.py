@@ -594,7 +594,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         self._input_type = input_type
 
     def arrow_to_pandas(self, arrow_column, idx):
-        spark_type: DataType
         if self._input_type is not None:
             spark_type = self._input_type[idx].dataType
         else:
