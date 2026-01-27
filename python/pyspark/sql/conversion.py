@@ -1039,10 +1039,12 @@ class ArrowArrayToPandasConversion:
                     struct_in_pandas=struct_in_pandas,
                     ndarray_as_list=ndarray_as_list,
                     df_for_struct=False,  # always False for child fields
-                ).rename(field.name)
+                )
                 for field_arr, field in zip(arr.flatten(), spark_type)
             ]
-            return pd.concat(series, axis=1)
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names
+            return pdf
 
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
