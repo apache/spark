@@ -2958,7 +2958,7 @@ def merge(
     ----------
     right: Object to merge with.
     how: Type of merge to be performed.
-        {'left', 'right', 'outer', 'inner'}, default 'inner'
+        {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'
 
         left: use only keys from left frame, like a SQL left outer join; preserve key
             order.
@@ -2968,6 +2968,8 @@ def merge(
             lexicographically.
         inner: use intersection of keys from both frames, like a SQL inner join;
             preserve the order of the left keys.
+        cross: creates the cartesian product from both frames, preserves the order
+            of the left keys.
     on: Column or index level names to join on. These must be found in both DataFrames. If on
         is None and not merging on indexes then this defaults to the intersection of the
         columns in both DataFrames.
