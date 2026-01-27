@@ -184,10 +184,9 @@ class ArrowStreamSerializer(Serializer):
         """
         Write START_ARROW_STREAM before the first batch, passing batches through unchanged.
 
-        This marker is required by Pandas UDF serialization protocol to signal the JVM that
-        the Arrow stream is about to begin. It must be sent after the first batch is successfully
-        created, so that if an error occurs during batch creation, the error can be sent back
-        to the JVM before the Arrow stream starts.
+        This marker signals the JVM that the Arrow stream is about to begin. It must be sent
+        after the first batch is successfully created, so that if an error occurs during batch
+        creation, the error can be sent back to the JVM before the Arrow stream starts.
 
         Parameters
         ----------
