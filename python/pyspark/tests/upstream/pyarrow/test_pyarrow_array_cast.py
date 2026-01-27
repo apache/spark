@@ -38,12 +38,30 @@ Tests container-to-container type conversions:
 - **List variants**: list, large_list, fixed_size_list
 - **Map**: map<key, value>
 - **Struct**: struct<fields...>
+
+## PyArrow Version Compatibility
+
+Some behaviors differ across PyArrow versions:
+
+| Feature                                                  | PyArrow < 19   | PyArrow 19-20  | PyArrow >= 21  |
+|----------------------------------------------------------|----------------|----------------|----------------|
+| struct cast: field name mismatch (missing fields → null) | ArrowTypeError | supported      | supported      |
+| struct cast: target has more fields (extra fields → null)| ArrowTypeError | supported      | supported      |
+| struct cast: field reorder (same fields, different order)| ArrowTypeError | ArrowTypeError | supported      |
+| pa.array(floats, pa.float16()) without numpy             | requires np.float16 | requires np.float16 | native support |
 """
 
 import platform
 import unittest
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+
+if have_pyarrow:
+    import pyarrow as pa
+
+    pyarrow_19_or_greater = LooseVersion(pa.__version__) >= LooseVersion("19.0.0")
+    pyarrow_21_or_greater = LooseVersion(pa.__version__) >= LooseVersion("21.0.0")
 
 
 def _get_float_to_int_boundary_expected(int_type):
@@ -75,6 +93,27 @@ def _get_float_to_int_boundary_expected(int_type):
     else:
         # Default to ArrowInvalid for Linux/x86_64 and other platforms
         return pa.lib.ArrowInvalid
+
+
+def _make_float16_array(values):
+    """
+    Create a float16 PyArrow array from Python float values.
+
+    PyArrow < 21 requires numpy.float16 instances to create float16 arrays,
+    while PyArrow >= 21 accepts Python floats directly.
+    """
+    from pyspark.loose_version import LooseVersion
+
+    import pyarrow as pa
+
+    if LooseVersion(pa.__version__) >= LooseVersion("21.0.0"):
+        return pa.array(values, pa.float16())
+    else:
+        import numpy as np
+
+        # Convert Python floats to numpy.float16, preserving None as None
+        np_values = [np.float16(v) if v is not None else None for v in values]
+        return pa.array(np_values, pa.float16())
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -170,6 +209,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
     def _arrays_equal_nan_aware(self, arr1, arr2):
         """Compare two PyArrow arrays, treating NaN == NaN."""
         import math
+        import numpy as np
 
         if len(arr1) != len(arr2):
             return False
@@ -184,8 +224,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 continue
             if v1 is None or v2 is None:
                 return False
-            if isinstance(v1, float) and isinstance(v2, float):
-                if math.isnan(v1) and math.isnan(v2):
+            # Handle both Python float and numpy floating types (e.g., np.float16)
+            if isinstance(v1, (float, np.floating)) and isinstance(v2, (float, np.floating)):
+                if math.isnan(float(v1)) and math.isnan(float(v2)):
                     continue
             if v1 != v2:
                 return False
@@ -370,10 +411,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array([0, 1, -1, None], pa.int8()),
-                    pa.array([0.0, 1.0, -1.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, None]),
                 ),
-                (pa.array([127, -128], pa.int8()), pa.array([127.0, -128.0], pa.float16())),
-                (pa.array([], pa.int8()), pa.array([], pa.float16())),
+                (pa.array([127, -128], pa.int8()), _make_float16_array([127.0, -128.0])),
+                (pa.array([], pa.int8()), _make_float16_array([])),
             ],
             "float32": [
                 (
@@ -543,10 +584,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array([0, 1, -1, None], pa.int16()),
-                    pa.array([0.0, 1.0, -1.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, None]),
                 ),
-                (pa.array([2048], pa.int16()), pa.array([2048.0], pa.float16())),
-                (pa.array([32767], pa.int16()), pa.array([32768.0], pa.float16())),  # rounds
+                (pa.array([2048], pa.int16()), _make_float16_array([2048.0])),
+                (pa.array([32767], pa.int16()), _make_float16_array([32768.0])),  # rounds
             ],
             "float32": [
                 (
@@ -729,9 +770,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array([0, 1, -1, None], pa.int32()),
-                    pa.array([0.0, 1.0, -1.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, None]),
                 ),
-                (pa.array([2048], pa.int32()), pa.array([2048.0], pa.float16())),
+                (pa.array([2048], pa.int32()), _make_float16_array([2048.0])),
                 (pa.array([2147483647], pa.int32()), pa.lib.ArrowInvalid),
             ],
             "float32": [
@@ -937,9 +978,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array([0, 1, -1, None], pa.int64()),
-                    pa.array([0.0, 1.0, -1.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, None]),
                 ),
-                (pa.array([2048], pa.int64()), pa.array([2048.0], pa.float16())),
+                (pa.array([2048], pa.int64()), _make_float16_array([2048.0])),
                 (pa.array([9223372036854775807], pa.int64()), pa.lib.ArrowInvalid),
             ],
             "float32": [
@@ -1224,10 +1265,10 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array([0, 1, 255, None], pa.uint8()),
-                    pa.array([0.0, 1.0, 255.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, 255.0, None]),
                 ),
-                (pa.array([128], pa.uint8()), pa.array([128.0], pa.float16())),
-                (pa.array([None, None], pa.uint8()), pa.array([None, None], pa.float16())),
+                (pa.array([128], pa.uint8()), _make_float16_array([128.0])),
+                (pa.array([None, None], pa.uint8()), _make_float16_array([None, None])),
             ],
             "float32": [
                 (
@@ -1383,9 +1424,9 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([None, None], pa.uint16()), pa.array([None, None], pa.uint64())),
             ],
             "float16": [
-                (pa.array([0, 1, None], pa.uint16()), pa.array([0.0, 1.0, None], pa.float16())),
-                (pa.array([2048], pa.uint16()), pa.array([2048.0], pa.float16())),
-                (pa.array([65535], pa.uint16()), pa.array([float("inf")], pa.float16())),
+                (pa.array([0, 1, None], pa.uint16()), _make_float16_array([0.0, 1.0, None])),
+                (pa.array([2048], pa.uint16()), _make_float16_array([2048.0])),
+                (pa.array([65535], pa.uint16()), _make_float16_array([float("inf")])),
             ],
             "float32": [
                 (
@@ -1547,8 +1588,8 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([None, None], pa.uint32()), pa.array([None, None], pa.uint64())),
             ],
             "float16": [
-                (pa.array([0, 1, None], pa.uint32()), pa.array([0.0, 1.0, None], pa.float16())),
-                (pa.array([2048], pa.uint32()), pa.array([2048.0], pa.float16())),
+                (pa.array([0, 1, None], pa.uint32()), _make_float16_array([0.0, 1.0, None])),
+                (pa.array([2048], pa.uint32()), _make_float16_array([2048.0])),
                 (pa.array([4294967295], pa.uint32()), pa.lib.ArrowInvalid),
             ],
             "float32": [
@@ -1713,8 +1754,8 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 (pa.array([], pa.uint64()), pa.array([], pa.uint64())),
             ],
             "float16": [
-                (pa.array([0, 1, None], pa.uint64()), pa.array([0.0, 1.0, None], pa.float16())),
-                (pa.array([2048], pa.uint64()), pa.array([2048.0], pa.float16())),
+                (pa.array([0, 1, None], pa.uint64()), _make_float16_array([0.0, 1.0, None])),
+                (pa.array([2048], pa.uint64()), _make_float16_array([2048.0])),
                 (pa.array([18446744073709551615], pa.uint64()), pa.lib.ArrowInvalid),
             ],
             "float32": [
@@ -1827,192 +1868,190 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         casts = {
             "int8": [
                 (
-                    pa.array([0.0, 1.0, -1.0, 127.0, -128.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 127.0, -128.0, None]),
                     pa.array([0, 1, -1, 127, -128, None], pa.int8()),
                 ),
                 # fractional values -> ArrowInvalid
-                (pa.array([1.5, -0.5], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5, -0.5]), pa.lib.ArrowInvalid),
                 # overflow int8 range
-                (pa.array([128.0], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([-129.0], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([128.0]), pa.lib.ArrowInvalid),
+                (_make_float16_array([-129.0]), pa.lib.ArrowInvalid),
                 # special: NaN, Inf -> ArrowInvalid for int
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("inf")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid),
             ],
             "int16": [
                 # Note: float16 can only represent integers exactly up to 2048
                 (
-                    pa.array([0.0, 1.0, -1.0, 2048.0, -2048.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 2048.0, -2048.0, None]),
                     pa.array([0, 1, -1, 2048, -2048, None], pa.int16()),
                 ),
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
                 # float16 max (65504) overflows int16 max (32767)
-                (pa.array([f16_max], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([f16_max]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
             ],
             "int32": [
                 (
-                    pa.array([0.0, 1.0, -1.0, f16_max, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, f16_max, None]),
                     pa.array([0, 1, -1, 65504, None], pa.int32()),
                 ),
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("inf")], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
             ],
             "int64": [
                 (
-                    pa.array([0.0, 1.0, -1.0, f16_max, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, f16_max, None]),
                     pa.array([0, 1, -1, 65504, None], pa.int64()),
                 ),
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("-inf")], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("-inf")]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
             ],
             "uint8": [
                 (
-                    pa.array([0.0, 1.0, 255.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, 255.0, None]),
                     pa.array([0, 1, 255, None], pa.uint8()),
                 ),
                 # negative values -> ArrowInvalid for unsigned
-                (pa.array([-1.0], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([-1.0]), pa.lib.ArrowInvalid),
                 # overflow uint8 range
-                (pa.array([256.0], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([256.0]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
             ],
             "uint16": [
                 # Note: float16 can only represent integers exactly up to 2048
                 (
-                    pa.array([0.0, 1.0, 2048.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, 2048.0, None]),
                     pa.array([0, 1, 2048, None], pa.uint16()),
                 ),
-                (pa.array([-1.0], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([-1.0]), pa.lib.ArrowInvalid),
                 # fractional
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("inf")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("inf")]), pa.lib.ArrowInvalid),
             ],
             "uint32": [
                 (
-                    pa.array([0.0, 1.0, f16_max, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, f16_max, None]),
                     pa.array([0, 1, 65504, None], pa.uint32()),
                 ),
-                (pa.array([-1.0], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("nan")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([-1.0]), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("nan")]), pa.lib.ArrowInvalid),
             ],
             "uint64": [
                 (
-                    pa.array([0.0, 1.0, f16_max, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, f16_max, None]),
                     pa.array([0, 1, 65504, None], pa.uint64()),
                 ),
-                (pa.array([-1.0], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([1.5], pa.float16()), pa.lib.ArrowInvalid),
-                (pa.array([float("-inf")], pa.float16()), pa.lib.ArrowInvalid),
+                (_make_float16_array([-1.0]), pa.lib.ArrowInvalid),
+                (_make_float16_array([1.5]), pa.lib.ArrowInvalid),
+                (_make_float16_array([float("-inf")]), pa.lib.ArrowInvalid),
             ],
             "float16": [
                 # identity cast: normal values + special values
                 (
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
                 ),
                 # special values: NaN, Inf, -Inf
                 (
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                 ),
                 # boundary values
                 (
-                    pa.array([f16_max, -f16_max, f16_min_normal], pa.float16()),
-                    pa.array([f16_max, -f16_max, f16_min_normal], pa.float16()),
+                    _make_float16_array([f16_max, -f16_max, f16_min_normal]),
+                    _make_float16_array([f16_max, -f16_max, f16_min_normal]),
                 ),
             ],
             "float32": [
                 # upcast preserves all values exactly
                 (
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
                     pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float32()),
                 ),
                 # special values preserved
                 (
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                     pa.array([float("nan"), float("inf"), float("-inf")], pa.float32()),
                 ),
                 # boundary values
                 (
-                    pa.array([f16_max, f16_min_normal], pa.float16()),
+                    _make_float16_array([f16_max, f16_min_normal]),
                     pa.array([f16_max, f16_min_normal], pa.float32()),
                 ),
             ],
             "float64": [
                 # upcast preserves all values exactly
                 (
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
                     pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float64()),
                 ),
                 # special values preserved
                 (
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                     pa.array([float("nan"), float("inf"), float("-inf")], pa.float64()),
                 ),
                 # boundary values
                 (
-                    pa.array([f16_max, f16_min_normal], pa.float16()),
+                    _make_float16_array([f16_max, f16_min_normal]),
                     pa.array([f16_max, f16_min_normal], pa.float64()),
                 ),
             ],
             # === Non-numerical types ===
             "bool": [
                 # float16 -> bool not supported
-                (pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError),
+                (_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError),
             ],
             "string": [
                 (
-                    pa.array([0.0, 1.0, -1.0, 1.5, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, None]),
                     pa.array(["0", "1", "-1", "1.5", None], pa.string()),
                 ),
                 (
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                     pa.array(["nan", "inf", "-inf"], pa.string()),
                 ),
             ],
             "large_string": [
                 (
-                    pa.array([0.0, 1.0, -1.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, None]),
                     pa.array(["0", "1", "-1", None], pa.large_string()),
                 ),
             ],
-            "binary": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "large_binary": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "fixed_size_binary_16": [
-                (pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)
-            ],
+            "binary": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "large_binary": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "fixed_size_binary_16": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
             "decimal128": [
-                (pa.array([0.0, 1.0, -1.0, None], pa.float16()), pa.lib.ArrowNotImplementedError),
+                (_make_float16_array([0.0, 1.0, -1.0, None]), pa.lib.ArrowNotImplementedError),
             ],
             "decimal256": [
-                (pa.array([0.0, 1.0, -1.0, None], pa.float16()), pa.lib.ArrowNotImplementedError),
+                (_make_float16_array([0.0, 1.0, -1.0, None]), pa.lib.ArrowNotImplementedError),
             ],
-            "date32": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "date64": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ms_tz": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_us_tz": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_ns_tz": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "timestamp_s_tz_ny": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
+            "date32": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "date64": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_us": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ns": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ms_tz": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_us_tz": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_ns_tz": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "timestamp_s_tz_ny": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
             "timestamp_s_tz_shanghai": [
-                (pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)
+                (_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)
             ],
-            "duration_s": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "duration_ms": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "duration_us": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "duration_ns": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "time32_s": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "time32_ms": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "time64_us": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
-            "time64_ns": [(pa.array([0.0], pa.float16()), pa.lib.ArrowNotImplementedError)],
+            "duration_s": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "duration_ms": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "duration_us": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "duration_ns": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "time32_s": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "time32_ms": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "time64_us": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
+            "time64_ns": [(_make_float16_array([0.0]), pa.lib.ArrowNotImplementedError)],
         }
         self._run_cast_tests(casts, "float16")
 
@@ -2103,20 +2142,20 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # values within float16 range
                 (
                     pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float32()),
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
                 ),
                 # special values preserved
                 (
                     pa.array([float("nan"), float("inf"), float("-inf")], pa.float32()),
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                 ),
                 # OVERFLOW: beyond float16 max -> Inf
                 (
                     pa.array([100000.0, -100000.0, f32_max], pa.float32()),
-                    pa.array([float("inf"), float("-inf"), float("inf")], pa.float16()),
+                    _make_float16_array([float("inf"), float("-inf"), float("inf")]),
                 ),
                 # boundary: exactly float16 max
-                (pa.array([f16_max], pa.float32()), pa.array([f16_max], pa.float16())),
+                (pa.array([f16_max], pa.float32()), _make_float16_array([f16_max])),
             ],
             "float32": [
                 # identity cast: normal + special + boundary
@@ -2378,21 +2417,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
                 # normal values + special values
                 (
                     pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float64()),
-                    pa.array([0.0, 1.0, -1.0, 1.5, -0.0, None], pa.float16()),
+                    _make_float16_array([0.0, 1.0, -1.0, 1.5, -0.0, None]),
                 ),
                 (
                     pa.array([float("nan"), float("inf"), float("-inf")], pa.float64()),
-                    pa.array([float("nan"), float("inf"), float("-inf")], pa.float16()),
+                    _make_float16_array([float("nan"), float("inf"), float("-inf")]),
                 ),
                 # OVERFLOW: beyond float16 max -> Inf
                 (
                     pa.array([100000.0, -100000.0, f64_max], pa.float64()),
-                    pa.array([float("inf"), float("-inf"), float("inf")], pa.float16()),
+                    _make_float16_array([float("inf"), float("-inf"), float("inf")]),
                 ),
                 # boundary + precision loss
                 (
                     pa.array([f16_max, 1.0001], pa.float64()),
-                    pa.array([f16_max, 1.0], pa.float16()),
+                    _make_float16_array([f16_max, 1.0]),
                 ),  # 1.0001 rounds to 1.0
             ],
             "float32": [
@@ -2690,7 +2729,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array(["0", "1.5", "-1.5", None], pa.string()),
-                    pa.array([0.0, 1.5, -1.5, None], pa.float16()),
+                    _make_float16_array([0.0, 1.5, -1.5, None]),
                 ),
             ],
             "float32": [
@@ -2924,7 +2963,7 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "float16": [
                 (
                     pa.array(["0", "1.5", None], pa.large_string()),
-                    pa.array([0.0, 1.5, None], pa.float16()),
+                    _make_float16_array([0.0, 1.5, None]),
                 ),
             ],
             "float32": [
@@ -7805,32 +7844,6 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                     pa.array([], type=pa.struct([("x", pa.int32())])),
                 ),
             ],
-            # struct -> struct (field name mismatch - missing become null)
-            "struct_name_mismatch": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"a": None, "b": None}],
-                        type=pa.struct([("a", pa.int32()), ("b", pa.int32())]),
-                    ),
-                ),
-            ],
-            # struct -> struct (more fields - extra become null)
-            "struct_more_fields": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"x": 1, "y": 2, "z": None}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
-                    ),
-                ),
-            ],
             # struct -> struct (fewer fields - drops extra)
             "struct_fewer_fields": [
                 (
@@ -7839,19 +7852,6 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                         type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
                     ),
                     pa.array([{"x": 1}], type=pa.struct([("x", pa.int32())])),
-                ),
-            ],
-            # struct -> struct (field reorder)
-            "struct_reorder": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"y": 2, "x": 1}],
-                        type=pa.struct([("y", pa.int32()), ("x", pa.int32())]),
-                    ),
                 ),
             ],
             # struct -> list (not supported)
@@ -7877,6 +7877,67 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                 ),
             ],
         }
+
+        # struct -> struct (field name mismatch - missing become null)
+        # PyArrow >= 19 supports this; earlier versions raise ArrowTypeError
+        casts["struct_name_mismatch"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"a": None, "b": None}],
+                    type=pa.struct([("a", pa.int32()), ("b", pa.int32())]),
+                )
+                if pyarrow_19_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_19_or_greater
+                else pa.struct([("a", pa.int32()), ("b", pa.int32())]),
+            ),
+        ]
+
+        # struct -> struct (more fields - extra become null)
+        # PyArrow >= 19 supports this; earlier versions raise ArrowTypeError
+        casts["struct_more_fields"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"x": 1, "y": 2, "z": None}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
+                )
+                if pyarrow_19_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_19_or_greater
+                else pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
+            ),
+        ]
+
+        # struct -> struct (field reorder)
+        # PyArrow >= 21 supports field reordering; earlier versions raise ArrowTypeError
+        casts["struct_reorder"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"y": 2, "x": 1}],
+                    type=pa.struct([("y", pa.int32()), ("x", pa.int32())]),
+                )
+                if pyarrow_21_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_21_or_greater
+                else pa.struct([("y", pa.int32()), ("x", pa.int32())]),
+            ),
+        ]
+
         self._run_nested_cast_tests(casts, "struct")
 
     def test_nested_struct_casts(self):

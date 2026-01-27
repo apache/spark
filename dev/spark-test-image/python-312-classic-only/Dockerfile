@@ -20,7 +20,7 @@
 FROM ubuntu:jammy-20240911.1
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.13 (no GIL)"
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark Classic with Python 3.12"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
@@ -59,23 +59,22 @@ RUN apt-get update && apt-get install -y \
     wget \
     zlib1g-dev
 
-# Install Python 3.13 (no GIL)
+# Install Python 3.12
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.13-nogil \
+    python3.12 \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
+ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
 
-
-# Install Python 3.13 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13t
-# TODO: Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS when it supports Python 3.13 free threaded
-# TODO: Add lxml, grpcio, grpcio-status back when they support Python 3.13 free threaded
-RUN python3.13t -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
-RUN python3.13t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib openpyxl jinja2 && \
-    python3.13t -m pip cache purge
+# Install Python 3.12 packages
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+RUN python3.12 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
+RUN python3.12 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
+    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install deepspeed torcheval && \
+    python3.12 -m pip cache purge
