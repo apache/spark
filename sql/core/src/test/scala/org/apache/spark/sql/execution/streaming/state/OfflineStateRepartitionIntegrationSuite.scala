@@ -31,9 +31,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
  * 2. Offset and commit logs are updated correctly
  * 3. Query can resume successfully and compute correctly with repartitioned state
  */
-trait OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBase {
-
-  import OfflineStateRepartitionTestUtils._
+abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -155,7 +153,7 @@ trait OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBas
       val hadoopConf = spark.sessionState.newHadoopConf()
 
       // Step 4: Verify offset and commit logs
-      verifyRepartitionBatch(
+      OfflineStateRepartitionTestUtils.verifyRepartitionBatch(
         repartitionBatchId, checkpointMetadata, hadoopConf,
         checkpointDir.getAbsolutePath, newPartitions, spark)
 
