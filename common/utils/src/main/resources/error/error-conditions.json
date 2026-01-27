@@ -912,6 +912,12 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
+    "message" : [
+      "Unidentified Error: <message>"
+    ],
+    "sqlState" : "XXKCM"
+  },
   "CONNECT_INVALID_PLAN" : {
     "message" : [
       "The Spark Connect plan is invalid."

@@ -227,13 +227,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -244,7 +246,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
