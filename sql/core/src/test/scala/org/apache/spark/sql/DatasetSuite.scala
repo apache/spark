@@ -3012,6 +3012,36 @@ object CustomPathEncoder {
     Seq(realClassDataEnc.fields.head.copy(enc = custStringEnc),
       realClassDataEnc.fields.last)
   )
+
+  test("zipWithIndex should append consecutive 0-based indices") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5)).toDS().repartition(3)
+    val result = ds.zipWithIndex()
+
+    // Index column should be the last column
+    assert(result.columns === Array("_1", "_2", "index"))
+    assert(result.schema.last.dataType === LongType)
+
+    // Indices should be consecutive 0-based
+    val indices = result.collect().map(_.getLong(2)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex with custom column name") {
+    val ds = Seq(1, 2, 3, 4, 5).toDS()
+    val result = ds.zipWithIndex("row_num")
+
+    assert(result.columns === Array("value", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex should throw if column name already exists") {
+    val ds = Seq(("a", 1), ("b", 2)).toDS().withColumnRenamed("_1", "index")
+    val ex = intercept[AnalysisException] {
+      ds.zipWithIndex()
+    }
+    assert(ex.getErrorClass == "COLUMN_ALREADY_EXISTS")
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest

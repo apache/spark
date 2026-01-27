@@ -1199,6 +1199,14 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  def zipWithIndex(indexColName: String): DataFrame = {
+    if (schema.fieldNames.contains(indexColName)) {
+      throw QueryCompilationErrors.columnAlreadyExistsError(indexColName)
+    }
+    select(col("*"), Column(DistributedSequenceID()).alias(indexColName))
+  }
+
+  /** @inheritdoc */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
     withSameTypedPlan {
       Sample(0.0, fraction, withReplacement, seed, logicalPlan)
@@ -1938,6 +1946,9 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   override def unionByName(other: sql.Dataset[T]): Dataset[T] = super.unionByName(other)
+
+  /** @inheritdoc */
+  override def zipWithIndex(): DataFrame = super.zipWithIndex()
 
   /** @inheritdoc */
   override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)

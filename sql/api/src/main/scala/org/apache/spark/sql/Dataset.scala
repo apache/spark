@@ -2011,6 +2011,33 @@ abstract class Dataset[T] extends Serializable {
   def exceptAll(other: Dataset[T]): Dataset[T]
 
   /**
+   * Returns a new [[Dataset]] by appending a column containing consecutive 0-based Long indices,
+   * similar to `RDD.zipWithIndex()`.
+   *
+   * The index column is appended as the last column of the resulting [[DataFrame]].
+   *
+   * @group typedrel
+   * @since 4.2.0
+   */
+  def zipWithIndex(): DataFrame = zipWithIndex("index")
+
+  /**
+   * Returns a new [[Dataset]] by appending a column containing consecutive 0-based Long indices,
+   * similar to `RDD.zipWithIndex()`.
+   *
+   * The index column is appended as the last column of the resulting [[DataFrame]].
+   *
+   * @param indexColName
+   *   The name of the index column to append. The dataset must not already contain a column with
+   *   this name.
+   * @throws AnalysisException
+   *   if a column with `indexColName` already exists in the schema.
+   * @group typedrel
+   * @since 4.2.0
+   */
+  def zipWithIndex(indexColName: String): DataFrame
+
+  /**
    * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement), using a
    * user-supplied seed.
    *
