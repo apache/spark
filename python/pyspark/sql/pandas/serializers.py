@@ -701,9 +701,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         # Normalize input to list of (data, spark_type) tuples
         # Handle: single series, (series, type) tuple, or list of tuples
-        if (
-            not isinstance(series, (list, tuple))
-            or (len(series) == 2 and isinstance(series[1], DataType))
+        if not isinstance(series, (list, tuple)) or (
+            len(series) == 2 and isinstance(series[1], DataType)
         ):
             series = [series]
         # Ensure each element is a (data, spark_type) tuple
