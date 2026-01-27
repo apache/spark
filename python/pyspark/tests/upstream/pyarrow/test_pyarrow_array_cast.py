@@ -38,12 +38,30 @@ Tests container-to-container type conversions:
 - **List variants**: list, large_list, fixed_size_list
 - **Map**: map<key, value>
 - **Struct**: struct<fields...>
+
+## PyArrow Version Compatibility
+
+Some behaviors differ across PyArrow versions:
+
+| Feature                                                  | PyArrow < 19   | PyArrow 19-20  | PyArrow >= 21  |
+|----------------------------------------------------------|----------------|----------------|----------------|
+| struct cast: field name mismatch (missing fields → null) | ArrowTypeError | supported      | supported      |
+| struct cast: target has more fields (extra fields → null)| ArrowTypeError | supported      | supported      |
+| struct cast: field reorder (same fields, different order)| ArrowTypeError | ArrowTypeError | supported      |
+| pa.array(floats, pa.float16()) without numpy             | requires np.float16 | requires np.float16 | native support |
 """
 
 import platform
 import unittest
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+
+if have_pyarrow:
+    import pyarrow as pa
+
+    pyarrow_19_or_greater = LooseVersion(pa.__version__) >= LooseVersion("19.0.0")
+    pyarrow_21_or_greater = LooseVersion(pa.__version__) >= LooseVersion("21.0.0")
 
 
 def _get_float_to_int_boundary_expected(int_type):
@@ -7826,32 +7844,6 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                     pa.array([], type=pa.struct([("x", pa.int32())])),
                 ),
             ],
-            # struct -> struct (field name mismatch - missing become null)
-            "struct_name_mismatch": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"a": None, "b": None}],
-                        type=pa.struct([("a", pa.int32()), ("b", pa.int32())]),
-                    ),
-                ),
-            ],
-            # struct -> struct (more fields - extra become null)
-            "struct_more_fields": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"x": 1, "y": 2, "z": None}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
-                    ),
-                ),
-            ],
             # struct -> struct (fewer fields - drops extra)
             "struct_fewer_fields": [
                 (
@@ -7860,19 +7852,6 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                         type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
                     ),
                     pa.array([{"x": 1}], type=pa.struct([("x", pa.int32())])),
-                ),
-            ],
-            # struct -> struct (field reorder)
-            "struct_reorder": [
-                (
-                    pa.array(
-                        [{"x": 1, "y": 2}],
-                        type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
-                    ),
-                    pa.array(
-                        [{"y": 2, "x": 1}],
-                        type=pa.struct([("y", pa.int32()), ("x", pa.int32())]),
-                    ),
                 ),
             ],
             # struct -> list (not supported)
@@ -7898,6 +7877,67 @@ class PyArrowNestedTypeCastTests(unittest.TestCase):
                 ),
             ],
         }
+
+        # struct -> struct (field name mismatch - missing become null)
+        # PyArrow >= 19 supports this; earlier versions raise ArrowTypeError
+        casts["struct_name_mismatch"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"a": None, "b": None}],
+                    type=pa.struct([("a", pa.int32()), ("b", pa.int32())]),
+                )
+                if pyarrow_19_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_19_or_greater
+                else pa.struct([("a", pa.int32()), ("b", pa.int32())]),
+            ),
+        ]
+
+        # struct -> struct (more fields - extra become null)
+        # PyArrow >= 19 supports this; earlier versions raise ArrowTypeError
+        casts["struct_more_fields"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"x": 1, "y": 2, "z": None}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
+                )
+                if pyarrow_19_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_19_or_greater
+                else pa.struct([("x", pa.int32()), ("y", pa.int32()), ("z", pa.int32())]),
+            ),
+        ]
+
+        # struct -> struct (field reorder)
+        # PyArrow >= 21 supports field reordering; earlier versions raise ArrowTypeError
+        casts["struct_reorder"] = [
+            (
+                pa.array(
+                    [{"x": 1, "y": 2}],
+                    type=pa.struct([("x", pa.int32()), ("y", pa.int32())]),
+                ),
+                pa.array(
+                    [{"y": 2, "x": 1}],
+                    type=pa.struct([("y", pa.int32()), ("x", pa.int32())]),
+                )
+                if pyarrow_21_or_greater
+                else pa.lib.ArrowTypeError,
+                None
+                if pyarrow_21_or_greater
+                else pa.struct([("y", pa.int32()), ("x", pa.int32())]),
+            ),
+        ]
+
         self._run_nested_cast_tests(casts, "struct")
 
     def test_nested_struct_casts(self):
