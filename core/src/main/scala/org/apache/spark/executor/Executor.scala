@@ -674,34 +674,42 @@ private[spark] class Executor(
       (accums, accUpdates)
     }
 
+    /**
+     * Obtains an IsolatedSessionState for the given job artifact state.
+     * Gets or creates a session from the cache, then acquires it. We need to retry the cache
+     * lookup if the session was evicted between get() and acquire(). This can happen when the
+     * cache is full and another task triggers eviction.
+     */
+    private def obtainSession(jobArtifactState: JobArtifactState): IsolatedSessionState = {
+      var session: IsolatedSessionState = null
+      var acquired = false
+      while (!acquired) {
+        // Get or create session. The loader uses sessions map as the authoritative store.
+        // This ensures there's only one IsolatedSessionState per UUID at any time.
+        session = isolatedSessionCache.get(jobArtifactState.uuid, () => {
+          // Check the authoritative sessions map first. tryUnEvict() will block if
+          // cleanup is in progress, so when it returns false, the session is already
+          // removed from the map and it's safe to create a new one.
+          val existingSession = IsolatedSessionState.sessions.get(jobArtifactState.uuid)
+          if (existingSession != null && existingSession.tryUnEvict()) {
+            existingSession
+          } else {
+            newSessionState(jobArtifactState)
+          }
+        })
+        // acquire() can return false if session was evicted between get() and now.
+        // In that case, retry - the session is already removed from cache.
+        acquired = session.acquire()
+      }
+      session
+    }
+
     override def run(): Unit = {
 
       // Classloader isolation
-      // We need to retry the cache lookup if the session was evicted between get() and acquire().
-      // This can happen when the cache is full and another task triggers eviction.
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
-          var session: IsolatedSessionState = null
-          var acquired = false
-          while (!acquired) {
-            // Get or create session. The loader uses sessions map as the authoritative store.
-            // This ensures there's only one IsolatedSessionState per UUID at any time.
-            session = isolatedSessionCache.get(jobArtifactState.uuid, () => {
-              // Check the authoritative sessions map first. tryUnEvict() will block if
-              // cleanup is in progress, so when it returns false, the session is already
-              // removed from the map and it's safe to create a new one.
-              val existingSession = IsolatedSessionState.sessions.get(jobArtifactState.uuid)
-              if (existingSession != null && existingSession.tryUnEvict()) {
-                existingSession
-              } else {
-                newSessionState(jobArtifactState)
-              }
-            })
-            // acquire() can return false if session was evicted between get() and now.
-            // In that case, retry - the session is already removed from cache.
-            acquired = session.acquire()
-          }
-          session
+          obtainSession(jobArtifactState)
         case _ =>
           // The default session is never in the cache and never evicted,
           // so no need to acquire/release.
