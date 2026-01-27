@@ -237,23 +237,15 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         """
         Flatten the struct into Arrow's record batches.
         """
-        import pyarrow as pa
-
-        batches = super().load_stream(stream)
-        for batch in batches:
-            result_batches = []
-            for i in range(batch.num_columns):
-                if i in self.table_arg_offsets:
-                    struct = batch.column(i)
-                    # Flatten the struct and create a RecordBatch from it
-                    flattened_batch = pa.RecordBatch.from_arrays(
-                        struct.flatten(), schema=pa.schema(struct.type)
-                    )
-                    result_batches.append(flattened_batch)
-                else:
-                    # Keep the column as it is for non-table columns
-                    result_batches.append(batch.column(i))
-            yield result_batches
+        for batch in super().load_stream(stream):
+            # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
+            # keep other columns as Array
+            yield [
+                ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                if i in self.table_arg_offsets
+                else batch.column(i)
+                for i in range(batch.num_columns)
+            ]
 
     def _create_array(self, arr, arrow_type):
         import pyarrow as pa
