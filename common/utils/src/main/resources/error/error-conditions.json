@@ -4196,6 +4196,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VECTOR_NORM_DEGREE" : {
+    "message" : [
+      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -7589,12 +7595,6 @@
     "message" : [
       "Cannot build variant bigger than <sizeLimit> in <functionName>.",
       "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
-    ],
-    "sqlState" : "22023"
-  },
-  "INVALID_VECTOR_NORM_DEGREE" : {
-    "message" : [
-      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
     ],
     "sqlState" : "22023"
   },
