@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
-import org.apache.spark.sql.catalyst.streaming.StreamingSourceValidation.validateSourceName
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
