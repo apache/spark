@@ -11166,7 +11166,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            return self.all(axis=1, bool_only=bool_only, skipna=skipna).all()  # type: ignore
+            return self.all(axis=1, bool_only=bool_only, skipna=skipna).all()
 
     def any(
         self,
