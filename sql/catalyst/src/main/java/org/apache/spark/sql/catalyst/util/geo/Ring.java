@@ -49,7 +49,22 @@ class Ring {
     }
     Point first = points.get(0);
     Point last = points.get(points.size() - 1);
-    return first.getX() == last.getX() && first.getY() == last.getY();
+    return coordinatesEqual(first.getCoordinates(), last.getCoordinates());
+  }
+
+  /**
+   * Compares two coordinate arrays for equality.
+   */
+  private static boolean coordinatesEqual(double[] coords1, double[] coords2) {
+    if (coords1.length != coords2.length) {
+      return false;
+    }
+    for (int i = 0; i < coords1.length; i++) {
+      if (coords1[i] != coords2[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 

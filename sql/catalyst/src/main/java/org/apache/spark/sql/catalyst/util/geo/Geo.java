@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.nio.ByteOrder;
 
@@ -82,3 +82,4 @@ interface Geo {
   void setSrid(int srid);
 
 }
+

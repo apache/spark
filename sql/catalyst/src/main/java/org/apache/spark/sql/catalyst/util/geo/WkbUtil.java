@@ -19,26 +19,27 @@ package org.apache.spark.sql.catalyst.util.geo;
 /**
  * Utility class for WKB-related constants and helper methods.
  */
-public class WkbUtil {
+class WkbUtil {
   // WKB byte order values
-  public static final byte BIG_ENDIAN = 0;
-  public static final byte LITTLE_ENDIAN = 1;
+  static final byte BIG_ENDIAN = 0;
+  static final byte LITTLE_ENDIAN = 1;
 
   // Min and max valid base type codes
-  public static final int WKB_MIN_TYPE = (int) GeoTypeId.POINT.getValue();
-  public static final int WKB_MAX_TYPE = (int) GeoTypeId.GEOMETRY_COLLECTION.getValue();
+  static final int WKB_MIN_TYPE = (int) GeoTypeId.POINT.getValue();
+  static final int WKB_MAX_TYPE = (int) GeoTypeId.GEOMETRY_COLLECTION.getValue();
 
   // Dimensional offset multipliers (following OGC WKB spec)
   // Type = BaseType + DIM_OFFSET * DimFactor
-  public static final int DIM_OFFSET_2D = 0;
-  public static final int DIM_OFFSET_Z = 1000;
-  public static final int DIM_OFFSET_M = 2000;
-  public static final int DIM_OFFSET_ZM = 3000;
+  static final int DIM_OFFSET_2D = 0;
+  static final int DIM_OFFSET_Z = 1000;
+  static final int DIM_OFFSET_M = 2000;
+  static final int DIM_OFFSET_ZM = 3000;
 
   // Size constants
-  public static final int BYTE_SIZE = 1;
-  public static final int INT_SIZE = 4;
-  public static final int DOUBLE_SIZE = 8;
+  static final int BYTE_SIZE = 1;
+  static final int INT_SIZE = 4;
+  static final int DOUBLE_SIZE = 8;
+  static final int TYPE_SIZE = INT_SIZE; // WKB type is a 4-byte integer
 
   /**
    * Returns true if the type value is a valid base type (1-7).

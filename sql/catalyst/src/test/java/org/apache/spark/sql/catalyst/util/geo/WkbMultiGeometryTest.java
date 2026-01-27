@@ -122,7 +122,6 @@ public class WkbMultiGeometryTest extends WkbTestBase {
 
     WkbWriter writer = new WkbWriter();
     byte[] wkb = writer.write(original);
-    System.out.println("WKB hex: " + bytesToHex(wkb));
 
     WkbReader reader = new WkbReader();
     GeometryModel parsed = reader.read(wkb, 0);

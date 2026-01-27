@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.util.geo;
  * Abstract base class for specific geometry types (Point, LineString, Polygon, etc.).
  * This class provides common functionality needed by geometry subclasses.
  */
-public abstract class GeometryModel {
+abstract class GeometryModel {
 
   /** GeometryModel internal implementation. */
 
   // Geometry type and SRID information
   // The GeoTypeId enum represents the OGC WKB base code for the geometry type.
-  protected GeoTypeId typeId;
+  protected final GeoTypeId typeId;
   protected int sridValue;
 
   // Dimension flags

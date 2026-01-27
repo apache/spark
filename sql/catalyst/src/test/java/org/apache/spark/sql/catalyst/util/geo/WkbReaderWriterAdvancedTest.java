@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util.geo;
 
-import org.apache.spark.sql.catalyst.util.Geometry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
