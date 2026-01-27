@@ -296,9 +296,10 @@ abstract class DataStreamReader {
   /**
    * Validates that a streaming source name only contains alphanumeric characters and underscores.
    *
-   * @param sourceName the source name to validate
-   * @throws IllegalArgumentException if the source name is null, empty, or contains invalid
-   *                                  characters
+   * @param sourceName
+   *   the source name to validate
+   * @throws IllegalArgumentException
+   *   if the source name is null, empty, or contains invalid characters
    */
   protected def validateSourceName(sourceName: String): Unit = {
     require(sourceName != null, "Source name cannot be null")
