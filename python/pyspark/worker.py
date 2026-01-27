@@ -657,10 +657,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
         return result
 
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), arrow_return_type)]
+    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), return_type)]
 
 
 def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
