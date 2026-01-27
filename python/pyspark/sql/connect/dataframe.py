@@ -1742,7 +1742,7 @@ class DataFrame(ParentDataFrame):
         # an AttributeError might be expected to make hasattr(df, name) work.
         # For example:
         # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
-        # and it internally invokes __getattr__("__setstate__").
+        # and it internally invokes hasattr(df, "__setstate__") -> __getattr__("__setstate__").
         # Returning a dataframe column self._col("__setstate__") in this case will break
         # the serialization of connect dataframe and features built atop it (e.g. FEB).
         if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
