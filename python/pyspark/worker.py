@@ -431,9 +431,15 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
             )
         return result
 
+    def to_output_format(result):
+        # Convert Series of dicts/Rows to DataFrame for struct types
+        if isinstance(return_type, StructType):
+            return pd.DataFrame(list(result))
+        return result
+
     return (
         args_kwargs_offsets,
-        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), return_type),
+        lambda *a: (to_output_format(verify_result_length(evaluate(*a), len(a[0]))), return_type),
     )
 
 

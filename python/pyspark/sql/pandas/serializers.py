@@ -484,13 +484,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given pandas.Series or list of Series,
-        with optional type.
+        Create an Arrow record batch from the given list of (series, spark_type) tuples.
 
         Parameters
         ----------
-        series : pandas.Series or list
-            A single series, list of series, or list of (series, spark_type)
+        series : list
+            List of (series, spark_type) tuples
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -500,13 +499,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             Arrow RecordBatch
         """
         import pyarrow as pa
-
-        # Make input conform to [(series1, spark_type1), (series2, spark_type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], DataType)
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         arrs = [
             self._create_array(s, spark_type, prefers_large_types=prefers_large_types)
@@ -520,7 +512,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
         batches = (
-            self._create_batch(series, prefers_large_types=self._prefers_large_types)
+            self._create_batch([series], prefers_large_types=self._prefers_large_types)
             for series in iterator
         )
         super().dump_stream(batches, stream)
@@ -675,14 +667,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given pandas.Series pandas.DataFrame
-        or list of Series or DataFrame, with optional type.
+        Create an Arrow record batch from the given list of (data, spark_type) tuples.
 
         Parameters
         ----------
-        series : pandas.Series or pandas.DataFrame or list
-            A single series or dataframe, list of series or dataframe,
-            or list of (series or dataframe, spark_type)
+        series : list
+            List of (series or dataframe, spark_type) tuples
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -694,30 +684,17 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         import pandas as pd
         import pyarrow as pa
 
-        # Make input conform to [(series1, spark_type1), (series2, spark_type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], DataType)
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-
         arrs = []
         for s, spark_type in series:
-            # Check if it's a struct type (but not Variant, which is represented as struct in Arrow)
+            # DataFrame with StructType → struct array; otherwise → regular array
+            # Note: callers are responsible for providing DataFrame for struct types
             is_struct_output = (
-                self._struct_in_pandas == "dict"
+                isinstance(s, pd.DataFrame)
                 and spark_type is not None
                 and isinstance(spark_type, StructType)
                 and not isinstance(spark_type, VariantType)
             )
             if is_struct_output:
-                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
-                # If it returns a pd.Series, it should throw an error.
-                if not isinstance(s, pd.DataFrame):
-                    raise PySparkValueError(
-                        "Invalid return type. Please make sure that the UDF returns a "
-                        "pandas.DataFrame when the specified return type is StructType."
-                    )
                 arrs.append(
                     self._create_struct_array(
                         s, spark_type, prefers_large_types=prefers_large_types
@@ -745,7 +722,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         def init_stream_yield_batches():
             should_write_start_length = True
             for series in iterator:
-                batch = self._create_batch(series, prefers_large_types=self._prefers_large_types)
+                batch = self._create_batch([series], prefers_large_types=self._prefers_large_types)
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
@@ -960,14 +937,12 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
     def _create_batch(self, series, *, prefers_large_types=False):
         """
-        Create an Arrow record batch from the given pandas.Series pandas.DataFrame
-        or list of Series or DataFrame, with optional type.
+        Create an Arrow record batch from the given list of (dataframe, spark_type) tuples.
 
         Parameters
         ----------
-        series : pandas.Series or pandas.DataFrame or list
-            A single series or dataframe, list of series or dataframe,
-            or list of (series or dataframe, spark_type)
+        series : list
+            List of (dataframe, spark_type) tuples
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -978,13 +953,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pandas as pd
         import pyarrow as pa
-
-        # Make input conform to [(series1, spark_type1), (series2, spark_type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], DataType)
-        ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         arrs = []
         for s, spark_type in series:
