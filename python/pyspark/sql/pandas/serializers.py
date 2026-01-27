@@ -1179,11 +1179,11 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Flatten the Iterator[Iterator[[(df, arrow_type)]]] returned by func.
-        The mapper returns Iterator[[(df, arrow_type)]], so we flatten one level
-        to match the parent's expected format Iterator[[(df, arrow_type)]].
+        Flatten the Iterator[Iterator[(df, spark_type)]] returned by func.
+        The mapper returns Iterator[(df, spark_type)], so we flatten one level
+        to match the parent's expected format (df, spark_type).
         """
-        # Flatten: Iterator[Iterator[[(df, arrow_type)]]] -> Iterator[[(df, arrow_type)]]
+        # Flatten: Iterator[Iterator[(df, spark_type)]] -> Iterator[(df, spark_type)]
         flattened_iter = (batch for generator in iterator for batch in generator)
         super().dump_stream(flattened_iter, stream)
 

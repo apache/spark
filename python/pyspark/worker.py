@@ -840,9 +840,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         yield result
 
     def flatten_wrapper(k, v):
-        # Return Iterator[[(df, spark_type)]] directly
+        # Return Iterator[(df, spark_type)] directly
         for df in wrapped(k, v):
-            yield [(df, return_type)]
+            yield (df, return_type)
 
     return flatten_wrapper
 
@@ -873,9 +873,9 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         yield from map(verify_element, result)
 
     def flatten_wrapper(k, v):
-        # Return Iterator[[(df, spark_type)]] directly
+        # Return Iterator[(df, spark_type)] directly
         for df in wrapped(k, v):
-            yield [(df, return_type)]
+            yield (df, return_type)
 
     return flatten_wrapper
 
@@ -909,7 +909,7 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
 
         return result_iter
 
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
+    return lambda p, m, k, v: (wrapped(p, m, k, v), return_type)
 
 
 def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
@@ -940,7 +940,7 @@ def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf
 
         return result_iter
 
-    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
+    return lambda p, m, k, v: (wrapped(p, m, k, v), return_type)
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
@@ -955,8 +955,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
     `eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE` for more details on
     the input parameters of lambda function.
 
-    Along with the returned iterator, the lambda instance will also produce the return_type as
-    converted to the arrow schema.
+    The lambda instance returns a tuple (iterator, return_type).
     """
 
     def wrapped(key_series, value_series_gen, state):
@@ -1032,7 +1031,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
             state,
         )
 
-    return lambda k, v, s: [(wrapped(k, v, s), return_type)]
+    return lambda k, v, s: (wrapped(k, v, s), return_type)
 
 
 def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
@@ -2956,7 +2955,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
 
-            # Flatten one level: yield from wrapper to return Iterator[[(df, arrow_type)]]
+            # Flatten one level: yield from wrapper to return Iterator[(df, spark_type)]
             yield from f(key_series, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
