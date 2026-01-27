@@ -811,7 +811,6 @@ class SparkConversionMixin:
         from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
-            to_arrow_type,
             _deduplicate_field_names,
         )
         from pyspark.sql.pandas.utils import (

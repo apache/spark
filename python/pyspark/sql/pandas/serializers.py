@@ -46,7 +46,6 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
 )
 from pyspark.sql.types import (
-    DataType,
     StringType,
     StructType,
     BinaryType,

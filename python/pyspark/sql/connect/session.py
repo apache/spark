@@ -72,7 +72,6 @@ from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
-    to_arrow_type,
     _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
@@ -595,7 +594,6 @@ class SparkSession:
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
             spark_types: List[Optional[DataType]]
-            arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
@@ -604,7 +602,6 @@ class SparkSession:
                     timezone="UTC",
                     prefers_large_types=prefers_large_types,
                 )
-                arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
                 raise PySparkTypeError(
@@ -620,12 +617,6 @@ class SparkSession:
                     if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
-                ]
-                arrow_types = [
-                    to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
-                    if dt is not None
-                    else None
-                    for dt in spark_types
                 ]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
