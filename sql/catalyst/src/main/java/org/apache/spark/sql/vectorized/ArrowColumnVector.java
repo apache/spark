@@ -25,7 +25,7 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.catalyst.util.STUtils;
+import org.apache.spark.sql.catalyst.util.geo.STUtils;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;

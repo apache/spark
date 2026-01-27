@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
-import org.apache.spark.sql.catalyst.util.STUtils
-import org.apache.spark.sql.catalyst.util.geo.{Geography, Geometry}
+import org.apache.spark.sql.catalyst.util.geo.{Geography, Geometry, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
