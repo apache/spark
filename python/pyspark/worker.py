@@ -2870,8 +2870,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                     raise PySparkRuntimeError(
                         errorClass="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                     )
-                # Yield single-element tuple for _create_batch (expects iterable of tuples)
-                yield ((result_batch, result_type),)
+                yield (result_batch, result_type)
 
             if is_scalar_iter:
                 try:
