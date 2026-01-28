@@ -170,16 +170,10 @@ public class WkbWriter {
     }
   }
 
-  private void writeCoordinates(ByteBuffer buffer, Point point) {
-    for (double coord : point.getCoordinates()) {
-      buffer.putDouble(coord);
-    }
-  }
-
   private void writeLineString(ByteBuffer buffer, LineString lineString) {
     buffer.putInt(lineString.getNumPoints());
     for (Point point : lineString.getPoints()) {
-      writeCoordinates(buffer, point);
+      writePoint(buffer, point);
     }
   }
 
@@ -187,7 +181,7 @@ public class WkbWriter {
     int numPoints = ring.getNumPoints();
     buffer.putInt(numPoints);
     for (Point point : ring.getPoints()) {
-      writeCoordinates(buffer, point);
+      writePoint(buffer, point);
     }
   }
 
