@@ -2013,10 +2013,11 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
                 spark_type = iter_row_with_type[1]
 
                 # Convert spark type to arrow type
+                # TODO: WE need to make this configurable, currently using default values.
                 arrow_type = to_arrow_type(
                     spark_type,
-                    timezone=self._timezone,
-                    prefers_large_types=self._prefers_large_types,
+                    timezone="UTC",
+                    prefers_large_types=False,
                 )
 
                 rows_as_dict = []
