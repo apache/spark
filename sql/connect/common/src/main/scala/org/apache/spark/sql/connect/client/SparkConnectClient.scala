@@ -1104,7 +1104,7 @@ object SparkConnectClient {
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
           metadata.foreach { case (key, value) =>
-            if (key != null && key.endsWith("-bin")) {
+            if (key != null && value != null && key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
               // Expects a base64-encoded value string.
               val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
               headers.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
