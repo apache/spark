@@ -996,6 +996,13 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         import pandas as pd
         import pyarrow as pa
 
+        # Normalize input to list of (data, spark_type) tuples
+        # Handle: single dataframe, (dataframe, type) tuple, or list of tuples
+        if not isinstance(series, (list, tuple)) or (
+            len(series) == 2 and isinstance(series[1], DataType)
+        ):
+            series = [series]
+
         arrs = []
         for s, spark_type in series:
             if not isinstance(s, pd.DataFrame):
