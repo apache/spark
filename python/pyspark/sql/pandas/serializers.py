@@ -404,18 +404,35 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    assign_cols_by_name : bool
-        If True, then Pandas DataFrames will get columns by name
     int_to_decimal_coercion_enabled : bool
         If True, applies additional coercions in Python before converting to Arrow
         This has performance penalties.
+    struct_in_pandas : str, optional
+        How to represent struct in pandas ("dict", "row", etc.). Default is "dict".
+    ndarray_as_list : bool, optional
+        Whether to convert ndarray as list. Default is False.
+    df_for_struct : bool, optional
+        If True, convert struct columns to DataFrame instead of Series. Default is False.
+    input_type : StructType, optional
+        Spark types for each column. Default is None.
     """
 
-    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        int_to_decimal_coercion_enabled: bool = False,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ):
         super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._struct_in_pandas = struct_in_pandas
+        self._ndarray_as_list = ndarray_as_list
+        self._df_for_struct = df_for_struct
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
@@ -550,6 +567,14 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     ArrowArrayToPandasConversion.convert(
                         batch.column(i),
                         self._timezone,
+                        struct_in_pandas=self._struct_in_pandas,
+                        ndarray_as_list=self._ndarray_as_list,
+                        spark_type=(
+                            self._input_type[i]
+                            if hasattr(self, "_input_type") and self._input_type
+                            else None
+                        ),
+                        df_for_struct=self._df_for_struct,
                     )
                     for i in range(batch.num_columns)
                 ]
@@ -576,11 +601,15 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         input_type: Optional[StructType] = None,
         int_to_decimal_coercion_enabled: bool = False,
     ):
-        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
+        super().__init__(
+            timezone,
+            safecheck,
+            int_to_decimal_coercion_enabled,
+            struct_in_pandas,
+            ndarray_as_list,
+            df_for_struct,
+        )
         self._assign_cols_by_name = assign_cols_by_name
-        self._struct_in_pandas = struct_in_pandas
-        self._ndarray_as_list = ndarray_as_list
-        self._df_for_struct = df_for_struct
         self._arrow_cast = arrow_cast
         if input_type is not None:
             assert isinstance(input_type, StructType)
@@ -1257,11 +1286,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         int_to_decimal_coercion_enabled,
     ):
         super().__init__(
-            timezone,
-            safecheck,
-            assign_cols_by_name,
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
             arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
@@ -1643,11 +1676,15 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         int_to_decimal_coercion_enabled,
     ):
         super().__init__(
-            timezone,
-            safecheck,
-            assign_cols_by_name,
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
             arrow_cast=True,
+            input_type=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
