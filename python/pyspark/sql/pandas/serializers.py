@@ -538,8 +538,22 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        to_pandas = ArrowBatchTransformer.to_pandas(timezone=self._timezone)
-        yield from map(to_pandas, super().load_stream(stream))
+        import pandas as pd
+        import pyspark
+
+        batches = super().load_stream(stream)
+        for batch in batches:
+            if batch.num_columns == 0:
+                yield [pd.Series([pyspark._NoValue] * batch.num_rows)]
+            else:
+                pandas_batches = [
+                    ArrowArrayToPandasConversion.convert(
+                        batch.column(i),
+                        self._timezone,
+                    )
+                    for i in range(batch.num_columns)
+                ]
+                yield pandas_batches
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
