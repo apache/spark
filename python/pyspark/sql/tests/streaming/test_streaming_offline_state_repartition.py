@@ -333,7 +333,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             split_df = split(df["value"], ",")
             parsed_df = df.select(
                 split_df.getItem(0).alias("id"),
-                split_df.getItem(1).cast("integer").alias("temperature")
+                split_df.getItem(1).cast("integer").alias("temperature"),
             )
 
             output_schema = StructType(
@@ -342,18 +342,22 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                     StructField("value", StringType(), True),
                 ]
             )
-            return parsed_df.groupBy("id").transformWithStateInPandas(
-                statefulProcessor=processor_factory.pandas(),
-                outputStructType=output_schema,
-                outputMode="Update",
-                timeMode="None",
-                initialState=None,
-            ) if is_pandas else parsed_df.groupBy("id").transformWithState(
-                statefulProcessor=processor_factory.row(),
-                outputStructType=output_schema,
-                outputMode="Update",
-                timeMode="None",
-                initialState=None,
+            return (
+                parsed_df.groupBy("id").transformWithStateInPandas(
+                    statefulProcessor=processor_factory.pandas(),
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                    initialState=None,
+                )
+                if is_pandas
+                else parsed_df.groupBy("id").transformWithState(
+                    statefulProcessor=processor_factory.row(),
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                    initialState=None,
+                )
             )
 
         def verify_initial(results):
@@ -393,15 +397,14 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
     def test_repartition_with_streaming_tws(self):
         """Test repartition for streaming transformWithState with both row and pandas processors"""
         self._run_tws_repartition_test(
-            SimpleStatefulProcessorWithInitialStateFactory(),
-            is_pandas = False
+            SimpleStatefulProcessorWithInitialStateFactory(), is_pandas=False
         )
 
     def test_repartition_with_streaming_tws_in_pandas(self):
         self._run_tws_repartition_test(
-            SimpleStatefulProcessorWithInitialStateFactory(),
-            is_pandas = True
+            SimpleStatefulProcessorWithInitialStateFactory(), is_pandas=True
         )
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
