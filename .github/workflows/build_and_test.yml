@@ -888,7 +888,7 @@ jobs:
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
       run: |
         if [ -f ./dev/structured_logging_style.py ]; then
-            python3.11 ./dev/structured_logging_style.py
+            python3.12 ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
@@ -906,13 +906,13 @@ jobs:
       run: python3.9 -m pip list
     - name: List Python packages
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
-      run: python3.11 -m pip list
+      run: python3.12 -m pip list
     - name: Python linter for branch-3.5 and branch-4.0
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: Python linter
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
-      run: PYTHON_EXECUTABLE=python3.11 ./dev/lint-python
+      run: PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install dependencies for Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
