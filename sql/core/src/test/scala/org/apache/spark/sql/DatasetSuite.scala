@@ -3008,7 +3008,7 @@ class DatasetSuite extends QueryTest
     val ex = intercept[AnalysisException] {
       ds.zipWithIndex()
     }
-    assert(ex.getErrorClass == "COLUMN_ALREADY_EXISTS")
+    assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
   }
 }
 
