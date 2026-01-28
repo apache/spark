@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
+from typing import Iterator, List, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -94,9 +94,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:  # type: ignore[override]
         assert start is not None, "start offset should not be None"
-        assert isinstance(readLimit, ReadAllAvailable), (
-            "simple stream reader does not support read limit"
-        )
+        assert isinstance(
+            readLimit, ReadAllAvailable
+        ), "simple stream reader does not support read limit"
 
         (iter, end) = self.simple_reader.read(start)
         self.cache.append(PrefetchedCacheEntry(start, end, iter))

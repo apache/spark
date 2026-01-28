@@ -58,7 +58,6 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
-from pyspark.sql.streaming.datasource import ReadAllAvailable
 
 INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
@@ -86,7 +85,7 @@ def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
 
 
 def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
-    offset = reader.latestOffset()
+    offset = reader.latestOffset()  # type: ignore[call-arg]
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
@@ -149,6 +148,7 @@ def check_support_func(reader: DataSourceStreamReader, outfile: IO) -> None:
             support_flags |= SUPPORTS_TRIGGER_AVAILABLE_NOW
     else:
         import inspect
+
         sig = inspect.signature(reader.latestOffset)
         if len(sig.parameters) == 0:
             # old signature of latestOffset()
@@ -188,7 +188,7 @@ def latest_offset_admission_control_func(
     limit = json.loads(utf8_deserializer.loads(infile))
     limit_obj = READ_LIMIT_REGISTRY.get(limit["type"], limit)
 
-    offset = reader.latestOffset(start_offset_dict, limit_obj)  # type: ignore[call-arg]
+    offset = reader.latestOffset(start_offset_dict, limit_obj)
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
