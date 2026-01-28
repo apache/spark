@@ -2699,7 +2699,9 @@ class AdaptiveQueryExecSuite
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
-          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString,
+        SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key -> "false") {
         sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
           """
