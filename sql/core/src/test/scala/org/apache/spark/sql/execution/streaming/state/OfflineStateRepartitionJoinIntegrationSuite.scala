@@ -22,10 +22,15 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Integration test suite for stream-stream join operator repartitioning.
  */
-class OfflineStateRepartitionJoinIntegrationSuite
+class OfflineStateRepartitionJoinCkptV1IntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "1")
+  }
 
   // Test stream-stream join operator repartitioning
   Seq(1, 2, 3).foreach { version =>
@@ -69,5 +74,13 @@ class OfflineStateRepartitionJoinIntegrationSuite
         )
       }
     }
+  }
+}
+
+class OfflineStateRepartitionJoinCkptV2IntegrationSuite
+  extends OfflineStateRepartitionJoinCkptV1IntegrationSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
   }
 }
