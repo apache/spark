@@ -301,11 +301,8 @@ class StatePartitionAllColumnFamiliesReader(
 
 
   private def checkIfUseColumnFamily(schema: Set[StateStoreColFamilySchema]): Boolean = {
-    // This will not catch the edge case where user passes in a single DEFAULT column family in
-    // colFamilyToWriterInfoMap for multi-cf operator, or pass in a non-DEFAULT column family
-    // for a single-cf operator. It should be okay here since StatePartitionAllColumnFamiliesReader
-    // is used internally and we expect user to pass in the correct allColumnFamiliesReaderInfo
-    // for each operator
+    // Using the heuristic that all operators that enable column families
+    // has a non-default column family
     schema.exists(_.colFamilyName != StateStoreId.DEFAULT_STORE_NAME)
   }
 

@@ -55,17 +55,10 @@ class StatePartitionAllColumnFamiliesWriter(
     colFamilyToWriterInfoMap: Map[String, StatePartitionWriterColumnFamilyInfo],
     schemaProviderOpt: Option[StateSchemaProvider]) {
 
-  private def checkIfUseColumnFamily(colFamilyNames: Seq[String]): Boolean = {
-    // This will not catch the edge case where user passes in a single DEFAULT column family in
-    // colFamilyToWriterInfoMap for multi-cf operator, or pass in a non-DEFAULT column family
-    // for a single-cf operator. It should be okay here since
-    // StatePartitionAllColumnFamiliesWriter is used internally and we expect user to pass in
-    // the correct colFamilyToWriterInfoMap for each operator
-    colFamilyNames.size > 1 ||
-      colFamilyNames.size == 1 && colFamilyNames.head != StateStoreId.DEFAULT_STORE_NAME
-  }
-
-  private val useColumnFamilies = checkIfUseColumnFamily(colFamilyToWriterInfoMap.keys.toSeq)
+  // Using the heuristic that all operators that enable column families
+  // has a non-default column family
+  private val useColumnFamilies = colFamilyToWriterInfoMap.keys.toSeq
+    .exists(_ != StateStoreId.DEFAULT_STORE_NAME)
   private val defaultSchema = {
     colFamilyToWriterInfoMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
       case Some(info) => info.schema
