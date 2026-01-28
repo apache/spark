@@ -560,3 +560,115 @@ AS tab(col)
 Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT key, vector_sum(vec) OVER (PARTITION BY grp) as sum_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
+-- !query analysis
+Sort [key#x ASC NULLS FIRST], true
++- Project [key#x, sum_vec#x]
+   +- Project [key#x, vec#x, grp#x, sum_vec#x, sum_vec#x]
+      +- Window [vector_sum(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum_vec#x], [grp#x]
+         +- Project [key#x, vec#x, grp#x]
+            +- SubqueryAlias tab
+               +- LocalRelation [key#x, grp#x, vec#x]
+
+
+-- !query
+SELECT key, vector_avg(vec) OVER (PARTITION BY grp) as avg_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
+-- !query analysis
+Sort [key#x ASC NULLS FIRST], true
++- Project [key#x, avg_vec#x]
+   +- Project [key#x, vec#x, grp#x, avg_vec#x, avg_vec#x]
+      +- Window [vector_avg(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_vec#x], [grp#x]
+         +- Project [key#x, vec#x, grp#x]
+            +- SubqueryAlias tab
+               +- LocalRelation [key#x, grp#x, vec#x]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query analysis
+Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]

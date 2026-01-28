@@ -601,3 +601,111 @@ AS tab(col)
 struct<vector_avg(col):array<float>>
 -- !query output
 [5.5,5.5]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
+-- !query schema
+struct<vector_sum(col):array<float>>
+-- !query output
+[8.0]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
+-- !query schema
+struct<vector_avg(col):array<float>>
+-- !query output
+[4.0]
+
+
+-- !query
+SELECT key, vector_sum(vec) OVER (PARTITION BY grp) as sum_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
+-- !query schema
+struct<key:string,sum_vec:array<float>>
+-- !query output
+a	[4.0,6.0]
+b	[4.0,6.0]
+c	[5.0,6.0]
+
+
+-- !query
+SELECT key, vector_avg(vec) OVER (PARTITION BY grp) as avg_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
+-- !query schema
+struct<key:string,avg_vec:array<float>>
+-- !query output
+a	[2.0,3.0]
+b	[2.0,3.0]
+c	[5.0,6.0]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_sum(col):array<float>>
+-- !query output
+[NaN,6.0]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_avg(col):array<float>>
+-- !query output
+[NaN,3.0]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_sum(col):array<float>>
+-- !query output
+[Infinity,6.0]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_avg(col):array<float>>
+-- !query output
+[Infinity,3.0]
+
+
+-- !query
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_sum(col):array<float>>
+-- !query output
+[-Infinity,6.0]
+
+
+-- !query
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
+-- !query schema
+struct<vector_avg(col):array<float>>
+-- !query output
+[-Infinity,3.0]

@@ -222,7 +222,7 @@ case class VectorL2Distance(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
-       [2.0, 3.0]
+       [2.0,3.0]
   """,
   since = "4.2.0",
   group = "vector_funcs"
@@ -465,7 +465,7 @@ case class VectorAvg(
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
-       [4.0, 6.0]
+       [4.0,6.0]
   """,
   since = "4.2.0",
   group = "vector_funcs"

@@ -229,3 +229,52 @@ SELECT vector_avg(col) FROM VALUES
     (array(9.0F, 9.0F)),
     (array(10.0F, 10.0F))
 AS tab(col);
+
+-- Single element vectors
+SELECT vector_sum(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col);
+
+SELECT vector_avg(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col);
+
+-- Window function tests
+SELECT key, vector_sum(vec) OVER (PARTITION BY grp) as sum_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key;
+
+SELECT key, vector_avg(vec) OVER (PARTITION BY grp) as avg_vec
+FROM VALUES
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key;
+
+-- Special float values: NaN propagation
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col);
+
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col);
+
+-- Special float values: Infinity
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col);
+
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col);
+
+-- Special float values: Negative Infinity
+SELECT vector_sum(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col);
+
+SELECT vector_avg(col) FROM VALUES
+    (array(1.0F, 2.0F)),
+    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col);
