@@ -174,34 +174,18 @@ private[sql] object ProtobufUtils extends Logging {
       messageName: String,
       binaryFileDescriptorSet: Option[Array[Byte]]): DescriptorWithExtensions =
     binaryFileDescriptorSet match {
-      case Some(bytes) =>
-        val fileDescriptors = parseFileDescriptorSet(bytes)
-        val descriptor = fileDescriptors
-          .flatMap { fileDesc =>
-            fileDesc.getMessageTypes.asScala.find { desc =>
-              desc.getName == messageName || desc.getFullName == messageName
-            }
-          }
-          .headOption
-          .getOrElse {
-            throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
-          }
-        val (extensionRegistry, fullNamesToExtensions) = buildExtensionRegistry(fileDescriptors)
-        DescriptorWithExtensions(descriptor, extensionRegistry, fullNamesToExtensions)
-      case None =>
-        // Given a Java class, we can only access the descriptor for the proto file it is defined
-        // in. Extensions in other files will not be picked up. As such, we choose to disable
-        // extension support when we fall back to the Java class.
-        DescriptorWithExtensions(
-          buildDescriptorFromJavaClass(messageName),
-          ExtensionRegistry.getEmptyRegistry,
-          Map.empty)
+      case Some(bytes) => buildDescriptorFromFDS(messageName, bytes)
+      case None => buildDescriptorFromJavaClass(messageName)
     }
 
   /**
    * Loads the given protobuf class and returns Protobuf descriptor for it.
+   *
+   * Given a Java class, we can only access the descriptor for the proto file it is defined
+   * in. Extensions in other files will not be picked up. As such, we choose to disable
+   * extension support when we fall back to the Java class.
    */
-  def buildDescriptorFromJavaClass(protobufClassName: String): Descriptor = {
+  def buildDescriptorFromJavaClass(protobufClassName: String): DescriptorWithExtensions = {
 
     // Default 'Message' class here is shaded while using the package (as in production).
     // The incoming classes might not be shaded. Check both.
@@ -249,9 +233,28 @@ private[sql] object ProtobufUtils extends Logging {
           protobufClassName, "Could not find getDescriptor() method", e)
     }
 
-    getDescriptorMethod
-      .invoke(null)
-      .asInstanceOf[Descriptor]
+    val descriptor = getDescriptorMethod.invoke(null).asInstanceOf[Descriptor]
+
+    DescriptorWithExtensions(descriptor, ExtensionRegistry.getEmptyRegistry, Map.empty)
+  }
+
+  def buildDescriptorFromFDS(
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte]): DescriptorWithExtensions = {
+    // Find the first message descriptor that matches the name.
+    val fileDescriptors = parseFileDescriptorSet(binaryFileDescriptorSet)
+    val descriptor = fileDescriptors
+      .flatMap { fileDesc =>
+        fileDesc.getMessageTypes.asScala.find { desc =>
+          desc.getName == messageName || desc.getFullName == messageName
+        }
+      }
+      .headOption
+      .getOrElse {
+        throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
+      }
+    val (extensionRegistry, fullNamesToExtensions) = buildExtensionRegistry(fileDescriptors)
+    DescriptorWithExtensions(descriptor, extensionRegistry, fullNamesToExtensions)
   }
 
   private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
