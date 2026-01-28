@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreePattern}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1766,11 +1766,16 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       // PropagateEmptyRelation will again remove it. So to fix this behaviour, in case of streaming
       // empty left or right legs, we do not infer any new filter
       val (streamingLeftEmpty, streamingRightEmpty) = if (plan.isStreaming) {
-        (left.collectLeaves().forall(PropagateEmptyRelation.isEmpty),
-          right.collectLeaves().forall(PropagateEmptyRelation.isEmpty))
+        (
+          !left.containsPattern(TreePattern.JOIN) && left.collectLeaves().forall(
+            PropagateEmptyRelation.isEmpty),
+          !right.containsPattern(TreePattern.JOIN) && right.collectLeaves().forall(
+            PropagateEmptyRelation.isEmpty)
+        )
       } else {
         (false, false)
       }
+
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
         // inner join, it just drops the right side in the final output.
