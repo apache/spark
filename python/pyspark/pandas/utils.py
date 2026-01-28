@@ -781,8 +781,8 @@ def validate_how(how: str) -> str:
         how = "full"
     if how not in ("inner", "left", "right", "full", "cross"):
         raise ValueError(
-            "The 'how' parameter has to be amongst the following values: ",
-            "['inner', 'left', 'right', 'outer', 'cross']",
+            "The 'how' parameter has to be amongst the following values: "
+            "['inner', 'left', 'right', 'outer', 'cross']"
         )
     return how
 

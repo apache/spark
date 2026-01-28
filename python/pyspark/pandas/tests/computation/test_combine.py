@@ -464,7 +464,9 @@ class FrameCombineMixin:
         ):
             left.merge(right, left_on=["value", "x"], right_on="value")
 
-        with self.assertRaisesRegex(ValueError, "['inner', 'left', 'right', 'outer', 'cross']"):
+        with self.assertRaisesRegex(
+            ValueError, r"\['inner', 'left', 'right', 'outer', 'cross'\]"
+        ):
             left.merge(right, left_index=True, right_index=True, how="foo")
 
         with self.assertRaisesRegex(KeyError, "id"):
