@@ -56,7 +56,7 @@ class StatePartitionAllColumnFamiliesWriter(
     schemaProviderOpt: Option[StateSchemaProvider]) {
 
   // Using the heuristic that all operators that enable column families
-  // has a non-default column family
+  // have a non-default column family
   private val useColumnFamilies = colFamilyToWriterInfoMap.keys.toSeq
     .exists(_ != StateStoreId.DEFAULT_STORE_NAME)
   private val defaultSchema = {

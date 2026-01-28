@@ -330,9 +330,10 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
 
         def create_streaming_df(df):
             # Parse text input format "id,temperature" into structured columns
+            split_df = split(df["value"], ",")
             parsed_df = df.select(
-                split(df["value"], ",").getItem(0).alias("id"),
-                split(df["value"], ",").getItem(1).cast("integer").alias("temperature")
+                split_df.getItem(0).alias("id"),
+                split_df.getItem(1).cast("integer").alias("temperature")
             )
 
             output_schema = StructType(

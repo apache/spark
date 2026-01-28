@@ -302,7 +302,7 @@ class StatePartitionAllColumnFamiliesReader(
 
   private def checkIfUseColumnFamily(schema: Set[StateStoreColFamilySchema]): Boolean = {
     // Using the heuristic that all operators that enable column families
-    // has a non-default column family
+    // have a non-default column family
     schema.exists(_.colFamilyName != StateStoreId.DEFAULT_STORE_NAME)
   }
 
