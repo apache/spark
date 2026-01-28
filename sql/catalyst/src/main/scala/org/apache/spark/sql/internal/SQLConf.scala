@@ -4046,6 +4046,13 @@ object SQLConf {
       .checkValue(_ >= 0, "This value must be equal to or greater than 0.")
       .createWithDefaultString("48MB")
 
+  val PYSPARK_TOJSON_RETURN_DATAFRAME =
+    buildConf("spark.sql.pyspark.toJSON.returnDataFrame")
+      .doc("When true, DataFrame.toJSON in PySpark Classic returns a Dataframe instead of RDD.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -7673,6 +7680,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
   def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
+
+  def pysparkToJSONReturnDataFrame: Boolean = getConf(PYSPARK_TOJSON_RETURN_DATAFRAME)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
