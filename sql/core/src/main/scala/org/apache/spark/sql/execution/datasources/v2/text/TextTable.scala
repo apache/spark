@@ -22,7 +22,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class TextTable(
@@ -46,7 +46,11 @@ case class TextTable(
     }
   }
 
-  override def supportsDataType(dataType: DataType): Boolean = dataType == StringType
+  override def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: GeometryType | _: GeographyType => false
+    case StringType => true
+    case _ => false
+  }
 
   override def formatName: String = "Text"
 }
