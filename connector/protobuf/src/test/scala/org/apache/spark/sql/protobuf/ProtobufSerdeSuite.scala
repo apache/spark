@@ -146,7 +146,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   test("Fail to convert with deeply nested field type mismatch") {
     val protoFile = ProtobufUtils.buildDescriptorFromJavaClass(
       s"${javaClassNamePrefix}MissMatchTypeInDeepNested"
-    )
+    ).descriptor
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
     withFieldMatchType { fieldMatch =>

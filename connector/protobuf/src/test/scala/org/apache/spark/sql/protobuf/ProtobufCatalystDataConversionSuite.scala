@@ -164,6 +164,7 @@ class ProtobufCatalystDataConversionSuite
     // Verify Java class deserializer matches with descriptor based serializer.
     val javaDescriptor = ProtobufUtils
       .buildDescriptorFromJavaClass(s"$javaClassNamePrefix$messageName")
+      .descriptor
     assert(dataType == SchemaConverters.toSqlType(javaDescriptor).dataType)
     val javaDeserialized = new ProtobufDeserializer(javaDescriptor, dataType, filters)
       .deserialize(DynamicMessage.parseFrom(javaDescriptor, data.toByteArray))
