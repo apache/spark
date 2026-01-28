@@ -4202,6 +4202,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VECTOR_NORM_DEGREE" : {
+    "message" : [
+      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",

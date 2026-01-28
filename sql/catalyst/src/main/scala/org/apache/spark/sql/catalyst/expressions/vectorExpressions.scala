@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, FloatType, StringType}
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
-       0.97463185
+       0.9746319
   """,
   since = "4.2.0",
   group = "vector_funcs"
@@ -194,5 +194,137 @@ case class VectorL2Distance(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): VectorL2Distance = {
     copy(left = newChildren(0), right = newChildren(1))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(vector, degree) - Returns the Lp norm of a float vector using the specified degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
+    2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3.0F, 4.0F), 2.0F);
+       5.0
+      > SELECT _FUNC_(array(3.0F, 4.0F), 1.0F);
+       7.0
+      > SELECT _FUNC_(array(3.0F, 4.0F), float('inf'));
+       4.0
+  """,
+  since = "4.2.0",
+  group = "vector_funcs"
+)
+// scalastyle:on line.size.limit
+case class VectorNorm(vector: Expression, degree: Expression)
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  def this(vector: Expression) = this(vector, Literal(2.0f))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (vector.dataType, degree.dataType) match {
+      case (ArrayType(FloatType, _), FloatType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(FloatType),
+            "inputSql" -> toSQLExpr(degree),
+            "inputType" -> toSQLType(degree.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(vector),
+            "inputType" -> toSQLType(vector.dataType)))
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[VectorFunctionImplUtils],
+    FloatType,
+    "vectorNorm",
+    Seq(vector, degree, Literal(prettyName)),
+    Seq(ArrayType(FloatType), FloatType, StringType)
+  )
+
+  override def prettyName: String = "vector_norm"
+
+  override def children: Seq[Expression] = Seq(vector, degree)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VectorNorm = {
+    copy(vector = newChildren(0), degree = newChildren(1))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(vector, degree) - Normalizes a float vector to unit length using the specified norm degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
+    2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3.0F, 4.0F), 2.0F);
+       [0.6,0.8]
+      > SELECT _FUNC_(array(3.0F, 4.0F), 1.0F);
+       [0.42857143,0.5714286]
+      > SELECT _FUNC_(array(3.0F, 4.0F), float('inf'));
+       [0.75,1.0]
+  """,
+  since = "4.2.0",
+  group = "vector_funcs"
+)
+// scalastyle:on line.size.limit
+case class VectorNormalize(vector: Expression, degree: Expression)
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  def this(vector: Expression) = this(vector, Literal(2.0f))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (vector.dataType, degree.dataType) match {
+      case (ArrayType(FloatType, _), FloatType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(FloatType),
+            "inputSql" -> toSQLExpr(degree),
+            "inputType" -> toSQLType(degree.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(vector),
+            "inputType" -> toSQLType(vector.dataType)))
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[VectorFunctionImplUtils],
+    ArrayType(FloatType),
+    "vectorNormalize",
+    Seq(vector, degree, Literal(prettyName)),
+    Seq(ArrayType(FloatType), FloatType, StringType)
+  )
+
+  override def prettyName: String = "vector_normalize"
+
+  override def children: Seq[Expression] = Seq(vector, degree)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VectorNormalize = {
+    copy(vector = newChildren(0), degree = newChildren(1))
   }
 }
