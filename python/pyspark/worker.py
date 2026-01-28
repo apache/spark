@@ -434,7 +434,7 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
     if isinstance(return_type, StructType):
         # Convert Series of dicts/Rows to DataFrame for struct types
         def to_output_format(result):
-            return pd.DataFrame.from_records(result, columns=return_type.fieldNames())
+            return pd.DataFrame(list(result))
 
     else:
 
