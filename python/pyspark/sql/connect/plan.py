@@ -334,6 +334,7 @@ class DataSource(LogicalPlan):
         paths: Optional[List[str]] = None,
         predicates: Optional[List[str]] = None,
         is_streaming: Optional[bool] = None,
+        source_name: Optional[str] = None,
     ) -> None:
         super().__init__(None)
 
@@ -357,12 +358,15 @@ class DataSource(LogicalPlan):
             assert isinstance(predicates, list)
             assert all(isinstance(predicate, str) for predicate in predicates)
 
+        assert source_name is None or isinstance(source_name, str)
+
         self._format = format
         self._schema = schema
         self._options = options
         self._paths = paths
         self._predicates = predicates
         self._is_streaming = is_streaming
+        self._source_name = source_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -377,6 +381,8 @@ class DataSource(LogicalPlan):
             plan.read.data_source.paths.extend(self._paths)
         if self._predicates is not None and len(self._predicates) > 0:
             plan.read.data_source.predicates.extend(self._predicates)
+        if self._source_name is not None:
+            plan.read.data_source.source_name = self._source_name
         if self._is_streaming is not None:
             plan.read.is_streaming = self._is_streaming
         return plan
