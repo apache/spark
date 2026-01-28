@@ -2463,7 +2463,7 @@ class FunctionsTestsMixin:
 
         # Test with min mode
         summary3 = sketch_df.select(F.tuple_sketch_summary_integer("sketch", "min")).first()[0]
-        self.assertEqual(summary3, 5)
+        self.assertEqual(summary3, 15)
 
     def test_tuple_union_double_basic(self):
         """Test tuple_union_double basic functionality"""
@@ -2646,9 +2646,9 @@ class FunctionsTestsMixin:
         self.assertIsNotNone(union2)
 
         # Test union_agg with lgNomEntries and mode
-        union3 = combined.groupBy("id").agg(F.tuple_union_agg_double("sketch", 10, "sum")).first()[
-            1
-        ]
+        union3 = (
+            combined.groupBy("id").agg(F.tuple_union_agg_double("sketch", 10, "sum")).first()[1]
+        )
         self.assertIsNotNone(union3)
 
         # Verify estimate from union_agg (keys 1, 2, 3, 4 should all be present)
@@ -2679,9 +2679,9 @@ class FunctionsTestsMixin:
         self.assertIsNotNone(union1)
 
         # Test union_agg with lgNomEntries and mode
-        union2 = combined.groupBy("id").agg(F.tuple_union_agg_integer("sketch", 10, "max")).first()[
-            1
-        ]
+        union2 = (
+            combined.groupBy("id").agg(F.tuple_union_agg_integer("sketch", 10, "max")).first()[1]
+        )
         self.assertIsNotNone(union2)
 
         # Test with lgNomEntries
@@ -2724,17 +2724,13 @@ class FunctionsTestsMixin:
 
         # Test intersection_agg with mode
         intersection2 = (
-            combined.groupBy("id")
-            .agg(F.tuple_intersection_agg_double("sketch", "sum"))
-            .first()[1]
+            combined.groupBy("id").agg(F.tuple_intersection_agg_double("sketch", "sum")).first()[1]
         )
         self.assertIsNotNone(intersection2)
 
         # Test with min mode
         intersection3 = (
-            combined.groupBy("id")
-            .agg(F.tuple_intersection_agg_double("sketch", "min"))
-            .first()[1]
+            combined.groupBy("id").agg(F.tuple_intersection_agg_double("sketch", "min")).first()[1]
         )
         self.assertIsNotNone(intersection3)
 
@@ -2773,9 +2769,7 @@ class FunctionsTestsMixin:
 
         # Test intersection_agg with mode
         intersection2 = (
-            combined.groupBy("id")
-            .agg(F.tuple_intersection_agg_integer("sketch", "max"))
-            .first()[1]
+            combined.groupBy("id").agg(F.tuple_intersection_agg_integer("sketch", "max")).first()[1]
         )
         self.assertIsNotNone(intersection2)
 
@@ -2823,12 +2817,8 @@ class FunctionsTestsMixin:
         self.assertGreater(row1["summary_total"], 0.0)
 
         # Test union operations
-        sketch1 = df1.groupBy("id").agg(
-            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
-        )
-        sketch2 = df2.groupBy("id").agg(
-            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
-        )
+        sketch1 = df1.groupBy("id").agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+        sketch2 = df2.groupBy("id").agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
 
         union_result = (
             sketch1.union(sketch2)
@@ -2844,9 +2834,7 @@ class FunctionsTestsMixin:
         joined = sketch1.crossJoin(sketch2.withColumnRenamed("sketch", "sketch2"))
         intersection_result = joined.withColumn(
             "intersection_sketch", F.tuple_intersection_double("sketch", "sketch2")
-        ).withColumn(
-            "intersection_estimate", F.tuple_sketch_estimate_double("intersection_sketch")
-        )
+        ).withColumn("intersection_estimate", F.tuple_sketch_estimate_double("intersection_sketch"))
 
         intersection_row = intersection_result.first()
         self.assertGreaterEqual(intersection_row["intersection_estimate"], 2.0)

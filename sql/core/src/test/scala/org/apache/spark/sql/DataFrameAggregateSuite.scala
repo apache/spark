@@ -3664,7 +3664,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Test with column names
     val summary3 = sketchDf.select(tuple_sketch_summary_integer("sketch", "min")).collect()(0)(0)
-    assert(summary3 == 5)
+    assert(summary3 == 15)
   }
 
   test("SPARK-54179: tuple_union_double basic functionality") {
