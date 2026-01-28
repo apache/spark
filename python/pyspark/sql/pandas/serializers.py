@@ -39,7 +39,6 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
-    from_arrow_schema,
     from_arrow_type,
     is_variant,
     to_arrow_type,
@@ -53,7 +52,6 @@ from pyspark.sql.types import (
     StructField,
     LongType,
     IntegerType,
-    VariantType,
 )
 
 if TYPE_CHECKING:
@@ -1499,7 +1497,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         """
 
         import pandas as pd
-        import pyarrow as pa
 
         def construct_state_pdf(state):
             """
