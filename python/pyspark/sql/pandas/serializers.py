@@ -423,7 +423,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series : pandas.Series
             A single series
         spark_type : DataType, optional
-            The Spark type to use. If None, pyarrow's inferred type will be used.
+            The Spark return type. For UDF return types, this should always be provided
+            and should never be None. If None, pyarrow's inferred type will be used
+            (for backward compatibility).
         arrow_cast : bool, optional
             Whether to apply Arrow casting when the user-specified return type mismatches the
             actual return values.
@@ -621,7 +623,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def _create_struct_array(
         self,
         df: "pd.DataFrame",
-        spark_type: StructType,
+        return_type: StructType,
         *,
         prefers_large_types: bool = False,
     ):
@@ -632,8 +634,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         ----------
         df : pandas.DataFrame
             A pandas DataFrame
-        spark_type : StructType
-            The Spark StructType to use
+        return_type : StructType
+            The Spark return type (StructType) to use
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
 
@@ -643,9 +645,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         """
         import pyarrow as pa
 
-        # Derive arrow_struct_type from spark_type
+        # Derive arrow_struct_type from return_type
         arrow_struct_type = to_arrow_type(
-            spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
+            return_type, timezone=self._timezone, prefers_large_types=prefers_large_types
         )
 
         if len(df.columns) == 0:
@@ -659,7 +661,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     arrow_cast=self._arrow_cast,
                     prefers_large_types=prefers_large_types,
                 )
-                for spark_field in spark_type
+                for spark_field in return_type
             ]
         # Assign result columns by position
         else:
@@ -672,7 +674,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     arrow_cast=self._arrow_cast,
                     prefers_large_types=prefers_large_types,
                 )
-                for i, spark_field in enumerate(spark_type)
+                for i, spark_field in enumerate(return_type)
             ]
 
         return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
@@ -720,7 +722,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             is_struct_type = (
                 spark_type is not None
                 and isinstance(spark_type, StructType)
-                and not isinstance(spark_type, VariantType)
                 and isinstance(s, pd.DataFrame)
             )
             if is_struct_type:
@@ -735,7 +736,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     struct_in_pandas == "dict"
                     and spark_type is not None
                     and isinstance(spark_type, StructType)
-                    and not isinstance(spark_type, VariantType)
                     and not isinstance(s, pd.DataFrame)
                 ):
                     raise PySparkValueError(
@@ -1022,7 +1022,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         series : pandas.Series
             A single series
         spark_type : DataType, optional
-            The Spark type to use. If None, pyarrow's inferred type will be used.
+            The Spark return type. For UDF return types, this should always be provided
+            and should never be None. If None, pyarrow's inferred type will be used
+            (for backward compatibility).
         arrow_cast : bool, optional
             Whether to apply Arrow casting when the user-specified return type mismatches the
             actual return values.
