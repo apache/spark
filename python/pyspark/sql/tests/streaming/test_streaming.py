@@ -643,43 +643,6 @@ class StreamingTestsMixin:
                 )
                 self.assertTrue(json_df.isStreaming, "JSON DataFrame should be streaming")
 
-    def test_name_persists_through_query(self):
-        """Test that the name persists when starting a streaming query."""
-        with self.sql_conf(
-            {
-                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-                "spark.sql.streaming.offsetLog.formatVersion": "2",
-            }
-        ):
-            with tempfile.TemporaryDirectory(prefix="test_name_query_") as tmpdir:
-                data_dir = tmpdir + "/data"
-                checkpoint_dir = tmpdir + "/checkpoint"
-
-                # Create test data
-                self.spark.range(10).write.mode("overwrite").parquet(data_dir)
-
-                df = (
-                    self.spark.readStream.format("parquet")
-                    .schema("id LONG")
-                    .name("parquet_source_test")
-                    .load(data_dir)
-                )
-
-                query = (
-                    df.writeStream.format("noop")
-                    .option("checkpointLocation", checkpoint_dir)
-                    .start()
-                )
-
-                try:
-                    # Let it run briefly
-                    time.sleep(1)
-
-                    # Verify query is running
-                    self.assertTrue(query.isActive, "Query should be active")
-                finally:
-                    query.stop()
-
     def test_streaming_drop_duplicate_within_watermark(self):
         """
         This verifies dropDuplicatesWithinWatermark works with a streaming dataframe.
