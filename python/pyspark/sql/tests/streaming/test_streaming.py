@@ -502,10 +502,12 @@ class StreamingTestsMixin:
 
     def test_name_with_valid_names(self):
         """Test that various valid source name patterns work correctly."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             valid_names = [
                 "mySource",
                 "my_source",
@@ -524,14 +526,18 @@ class StreamingTestsMixin:
                         .name(name)
                         .load(tmpdir)
                     )
-                    self.assertTrue(df.isStreaming, f"DataFrame should be streaming for name: {name}")
+                    self.assertTrue(
+                        df.isStreaming, f"DataFrame should be streaming for name: {name}"
+                    )
 
     def test_name_method_chaining(self):
         """Test that name() returns the reader for method chaining."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_chaining_") as tmpdir:
                 self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
                 df = (
@@ -546,10 +552,12 @@ class StreamingTestsMixin:
 
     def test_name_before_format(self):
         """Test that order doesn't matter - name can be set before format."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_before_format_") as tmpdir:
                 self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
                 df = (
@@ -563,10 +571,12 @@ class StreamingTestsMixin:
 
     def test_invalid_names(self):
         """Test that various invalid source names are rejected."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             invalid_names = [
                 "",  # empty string
                 "  ",  # whitespace only
@@ -602,10 +612,12 @@ class StreamingTestsMixin:
 
     def test_name_with_different_formats(self):
         """Test that name() works with different streaming data sources."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_name_formats_") as tmpdir:
                 # Create test data
                 self.spark.range(10).write.mode("overwrite").parquet(tmpdir + "/parquet_data")
@@ -633,10 +645,12 @@ class StreamingTestsMixin:
 
     def test_name_persists_through_query(self):
         """Test that the name persists when starting a streaming query."""
-        with self.sql_conf({
-            "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
-            "spark.sql.streaming.offsetLog.formatVersion": "2"
-        }):
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
             with tempfile.TemporaryDirectory(prefix="test_name_query_") as tmpdir:
                 data_dir = tmpdir + "/data"
                 checkpoint_dir = tmpdir + "/checkpoint"
@@ -652,7 +666,9 @@ class StreamingTestsMixin:
                 )
 
                 query = (
-                    df.writeStream.format("noop").option("checkpointLocation", checkpoint_dir).start()
+                    df.writeStream.format("noop")
+                    .option("checkpointLocation", checkpoint_dir)
+                    .start()
                 )
 
                 try:
