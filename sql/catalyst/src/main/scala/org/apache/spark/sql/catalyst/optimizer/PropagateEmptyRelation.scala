@@ -48,7 +48,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   // This tag is used to mark a repartition as a root repartition which is user-specified
   private[sql] val ROOT_REPARTITION = TreeNodeTag[Unit]("ROOT_REPARTITION")
 
-  protected def isEmpty(plan: LogicalPlan): Boolean = plan match {
+  def isEmpty(plan: LogicalPlan): Boolean = plan match {
     case p: LocalRelation => p.data.isEmpty
     case _ => false
   }
@@ -141,7 +141,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
       case _: Project => empty(p)
-      case _: Filter if !p.isStreaming => empty(p) // SPARK-55241
+      case _: Filter => empty(p)
       case _: Sample => empty(p)
       case _: Sort => empty(p)
       case _: GlobalLimit if !p.isStreaming => empty(p)

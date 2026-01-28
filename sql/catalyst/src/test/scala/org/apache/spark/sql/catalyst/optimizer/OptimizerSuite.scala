@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+
+import java.util
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -29,8 +32,6 @@ import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructField, StructType, TimestampType}
-
-import java.util
 
 /**
  * A dummy optimizer rule for testing that decrements integer literals until 0.
