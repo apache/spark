@@ -716,27 +716,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         arrs = []
         for s, spark_type in series:
             # DataFrame with StructType → struct array; otherwise → regular array
-            # Note: callers are responsible for providing DataFrame for struct types
+            # Check if this is a struct type that needs DataFrame representation
             is_struct_type = (
-                struct_in_pandas == "dict"
-                and spark_type is not None
+                spark_type is not None
                 and isinstance(spark_type, StructType)
                 and not isinstance(spark_type, VariantType)
+                and isinstance(s, pd.DataFrame)
             )
             if is_struct_type:
-                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
-                # If it returns a pd.Series, it should throw an error.
-                if not isinstance(s, pd.DataFrame):
-                    raise PySparkValueError(
-                        "Invalid return type. Please make sure that the UDF returns a "
-                        "pandas.DataFrame when the specified return type is StructType."
-                    )
                 arrs.append(
                     self._create_struct_array(
                         s, spark_type, prefers_large_types=prefers_large_types
                     )
                 )
             else:
+                # For struct types with struct_in_pandas="dict", validate DataFrame is provided
+                if (
+                    struct_in_pandas == "dict"
+                    and spark_type is not None
+                    and isinstance(spark_type, StructType)
+                    and not isinstance(spark_type, VariantType)
+                    and not isinstance(s, pd.DataFrame)
+                ):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
                 arrs.append(
                     self._create_array(
                         s,
@@ -1545,7 +1550,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             empty_row_cnt_in_state = max_data_cnt - state_data_cnt
 
             empty_rows_pdf = pd.DataFrame(
-                dict.fromkeys(pa.schema(pdf_schema).names),
+                dict.fromkeys(pdf_schema.names),
                 index=[x for x in range(0, empty_row_cnt_in_data)],
             )
             empty_rows_state = pd.DataFrame(
@@ -1559,13 +1564,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_pdf = pd.concat(pdfs, ignore_index=True)
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
-            # Convert arrow schema to spark type for the data schema
-            pdf_spark_type = from_arrow_schema(pa.schema(pdf_schema))
-
             return self._create_batch(
                 [
                     (count_pdf, self.result_count_df_type),
-                    (merged_pdf, pdf_spark_type),
+                    (merged_pdf, pdf_schema),
                     (merged_state_pdf, self.result_state_df_type),
                 ]
             )

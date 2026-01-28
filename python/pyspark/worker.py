@@ -906,7 +906,7 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
 
         return result_iter
 
-    return lambda p, m, k, v: (wrapped(p, m, k, v), return_type)
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
 def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
@@ -1028,7 +1028,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
             state,
         )
 
-    return lambda k, v, s: (wrapped(k, v, s), return_type)
+    return lambda k, v, s: [(wrapped(k, v, s), return_type)]
 
 
 def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
