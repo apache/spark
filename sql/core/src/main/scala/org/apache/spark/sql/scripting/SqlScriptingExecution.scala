@@ -254,7 +254,19 @@ class SqlScriptingExecution(
         handler.reset()
         handlerFrame.executionPlan.enterScope()
       case None =>
-        throw e.asInstanceOf[Throwable]
+        // SQL Standard: Unhandled completion conditions (SQLSTATE class '02' - no data)
+        // continue execution after the statement that caused the condition.
+        // Unhandled exception conditions (all other classes) are resignaled (thrown).
+        // Note: SQLSTATE class '01' (warnings) are not currently raised by Spark.
+        val sqlState = e.getSqlState
+        val isCompletionCondition = sqlState != null && sqlState.startsWith("02")
+
+        if (!isCompletionCondition) {
+          // Exception condition - resignal (throw)
+          throw e.asInstanceOf[Throwable]
+        }
+        // Otherwise: Completion condition (no data) - continue execution without throwing
+        // This allows statements like FETCH to return "no data" without causing script failure
     }
   }
 

@@ -24,6 +24,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingExecutionContextExtension, VariableDefinition}
+import org.apache.spark.sql.catalyst.expressions.CursorDefinition
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
@@ -52,6 +53,108 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
 
   def currentFrame: SqlScriptingExecutionFrame = frames.last
   def currentScope: SqlScriptingExecutionScope = currentFrame.currentScope
+
+  /**
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Implementation of SqlScriptingExecutionContextExtension API.
+   *
+   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
+   * This ensures cursors declared in handlers shadow cursors with the same name in the script.
+   */
+  override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      // Search in current frame first (respects shadowing), then script frame (cross-frame access)
+      if (frames.size > 1) {
+        // Handler frame: search current frame first, then script frame
+        currentFrame.findCursorByName(normalizedName)
+          .orElse(frames.head.findCursorByName(normalizedName))
+      } else {
+        // Script frame only: just search in it
+        frames.head.findCursorByName(normalizedName)
+      }
+    }
+  }
+
+  /**
+   * Find a cursor in a specific labeled scope.
+   * Implementation of SqlScriptingExecutionContextExtension API.
+   *
+   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
+   */
+  override def findCursorInScope(
+      normalizedScopeLabel: String,
+      normalizedName: String): Option[CursorDefinition] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      // Search in current frame first (respects shadowing), then script frame
+      if (frames.size > 1) {
+        currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+          .orElse(frames.head.findCursorInScope(normalizedScopeLabel, normalizedName))
+      } else {
+        frames.head.findCursorInScope(normalizedScopeLabel, normalizedName)
+      }
+    }
+  }
+
+  /**
+   * Get cursor state across all frames.
+   * Searches script frame first to support handlers accessing cursors from main script.
+   */
+  def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      // Try script frame first (frames.head)
+      val scriptFrameState = frames.head.getCursorState(normalizedName, scopeLabel)
+      if (scriptFrameState.isDefined) {
+        scriptFrameState
+      } else if (frames.size > 1) {
+        // Try current frame (handler frame)
+        currentFrame.getCursorState(normalizedName, scopeLabel)
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
+   * Get cursor state for a resolved CursorReference.
+   * This is a convenience method that avoids repeating the same pattern in cursor commands.
+   */
+  def getCursorState(cursorRef: org.apache.spark.sql.catalyst.expressions.CursorReference):
+      Option[CursorState] = {
+    getCursorState(cursorRef.normalizedName, cursorRef.scopeLabel)
+  }
+
+  /**
+   * Update cursor state across all frames.
+   * Updates in the frame where the cursor is actually defined.
+   */
+  def updateCursorState(
+      normalizedName: String,
+      scopeLabel: Option[String],
+      newState: CursorState): Unit = {
+    if (frames.isEmpty) {
+      throw SparkException.internalError("Cannot update cursor state: no frames.")
+    }
+
+    // Try to update in script frame first
+    val scriptFrameHasCursor = frames.head.findCursorByName(normalizedName).isDefined ||
+      (scopeLabel.isDefined &&
+        frames.head.findCursorInScope(scopeLabel.get, normalizedName).isDefined)
+
+    if (scriptFrameHasCursor) {
+      frames.head.updateCursorState(normalizedName, scopeLabel, newState)
+    } else if (frames.size > 1) {
+      // Update in current frame (handler frame)
+      currentFrame.updateCursorState(normalizedName, scopeLabel, newState)
+    } else {
+      throw SparkException.internalError(s"Cursor $normalizedName not found in any frame")
+    }
+  }
 
   def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     if (frames.isEmpty) {
@@ -105,6 +208,82 @@ class SqlScriptingExecutionFrame(
   // List of scopes that are currently active.
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
+  /**
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Used by cursor commands after name resolution.
+   *
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
+    scopes.reverseIterator.flatMap(_.cursors.get(normalizedName)).nextOption()
+  }
+
+  /**
+   * Find a cursor in a specific labeled scope.
+   * Used by qualified cursor references (label.cursor).
+   *
+   * @param scopeLabel The label of the scope to search in
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorInScope(scopeLabel: String, normalizedName: String): Option[CursorDefinition] = {
+    scopes.reverseIterator.find(_.label == scopeLabel).flatMap(_.cursors.get(normalizedName))
+  }
+
+  /**
+   * Find the scope object with the given label.
+   * Used to access scope-specific state (e.g., cursorStates).
+   *
+   * @param scopeLabel The label of the scope to find
+   * @return The scope if found
+   */
+  def findScope(scopeLabel: String): Option[SqlScriptingExecutionScope] = {
+    scopes.reverseIterator.find(_.label == scopeLabel)
+  }
+
+  /**
+   * Get the cursor state for a given cursor, considering scope qualifications.
+   *
+   * @param normalizedName The normalized cursor name
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
+   * @return The cursor state if found
+   */
+  def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
+    scopeLabel match {
+      case Some(label) =>
+        findScope(label).flatMap(_.cursorStates.get(normalizedName))
+      case None =>
+        // Search in current scope and parent scopes
+        scopes.reverseIterator.flatMap(_.cursorStates.get(normalizedName)).nextOption()
+    }
+  }
+
+  /**
+   * Update the cursor state for a given cursor, considering scope qualifications.
+   *
+   * @param normalizedName The normalized cursor name
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
+   * @param newState The new cursor state
+   */
+  def updateCursorState(
+      normalizedName: String,
+      scopeLabel: Option[String],
+      newState: CursorState): Unit = {
+    val targetScope = scopeLabel match {
+      case Some(label) =>
+        findScope(label).getOrElse(
+          throw SparkException.internalError(s"Scope $label not found"))
+      case None =>
+        // Find the scope where this cursor is defined
+        scopes.reverseIterator.find(_.cursors.contains(normalizedName)).getOrElse(
+          throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
+    }
+    targetScope.cursorStates.put(normalizedName, newState)
+  }
+
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
@@ -115,6 +294,8 @@ class SqlScriptingExecutionFrame(
   def enterScope(
       label: String,
       triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap): Unit = {
+    // Note: Labels are already lowercased in ParserUtils#enterLabeledScope during parsing,
+    // so no need to normalize here. Labels are always case-insensitive in SQL/PSM.
     scopes.append(new SqlScriptingExecutionScope(label, triggerToExceptionHandlerMap))
   }
 
@@ -125,11 +306,13 @@ class SqlScriptingExecutionFrame(
 
     // Remove all scopes until the one with the given label.
     while (scopes.nonEmpty && scopes.last.label != label) {
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
 
     // Remove the scope with the given label.
     if (scopes.nonEmpty) {
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
   }
@@ -182,6 +365,19 @@ class SqlScriptingExecutionScope(
     val label: String,
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
   val variables = new mutable.HashMap[String, VariableDefinition]
+  val cursors = new mutable.HashMap[String, CursorDefinition]
+  val cursorStates = new mutable.HashMap[String, CursorState]
+
+  /**
+   * Cleanup resources when this scope is being removed.
+   * Closes all open cursors and releases their result data.
+   */
+  def cleanup(): Unit = {
+    // Close all cursors by transitioning them to Closed state
+    cursorStates.keys.foreach { cursorName =>
+      cursorStates.put(cursorName, CursorClosed)
+    }
+  }
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
