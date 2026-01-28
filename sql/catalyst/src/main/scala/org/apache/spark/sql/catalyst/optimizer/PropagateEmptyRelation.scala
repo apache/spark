@@ -141,7 +141,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
       case _: Project => empty(p)
-      case _: Filter => empty(p)
+      case _: Filter if !p.isStreaming => empty(p) // SPARK-55241
       case _: Sample => empty(p)
       case _: Sort => empty(p)
       case _: GlobalLimit if !p.isStreaming => empty(p)
