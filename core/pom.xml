@@ -541,7 +541,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
+                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client,jetty-session
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
@@ -559,14 +559,15 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
-              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty.ee10:jetty-ee10-proxy</include>
               <include>org.eclipse.jetty:jetty-client</include>
-              <include>org.eclipse.jetty:jetty-servlet</include>
-              <include>org.eclipse.jetty:jetty-servlets</include>
-              <include>org.eclipse.jetty:jetty-plus</include>
+              <include>org.eclipse.jetty.ee10:jetty-ee10-servlet</include>
+              <include>org.eclipse.jetty.ee10:jetty-ee10-servlets</include>
+              <include>org.eclipse.jetty.ee10:jetty-ee10-plus</include>
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
+              <include>org.eclipse.jetty:jetty-session</include>
               <include>com.google.guava:guava</include>
               <include>com.google.guava:failureaccess</include>
               <include>com.google.protobuf:*</include>

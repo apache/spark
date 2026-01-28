@@ -38,6 +38,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
@@ -436,7 +438,8 @@ object SparkConnectService extends Logging {
       return
     }
 
-    sessionManager.initializeBaseSession(sc)
+    sessionManager.initializeBaseSession(() =>
+      SparkSession.builder().sparkContext(sc).getOrCreate().newSession())
     startGRPCService()
     createListenerAndUI(sc)
 

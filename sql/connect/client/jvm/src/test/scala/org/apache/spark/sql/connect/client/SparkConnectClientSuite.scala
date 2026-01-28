@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -37,7 +36,7 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class SparkConnectClientSuite extends ConnectFunSuite {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _
@@ -228,13 +227,15 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -245,7 +246,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)

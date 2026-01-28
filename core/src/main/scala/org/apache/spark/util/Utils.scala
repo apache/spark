@@ -1368,10 +1368,26 @@ private[spark] object Utils
   val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
     "Full stacktrace of original doTryWithCallerStacktrace caller"
 
+  /**
+   * Exception used to preserve the original stacktrace before stitching. On subsequent accesses
+   * (not the first), this is added as a suppressed exception to show where the error originally
+   * occurred.
+   */
   class OriginalTryStackTraceException()
-    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE) {
-    var doTryWithCallerStacktraceDepth: Int = 0
-  }
+    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+
+  /**
+   * Internal wrapper used to carry the original exception along with metadata needed for
+   * stacktrace stitching. This wrapper is never exposed to users.
+   *
+   * @param originalException The original exception
+   * @param depth The number of stacktrace frames below doTryWithCallerStacktrace to preserve
+   * @param originalStacktraceEx Exception holding the original stacktrace (for suppressed display)
+   */
+  class TryStackTraceWrapper(
+      val originalException: Throwable,
+      val depth: Int,
+      val originalStacktraceEx: OriginalTryStackTraceException) extends Exception(originalException)
 
   /**
    * Use Try with stacktrace substitution for the caller retrieving the error.
@@ -1379,9 +1395,8 @@ private[spark] object Utils
    * Normally in case of failure, the exception would have the stacktrace of the caller that
    * originally called doTryWithCallerStacktrace. However, we want to replace the part above
    * this function with the stacktrace of the caller who calls getTryWithCallerStacktrace.
-   * So here we save the part of the stacktrace below doTryWithCallerStacktrace, and
-   * getTryWithCallerStacktrace will stitch it with the new stack trace of the caller.
-   * The full original stack trace is kept in ex.getSuppressed.
+   * So here we wrap the exception with metadata, and getTryWithCallerStacktrace will
+   * unwrap it and stitch the stacktrace with the new caller's stack trace.
    *
    * @param f Code block to be wrapped in Try
    * @return Try with Success or Failure of the code block. Use with getTryWithCallerStacktrace.
@@ -1392,6 +1407,10 @@ private[spark] object Utils
     }
     t match {
       case Failure(ex) =>
+        // If already wrapped, return as-is (nested call)
+        if (ex.isInstanceOf[TryStackTraceWrapper]) {
+          return t
+        }
         // Note: we remove the common suffix instead of e.g. finding the call to this function, to
         // account for recursive calls with multiple doTryWithCallerStacktrace on the stack trace.
         val origStackTrace = ex.getStackTrace
@@ -1399,22 +1418,16 @@ private[spark] object Utils
         val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
           case (exElem, currentElem) => exElem == currentElem
         }.length
-        // Add the full stack trace of the original caller as the suppressed exception.
-        // It may already be there if it's a nested call to doTryWithCallerStacktrace.
-        val origEx = ex.getSuppressed.find { e =>
-          e.isInstanceOf[OriginalTryStackTraceException]
-        }.getOrElse {
-          val fullEx = new OriginalTryStackTraceException()
-          fullEx.setStackTrace(origStackTrace)
-          ex.addSuppressed(fullEx)
-          fullEx
-        }.asInstanceOf[OriginalTryStackTraceException]
-        // Update the depth of the stack of the current doTryWithCallerStacktrace, for stitching
-        // it with the stack of getTryWithCallerStacktrace.
-        origEx.doTryWithCallerStacktraceDepth = origStackTrace.size - commonSuffixLen
-      case Success(_) => // nothing
+        // Compute the depth of the "below" portion to preserve during stitching
+        val depth = origStackTrace.size - commonSuffixLen
+        // Create exception to hold original stacktrace (for suppressed on subsequent access)
+        val originalStacktraceEx = new OriginalTryStackTraceException()
+        originalStacktraceEx.setStackTrace(origStackTrace)
+        // Wrap everything
+        val wrapper = new TryStackTraceWrapper(ex, depth, originalStacktraceEx)
+        Failure(wrapper)
+      case Success(_) => t
     }
-    t
   }
 
   /**
@@ -1424,32 +1437,34 @@ private[spark] object Utils
    * below the original doTryWithCallerStacktrace which triggered it, with the caller stack trace
    * of the current caller of getTryWithCallerStacktrace.
    *
-   * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
-   * ```
-   * ex.getSuppressed.find { e =>
-   *   e.isInstanceOf[Utils.OriginalTryStackTraceException]
-   * }
-   * ```
-   *
+   * On subsequent accesses (not the first), the original stacktrace is added as a suppressed
+   * exception to help with debugging.
    *
    * @param t Try from doTryWithCallerStacktrace
+   * @param isFirstAccess Whether this is the first access to the Try value
    * @return Result of the Try or rethrows the failure exception with modified stacktrace.
    */
-  def getTryWithCallerStacktrace[T](t: Try[T]): T = t match {
-    case Failure(ex) =>
-      val originalStacktraceEx = ex.getSuppressed.find { e =>
-        // added in doTryWithCallerStacktrace
-        e.isInstanceOf[OriginalTryStackTraceException]
-      }.getOrElse {
-        // If we don't have the expected stacktrace information, just rethrow
-        throw ex
-      }.asInstanceOf[OriginalTryStackTraceException]
-      val belowStacktrace = originalStacktraceEx.getStackTrace
-        .take(originalStacktraceEx.doTryWithCallerStacktraceDepth)
+  def getTryWithCallerStacktrace[T](t: Try[T], isFirstAccess: Boolean = true): T = t match {
+    case Failure(wrapper: TryStackTraceWrapper) =>
+      val originalEx = wrapper.originalException
+      // Stitch the stacktrace: keep the first `depth` frames, replace the rest with current caller
+      val belowStacktrace = originalEx.getStackTrace.take(wrapper.depth)
       // We are modifying and throwing the original exception. It would be better if we could
       // return a copy, but we can't easily clone it and preserve. If this is accessed from
       // multiple threads that then look at the stack trace, this could break.
-      ex.setStackTrace(belowStacktrace ++ Thread.currentThread().getStackTrace.drop(1))
+      originalEx.setStackTrace(
+        belowStacktrace ++ Thread.currentThread().getStackTrace.drop(1))
+      // On subsequent accesses, add suppressed exception showing original stacktrace
+      if (!isFirstAccess) {
+        val alreadyAdded = originalEx.getSuppressed.exists(
+          _.isInstanceOf[OriginalTryStackTraceException])
+        if (!alreadyAdded) {
+          originalEx.addSuppressed(wrapper.originalStacktraceEx)
+        }
+      }
+      throw originalEx
+    case Failure(ex) =>
+      // Not wrapped (shouldn't happen if used correctly), just rethrow
       throw ex
     case Success(s) => s
   }

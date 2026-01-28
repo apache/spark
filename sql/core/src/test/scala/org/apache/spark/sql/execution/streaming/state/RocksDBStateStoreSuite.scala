@@ -2401,6 +2401,44 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("deleteRange - bulk deletion of keys in range") {
+    tryWithProviderResource(
+      newStoreProvider(
+        keySchemaWithRangeScan,
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put keys with timestamps that will be ordered
+        // Keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10))
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20))
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30))
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40))
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50))
+
+        // Verify all keys exist
+        assert(store.iterator().toSeq.length === 5)
+
+        // Delete range [2, 4) - should delete keys with timestamps 2 and 3
+        val beginKey = dataToKeyRowWithRangeScan(2L, "")
+        val endKey = dataToKeyRowWithRangeScan(4L, "")
+        store.deleteRange(beginKey, endKey)
+
+        // Verify remaining keys
+        val remainingKeys = store.iterator().map { kv =>
+          keyRowWithRangeScanToData(kv.key)
+        }.toSeq
+
+        // Keys 1, 4, 5 should remain; keys 2, 3 should be deleted
+        assert(remainingKeys.length === 3)
+        assert(remainingKeys.map(_._1).toSet === Set(1L, 4L, 5L))
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
   test("Rocks DB task completion listener does not double unlock acquireThread") {
     // This test verifies that a thread that locks then unlocks the db and then
     // fires a completion listener (Thread 1) does not unlock the lock validly

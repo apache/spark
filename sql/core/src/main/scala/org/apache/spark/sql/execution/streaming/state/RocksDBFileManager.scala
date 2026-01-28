@@ -375,6 +375,8 @@ class RocksDBFileManager(
       createDfsRootDirIfNotExist()
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
+      // Set empty metrics since we're not loading any files from DFS
+      loadCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
       RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file

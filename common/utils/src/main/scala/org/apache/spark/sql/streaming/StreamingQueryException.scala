@@ -58,6 +58,23 @@ class StreamingQueryException private[sql](
       messageParameters)
   }
 
+  private[spark] def this(
+      message: String,
+      cause: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      sqlState: Option[String]) = {
+    this(
+      messageParameters.getOrElse("queryDebugString", ""),
+      message,
+      cause,
+      messageParameters.getOrElse("startOffset", ""),
+      messageParameters.getOrElse("endOffset", ""),
+      errorClass,
+      messageParameters,
+      sqlState)
+  }
+
   def this(
       queryDebugString: String,
       cause: Throwable,

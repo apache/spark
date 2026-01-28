@@ -137,6 +137,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
     failTimeTravel(ident, loadTable(ident))
   }
 
+  override def tableExists(ident: Identifier): Boolean = {
+    catalog.tableExists(ident.asTableIdentifier)
+  }
+
   private def failTimeTravel(ident: Identifier, t: Table): Table = {
     val nameParts = t match {
       case V1Table(catalogTable) => catalogTable.identifier.nameParts
@@ -329,7 +333,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
   private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
       loadTable(ident) match {
-        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW &&
+            !SQLConf.get.getConf(SQLConf.DROP_TABLE_VIEW_ENABLED) =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
@@ -422,13 +427,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = namespace match {
-    case Array(db) if !catalog.databaseExists(db) =>
+    case Array(db) =>
       catalog.createDatabase(
         toCatalogDatabase(db, metadata, defaultLocation = Some(catalog.getDefaultDBPath(db))),
         ignoreIfExists = false)
-
-    case Array(_) =>
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
       throw QueryExecutionErrors.invalidNamespaceNameError(namespace)

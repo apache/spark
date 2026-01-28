@@ -47,6 +47,12 @@ Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or great
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
+### `rancher-desktop`
+
+[Rancher Desktop](https://github.com/rancher-sandbox/rancher-desktop) is an open-source (Apache 2.0 license)
+project that brings Kubernetes and container management to the desktop. It runs on Windows, macOS and Linux.
+The `rancher-desktop` backend configures the tests to use it.
+
 ### `docker-desktop`
 
 Since July 2018 Docker for Desktop provide an optional Kubernetes cluster that can be enabled as described in this 
@@ -168,7 +174,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark.kubernetes.test.deployMode</code></td>
     <td>
       The integration test backend to use.  Acceptable values are <code>minikube</code>, 
-      <code>docker-desktop</code> and <code>cloud</code>.
+      <code>docker-desktop</code>, <code>rancher-desktop</code> and <code>cloud</code>.
     <td><code>minikube</code></td>
   </tr>
   <tr>

@@ -396,9 +396,9 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     logTrace(s"Task $taskAttemptId releasing lock for $blockId")
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != BlockInfo.NO_WRITER) {
-        info.writerTask = BlockInfo.NO_WRITER
         val blockIds = writeLocksByTask.get(taskAttemptId)
         if (blockIds != null) {
+          info.writerTask = BlockInfo.NO_WRITER
           blockIds.remove(blockId)
         }
       } else {

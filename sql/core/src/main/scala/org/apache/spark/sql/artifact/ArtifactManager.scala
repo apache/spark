@@ -183,25 +183,34 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     if (normalizedRemoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
+        val hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}")
         val blockManager = session.sparkContext.env.blockManager
         val blockId = CacheId(
           sessionUUID = session.sessionUUID,
-          hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
-        val updater = blockManager.TempFileBasedBlockStoreUpdater(
-          blockId = blockId,
-          level = StorageLevel.MEMORY_AND_DISK_SER,
-          classTag = implicitly[ClassTag[Array[Byte]]],
-          tmpFile = tmpFile,
-          blockSize = tmpFile.length(),
-          tellMaster = false)
-        updater.save()
-        val oldBlock = hashToCachedIdMap.put(blockId.hash, new RefCountedCacheId(blockId))
-        if (oldBlock != null) {
-          logWarning(
-            log"Replacing existing cache artifact with hash ${MDC(LogKeys.BLOCK_ID, blockId)} " +
-              log"in session ${MDC(LogKeys.SESSION_ID, session.sessionUUID)}. " +
-              log"This may indicate duplicate artifact addition.")
-          oldBlock.release(blockManager)
+          hash = hash)
+        // If the exact same block (same CacheId) already exists, skip re-adding.
+        // This prevents incorrectly removing the existing block from BlockManager.
+        // Note: We only skip if the CacheId matches - if it's a different session's block
+        // (e.g., after clone), we should replace it.
+        val existingBlock = hashToCachedIdMap.get(hash)
+        if (existingBlock == null || existingBlock.id != blockId) {
+          val updater = blockManager.TempFileBasedBlockStoreUpdater(
+            blockId = blockId,
+            level = StorageLevel.MEMORY_AND_DISK_SER,
+            classTag = implicitly[ClassTag[Array[Byte]]],
+            tmpFile = tmpFile,
+            blockSize = tmpFile.length(),
+            tellMaster = false)
+          updater.save()
+          hashToCachedIdMap.put(blockId.hash, new RefCountedCacheId(blockId))
+          if (existingBlock != null) {
+            // Release the old block - this is a legitimate replacement (different CacheId,
+            // e.g., after session clone). The old block will be removed when its ref count
+            // reaches zero.
+            existingBlock.release(blockManager)
+          }
+        } else {
+          logWarning(s"Cache artifact with hash $hash already exists in this session, skipping.")
         }
       }(finallyBlock = { tmpFile.delete() })
     } else if (normalizedRemoteRelativePath.startsWith(s"classes${File.separator}")) {

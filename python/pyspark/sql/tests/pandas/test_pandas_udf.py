@@ -17,7 +17,6 @@
 
 import unittest
 import datetime
-from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import (
@@ -41,7 +40,7 @@ from pyspark.testing.sqlutils import (
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):

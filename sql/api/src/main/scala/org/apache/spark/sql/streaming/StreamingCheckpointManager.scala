@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.annotation.Evolving
+
 /**
  * A class to manage operations on streaming query checkpoints.
  */
+@Evolving
 private[spark] abstract class StreamingCheckpointManager {
 
   /**
@@ -47,6 +50,7 @@ private[spark] abstract class StreamingCheckpointManager {
    * @param enforceExactlyOnceSink
    *   if we shouldn't allow skipping failed batches, to avoid duplicates in exactly once sinks.
    */
+  @Evolving
   private[spark] def repartition(
       checkpointLocation: String,
       numPartitions: Int,

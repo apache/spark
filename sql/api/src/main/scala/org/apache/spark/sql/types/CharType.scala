@@ -17,19 +17,49 @@
 
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.{JString, JValue}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
+/**
+ * A data type representing fixed-length character strings with a specified length.
+ *
+ * @param length
+ *   The fixed length of the char string (must be non-negative)
+ * @param collation
+ *   Optional collation ID for string comparison and sorting. If None, uses
+ *   UTF8_BINARY_COLLATION_ID. The reason for using an `Option` is to be able to see in the
+ *   analyzer whether the collation was explicitly specified or not.
+ */
 @Experimental
-case class CharType(length: Int)
-    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, FixedLength(length)) {
+case class CharType private[sql] (length: Int, collation: Option[Int])
+    extends StringType(
+      collation.getOrElse(CollationFactory.UTF8_BINARY_COLLATION_ID),
+      FixedLength(length)) {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def defaultSize: Int = length
-  override def typeName: String = s"char($length)"
-  override def jsonValue: JValue = JString(typeName)
-  override def toString: String = s"CharType($length)"
+  override def typeName: String =
+    if (isUTF8BinaryCollation) s"char($length)"
+    else s"char($length) collate $collationName"
+  override def toString: String =
+    if (isUTF8BinaryCollation) s"CharType($length)"
+    else s"CharType($length, $collationName)"
   private[spark] override def asNullable: CharType = this
+
+  def toStringType: StringType = {
+    if (collation.isEmpty) StringType
+    else StringType(collationId)
+  }
+}
+
+object CharType {
+  def apply(length: Int): CharType = new CharType(length, None)
+
+  def apply(length: Int, collationName: String): CharType = {
+    val collationId = CollationFactory.collationNameToId(collationName)
+    new CharType(length, Some(collationId))
+  }
+
+  def apply(length: Int, collationId: Int): CharType =
+    new CharType(length, Some(collationId))
 }

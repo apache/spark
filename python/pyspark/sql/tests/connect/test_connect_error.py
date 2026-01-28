@@ -171,8 +171,6 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
         # SPARK-41225: Disable unsupported functions.
         df = self.spark.range(10)
         with self.assertRaises(NotImplementedError):
-            df.toJSON()
-        with self.assertRaises(NotImplementedError):
             df.rdd
 
     def test_unsupported_jvm_attribute(self):

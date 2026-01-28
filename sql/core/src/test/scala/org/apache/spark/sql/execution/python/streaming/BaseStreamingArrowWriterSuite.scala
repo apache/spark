@@ -20,13 +20,12 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, times, verify, when}
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 
-class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class BaseStreamingArrowWriterSuite extends SparkFunSuite {
   // Setting the maximum number of records per batch to 2 to make test easier.
   val arrowMaxRecordsPerBatch = 2
   val arrowMaxBytesPerBatch = Int.MaxValue

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from types import CodeType
 from typing import (
     Any,
     Callable,
@@ -277,6 +278,10 @@ if has_memory_profiler:
             include_children = kw.get("include_children", False)
             backend = kw.get("backend", "psutil")
             self.code_map = CodeMapForUDFV2(include_children=include_children, backend=backend)
+
+        def add_code(self, code: CodeType) -> None:
+            """Record line profiling information for the given code object."""
+            self.code_map.add(code)
 
 
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):

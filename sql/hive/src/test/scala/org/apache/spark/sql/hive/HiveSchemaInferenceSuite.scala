@@ -22,8 +22,6 @@ import java.util.Locale
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -35,7 +33,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 class HiveSchemaInferenceSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+  extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import HiveSchemaInferenceSuite._
   import HiveExternalCatalog.DATASOURCE_SCHEMA_PREFIX

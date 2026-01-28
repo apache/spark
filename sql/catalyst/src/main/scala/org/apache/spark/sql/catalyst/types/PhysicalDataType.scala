@@ -40,8 +40,8 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType(StringType.collationId)
-    case CharType(_) => PhysicalStringType(StringType.collationId)
+    case v: VarcharType => PhysicalStringType(v.collationId)
+    case c: CharType => PhysicalStringType(c.collationId)
     case s: StringType => PhysicalStringType(s.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType

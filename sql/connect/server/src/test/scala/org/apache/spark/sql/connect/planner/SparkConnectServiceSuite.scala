@@ -68,7 +68,7 @@ class SparkConnectServiceSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
-    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
 
   private def sparkSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)

@@ -178,7 +178,7 @@ class DatetimeOpsTestsMixin:
         self.assertRaises(TypeError, lambda: False | self.psser)
 
     def test_from_to_pandas(self):
-        data = pd.date_range("1994-1-31 10:30:15", periods=3, freq="M")
+        data = pd.date_range("1994-1-31 10:30:15", periods=3, freq="ME")
         pser = pd.Series(data)
         psser = ps.Series(data)
         self.assert_eq(pser, psser._to_pandas())

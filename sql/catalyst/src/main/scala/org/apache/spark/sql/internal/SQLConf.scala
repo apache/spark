@@ -2148,6 +2148,13 @@ object SQLConf {
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
+  val DROP_TABLE_VIEW_ENABLED =
+    buildConf("spark.sql.dropTableOnView.enabled")
+      .doc("When true, DROP TABLE command will work on VIEW as well.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -2937,6 +2944,27 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART =
+    buildConf("spark.sql.streaming.checkUnfinishedRepartitionOnRestart")
+      .internal()
+      .doc("When true, checks if the latest batch is for an unfinished state repartitioning " +
+        "operation, on query restart. If so, it will fail the query and require the " +
+        "repartitioning to be complete before restarting the query.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS =
+    buildConf("spark.sql.streaming.checkpoint.verifyMetadataExists.enabled")
+      .internal()
+      .doc("When true, validates that the checkpoint metadata file exists when offset " +
+        "or commit logs contain data. This prevents generating a new query ID when " +
+        "checkpoint data already exists, which would cause data duplication in " +
+        "exactly-once sinks.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -6241,6 +6269,16 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(1024 * 1024)
 
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The local relation size in bytes must be positive")
+      .createWithDefault(3L * 1024 * 1024 * 1024)
+
   val LOCAL_RELATION_CHUNK_SIZE_ROWS =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
       .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
@@ -6273,15 +6311,6 @@ object SQLConf {
       .version("4.1.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2000MB")
-
-  val LOCAL_RELATION_SIZE_LIMIT =
-    buildConf("spark.sql.session.localRelationSizeLimit")
-      .internal()
-      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
-        "If the limit is exceeded, an exception is thrown.")
-      .version("4.1.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("3GB")
 
   val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
@@ -7210,6 +7239,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
 
+  def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
+    getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)
+
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
@@ -7526,6 +7558,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())
 
   def dataframeCacheLogLevel: Level = getConf(DATAFRAME_CACHE_LOG_LEVEL)
+
+  def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 

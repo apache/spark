@@ -24,8 +24,7 @@ import java.lang.reflect.{Field, Modifier}
 import scala.collection.mutable.{Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
-import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
-import org.apache.xbean.asm9.Opcodes._
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Opcodes, Type}
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 
 import org.apache.spark.SparkException
@@ -671,7 +670,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
    * Returns true if both criteria above are met.
    */
   def isLambdaBodyCapturingOuter(handle: Handle, ownerInternalName: String): Boolean = {
-    handle.getTag == H_INVOKESTATIC &&
+    handle.getTag == Opcodes.H_INVOKESTATIC &&
       handle.getName.contains("$anonfun$") &&
       handle.getOwner == ownerInternalName &&
       handle.getDesc.startsWith(s"(L$ownerInternalName;")
@@ -686,7 +685,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
    */
   def isInnerClassCtorCapturingOuter(
       op: Int, owner: String, name: String, desc: String, callerInternalName: String): Boolean = {
-    op == INVOKESPECIAL && name == "<init>" && desc.startsWith(s"(L$callerInternalName;")
+    op == Opcodes.INVOKESPECIAL && name == "<init>" && desc.startsWith(s"(L$callerInternalName;")
   }
 
   /**
@@ -882,14 +881,14 @@ private[spark] object IndylambdaScalaClosures extends Logging {
       addAmmoniteCommandFieldsToTracking(currentClass)
       val currentMethodNode = methodNodeById(currentId)
       logTrace(s"  scanning ${currentId.cls.getName}.${currentId.name}${currentId.desc}")
-      currentMethodNode.accept(new MethodVisitor(ASM9) {
+      currentMethodNode.accept(new MethodVisitor(Opcodes.ASM9) {
         val currentClassName = currentClass.getName
         val currentClassInternalName = currentClassName.replace('.', '/')
 
         // Find and update the accessedFields info. Only fields on known outer classes are tracked.
         // This is the FieldAccessFinder equivalent.
         override def visitFieldInsn(op: Int, owner: String, name: String, desc: String): Unit = {
-          if (op == GETFIELD || op == PUTFIELD) {
+          if (op == Opcodes.GETFIELD || op == Opcodes.PUTFIELD) {
             val ownerExternalName = owner.replace('/', '.')
             for (cl <- accessedFields.keys if cl.getName == ownerExternalName) {
               logTrace(s"    found field access $name on $ownerExternalName")
@@ -970,7 +969,7 @@ private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
 private class ReturnStatementFinder(targetMethodName: Option[String] = None)
-  extends ClassVisitor(ASM9) {
+  extends ClassVisitor(Opcodes.ASM9) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
 
@@ -984,15 +983,16 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
       val isTargetMethod = targetMethodName.isEmpty ||
         name == targetMethodName.get || name == targetMethodName.get.stripSuffix("$adapted")
 
-      new MethodVisitor(ASM9) {
+      new MethodVisitor(Opcodes.ASM9) {
         override def visitTypeInsn(op: Int, tp: String): Unit = {
-          if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl") && isTargetMethod) {
+          if (op == Opcodes.NEW && tp.contains("scala/runtime/NonLocalReturnControl") &&
+              isTargetMethod) {
             throw new ReturnStatementInClosureException
           }
         }
       }
     } else {
-      new MethodVisitor(ASM9) {}
+      new MethodVisitor(Opcodes.ASM9) {}
     }
   }
 }
@@ -1016,7 +1016,7 @@ private[util] class FieldAccessFinder(
     findTransitively: Boolean,
     specificMethod: Option[MethodIdentifier[_]] = None,
     visitedMethods: Set[MethodIdentifier[_]] = Set.empty)
-  extends ClassVisitor(ASM9) {
+  extends ClassVisitor(Opcodes.ASM9) {
 
   override def visitMethod(
       access: Int,
@@ -1031,9 +1031,9 @@ private[util] class FieldAccessFinder(
       return null
     }
 
-    new MethodVisitor(ASM9) {
+    new MethodVisitor(Opcodes.ASM9) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String): Unit = {
-        if (op == GETFIELD) {
+        if (op == Opcodes.GETFIELD) {
           for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
             fields(cl) += name
           }
@@ -1045,7 +1045,7 @@ private[util] class FieldAccessFinder(
         for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
           // Check for calls a getter method for a variable in an interpreter wrapper object.
           // This means that the corresponding field will be accessed, so we should save it.
-          if (op == INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer")) {
+          if (op == Opcodes.INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer")) {
             fields(cl) += name
           }
           // Optionally visit other methods to find fields that are transitively referenced
@@ -1071,7 +1071,7 @@ private[util] class FieldAccessFinder(
   }
 }
 
-private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM9) {
+private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(Opcodes.ASM9) {
   var myName: String = null
 
   // TODO: Recursively find inner closures that we indirectly reference, e.g.
@@ -1086,11 +1086,11 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
 
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    new MethodVisitor(ASM9) {
+    new MethodVisitor(Opcodes.ASM9) {
       override def visitMethodInsn(
           op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
         val argTypes = Type.getArgumentTypes(desc)
-        if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
+        if (op == Opcodes.INVOKESPECIAL && name == "<init>" && argTypes.length > 0
             && argTypes(0).toString.startsWith("L") // is it an object?
             && argTypes(0).getInternalName == myName) {
           output += SparkClassUtils.classForName(

@@ -24,7 +24,6 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -38,7 +37,7 @@ import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType,
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
+    extends HiveVersionSuite(version) with SQLHelper {
 
   override def beforeEach(): Unit = {
     super.beforeEach()

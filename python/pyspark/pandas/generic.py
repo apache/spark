@@ -37,7 +37,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
@@ -946,7 +946,7 @@ class Frame(object, metaclass=ABCMeta):
             psdf_or_ser = self
             pdf = psdf_or_ser._to_pandas()
             if isinstance(self, ps.Series):
-                pdf = pdf.to_frame()
+                pdf = pdf.to_frame()  # type: ignore[operator]
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
@@ -2665,7 +2665,7 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = (
+            first_valid_row_df = (
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
@@ -2673,10 +2673,10 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         # For Empty Series or DataFrame, returns None.
-        if len(first_valid_row) == 0:
+        if len(first_valid_row_df) == 0:
             return None
 
-        first_valid_row = first_valid_row.iloc[0]
+        first_valid_row = first_valid_row_df.iloc[0]
         if len(first_valid_row) == 1:
             return first_valid_row.iloc[0]
         else:
@@ -3085,7 +3085,7 @@ class Frame(object, metaclass=ABCMeta):
             # If DataFrame has only a single value, use pandas API directly.
             if has_single_value:
                 result = self._to_internal_pandas().squeeze(axis)
-                return ps.Series(result) if isinstance(result, pd.Series) else result
+                return ps.Series(result) if isinstance(result, pd.Series) else result  # type: ignore[return-value]
             elif axis == 0:
                 return self
             else:

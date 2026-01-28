@@ -126,7 +126,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK-52933: Verify if the executor cpu request exceeds limit") {
     baseConf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "2")
     baseConf.set(KUBERNETES_EXECUTOR_LIMIT_CORES, "1")
-    val error = intercept[SparkException] {
+    val error = intercept[IllegalArgumentException] {
       initDefaultProfile(baseConf)
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)

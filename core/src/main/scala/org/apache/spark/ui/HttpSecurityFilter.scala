@@ -48,6 +48,7 @@ private class HttpSecurityFilter(
     val hreq = req.asInstanceOf[HttpServletRequest]
     val hres = res.asInstanceOf[HttpServletResponse]
     hres.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+    hres.setHeader("Content-Security-Policy", "default-src 'self'")
 
     val requestUser = hreq.getRemoteUser()
 

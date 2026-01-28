@@ -18,12 +18,12 @@
 package org.apache.spark
 
 import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.Tag
 
 import org.apache.spark.network.util.IOMode
 import org.apache.spark.util.Utils
 
-abstract class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+abstract class ShuffleNettySuite extends ShuffleSuite {
 
   // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
 

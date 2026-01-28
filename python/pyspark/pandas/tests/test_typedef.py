@@ -100,7 +100,15 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> "pandas.DataFrame[float]":
@@ -123,7 +131,15 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> pd.DataFrame[np.float64]:
@@ -174,7 +190,15 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> "pd.DataFrame['a': float, 'b': int]":  # noqa: F821
@@ -329,7 +353,12 @@ class TypeHintTestsMixin:
             float: (np.float64, DoubleType()),
             # string
             np.str_: (np.str_, StringType()),
-            str: (np.str_, StringType()),
+            str: (
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+                StringType(),
+            ),
             # bool
             bool: (np.bool_, BooleanType()),
             # datetime

@@ -81,6 +81,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      keys.iterator.map(key => get(key, colFamilyName))
+    }
+
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.iterator()
       new StateStoreIterator(iter)
@@ -164,6 +168,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
+    }
+
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      assertUseOfDefaultColFamily(colFamilyName)
+      keys.iterator.map(key => mapToUpdate.get(key))
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {

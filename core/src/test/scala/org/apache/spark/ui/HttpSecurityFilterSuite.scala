@@ -130,6 +130,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     filter.doFilter(req, res, chain)
 
     Map(
+      "Content-Security-Policy" -> "default-src 'self'",
       "X-Frame-Options" -> "ALLOW-FROM example.com",
       "X-XSS-Protection" -> "xssProtection",
       "X-Content-Type-Options" -> "nosniff",

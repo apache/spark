@@ -7524,6 +7524,12 @@
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
     },
+    "XXKCM": {
+        "description": "Connect Client - Unexpected missing SQL state",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "XXKD0": {
         "description": "Analysis - Bad plan",
         "origin": "Databricks",

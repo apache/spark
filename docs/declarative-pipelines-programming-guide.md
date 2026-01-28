@@ -449,6 +449,52 @@ AS INSERT INTO customers_us
 SELECT * FROM STREAM(customers_us_east);
 ```
 
+## Writing Data to External Targets with Sinks
+
+Sinks in SDP provide a way to write transformed data to external destinations beyond the default streaming tables and materialized views. Sinks are particularly useful for operational use cases that require low-latency data processing, reverse ETL operations, or writing to external systems. 
+
+Sinks enable a pipeline to write to any destination that a Spark Structured Streaming query can be written to, including, but not limited to, **Apache Kafka** and **Azure Event Hubs**.
+
+### Creating and Using Sinks in Python
+
+Working with sinks involves two main steps: creating the sink definition and implementing an append flow to write data.
+
+#### Creating a Kafka Sink
+
+You can create a sink that streams data to a Kafka topic:
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql.functions import to_json, struct
+
+dp.create_sink(
+    name="kafka_sink",
+    format="kafka",
+    options={
+        "kafka.bootstrap.servers": "localhost:9092",
+        "topic": "processed_orders"
+    }
+)
+
+@dp.append_flow(target="kafka_sink")
+def kafka_orders_flow() -> DataFrame:
+    return (
+        spark.readStream.table("customer_orders")
+        .select(
+            col("order_id").cast("string").alias("key"),
+            to_json(struct("*")).alias("value")
+        )
+    )
+```
+
+### Sink Considerations
+
+When working with sinks, keep the following considerations in mind:
+
+- **Streaming-only**: Sinks currently support only streaming queries through `append_flow` decorators
+- **Python API**: Sink functionality is available only through the Python API, not SQL
+- **Append-only**: Only append operations are supported; full refresh updates reset checkpoints but do not clean previously computed results
+
 ## Important Considerations
 
 ### Python Considerations

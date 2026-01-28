@@ -132,8 +132,8 @@ class ClientE2ETestSuite
       assert(ex.getCause.isInstanceOf[SparkException])
 
       val cause = ex.getCause.asInstanceOf[SparkException]
-      assert(cause.getCondition == null)
-      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getCondition == "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE")
+      assert(cause.getMessageParameters.asScala == Map("message" -> "test".repeat(10000)))
       assert(cause.getMessage.contains("test".repeat(10000)))
     }
   }

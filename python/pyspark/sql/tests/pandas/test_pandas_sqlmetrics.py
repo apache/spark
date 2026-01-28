@@ -16,8 +16,6 @@
 #
 
 import unittest
-from typing import cast
-
 from pyspark.sql.functions import pandas_udf
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -30,7 +28,7 @@ from pyspark.testing.sqlutils import (
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasSQLMetrics(ReusedSQLTestCase):
     def test_pandas_sql_metrics_basic(self):

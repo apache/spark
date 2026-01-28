@@ -88,7 +88,8 @@ class SqlScriptingExecution(
 
   /**
    * Helper method to execute interrupts to ConditionalStatements.
-   * This method should only interrupt when the statement that throws is a conditional statement.
+   * This method should only interrupt when the exception was thrown during evaluation of
+   * the conditional statement's condition.
    * @param executionPlan Execution plan.
    */
   private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
@@ -101,11 +102,40 @@ class SqlScriptingExecution(
     }
 
     currExecPlan match {
-      case exec: ConditionalStatementExec =>
-        // Only interrupt if the conditional statement is currently evaluating its condition.
-        // For loop statements, this means we should skip the loop when an exception occurs
-        // during condition evaluation, but NOT when an exception occurs in the loop body.
-        if (exec.isInCondition) {
+      case exec: ConditionalStatementExec if exec.isInCondition =>
+        // Only interrupt the conditional if its condition/query was being evaluated when the
+        // exception occurred. This distinguishes between two scenarios:
+        //   1. Exception during condition evaluation -> interrupt (skip the conditional)
+        //   2. Exception before reaching the conditional -> don't interrupt (execute normally)
+        //
+        // Different conditional statements track evaluation state differently:
+        //   - SimpleCaseStatementExec: hasStartedCaseVariableEvaluation flag is set when
+        //     validateCache() begins evaluating the case variable expression.
+        //   - ForStatementExec: hasStartedQueryEvaluation flag is set when cachedQueryResult()
+        //     begins evaluating the FOR loop's query.
+        //   - IF/ELSEIF, WHILE, REPEAT, SEARCHED CASE: curr.isExecuted flag is set by
+        //     evaluateBooleanCondition() before evaluating each condition.
+        val shouldInterrupt =
+          exec match {
+            case simpleCaseStmt: SimpleCaseStatementExec
+              if simpleCaseStmt.hasStartedCaseVariableEvaluation =>
+              // Only interrupt if case variable evaluation was attempted.
+              true
+            case forStmt: ForStatementExec =>
+              // Only interrupt if query evaluation was attempted.
+              forStmt.hasStartedQueryEvaluation
+            case _ =>
+              // For IF, WHILE, REPEAT, SEARCHED/SIMPLE CASE: check if condition was executed.
+              // evaluateBooleanCondition sets isExecuted=true before evaluation, so if an
+              // exception occurs during evaluation, isExecuted will be true. If the exception
+              // happened before reaching the conditional, isExecuted will still be false.
+              exec.curr match {
+                case Some(stmt: SingleStatementExec) => stmt.isExecuted
+                case _ => false
+              }
+          }
+
+        if (shouldInterrupt) {
           exec.interrupted = true
         }
       case _ =>

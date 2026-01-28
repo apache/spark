@@ -17,7 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
 from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
@@ -48,7 +47,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class WindowPandasUDFTestsMixin:
     @property

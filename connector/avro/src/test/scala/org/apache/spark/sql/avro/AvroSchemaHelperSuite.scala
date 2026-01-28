@@ -20,10 +20,10 @@ import org.apache.avro.SchemaBuilder
 
 import org.apache.spark.sql.avro.AvroUtils.AvroMatchedField
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
+class AvroSchemaHelperSuite extends SharedSparkSession {
 
   test("ensure schema is a record") {
     val avroSchema = SchemaBuilder.builder().intType()

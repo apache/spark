@@ -51,6 +51,18 @@ class ArtifactManagerSuite extends SharedSparkSession {
     super.afterEach()
   }
 
+  private def isBlockRegistered(id: CacheId): Boolean = {
+    sparkContext.env.blockManager.getStatus(id).isDefined
+  }
+
+  private def addCachedArtifact(session: SparkSession, name: String, data: String): CacheId = {
+    val bytes = new Artifact.InMemory(data.getBytes(StandardCharsets.UTF_8))
+    session.artifactManager.addLocalArtifacts(Artifact.newCacheArtifact(name, bytes) :: Nil)
+    val id = CacheId(session.sessionUUID, name)
+    assert(isBlockRegistered(id))
+    id
+  }
+
   test("Class artifacts are added to the correct directory.") {
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
@@ -534,18 +546,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("Share blocks between ArtifactManagers") {
-    def isBlockRegistered(id: CacheId): Boolean = {
-      sparkContext.env.blockManager.getStatus(id).isDefined
-    }
-
-    def addCachedArtifact(session: SparkSession, name: String, data: String): CacheId = {
-      val bytes = new Artifact.InMemory(data.getBytes(StandardCharsets.UTF_8))
-      session.artifactManager.addLocalArtifacts(Artifact.newCacheArtifact(name, bytes) :: Nil)
-      val id = CacheId(session.sessionUUID, name)
-      assert(isBlockRegistered(id))
-      id
-    }
-
     // Create fresh session so there is no interference with other tests.
     val session1 = spark.newSession()
     val b1 = addCachedArtifact(session1, "b1", "b_one")
@@ -580,6 +580,42 @@ class ArtifactManagerSuite extends SharedSparkSession {
     session3.artifactManager.cleanUpResourcesForTesting()
     assert(!isBlockRegistered(b1a))
     assert(!isBlockRegistered(b2a))
+  }
+
+  test("cache artifact deduplication and replacement across sessions") {
+    val session1 = spark.newSession()
+    val b1 = addCachedArtifact(session1, "b1", "data_one")
+
+    // Add the same block again to verify that it is still registered
+    addCachedArtifact(session1, "b1", "data_one")
+    assert(isBlockRegistered(b1))
+
+    val session2 = session1.cloneSession()
+    assert(session2.artifactManager.getCachedBlockId("b1").get == b1)
+
+    /*
+     * Replace the block with different data in the cloned session
+     * If we try to add the same hash in the cloned session, that is allowed
+     * and the old reference from the cloned session is removed.
+     */
+    val b1a = addCachedArtifact(session2, "b1", "data_one_replaced")
+    assert(session2.artifactManager.getCachedBlockId("b1").get == b1a)
+
+    // Verify that the original block is still registered
+    assert(isBlockRegistered(b1))
+    assert(session1.artifactManager.getCachedBlockId("b1").get == b1)
+
+    // Add the same block again to verify that it is still registered
+    addCachedArtifact(session2, "b1", "data_one_replaced")
+    assert(isBlockRegistered(b1a))
+
+    // Clean up the sessions
+    session1.artifactManager.cleanUpResourcesForTesting()
+    assert(!isBlockRegistered(b1))
+    assert(isBlockRegistered(b1a))
+
+    session2.artifactManager.cleanUpResourcesForTesting()
+    assert(!isBlockRegistered(b1a))
   }
 
   test("Codegen cache should be invalid when artifacts are added - class artifact") {

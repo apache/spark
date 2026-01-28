@@ -79,7 +79,7 @@ object Checksum {
   /** Used to convert between class and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
-    _mapper.setSerializationInclusion(Include.NON_ABSENT)
+    _mapper.setDefaultPropertyInclusion(Include.NON_ABSENT)
     _mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     _mapper.registerModule(DefaultScalaModule)
     _mapper

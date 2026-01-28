@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+# TODO: Add StreamingCheckpointManager to this when we want to make it public
 from pyspark.sql.streaming.query import StreamingQuery, StreamingQueryManager  # noqa: F401
 from pyspark.sql.streaming.readwriter import DataStreamReader, DataStreamWriter  # noqa: F401
 from pyspark.sql.streaming.listener import StreamingQueryListener  # noqa: F401

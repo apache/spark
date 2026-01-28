@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger}
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
@@ -127,6 +127,14 @@ class AsyncProgressTrackingMicroBatchExecution(
   override def cleanUpLastExecutedMicroBatch(execCtx: MicroBatchExecutionContext): Unit = {
     // this is a no op for async progress tracking since we only want to commit sources only
     // after the offset WAL commit has be successfully written
+  }
+
+  override def checkUnfinishedRepartitionBatch(
+      latestStartedBatchId: Option[Long],
+      lastCommittedBatchId: Long,
+      offsetLog: OffsetSeqLog): Unit = {
+    // No-op for async progress tracking since it doesn't support stateful streaming queries.
+    // Hence, state repartitioning cannot happen.
   }
 
   /**

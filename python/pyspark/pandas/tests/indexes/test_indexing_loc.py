@@ -223,7 +223,7 @@ class IndexingLocMixin:
 
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="M", periods=100),
+            index=pd.date_range("2011-01-01", freq="ME", periods=100),
         )
         psdf = ps.from_pandas(pdf)
         # TODO?: self.assert_eq(pdf.loc['2011-01'], psdf.loc['2011-01'])

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -27,8 +25,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class ListTablesSuite extends QueryTest
   with AnalysisTest
-  with TestHiveSingleton
-  with BeforeAndAfterAll {
+  with TestHiveSingleton {
   import hiveContext._
   import hiveContext.sparkSession.implicits._
 

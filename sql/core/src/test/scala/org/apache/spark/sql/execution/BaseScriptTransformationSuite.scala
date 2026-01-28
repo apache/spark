@@ -24,7 +24,6 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
@@ -40,8 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
-  with BeforeAndAfterEach {
+abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils {
   import testImplicits._
   import ScriptTransformationIOSchema._
 
