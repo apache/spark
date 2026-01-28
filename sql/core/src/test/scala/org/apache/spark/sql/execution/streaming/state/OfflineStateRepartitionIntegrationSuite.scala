@@ -203,17 +203,6 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
     }
   }
 
-  def testWithStateStoreCheckpointIds(testName: String)(testBody: => Unit): Unit = {
-    Seq(1, 2).foreach { ckptVersion =>
-      val newTestName = s"$testName - enableStateStoreCheckpointIds = ${ckptVersion >= 2}"
-      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
-        testWithChangelogConfig(newTestName) {
-          testBody
-        }
-      }
-    }
-  }
-
   /**
    * Helper function to test with both increase and decrease repartition operations.
    * This reduces code duplication across different operator tests.
@@ -224,7 +213,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
     Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
-      testWithStateStoreCheckpointIds(s"$testNamePrefix - $direction partitions") {
+      testWithChangelogConfig(s"$testNamePrefix - $direction partitions") {
         testFun(newPartitions)
       }
     }
@@ -234,9 +223,15 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
 /**
  * Integration test suite for OfflineStateRepartitionRunner with single-column family operators.
  */
-class OfflineStateRepartitionIntegrationSuite extends OfflineStateRepartitionIntegrationSuiteBase {
+class OfflineStateRepartitionCkptV1IntegrationSuite
+  extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "1")
+  }
 
   // Test aggregation operator repartitioning
   StreamingAggregationStateManager.supportedVersions.foreach { version =>
@@ -528,5 +523,13 @@ class OfflineStateRepartitionIntegrationSuite extends OfflineStateRepartitionInt
         )
       }
     )
+  }
+}
+
+class OfflineStateRepartitionCkptV2IntegrationSuite
+  extends OfflineStateRepartitionCkptV1IntegrationSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
   }
 }
