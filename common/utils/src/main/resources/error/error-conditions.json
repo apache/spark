@@ -912,6 +912,12 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
+    "message" : [
+      "Unidentified Error: <message>"
+    ],
+    "sqlState" : "XXKCM"
+  },
   "CONNECT_INVALID_PLAN" : {
     "message" : [
       "The Spark Connect plan is invalid."
@@ -5391,6 +5397,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22003"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -5942,6 +5954,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -6193,13 +6211,7 @@
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
-  },
-  "THETA_INVALID_LG_NOM_ENTRIES" : {
-    "message" : [
-      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
-    ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
@@ -6244,6 +6256,18 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_SKETCH_MODE" : {
+    "message" : [
+      "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
+    ],
+    "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
