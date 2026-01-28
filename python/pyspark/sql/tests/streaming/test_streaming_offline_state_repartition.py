@@ -23,6 +23,10 @@ from typing import cast
 from pyspark import SparkConf
 from pyspark.sql.functions import split
 from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    SimpleStatefulProcessorWithInitialStateFactory,
+    StatefulProcessorCompositeTypeFactory,
+)
 from pyspark.sql.types import LongType, StringType, StructType, StructField
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -30,10 +34,6 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-)
-from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    SimpleStatefulProcessorWithInitialStateFactory,
-    StatefulProcessorCompositeTypeFactory,
 )
 
 if have_pandas:
