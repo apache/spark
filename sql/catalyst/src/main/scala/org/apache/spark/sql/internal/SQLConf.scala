@@ -2301,11 +2301,13 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowBuiltinFunctionShadowing")
       .internal()
       .version("4.2.0")
-      .doc("When true, allows temporary functions to shadow builtin functions (including " +
-        "extensions), and changes function resolution order to session -> builtin -> persistent " +
-        "(pre-4.0 behavior). When false (default), blocks creation of temporary functions " +
-        "that conflict with builtin functions, and uses the secure resolution " +
-        "order: builtin -> session -> persistent.")
+      .doc("When false (default, secure mode), all session functions can be registered " +
+        "but builtins take precedence during resolution " +
+        "(order: builtin -> session -> persistent). " +
+        "When true (legacy mode), Scala UDFs shadow builtins " +
+        "(order: session -> builtin -> persistent), " +
+        "but SQL-based registration (CREATE TEMPORARY FUNCTION) is blocked when " +
+        "conflicting with builtins to preserve master behavior.")
       .booleanConf
       .createWithDefault(false)
 

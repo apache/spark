@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Strategy
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
@@ -366,31 +365,33 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      // Extension functions use EXTENSION_NAMESPACE to:
-      // 1. Allow trusted extensions (Sedona, Delta) to shadow/augment built-ins
-      // 2. Ensure extension functions resolve BEFORE built-ins (extension → builtin → session)
-      // 3. Prevent untrusted user temp functions from shadowing security-critical built-ins
-      //    (builtin resolves before session, blocking attacks like shadowing current_user())
-      val extensionQualifiedName = if (name.database.isEmpty) {
-        FunctionIdentifier(name.funcName, Some(CatalogManager.EXTENSION_NAMESPACE))
+      // Extension functions are treated as builtins - stored unqualified.
+      // This allows power users (Sedona, Delta, etc.) to overwrite existing builtins if needed.
+      // Extension functions cannot be shadowed by temporary/session functions in secure mode.
+      val identifier = if (name.database.isEmpty && name.catalog.isEmpty) {
+        // Unqualified extension - store as builtin (unqualified)
+        FunctionIdentifier(name.funcName)
       } else {
+        // Already qualified - keep as-is (power user knows what they're doing)
         name
       }
-      functionRegistry.registerFunction(extensionQualifiedName, expressionInfo, function)
+      functionRegistry.registerFunction(identifier, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      // Extension table functions use EXTENSION_NAMESPACE for the same reasons as scalar functions:
-      // resolution order extension → builtin → session protects security-critical built-ins
-      val extensionQualifiedName = if (name.database.isEmpty) {
-        FunctionIdentifier(name.funcName, Some(CatalogManager.EXTENSION_NAMESPACE))
+      // Extension table functions are treated as builtins - stored unqualified.
+      // This allows power users to overwrite existing builtin table functions if needed.
+      val identifier = if (name.database.isEmpty && name.catalog.isEmpty) {
+        // Unqualified extension - store as builtin (unqualified)
+        FunctionIdentifier(name.funcName)
       } else {
+        // Already qualified - keep as-is (power user knows what they're doing)
         name
       }
-      tableFunctionRegistry.registerFunction(extensionQualifiedName, expressionInfo, function)
+      tableFunctionRegistry.registerFunction(identifier, expressionInfo, function)
     }
     tableFunctionRegistry
   }

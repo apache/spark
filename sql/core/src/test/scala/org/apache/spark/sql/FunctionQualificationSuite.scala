@@ -630,21 +630,19 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     assert(desc.nonEmpty, "DESCRIBE FUNCTION should return results for extension functions")
   }
 
-  test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is false") {
-    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "false") {
-      // Try to create a temp function that shadows a builtin
+  test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is true") {
+    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+      // Try to create a SQL temp function that shadows a builtin
+      // SQL temp functions are blocked in legacy mode to preserve master behavior
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            """CREATE TEMPORARY FUNCTION abs AS
-              |'org.apache.spark.sql.MyTestUDF'
-              |""".stripMargin)
+          sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999")
         },
-        condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+        condition = "ROUTINE_ALREADY_EXISTS",
         parameters = Map(
-          "funcName" -> "`abs`",
-          "namespace" -> "`system`.`builtin`",
-          "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
+          "routineName" -> "`abs`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"
         )
       )
 
@@ -652,31 +650,28 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       // (Extensions are stored as builtins, so same error)
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            """CREATE TEMPORARY FUNCTION test_ext_func AS
-              |'org.apache.spark.sql.MyTestUDF'
-              |""".stripMargin)
+          sql("CREATE TEMPORARY FUNCTION test_ext_func() RETURNS INT RETURN 999")
         },
-        condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+        condition = "ROUTINE_ALREADY_EXISTS",
         parameters = Map(
-          "funcName" -> "`test_ext_func`",
-          "namespace" -> "`system`.`builtin`",
-          "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
+          "routineName" -> "`test_ext_func`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"
         )
       )
     }
   }
 
-  test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION allowed when config is true") {
+  test("SECTION 13: Legacy mode - Scala UDF allowed and shadows builtin when config is true") {
     withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
       withTempView("test_data") {
         sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
 
-        // Create a temp function that shadows abs (should be allowed)
+        // Create a Scala UDF that shadows abs (should be allowed in legacy mode)
         spark.udf.register("abs", (x: Int) => x + 100)
 
         try {
-          // Unqualified abs should now resolve to temp function (returns input + 100)
+          // Unqualified abs should resolve to Scala UDF (NOT builtin)
           checkAnswer(
             sql("SELECT abs(5) FROM test_data"),
             Row(105)
@@ -705,12 +700,12 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       withTempView("test_data") {
         sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
 
-        // Register a temp function with the same name as a builtin
+        // Register a Scala UDF with the same name as a builtin
         spark.udf.register("upper", (s: String) => "TEMP_" + s)
 
         try {
-          // With legacy mode, temp should shadow builtin
-          // Resolution order: extension -> session (temp) -> builtin
+          // With legacy mode, Scala UDF should shadow builtin
+          // Resolution order: session (temp) -> builtin
           checkAnswer(
             sql("SELECT upper('test') FROM test_data"),
             Row("TEMP_test")
@@ -728,19 +723,30 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECTION 13: Legacy mode - default behavior blocks shadowing") {
-    // Without setting the config (default is false), shadowing should be blocked
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.udf.register("length", (s: String) => 999)
-      },
-      condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
-      parameters = Map(
-        "funcName" -> "`length`",
-        "namespace" -> "`system`.`builtin`",
-        "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
-      )
-    )
+  test("SECTION 13: Legacy mode - default behavior allows registration but builtin wins") {
+    // Without setting the config (default is false, secure mode), registration is allowed
+    // but resolution order ensures builtins take precedence
+    spark.udf.register("length", (s: String) => 999)
+
+    try {
+      withTempView("test_data") {
+        sql("CREATE TEMPORARY VIEW test_data AS SELECT 'test' as str")
+
+        // Unqualified length should resolve to builtin (NOT temp function)
+        checkAnswer(
+          sql("SELECT length(str) FROM test_data"),
+          Row(4)  // builtin length of "test"
+        )
+
+        // session.length should resolve to temp function
+        checkAnswer(
+          sql("SELECT session.length(str) FROM test_data"),
+          Row(999)
+        )
+      }
+    } finally {
+      spark.sessionState.catalog.dropTempFunction("length", ignoreIfNotExists = true)
+    }
   }
 
   test("SECTION 14: FunctionIdentifier structure for system namespaces") {

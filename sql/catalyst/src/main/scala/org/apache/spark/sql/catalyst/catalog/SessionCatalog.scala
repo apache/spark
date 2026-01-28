@@ -2184,17 +2184,18 @@ class SessionCatalog(
       func
     }
 
-    // Security check: When legacy mode is disabled, block creation of temporary functions
-    // that would shadow builtin functions (including extensions)
-    if (func.database.isEmpty && useCompositeKey && !conf.legacyAllowBuiltinFunctionShadowing &&
+    // Security check: When legacy mode is enabled, block SQL-created temporary functions
+    // from shadowing builtin functions (to preserve master behavior)
+    // Scala UDFs are still allowed to shadow in legacy mode
+    // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
+    if (func.database.isEmpty && useCompositeKey && conf.legacyAllowBuiltinFunctionShadowing &&
         !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionIdentifier(format(funcName))
       if (functionRegistry.functionExists(builtinIdent) ||
           tableFunctionRegistry.functionExists(builtinIdent)) {
-        throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
-          funcName, "system.builtin")
+        throw QueryCompilationErrors.functionAlreadyExistsError(func)
       }
     }
 
@@ -2301,16 +2302,16 @@ class SessionCatalog(
       // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
-      // Security check: When legacy mode is disabled, block creation of temporary functions
-      // that would shadow builtin functions (including extensions)
-      if (!conf.legacyAllowBuiltinFunctionShadowing && !overrideIfExists) {
+      // Security check: When legacy mode is enabled, block SQL-created temporary functions
+      // from shadowing builtin functions (including extensions) as a safeguard
+      // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
+      if (conf.legacyAllowBuiltinFunctionShadowing && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
         val builtinIdent = FunctionIdentifier(format(funcName))
         if (functionRegistry.functionExists(builtinIdent) ||
             tableFunctionRegistry.functionExists(builtinIdent)) {
-          throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
-            funcName, "system.builtin")
+          throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
         }
       }
 
