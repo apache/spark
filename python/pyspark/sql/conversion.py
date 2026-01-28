@@ -69,8 +69,8 @@ class ArrowBatchTransformer:
 
         Used by:
             - ArrowStreamUDFSerializer.load_stream
-            - GroupArrowUDFSerializer.load_stream
-            - ArrowStreamArrowUDTFSerializer.load_stream
+            - SQL_GROUPED_MAP_ARROW_UDF mapper
+            - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
         """
         import pyarrow as pa
 
@@ -1005,13 +1005,50 @@ class ArrowArrayToPandasConversion:
     @classmethod
     def convert_legacy(
         cls,
-        arr: "pa.Array",
+        arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
         *,
         timezone: Optional[str] = None,
         struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
-    ) -> "pd.Series":
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        """
+        Parameters
+        ----------
+        arr : :class:`pyarrow.Array`.
+        spark_type: target spark type, should always be specified.
+        timezone : The timezone to convert from. If there is a timestamp type, it's required.
+        struct_in_pandas : How to handle struct type. If there is a struct type, it's required.
+        ndarray_as_list : Whether `np.ndarray` is converted to a list or not.
+        df_for_struct: when true, and spark type is a StructType, return a DataFrame.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if df_for_struct and isinstance(spark_type, StructType):
+            import pyarrow.types as types
+
+            assert types.is_struct(arr.type)
+            assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
+
+            series = [
+                cls.convert_legacy(
+                    field_arr,
+                    spark_type=field.dataType,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    ndarray_as_list=ndarray_as_list,
+                    df_for_struct=False,  # always False for child fields
+                )
+                for field_arr, field in zip(arr.flatten(), spark_type)
+            ]
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names  # type: ignore[assignment]
+            return pdf
+
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
