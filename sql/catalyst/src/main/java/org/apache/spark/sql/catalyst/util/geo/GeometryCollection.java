@@ -47,4 +47,3 @@ class GeometryCollection extends GeometryModel {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
   }
 }
-

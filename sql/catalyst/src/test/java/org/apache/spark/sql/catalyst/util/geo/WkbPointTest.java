@@ -188,4 +188,3 @@ public class WkbPointTest extends WkbTestBase {
     Assertions.assertEquals(4.0, point.getM(), 1e-10, "M coordinate");
   }
 }
-

@@ -1133,4 +1133,3 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(4326, geom.srid());
   }
 }
-

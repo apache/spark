@@ -130,4 +130,3 @@ class WkbUtil {
       || offset == WkbUtil.DIM_OFFSET_M || offset == WkbUtil.DIM_OFFSET_ZM;
   }
 }
-

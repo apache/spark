@@ -397,4 +397,3 @@ public class WkbErrorHandlingTest extends WkbTestBase {
     assertParseError("0101000080000000000000f03f00000000000010400000000000002240", "Invalid or unsupported type -2147483647"); // checkstyle.off: LineLength
   }
 }
-

@@ -52,4 +52,3 @@ public abstract class WkbTestBase {
     return sb.toString();
   }
 }
-

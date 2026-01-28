@@ -140,4 +140,3 @@ public class WkbLineStringTest extends WkbTestBase {
         "toString should contain EMPTY for empty linestring");
   }
 }
-

@@ -398,4 +398,3 @@ public class WkbReaderWriterGeometryModelTest extends WkbTestBase {
       "Second point Y mismatch");
   }
 }
-
