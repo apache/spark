@@ -1016,8 +1016,11 @@ class ArrowArrayToPandasConversion:
         """
         Parameters
         ----------
-        arr : :class:`pyarrow.Array`
-        spark_type: target spark type, should always be specified
+        arr : :class:`pyarrow.Array`.
+        spark_type: target spark type, should always be specified.
+        timezone : The timezone to convert from. If there is a timestamp type, it's required.
+        struct_in_pandas : How to handle struct type. If there is a struct type, it's required.
+        ndarray_as_list : Whether `np.ndarray` is converted to a list or not.
         df_for_struct: when true, and spark type is a StructType, return a DataFrame.
         """
         import pyarrow as pa
