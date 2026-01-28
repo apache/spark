@@ -633,6 +633,78 @@ case class Union(
     copy(children = newChildren)
 }
 
+/**
+ * Logical plan for unioning multiple plans sequentially, processing each child to completion
+ * before moving to the next. This is used for backfill-to-live streaming scenarios where
+ * historical data should be processed completely before switching to live data.
+ *
+ * Unlike [[Union]] which processes all children concurrently in streaming queries, SequentialUnion
+ * processes each child source sequentially:
+ * 1. First child processes until complete (bounded sources reach their end)
+ * 2. Second child begins processing
+ * 3. And so on...
+ *
+ * Requirements:
+ * - All children must be streaming sources
+ * - All non-final children must support bounded execution (SupportsTriggerAvailableNow)
+ * - All children must have explicit names when used in streaming queries
+ * - Schema compatibility is enforced via UnionBase
+ *
+ * State preservation: All stateful operators (aggregations, watermarks, deduplication, joins)
+ * preserve their state across source transitions, enabling seamless backfill-to-live scenarios.
+ *
+ * Example:
+ * {{{
+ *   val historical = spark.readStream.format("delta").name("historical").load("/data")
+ *   val live = spark.readStream.format("kafka").name("live").load()
+ *   historical.followedBy(live) // Creates SequentialUnion
+ * }}}
+ *
+ * @param children        The logical plans to union sequentially (must be streaming sources)
+ * @param byName          Whether to resolve columns by name
+ * @param allowMissingCol Whether to allow missing columns in children
+ */
+case class SequentialUnion(
+    children: Seq[LogicalPlan],
+    byName: Boolean = false,
+    allowMissingCol: Boolean = false) extends UnionBase {
+
+  assert(children.length >= 2,
+    "SequentialUnion requires at least 2 children")
+  assert(!allowMissingCol || byName,
+    "`allowMissingCol` can be true only if `byName` is true.")
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+
+  override lazy val resolved: Boolean = {
+    children.length >= 2 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): SequentialUnion = {
+    copy(children = newChildren)
+  }
+}
+
+object SequentialUnion {
+  /**
+   * Flattens nested SequentialUnions into a single level.
+   * This allows chaining: df1.followedBy(df2).followedBy(df3)
+   *
+   * @param plans The plans to flatten
+   * @return Flattened sequence of plans
+   */
+  def flatten(plans: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    plans.flatMap {
+      case SequentialUnion(children, _, _) => flatten(children)
+      case other => Seq(other)
+    }
+  }
+}
+
 object Join {
   def computeOutput(
     joinType: JoinType,
