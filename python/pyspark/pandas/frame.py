@@ -12138,7 +12138,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(op, should_resolve=True)
 
-    # TODO(SPARK-46168): axis = 1
     def idxmax(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of maximum over requested axis.
@@ -12149,8 +12148,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise, 1 or 'columns' for column-wise.
 
         Returns
         -------
@@ -12197,24 +12196,81 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b  y    0
         c  z    2
         dtype: int64
+
+        For axis=1, return the column label of the maximum value in each row:
+
+        >>> psdf.idxmax(axis=1)
+        0    c
+        1    c
+        2    c
+        3    c
+        dtype: object
         """
-        max_cols = map(lambda scol: F.max(scol), self._internal.data_spark_columns)
-        sdf_max = self._internal.spark_frame.select(*max_cols).head()
-        # `sdf_max` looks like below
-        # +------+------+------+
-        # |(a, x)|(b, y)|(c, z)|
-        # +------+------+------+
-        # |     3|   4.0|   400|
-        # +------+------+------+
+        axis = validate_axis(axis)
+        if axis == 0:
+            max_cols = map(lambda scol: F.max(scol), self._internal.data_spark_columns)
+            sdf_max = self._internal.spark_frame.select(*max_cols).head()
+            # `sdf_max` looks like below
+            # +------+------+------+
+            # |(a, x)|(b, y)|(c, z)|
+            # +------+------+------+
+            # |     3|   4.0|   400|
+            # +------+------+------+
 
-        conds = (
-            scol == max_val for scol, max_val in zip(self._internal.data_spark_columns, sdf_max)
-        )
-        cond = reduce(lambda x, y: x | y, conds)
+            conds = (
+                scol == max_val for scol, max_val in zip(self._internal.data_spark_columns, sdf_max)
+            )
+            cond = reduce(lambda x, y: x | y, conds)
 
-        psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
+            psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
 
-        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
+            return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
+        else:
+            from pyspark.pandas.series import first_series
+
+            column_labels = self._internal.column_labels
+
+            if len(column_labels) == 0:
+                return ps.Series([], dtype=np.int64)
+
+            if self._internal.column_labels_level > 1:
+                raise NotImplementedError(
+                    "idxmax with axis=1 does not support MultiIndex columns yet"
+                )
+
+            max_value = F.greatest(
+                *[F.coalesce(self._internal.spark_column_for(label), F.lit(float('-inf')))
+                  for label in column_labels],
+                F.lit(float('-inf'))
+            )
+
+            result = None
+            for label in reversed(column_labels):
+                scol = self._internal.spark_column_for(label)
+                label_value = label[0] if len(label) == 1 else label
+                condition = (scol == max_value) & scol.isNotNull()
+
+                result = (F.when(condition, F.lit(label_value)) if result is None
+                          else F.when(condition, F.lit(label_value)).otherwise(result))
+
+            result = F.when(max_value == float('-inf'), F.lit(None)).otherwise(result)
+
+            sdf = self._internal.spark_frame.select(
+                *self._internal_frame.index_spark_columns,
+                result.alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
 
     # TODO(SPARK-46168): axis = 1
     def idxmin(self, axis: Axis = 0) -> "Series":
