@@ -4519,11 +4519,18 @@ object SQLConf {
   val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
     buildConf("spark.sql.scripting.continueHandlerEnabled")
       .internal()
-      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
-        "is under development and still not working as intended. This feature switch is intended " +
-        "to be used internally for development and testing, not by end users. " +
-        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .doc("SQL Scripting CONTINUE HANDLER feature enables CONTINUE exception handlers " +
+        "which are essential for cursor iteration with NOT FOUND conditions.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SQL_SCRIPTING_CURSOR_ENABLED =
+    buildConf("spark.sql.scripting.cursorEnabled")
+      .internal()
+      .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
+        "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
