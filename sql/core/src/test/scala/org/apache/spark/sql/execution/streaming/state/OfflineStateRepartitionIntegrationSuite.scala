@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.{Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, TimeMode, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /**
@@ -91,46 +90,6 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       }
       storeName -> columnFamilyData
     }
-  }
-
-  /**
-   * Unified helper to build state source options for transformWithState tests.
-   * Handles basic state variables, timer and TTL column families.
-   *
-   * @param columnFamilyNames List of column family names to configure
-   * @param timeMode Optional TimeMode for timer-based tests (adds READ_REGISTERED_TIMERS)
-   * @param listStateName Optional list state name for TTL tests (adds FLATTEN_COLLECTION_TYPES)
-   * @return Map of column family names to their state source options
-   */
-  def buildStateSourceOptionsForTWS(
-      columnFamilyNames: Seq[String],
-      timeMode: Option[TimeMode] = None,
-      listStateName: Option[String] = None): Map[String, Map[String, String]] = {
-    // Get timer column family names if timeMode is provided
-    val (keyToTimestampCF, timestampToKeyCF) = timeMode match {
-      case Some(tm) => TimerStateUtils.getTimerStateVarNames(tm.toString)
-      case None => (null, null)
-    }
-
-    columnFamilyNames.map { cfName =>
-      // Determine base options based on column family type
-      val options = if (cfName == keyToTimestampCF || cfName == timestampToKeyCF) {
-        // Timer column families
-        Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
-      } else if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-        throw new IllegalArgumentException("TWS operator shouldn't contain DEFAULT column family")
-      } else {
-        // Regular state variable column families
-        val baseOptions = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
-        if (listStateName.contains(cfName)) {
-          baseOptions + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
-        } else {
-          baseOptions
-        }
-      }
-
-      cfName -> options
-    }.toMap
   }
 
   /**
