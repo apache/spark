@@ -348,7 +348,7 @@ private[sql] object ProtobufUtils extends Logging {
   /**
    * Builds an ExtensionRegistry and an index from full name to field descriptor for all extensions
    * found in the list of provided file descriptors.
-   * 
+   *
    * This method will traverse the AST to ensure extensions in nested scopes are registered as well.
    *
    * @param fileDescriptors
