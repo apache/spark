@@ -484,20 +484,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("continue handler - WHILE loop with SIGNAL before IF") {
+  test("continue handler - WHILE loop with zero division before IF") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE i INT DEFAULT 0;
         |  DECLARE s INT DEFAULT 0;
         |
-        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
         |    SELECT 22;
+        |  END;
         |
         |  WHILE i < 2 DO
         |    SET i = i + 1;
         |
-        |    SIGNAL SQLSTATE '02000';
+        |    SELECT 1/0;
         |
         |    IF 1==1 THEN
         |      SET s = s + 5;
@@ -515,20 +517,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("continue handler - REPEAT loop with SIGNAL before IF") {
+  test("continue handler - REPEAT loop with zero division before IF") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE i INT DEFAULT 0;
         |  DECLARE s INT DEFAULT 0;
         |
-        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
         |    SELECT 22;
+        |  END;
         |
         |  REPEAT
         |    SET i = i + 1;
         |
-        |    SIGNAL SQLSTATE '02000';
+        |    SELECT 1/0;
         |
         |    IF 1==1 THEN
         |      SET s = s + 5;
@@ -576,18 +580,20 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("continue handler - FOR loop with signal before IF") {
+  test("continue handler - FOR loop with zero division before IF") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE s INT DEFAULT 0;
         |
-        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
         |    SELECT 22;
+        |  END;
         |
         |  FOR i AS VALUES (1), (2) DO
         |    SELECT 1;
-        |    SIGNAL SQLSTATE '02000';
+        |    SELECT 1/0;
         |
         |    IF 1==1 THEN
         |      SET s = s + 5;
@@ -607,16 +613,18 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("continue handler - SIGNAL before FOR loop") {
+  test("continue handler - zero division before FOR loop") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE s INT DEFAULT 0;
         |
-        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
         |    SELECT 22;
+        |  END;
         |
-        |  SIGNAL SQLSTATE '02000';
+        |  SELECT 1/0;
         |
         |  FOR i AS VALUES (1), (2) DO
         |    SELECT 1;
@@ -637,19 +645,21 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("continue handler - SIGNAL before simple case") {
+  test("continue handler - zero division before simple case") {
     withTable("t") {
       val commands =
         """
           |BEGIN
-          |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+          |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+          |  BEGIN
           |    SELECT 22;
+          |  END;
           |
           |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
           |  INSERT INTO t VALUES (1, 'a', 1.0);
           |  INSERT INTO t VALUES (2, 'b', 2.0);
           |
-          |  SIGNAL SQLSTATE '02000';
+          |  SELECT 1/0;
           |  CASE (SELECT COUNT(*) FROM t)
           |   WHEN 1 THEN
           |     SELECT 42;
@@ -668,14 +678,16 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("continue handler - SIGNAL before searched case") {
+  test("continue handler - zero division before searched case") {
     val commands =
       """
         |BEGIN
-        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
         |    SELECT 22;
+        |  END;
         |
-        |  SIGNAL SQLSTATE '02000';
+        |  SELECT 1/0;
         |
         |  CASE
         |    WHEN 1 = (SELECT 2) THEN
