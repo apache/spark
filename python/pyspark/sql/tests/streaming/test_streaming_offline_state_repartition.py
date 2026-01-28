@@ -18,8 +18,10 @@
 import os
 import tempfile
 import unittest
+from typing import cast
 
 from pyspark import SparkConf
+from pyspark.sql.functions import split
 from pyspark.sql.streaming.state import GroupStateTimeout
 from pyspark.sql.types import LongType, StringType, StructType, StructField
 from pyspark.testing.sqlutils import (
@@ -30,8 +32,8 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    TTLStatefulProcessorFactory,
     SimpleStatefulProcessorWithInitialStateFactory,
+    StatefulProcessorCompositeTypeFactory,
 )
 
 if have_pandas:
@@ -192,8 +194,13 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             self.spark._streamingCheckpointManager.repartition("test", 0)
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
+        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        cast(
+            str,
+            pandas_requirement_message
+            or pyarrow_requirement_message
+            or "Not supported in no-GIL mode",
+        ),
     )
     def test_repartition_with_apply_in_pandas_with_state(self):
         """Test repartition for a streaming query using applyInPandasWithState."""
@@ -324,9 +331,8 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             verify_after_decrease=verify_after_decrease,
         )
 
-    def _run_tws_repartition_test(self, processor_factory, is_pandas):
+    def _run_tws_repartition_test(self, is_pandas):
         """Helper method to run repartition test with a given processor factory method"""
-        from pyspark.sql.functions import split
 
         def create_streaming_df(df):
             # Parse text input format "id,temperature" into structured columns
@@ -342,9 +348,14 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                     StructField("value", StringType(), True),
                 ]
             )
+            processor = (
+                SimpleStatefulProcessorWithInitialStateFactory().pandas()
+                if is_pandas
+                else SimpleStatefulProcessorWithInitialStateFactory().row()
+            )
             return (
                 parsed_df.groupBy("id").transformWithStateInPandas(
-                    statefulProcessor=processor_factory.pandas(),
+                    statefulProcessor=processor,
                     outputStructType=output_schema,
                     outputMode="Update",
                     timeMode="None",
@@ -352,7 +363,7 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
                 )
                 if is_pandas
                 else parsed_df.groupBy("id").transformWithState(
-                    statefulProcessor=processor_factory.row(),
+                    statefulProcessor=processor,
                     outputStructType=output_schema,
                     outputMode="Update",
                     timeMode="None",
@@ -395,15 +406,137 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         )
 
     def test_repartition_with_streaming_tws(self):
-        """Test repartition for streaming transformWithState with both row and pandas processors"""
-        self._run_tws_repartition_test(
-            SimpleStatefulProcessorWithInitialStateFactory(), is_pandas=False
-        )
+        """Test repartition for streaming transformWithState"""
+
+        self._run_tws_repartition_test(is_pandas=False)
 
     def test_repartition_with_streaming_tws_in_pandas(self):
-        self._run_tws_repartition_test(
-            SimpleStatefulProcessorWithInitialStateFactory(), is_pandas=True
+        """Test repartition for streaming transformWithStateInPandas."""
+
+        self._run_tws_repartition_test(is_pandas=True)
+
+    def _run_repartition_with_streaming_tws_multiple_state_vars_test(self, is_pandas):
+        """Test repartition with processor using multiple state variable types (value + list + map)."""
+
+        def create_streaming_df(df):
+            # Parse text input format "id,temperature" into structured columns
+            split_df = split(df["value"], ",")
+            parsed_df = df.select(
+                split_df.getItem(0).alias("id"),
+                split_df.getItem(1).cast("integer").alias("temperature"),
+            )
+
+            output_schema = StructType(
+                [
+                    StructField("id", StringType(), True),
+                    StructField("value_arr", StringType(), True),
+                    StructField("list_state_arr", StringType(), True),
+                    StructField("map_state_arr", StringType(), True),
+                    StructField("nested_map_state_arr", StringType(), True),
+                ]
+            )
+            processor = (
+                StatefulProcessorCompositeTypeFactory().pandas()
+                if is_pandas
+                else StatefulProcessorCompositeTypeFactory().row()
+            )
+            return (
+                parsed_df.groupBy("id").transformWithStateInPandas(
+                    statefulProcessor=processor,
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                    initialState=None,
+                )
+                if is_pandas
+                else parsed_df.groupBy("id").transformWithState(
+                    statefulProcessor=processor,
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                    initialState=None,
+                )
+            )
+
+        def verify_initial(results):
+            rows = {row.id: row for row in results}
+            # StatefulProcessorCompositeType initializes to "0" on first batch
+            # (this is how the processor is designed - see line 1853 in helper file)
+            self.assertEqual(rows["a"].value_arr, "0")
+            self.assertEqual(rows["a"].list_state_arr, "0")
+            # Map state initialized with default ATTRIBUTES_MAP and CONFS_MAP
+            self.assertEqual(rows["a"].map_state_arr, '{"key1": [1], "key2": [10]}')
+            self.assertEqual(rows["a"].nested_map_state_arr, '{"e1": {"e2": 5, "e3": 10}}')
+
+        def verify_after_increase(results):
+            # After repartition, state should be preserved
+            rows = {row.id: row for row in results}
+            # Key 'a': value state accumulated
+            self.assertEqual(rows["a"].value_arr, "100")
+            self.assertEqual(rows["a"].list_state_arr, "0,100")
+            # Map state updated with key "a" and temperature 100
+            self.assertEqual(rows["a"].map_state_arr, '{"a": [100], "key1": [1], "key2": [10]}')
+            self.assertEqual(
+                rows["a"].nested_map_state_arr, '{"e1": {"a": 100, "e2": 5, "e3": 10}}'
+            )
+            # New key 'd' - first batch for this key, outputs "0"
+            self.assertEqual(rows["d"].value_arr, "0")
+            self.assertEqual(rows["d"].list_state_arr, "0")
+            # Map state for 'd' initialized with defaults
+            self.assertEqual(rows["d"].map_state_arr, '{"key1": [1], "key2": [10]}')
+            self.assertEqual(rows["d"].nested_map_state_arr, '{"e1": {"e2": 5, "e3": 10}}')
+
+        def verify_after_decrease(results):
+            # After another repartition, state should still be preserved
+            rows = {row.id: row for row in results}
+            # Key 'd' gets 102, state was [0], so accumulated: [0+102] = [102]
+            self.assertEqual(rows["d"].value_arr, "102")
+            self.assertEqual(rows["d"].list_state_arr, "0,102")
+            # Map state for 'd' updated with temperature 102
+            self.assertEqual(rows["d"].map_state_arr, '{"d": [102], "key1": [1], "key2": [10]}')
+            self.assertEqual(
+                rows["d"].nested_map_state_arr, '{"e1": {"d": 102, "e2": 5, "e3": 10}}'
+            )
+            # Key 'a' gets 101, state was [100], so accumulated: [100+101] = [201]
+            self.assertEqual(rows["a"].value_arr, "201")
+            self.assertEqual(rows["a"].list_state_arr, "0,100,101")
+            # Map state for 'a' updated with temperature 101 (replaces previous value)
+            self.assertEqual(rows["a"].map_state_arr, '{"a": [101], "key1": [1], "key2": [10]}')
+            self.assertEqual(
+                rows["a"].nested_map_state_arr, '{"e1": {"a": 101, "e2": 5, "e3": 10}}'
+            )
+
+        OfflineStateRepartitionTestUtils.run_repartition_test(
+            spark=self.spark,
+            num_shuffle_partitions=self.NUM_SHUFFLE_PARTITIONS,
+            create_streaming_df=create_streaming_df,
+            output_mode="update",
+            batch1_data="a,100\n",  # a:0
+            batch2_data="a,100\nd,100\n",  # a:100, d:0 (new)
+            batch3_data="d,102\na,101\n",  # d:102, a:201 (new)
+            verify_initial=verify_initial,
+            verify_after_increase=verify_after_increase,
+            verify_after_decrease=verify_after_decrease,
         )
+
+    def test_repartition_with_streaming_tws_multiple_state_vars(self):
+        """Test repartition with transformWithState using multiple state variable types (value + list + map)."""
+
+        self._run_repartition_with_streaming_tws_multiple_state_vars_test(is_pandas=False)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        cast(
+            str,
+            pandas_requirement_message
+            or pyarrow_requirement_message
+            or "Not supported in no-GIL mode",
+        ),
+    )
+    def test_repartition_with_streaming_tws_in_pandas_multiple_state_vars(self):
+        """Test repartition with transformWithStateInPandas using multiple state variable types (value + list + map)."""
+
+        self._run_repartition_with_streaming_tws_multiple_state_vars_test(is_pandas=True)
 
 
 if __name__ == "__main__":

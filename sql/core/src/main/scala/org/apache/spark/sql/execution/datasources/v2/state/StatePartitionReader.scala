@@ -300,10 +300,10 @@ class StatePartitionAllColumnFamiliesReader(
   }
 
 
-  private def checkIfUseColumnFamily(schema: Set[StateStoreColFamilySchema]): Boolean = {
-    // Using the heuristic that all operators that enable column families
-    // have a non-default column family
-    schema.exists(_.colFamilyName != StateStoreId.DEFAULT_STORE_NAME)
+  // Using the heuristic that all operators that enable column families
+  // have a non-default column family
+  private lazy val useColumnFamilies: Boolean = {
+    stateStoreColFamilySchemas.exists(_.colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME)
   }
 
   // Create extractors for each column family - each column family may have different key schema
@@ -338,7 +338,6 @@ class StatePartitionAllColumnFamiliesReader(
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val useColumnFamilies = checkIfUseColumnFamily(stateStoreColFamilySchemas)
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
@@ -380,7 +379,7 @@ class StatePartitionAllColumnFamiliesReader(
     )
 
     // Register all column families from the schema
-    if (checkIfUseColumnFamily(stateStoreColFamilySchemas)) {
+    if (useColumnFamilies) {
       checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName).toList, stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
