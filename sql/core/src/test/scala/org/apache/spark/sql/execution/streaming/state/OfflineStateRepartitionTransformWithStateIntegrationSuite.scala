@@ -20,6 +20,8 @@ import java.sql.Timestamp
 import java.time.Duration
 
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
@@ -29,10 +31,55 @@ import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateV
 /**
  * Integration test suite for transformWithState operator repartitioning.
  */
-class OfflineStateRepartitionTransformWithStateIntegrationSuite
+class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "1")
+  }
+
+  /**
+   * Unified helper to build state source options for transformWithState tests.
+   * Handles basic state variables, timer and TTL column families.
+   *
+   * @param columnFamilyNames List of column family names to configure
+   * @param timeMode Optional TimeMode for timer-based tests (adds READ_REGISTERED_TIMERS)
+   * @param listStateName Optional list state name for TTL tests (adds FLATTEN_COLLECTION_TYPES)
+   * @return Map of column family names to their state source options
+   */
+  def buildStateSourceOptionsForTWS(
+       columnFamilyNames: Seq[String],
+       timeMode: Option[TimeMode] = None,
+       listStateName: Option[String] = None): Map[String, Map[String, String]] = {
+    // Get timer column family names if timeMode is provided
+    val (keyToTimestampCF, timestampToKeyCF) = timeMode match {
+      case Some(tm) => TimerStateUtils.getTimerStateVarNames(tm.toString)
+      case None => (null, null)
+    }
+
+    columnFamilyNames.map { cfName =>
+      // Determine base options based on column family type
+      val options = if (cfName == keyToTimestampCF || cfName == timestampToKeyCF) {
+        // Timer column families
+        Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
+      } else if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+        throw new IllegalArgumentException("TWS operator shouldn't contain DEFAULT column family")
+      } else {
+        // Regular state variable column families
+        val baseOptions = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+        if (listStateName.contains(cfName)) {
+          baseOptions + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+        } else {
+          baseOptions
+        }
+      }
+
+      cfName -> options
+    }.toMap
+  }
 
   def testWithDifferentEncodingType(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
@@ -398,5 +445,13 @@ class OfflineStateRepartitionTransformWithStateIntegrationSuite
           StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions
         )
       )
+  }
+}
+
+class OfflineStateRepartitionTransformWithStateCkptV2IntegrationSuite
+  extends OfflineStateRepartitionCkptV1IntegrationSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
   }
 }
