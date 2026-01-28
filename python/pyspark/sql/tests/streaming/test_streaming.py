@@ -147,6 +147,28 @@ class StreamingTestsMixin:
         except TypeError:
             pass
 
+    def test_stream_real_time_trigger(self):
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, "out")
+        chk = os.path.join(tmpPath, "chk")
+        try:
+            q = (
+                df.writeStream.format("console")
+                .trigger(realTime="5 seconds")
+                .option("checkpointLocation", chk)
+                .outputMode("update")
+                .start(out)
+            )
+            q.processAllAvailable()
+        except Exception as e:
+            # This error is expected
+            self._assert_exception_tree_contains_msg(
+                e, "STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED"
+            )
+
     def test_stream_read_options(self):
         schema = StructType([StructField("data", StringType(), False)])
         df = (
@@ -514,13 +536,6 @@ class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.streaming.test_streaming import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

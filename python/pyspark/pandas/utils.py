@@ -29,6 +29,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Optional,
     Tuple,
     Union,
@@ -40,7 +41,7 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
@@ -745,14 +746,14 @@ def is_name_like_value(
         return True
 
 
-def validate_axis(axis: Optional[Axis] = 0, none_axis: int = 0) -> int:
+def validate_axis(axis: Optional[Axis] = 0, none_axis: Literal[0, 1] = 0) -> Literal[0, 1]:
     """Check the given axis is valid."""
     # convert to numeric axis
     axis = cast(Dict[Optional[Axis], int], {None: none_axis, "index": 0, "columns": 1}).get(
         axis, axis
     )
     if axis in (none_axis, 0, 1):
-        return cast(int, axis)
+        return axis  # type: ignore[return-value]
     else:
         raise ValueError("No axis named {0}".format(axis))
 

@@ -267,32 +267,22 @@ object GroupingID {
   }
 }
 
-object GroupingAnalytics {
+object GroupingAnalytics extends AliasHelper {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Expression])] = {
-    if (!exprs.exists(_.isInstanceOf[BaseGroupingSets])) {
+    val exprsNoAlias = exprs.map(trimAliases)
+
+    if (!exprsNoAlias.exists(_.isInstanceOf[BaseGroupingSets])) {
       None
     } else {
-      val resolved = exprs.forall {
+      val resolved = exprsNoAlias.forall {
         case gs: BaseGroupingSets => gs.childrenResolved
         case other => other.resolved
       }
       if (!resolved) {
         None
       } else {
-        val groups = exprs.flatMap {
-          case gs: BaseGroupingSets => gs.groupByExprs
-          case other: Expression => other :: Nil
-        }
-        val unmergedSelectedGroupByExprs = exprs.map {
-          case gs: BaseGroupingSets => gs.selectedGroupByExprs
-          case other: Expression => Seq(Seq(other))
-        }
-        val selectedGroupByExprs = unmergedSelectedGroupByExprs.tail
-          .foldLeft(unmergedSelectedGroupByExprs.head) { (x, y) =>
-            for (a <- x; b <- y) yield a ++ b
-          }
-        Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))
+        GroupingAnalyticsExtractor(exprsNoAlias)
       }
     }
   }

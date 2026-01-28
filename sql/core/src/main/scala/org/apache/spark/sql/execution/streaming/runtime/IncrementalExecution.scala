@@ -66,7 +66,10 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
-    val queryId: UUID,
+    // For backward compatibility, streaming queries queryId is UUIDv4,
+    // see `StreamingQueryCheckpointMetadata.streamMetadata`.
+    // If not supplied, QueryExecution.queryId generates a new UUIDv7.
+    queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadataBase],
@@ -80,8 +83,9 @@ class IncrementalExecution(
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
-    shuffleCleanupMode =
-      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)) with Logging {
+    shuffleCleanupModeOpt =
+      Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
+    queryId = queryId) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(

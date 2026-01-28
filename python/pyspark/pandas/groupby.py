@@ -44,8 +44,7 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
-from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
+from pandas.api.types import is_number, is_hashable, is_list_like
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.internal import InternalFunction as SF
@@ -59,6 +58,7 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
@@ -1955,11 +1955,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             psdf, self._groupkeys, agg_columns
         )
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+
+            f = is_builtin_func(func)
+        else:
+            f = func
+
         if is_series_groupby:
             name = psdf.columns[-1]
-            pandas_apply = _builtin_table.get(func, func)
+            pandas_apply = f
         else:
-            f = _builtin_table.get(func, func)
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
                 return f(pdf.drop(groupkey_names, axis=1), *a, **k)
@@ -2179,10 +2185,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if is_series_groupby:
 
             def pandas_filter(pdf: pd.DataFrame) -> pd.DataFrame:
-                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))
+                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))  # type: ignore[arg-type]
 
         else:
-            f = _builtin_table.get(func, func)
+            if LooseVersion(pd.__version__) < "3.0.0":
+                from pandas.core.common import is_builtin_func
+
+                f = is_builtin_func(func)
+            else:
+                f = func
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 return f(pdf.drop(groupkey_names, axis=1))
@@ -2260,7 +2271,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
             # Just positionally map the column names to given schema's.
-            pdf.columns = return_schema.names
+            pdf.columns = pd.Index(return_schema.names)
 
             return pdf
 

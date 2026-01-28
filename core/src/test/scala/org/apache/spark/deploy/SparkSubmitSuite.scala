@@ -27,7 +27,6 @@ import scala.io.{Codec, Source}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -104,7 +103,6 @@ trait TestPrematureExit {
 class SparkSubmitSuite
   extends SparkSubmitTestUtils
   with Matchers
-  with BeforeAndAfterEach
   with ResetSystemProperties
   with TestPrematureExit {
 
@@ -1813,6 +1811,87 @@ class SparkSubmitSuite
       }
 
       conf.get(nonDelimSpaceFromFile._1) should be ("blah")
+    }
+  }
+
+  test("SPARK-54313: handle multiple --extra-properties-file options") {
+    withPropertyFile("base.properties", Map.empty) { baseFile =>
+      withPropertyFile("extra1.properties", Map.empty) { extra1File =>
+        withPropertyFile("extra2.properties", Map.empty) { extra2File =>
+          val clArgs = Seq(
+            "--class", "org.SomeClass",
+            "--properties-file", baseFile,
+            "--extra-properties-file", extra1File,
+            "--extra-properties-file", extra2File,
+            "--master", "yarn",
+            "thejar.jar")
+
+          val appArgs = new SparkSubmitArguments(clArgs)
+          appArgs.propertiesFile should be (baseFile)
+          appArgs.extraPropertiesFiles should be (Seq(extra1File, extra2File))
+        }
+      }
+    }
+  }
+
+  test("SPARK-54313: extra properties files override base properties") {
+    val baseProps = Map("spark.executor.memory" -> "1g", "spark.driver.memory" -> "512m")
+    val extraProps = Map("spark.executor.memory" -> "2g")
+
+    withPropertyFile("base.properties", baseProps) { baseFile =>
+      withPropertyFile("extra.properties", extraProps) { extraFile =>
+        val clArgs = Seq(
+          "--class", "org.SomeClass",
+          "--properties-file", baseFile,
+          "--extra-properties-file", extraFile,
+          "--master", "local",
+          "thejar.jar")
+
+        val appArgs = new SparkSubmitArguments(clArgs)
+        val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+        conf.get("spark.executor.memory") should be ("2g") // Overridden
+        conf.get("spark.driver.memory") should be ("512m") // From base
+      }
+    }
+  }
+
+  test("SPARK-54313: later extra properties files override earlier ones") {
+    val extra1Props = Map("spark.executor.memory" -> "1g")
+    val extra2Props = Map("spark.executor.memory" -> "3g")
+
+    withPropertyFile("extra1.properties", extra1Props) { extra1File =>
+      withPropertyFile("extra2.properties", extra2Props) { extra2File =>
+        val clArgs = Seq(
+          "--class", "org.SomeClass",
+          "--extra-properties-file", extra1File,
+          "--extra-properties-file", extra2File,
+          "--master", "local",
+          "thejar.jar")
+
+        val appArgs = new SparkSubmitArguments(clArgs)
+        val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+        conf.get("spark.executor.memory") should be ("3g") // Last wins
+      }
+    }
+  }
+
+  test("SPARK-54313: --conf overrides extra properties files") {
+    val extraProps = Map("spark.executor.memory" -> "2g")
+
+    withPropertyFile("extra.properties", extraProps) { extraFile =>
+      val clArgs = Seq(
+        "--class", "org.SomeClass",
+        "--extra-properties-file", extraFile,
+        "--conf", "spark.executor.memory=4g",
+        "--master", "local",
+        "thejar.jar")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+      conf.get("spark.executor.memory") should be ("4g") // --conf wins
     }
   }
 

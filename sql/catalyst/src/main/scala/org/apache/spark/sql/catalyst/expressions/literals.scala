@@ -169,7 +169,7 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
-      case CharType(_) | VarcharType(_) if SQLConf.get.preserveCharVarcharTypeInfo =>
+      case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
@@ -202,11 +202,11 @@ object Literal {
     case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case CharType(length) =>
-      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), length),
+    case c: CharType =>
+      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), c.length),
         dataType)
-    case VarcharType(length) =>
-      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), length),
+    case v: VarcharType =>
+      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), v.length),
         dataType)
     case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))

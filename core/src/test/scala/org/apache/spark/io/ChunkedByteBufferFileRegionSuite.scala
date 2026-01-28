@@ -22,15 +22,13 @@ import java.nio.channels.WritableByteChannel
 import scala.util.Random
 
 import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.util.io.ChunkedByteBuffer
 
-class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
-    with BeforeAndAfterEach {
+class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar {
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

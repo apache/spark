@@ -116,6 +116,19 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Get the values for multiple keys in a single batch operation.
+   * Default implementation throws UnsupportedOperationException.
+   * Providers that support batch retrieval should override this method.
+   *
+   * @param keys          Array of keys to look up
+   * @param colFamilyName The column family name
+   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
+  }
+
+  /**
    * Check if a key exists in the store, with 100% guarantee of a correct result.
    *
    * Default implementation calls get() and checks if the result is null.
@@ -250,6 +263,22 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @note This operation is NOT recorded in the changelog.
+   * @param beginKey      The start key of the range (inclusive)
+   * @param endKey        The end key of the range (exclusive)
+   * @param colFamilyName The column family name
+   */
+  def deleteRange(
+      beginKey: UnsafeRow,
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("deleteRange is not supported by this StateStore")
+  }
+
+  /**
    * Merges the provided value with existing values of a non-null key. If a existing
    * value does not exist, this operation behaves as [[StateStore.put()]].
    *
@@ -328,6 +357,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
+
+  override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    store.multiGet(keys, colFamilyName)
+  }
 
   override def keyExists(
       key: UnsafeRow,

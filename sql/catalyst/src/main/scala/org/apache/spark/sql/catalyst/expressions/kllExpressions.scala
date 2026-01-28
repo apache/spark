@@ -50,8 +50,8 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -78,8 +78,8 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -106,8 +106,8 @@ case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringB
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -144,8 +144,8 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -172,8 +172,8 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -200,8 +200,8 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -241,8 +241,8 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -272,8 +272,8 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -303,8 +303,8 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -456,12 +456,12 @@ abstract class KllSketchGetQuantileBase
     } catch {
       case e: org.apache.datasketches.common.SketchesArgumentException =>
         if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rankForError)
+          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName)
         } else {
-          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+          throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
         }
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -617,8 +617,8 @@ abstract class KllSketchGetRankBase
     try {
       operation
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 

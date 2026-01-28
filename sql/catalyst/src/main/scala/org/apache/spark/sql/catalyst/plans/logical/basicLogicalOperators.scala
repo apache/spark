@@ -1296,36 +1296,60 @@ object Expand {
    * Apply the all of the GroupExpressions to every input row, hence we will get
    * multiple output rows for an input row.
    *
+   * This method performs the following steps:
+   *  1. Creates an array of Projections for the child projection, and replaces the projections'
+   *     expressions which equal GroupBy expressions with `Literal(null)`, if those expressions are
+   *     not set for this grouping set.
+   *  2. For each grouping set attribute:
+   *      - If the input attribute is in the invalid grouping expression set for this group,
+   *        replaces it with constant null.
+   *      - Otherwise, fixes the nullable field by using the nullability from
+   *        `childOutput ++ groupByAliases`. This is logic from the `UpdateAttributeNullability`
+   *        rule in which we align nullability of attributes with the output of the child plan.
+   *  3. The `groupingId` is added as the last output, using the bit mask as the concrete value for
+   *     it.
+   *  4. If `groupingSetsAttrs` has duplicate entries (e.g., `GROUPING SETS ((key), (key))`), adds
+   *     one more virtual grouping attribute (`_gen_grouping_pos`) to avoid wrongly grouping rows
+   *     with the same grouping ID.
+   * 5.  The `groupByAttrs` has different meaning in `Expand.output` (it could be the original
+   *     grouping expression or null), so new instances are created for the output.
+   *
    * @param groupingSetsAttrs The attributes of grouping sets
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
+   * @param childOutputOpt Optional child output. If not provided, then `child.output` is used
    */
   def apply(
     groupingSetsAttrs: Seq[Seq[Attribute]],
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
-    child: LogicalPlan): Expand = {
+    child: LogicalPlan,
+    childOutputOpt: Option[Seq[Attribute]] = None): Expand = {
+    val childOutput = childOutputOpt.getOrElse(child.output)
+
     val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
 
-    // Create an array of Projections for the child projection, and replace the projections'
-    // expressions which equal GroupBy expressions with Literal(null), if those expressions
-    // are not set for this grouping set.
+    val nullabilities = (childOutput ++ groupByAliases.map(_.toAttribute)).groupBy(_.exprId).map {
+      case (exprId, attributes) => exprId -> attributes.exists(_.nullable)
+    }
+
     val projections = groupingSetsAttrs.zipWithIndex.map { case (groupingSetAttrs, i) =>
-      val projAttrs = child.output ++ groupByAttrs.map { attr =>
+      val projAttrs = childOutput ++ groupByAttrs.map { attr =>
         if (!groupingSetAttrs.contains(attr)) {
-          // if the input attribute in the Invalid Grouping Expression set of for this group
-          // replace it with constant null
           Literal.create(null, attr.dataType)
         } else {
-          attr
+          if (nullabilities.contains(attr.exprId)) {
+            attr.withNullability(nullabilities(attr.exprId))
+          } else {
+            attr
+          }
         }
-      // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ {
         val bitMask = buildBitmask(groupingSetAttrs, attrMap)
         val dataType = GroupingID.dataType
@@ -1335,24 +1359,19 @@ object Expand {
       }
 
       if (hasDuplicateGroupingSets) {
-        // If `groupingSetsAttrs` has duplicate entries (e.g., GROUPING SETS ((key), (key))),
-        // we add one more virtual grouping attribute (`_gen_grouping_pos`) to avoid
-        // wrongly grouping rows with the same grouping ID.
         projAttrs :+ Literal.create(i, IntegerType)
       } else {
         projAttrs
       }
     }
 
-    // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
-    // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
+      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
-    Expand(projections, output, Project(child.output ++ groupByAliases, child))
+    Expand(projections, output, Project(childOutput ++ groupByAliases, child))
   }
 }
 

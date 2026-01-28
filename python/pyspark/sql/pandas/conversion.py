@@ -18,7 +18,6 @@ import sys
 from typing import (
     Any,
     Callable,
-    Iterator,
     List,
     Optional,
     Sequence,
@@ -164,7 +163,7 @@ def _convert_arrow_table_to_pandas(
     )
 
     # Restore original column names (including duplicates)
-    pdf.columns = schema.names
+    pdf.columns = pd.Index(schema.names)
 
     return pdf
 
@@ -219,7 +218,9 @@ class PandasConversionMixin:
 
                 require_minimum_pyarrow_version()
                 arrow_schema = to_arrow_schema(
-                    self.schema, prefers_large_types=prefers_large_var_types
+                    self.schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -292,20 +293,16 @@ class PandasConversionMixin:
 
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
+        if len(rows) > 0:
+            pdf = pd.DataFrame.from_records(rows, index=range(len(rows)), columns=self.columns)
+        else:
+            pdf = pd.DataFrame(columns=self.columns)
 
-        if len(self.columns) > 0:
+        if len(pdf.columns) > 0:
             timezone = sessionLocalTimeZone
             struct_in_pandas = pandasStructHandlingMode
 
-            # Extract columns from rows and apply converters
-            if len(rows) > 0:
-                # Use iterator to avoid materializing intermediate data structure
-                columns_data: Iterator[Any] = iter(zip(*rows))
-            else:
-                columns_data = iter([] for _ in self.schema.fields)
-
-            # Build DataFrame from columns
-            pdf = pd.concat(
+            return pd.concat(
                 [
                     _create_converter_to_pandas(
                         field.dataType,
@@ -316,15 +313,13 @@ class PandasConversionMixin:
                         ),
                         error_on_duplicated_field_names=False,
                         timestamp_utc_localized=False,
-                    )(pd.Series(col_data, dtype=object))
-                    for col_data, field in zip(columns_data, self.schema.fields)
+                    )(pser)
+                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
                 ],
-                axis=1,
-                keys=self.columns,
+                axis="columns",
             )
-            return pdf
         else:
-            return pd.DataFrame(columns=[], index=range(len(rows)))
+            return pdf
 
     def toArrow(self) -> "pa.Table":
         from pyspark.sql.dataframe import DataFrame
@@ -350,6 +345,7 @@ class PandasConversionMixin:
         schema = to_arrow_schema(
             self.schema,
             error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
             prefers_large_types=prefers_large_var_types,
         )
 
@@ -440,7 +436,9 @@ class PandasConversionMixin:
             from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
 
-            schema = to_arrow_schema(self.schema, prefers_large_types=prefers_large_var_types)
+            schema = to_arrow_schema(
+                self.schema, timezone="UTC", prefers_large_types=prefers_large_var_types
+            )
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
 
@@ -698,7 +696,7 @@ class SparkConversionMixin:
 
                     conv = _converter(data_type)
                     if conv is not None:
-                        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+                        return lambda pser: pser.apply(conv)
                     else:
                         return lambda pser: pser
 
@@ -744,7 +742,7 @@ class SparkConversionMixin:
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
-            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
         ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
@@ -825,9 +823,7 @@ class SparkConversionMixin:
         require_minimum_pyarrow_version()
 
         import pandas as pd
-        from pandas.api.types import (  # type: ignore[attr-defined]
-            is_datetime64_dtype,
-        )
+        from pandas.api.types import is_datetime64_dtype
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types
@@ -849,7 +845,7 @@ class SparkConversionMixin:
                             StringType(), from_arrow_type(arrow_type, prefer_timestamp_ntz)
                         )
                     else:
-                        spark_type = from_arrow_type(field_type)
+                        spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                     struct.add(name, spark_type, nullable=field.nullable)
             else:
                 for name, field in zip(schema, arrow_schema):
@@ -887,7 +883,7 @@ class SparkConversionMixin:
             [
                 (
                     c,
-                    to_arrow_type(t, prefers_large_types=prefers_large_var_types)
+                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types)
                     if t is not None
                     else None,
                     t,
@@ -966,6 +962,7 @@ class SparkConversionMixin:
             to_arrow_schema(
                 schema,
                 error_on_duplicated_field_names_in_struct=True,
+                timezone="UTC",
                 prefers_large_types=prefers_large_var_types,
             )
         )

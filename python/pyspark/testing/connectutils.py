@@ -17,9 +17,6 @@
 import shutil
 import tempfile
 import os
-import sys
-import signal
-import faulthandler
 import functools
 import unittest
 import uuid
@@ -45,6 +42,7 @@ from pyspark.testing.utils import (
     should_test_connect,
     PySparkErrorTestUtils,
 )
+from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.session import SparkSession as PySparkSession
 
@@ -75,7 +73,7 @@ class MockRemoteSession:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
+class PlanOnlyTestFixture(PySparkBaseTestCase, PySparkErrorTestUtils):
     if should_test_connect:
 
         class MockDF(DataFrame):
@@ -152,7 +150,7 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUtils):
+class ReusedConnectTestCase(PySparkBaseTestCase, SQLTestUtils, PySparkErrorTestUtils):
     """
     Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
     """
@@ -180,8 +178,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def setUpClass(cls):
-        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
-            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+        super().setUpClass()
 
         # This environment variable is for interrupting hanging ML-handler and making the
         # tests fail fast.
@@ -203,11 +200,11 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
-            faulthandler.unregister(signal.SIGTERM)
-
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
-        cls.spark.stop()
+        try:
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+            cls.spark.stop()
+        finally:
+            super().tearDownClass()
 
     def setUp(self) -> None:
         # force to clean up the ML cache before each test

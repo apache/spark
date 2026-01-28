@@ -16,5 +16,5 @@
 #
 
 -J-Xmx8g
--J-Xms8g
+-J-Xms4g
 -J-XX:MaxMetaspaceSize=1g

@@ -465,6 +465,11 @@
       "Parameter value <arg_name> must be a valid UUID format: <origin>"
     ]
   },
+  "INVALID_STREAMING_SOURCE_NAME": {
+    "message": [
+      "Invalid streaming source name '<source_name>'. Source names must contain only ASCII letters, digits, and underscores."
+    ]
+  },
   "INVALID_TIMEOUT_TIMESTAMP": {
     "message": [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
@@ -550,6 +555,12 @@
     "message": [
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
+  },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
+    "message": [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState": "54000"
   },
   "MALFORMED_GEOGRAPHY": {
     "message": [

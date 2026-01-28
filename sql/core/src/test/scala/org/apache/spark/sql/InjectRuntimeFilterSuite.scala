@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession
+class InjectRuntimeFilterSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   protected override def beforeAll(): Unit = {

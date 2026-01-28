@@ -2261,6 +2261,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
+  def unfinishedRepartitionDetectedError(batchId: Long, lastCommittedBatchId: Long): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+      messageParameters = Map(
+        "batchId" -> batchId.toString,
+        "lastCommittedBatchId" -> lastCommittedBatchId.toString),
+      cause = null)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }
@@ -2820,6 +2829,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
+  def kllInvalidInputSketchBuffer(function: String, reason: String = ""): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
   def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
@@ -3169,9 +3185,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+  def sketchInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      errorClass = "SKETCH_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
@@ -3185,28 +3201,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+  def kllSketchInvalidQuantileRangeError(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "quantile" -> toSQLValue(quantile, DoubleType)))
-  }
-
-  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INVALID_INPUT",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
-  }
-
-  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
+        "functionName" -> toSQLId(function)))
   }
 
   def kllSketchKMustBeConstantError(function: String): Throwable = {
@@ -3221,5 +3220,32 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def vectorDimensionMismatchError(
+    function: String,
+    leftDim: Int,
+    rightDim: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "VECTOR_DIMENSION_MISMATCH",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "leftDim" -> leftDim.toString,
+        "rightDim" -> rightDim.toString))
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_MODE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "mode" -> mode,
+        "validModes" -> validModes.mkString(", ")))
   }
 }

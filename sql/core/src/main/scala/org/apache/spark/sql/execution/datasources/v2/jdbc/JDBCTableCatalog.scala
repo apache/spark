@@ -154,10 +154,6 @@ class JDBCTableCatalog extends TableCatalog
 
   override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
-      if (!tableExists(ident, conn)) {
-        throw QueryCompilationErrors.noSuchTableError(name(), ident)
-      }
-
       val optionsWithTableName = new JDBCOptions(
         options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
       JdbcUtils.classifyException(
@@ -172,7 +168,7 @@ class JDBCTableCatalog extends TableCatalog
         val remoteSchemaFetchMetric = JdbcUtils
           .createSchemaFetchMetric(SparkSession.active.sparkContext)
         val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
-          JDBCRDD.resolveTable(optionsWithTableName, conn)
+          JDBCRDD.resolveTable(optionsWithTableName, conn, Some(ident), Some(name()))
         }
         JDBCTable(ident, schema, optionsWithTableName,
           Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))

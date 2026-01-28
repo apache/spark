@@ -31,21 +31,23 @@ object ThetaSketchUtils {
    * MIN_LG_NOM_LONGS = 4 means minimum 16 buckets (2^4), MAX_LG_NOM_LONGS = 26 means maximum
    * ~67 million buckets (2^26). These bounds ensure reasonable memory usage while maintaining
    * sketch accuracy for cardinality estimation.
-  */
+   */
   final val MIN_LG_NOM_LONGS = 4
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
 
   /**
-   * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
-   * value is out of bounds.
+   * Validates the lgNomLongs parameter for Theta/Tuple sketch size. Throws a Spark SQL exception
+   * if the value is out of bounds.
    *
    * @param lgNomLongs
    *   Log2 of nominal entries
+   * @param prettyName
+   *   The display name of the function/expression for error messages
    */
   def checkLgNomLongs(lgNomLongs: Int, prettyName: String): Unit = {
     if (lgNomLongs < MIN_LG_NOM_LONGS || lgNomLongs > MAX_LG_NOM_LONGS) {
-      throw QueryExecutionErrors.thetaInvalidLgNomEntries(
+      throw QueryExecutionErrors.sketchInvalidLgNomEntries(
         function = prettyName,
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,
@@ -54,21 +56,25 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Wraps a byte array into a DataSketches CompactSketch object.
-   * This method safely deserializes a compact Theta sketch from its binary representation,
-   * handling potential deserialization errors by throwing appropriate Spark SQL exceptions.
+   * Wraps a byte array into a DataSketches CompactSketch object. This method safely deserializes
+   * a compact Theta sketch from its binary representation, handling potential deserialization
+   * errors by throwing appropriate Spark SQL exceptions.
    *
-   * @param bytes The binary representation of a compact theta sketch
-   * @param prettyName The display name of the function/expression for error messages
-   * @return A CompactSketch object wrapping the provided bytes
+   * @param bytes
+   *   The binary representation of a compact theta sketch
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @return
+   *   A CompactSketch object wrapping the provided bytes
    */
   def wrapCompactSketch(bytes: Array[Byte], prettyName: String): CompactSketch = {
-    val memory = try {
-      Memory.wrap(bytes)
-    } catch {
-      case _: NullPointerException | _: MemoryBoundsException =>
-        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-    }
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
 
     try {
       CompactSketch.wrap(memory)

@@ -410,6 +410,25 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-55035: Shuffle cleanup performed in child executions") {
+    val sourceDF = spark.range(100).repartition(10)
+    sourceDF.createOrReplaceTempView("source")
+
+    val createTablePlan = spark.sessionState.sqlParser.parsePlan(
+      """
+        CREATE TABLE child_exec_test
+        USING parquet
+        AS SELECT * FROM source WHERE id < 50
+      """)
+    val df = Dataset.ofRows(spark, createTablePlan, RemoveShuffleFiles)
+    df.collect()
+
+    val blockManager = spark.sparkContext.env.blockManager
+    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+    assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+    cleanupShuffles()
+  }
+
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
     val plan = spark.sql("SHOW FUNCTIONS").queryExecution.executedPlan
     assert(plan.isInstanceOf[CommandResultExec])

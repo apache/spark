@@ -379,10 +379,10 @@ class ScalarArrowUDFTestsMixin:
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
                     tzinfo=ZoneInfo(tz),
-                ).astimezone(datetime.timezone.utc)
+                )
                 for i in range(len(y))
             ]
-            return pa.array(dates, pa.timestamp("us", "UTC"))
+            return pa.array(dates)
 
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(
@@ -1289,12 +1289,6 @@ class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf_scalar import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

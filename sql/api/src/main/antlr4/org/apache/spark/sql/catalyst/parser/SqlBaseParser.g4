@@ -424,10 +424,14 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? watermarkClause?
-      tableAlias                                                       #streamTableName
+    : STREAM multipartIdentifier optionsClause?
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? watermarkClause? tableAlias                       #streamTableName
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
+    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
+    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -560,9 +564,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
+    : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -1067,11 +1071,16 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
-    | functionTable                                         #tableValuedFunction
+    | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
     ;
 
 optionsClause
     : WITH options=propertyList
+    ;
+
+// Clause for naming streaming sources with IDENTIFIED BY
+identifiedByClause
+    : IDENTIFIED BY sourceName=errorCapturingIdentifier
     ;
 
 // Unlike all other types of expression for relation, we do not support watermarkClause for
@@ -1112,13 +1121,19 @@ functionTableArgument
     | functionArgument
     ;
 
-// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
-// referred by other clause, please check wheter watermarkClause makes sense to the clause.
-// If not, consider separate this rule.
-functionTable
+// A table function call including opening and closing parentheses.
+tableFunctionCall
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN watermarkClause? tableAlias
+      RIGHT_PAREN
+    ;
+
+// A table function call with optional trailing clauses for streaming and aliasing.
+// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
+// the AST builder will reject it with an error. The clause must come before watermarkClause
+// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+tableFunctionCallWithTrailingClauses
+    : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
 
 tableAlias
@@ -1214,7 +1229,7 @@ booleanExpression
 
 predicate
     : errorCapturingNot? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | errorCapturingNot? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    | errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
     | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
@@ -1407,8 +1422,8 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
@@ -1815,7 +1830,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
-    | DROP identifierSeq
+    | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
@@ -1971,6 +1986,7 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -2358,6 +2374,7 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE

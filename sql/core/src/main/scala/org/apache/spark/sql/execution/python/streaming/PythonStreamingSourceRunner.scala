@@ -249,7 +249,10 @@ class PythonStreamingSourceRunner(
     val root = reader.getVectorSchemaRoot()
     // When input is empty schema can't be read.
     val schema = ArrowUtils.fromArrowSchema(root.getSchema())
-    assert(schema == outputSchema)
+    if (schema != outputSchema) {
+      throw QueryExecutionErrors.arrowDataTypeMismatchError(
+        "Python streaming data source read", Seq(outputSchema), Seq(schema))
+    }
 
     val vectors = root.getFieldVectors().asScala.map { vector =>
       new ArrowColumnVector(vector)

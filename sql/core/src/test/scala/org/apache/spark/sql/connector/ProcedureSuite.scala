@@ -493,7 +493,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   }
 
   test("SPARK-51780: Implement DESC PROCEDURE") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), SimpleSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
     catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
     catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
@@ -517,20 +517,26 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("DESC PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use DESCRIBE instead of DESC
         sql("DESCRIBE PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use default catalog
         sql("DESC PROCEDURE ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use multi-part namespace
@@ -559,6 +565,32 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
         Row("Procedure:   void") ::
           Row("Description: void procedure") :: Nil)
+    }
+  }
+
+  test("SPARK-51780: DESC PROCEDURE with binding failure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "bind_fail"), UnboundBindFailProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.bind_fail"),
+      Row("Procedure:   bind_fail") ::
+      Row("Description: bind fail procedure") :: Nil)
+  }
+
+  test("SPARK-51780: DESC PROCEDURE with zero parameters") {
+    catalog.createProcedure(
+      Identifier.of(Array("ns"), "zero_params"), SimpleZeroParameterProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.zero_params"),
+      Row("Procedure:   zero_params") ::
+      Row("Description: zero parameter procedure") ::
+      Row("Parameters:  ()") :: Nil)
+  }
+
+  object UnboundBindFailProcedure extends UnboundProcedure {
+    override def name: String = "bind_fail"
+    override def description: String = "bind fail procedure"
+    override def bind(inputType: StructType): BoundProcedure = {
+      throw new UnsupportedOperationException("Cannot bind")
     }
   }
 
@@ -908,5 +940,13 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     override def name: String = "simple_sum"
 
     override def description: String = "simple sum integers"
+  }
+
+  object SimpleZeroParameterProcedure extends SimpleProcedure {
+    override def name: String = "zero_params"
+    override def description: String = "zero parameter procedure"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array.empty
+    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
 }

@@ -179,6 +179,7 @@ object TreePattern extends Enumeration  {
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
+  val NAMED_STREAMING_RELATION: Value = Value
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value

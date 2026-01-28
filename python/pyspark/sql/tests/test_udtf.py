@@ -1400,7 +1400,7 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         self.spark.udtf.register("test_udtf", func)
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             assertDataFrameEqual(
                 self.spark.sql("SELECT * FROM test_udtf(TABLE (v))"),
@@ -1416,7 +1416,7 @@ class BaseUDTFTestsMixin:
         func = udtf(TestUDTF, returnType="a: int")
         self.spark.udtf.register("test_udtf", func)
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             assertDataFrameEqual(
                 self.spark.sql("SELECT * FROM test_udtf(5, TABLE (v))"),
@@ -3994,12 +3994,6 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_udtf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

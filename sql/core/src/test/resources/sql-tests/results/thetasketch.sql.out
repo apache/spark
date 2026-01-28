@@ -900,8 +900,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
+  "sqlState" : "22003",
   "messageParameters" : {
     "function" : "`theta_sketch_agg`",
     "max" : "26",
@@ -919,8 +919,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
+  "sqlState" : "22003",
   "messageParameters" : {
     "function" : "`theta_sketch_agg`",
     "max" : "26",
@@ -942,8 +942,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
+  "sqlState" : "22003",
   "messageParameters" : {
     "function" : "`theta_union_agg`",
     "max" : "26",
@@ -965,8 +965,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
+  "sqlState" : "22003",
   "messageParameters" : {
     "function" : "`theta_union_agg`",
     "max" : "26",
@@ -984,8 +984,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "SKETCH_INVALID_LG_NOM_ENTRIES",
+  "sqlState" : "22003",
   "messageParameters" : {
     "function" : "`theta_sketch_agg`",
     "max" : "26",
@@ -1200,7 +1200,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_sketch_estimate`"
   }
@@ -1215,7 +1215,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_union`"
   }
@@ -1230,7 +1230,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_intersection`"
   }
@@ -1245,7 +1245,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_difference`"
   }
@@ -1261,7 +1261,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_union_agg`"
   }
@@ -1277,7 +1277,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "THETA_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`theta_intersection_agg`"
   }
