@@ -25,8 +25,7 @@ import org.apache.spark.sql.types.StringType
 /**
  * The command for `SHOW CURRENT NAMESPACE`.
  */
-case class ShowCurrentNamespaceCommand()
-  extends LeafRunnableCommand {
+case class ShowCurrentNamespaceCommand() extends LeafRunnableCommand {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)(),
     AttributeReference("namespace", StringType, nullable = false)())

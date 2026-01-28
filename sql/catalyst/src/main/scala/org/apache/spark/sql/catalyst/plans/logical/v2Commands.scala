@@ -1221,8 +1221,7 @@ case class RenameTable(
 case class ShowTables(
     namespace: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowTables.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTables.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTables =
     copy(namespace = newChild)
@@ -1241,8 +1240,7 @@ object ShowTables {
 case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
-    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
@@ -1277,8 +1275,7 @@ case class ShowTablePartition(
 case class ShowViews(
     namespace: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowViews.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowViews.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowViews =
     copy(namespace = newChild)
@@ -1314,8 +1311,7 @@ case class RefreshTable(child: LogicalPlan) extends UnaryCommand {
 case class ShowTableProperties(
     table: LogicalPlan,
     propertyKey: Option[String],
-    override val output: Seq[Attribute] = ShowTableProperties.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTableProperties.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
@@ -1409,8 +1405,7 @@ case class ShowFunctions(
     userScope: Boolean,
     systemScope: Boolean,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowFunctions =
     copy(namespace = newChild)
@@ -1534,8 +1529,7 @@ case class LoadData(
 case class ShowCreateTable(
     child: LogicalPlan,
     asSerde: Boolean = false,
-    override val output: Seq[Attribute] = ShowCreateTable.getoutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowCreateTable.getoutputAttrs) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowCreateTable =
     copy(child = newChild)
 }
@@ -1552,8 +1546,7 @@ object ShowCreateTable {
 case class ShowColumns(
     child: LogicalPlan,
     namespace: Option[Seq[String]],
-    override val output: Seq[Attribute] = ShowColumns.getOutputAttrs)
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowColumns.getOutputAttrs) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowColumns =
     copy(child = newChild)
 }

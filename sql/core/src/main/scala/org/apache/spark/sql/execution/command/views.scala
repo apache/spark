@@ -358,8 +358,7 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
 case class ShowViewsCommand(
     databaseName: String,
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute])
-  extends LeafRunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

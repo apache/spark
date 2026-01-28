@@ -25,8 +25,7 @@ import org.apache.spark.sql.types.StringType
 /**
  * The command for `SHOW CATALOGS`.
  */
-case class ShowCatalogsCommand(pattern: Option[String])
-  extends LeafRunnableCommand {
+case class ShowCatalogsCommand(pattern: Option[String]) extends LeafRunnableCommand {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)())
 
