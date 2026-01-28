@@ -11364,7 +11364,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO(SPARK-46167): add pct, na_option parameter
     def rank(
         self,
-        method: str = "average",
+        method: Literal = "average",
         ascending: bool = True,
         numeric_only: bool = False,
         axis: Axis = 0,
