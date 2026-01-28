@@ -21,7 +21,18 @@ import os
 import pstats
 from threading import RLock
 from types import CodeType, TracebackType
-from typing import Any, Callable, Dict, Iterable, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Literal,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+    overload,
+)
 import warnings
 
 from pyspark.accumulators import (
@@ -454,7 +465,9 @@ class Profile:
                 },
             )
 
-    def dump(self, path: str, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None) -> None:
+    def dump(
+        self, path: str, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None
+    ) -> None:
         """
         Dump the profile results into directory `path`.
 
@@ -485,18 +498,28 @@ class Profile:
             )
 
     @overload
-    def render(self, id: Union[int, str], *, type: Optional[str] = None, renderer: Optional[str] = None) -> Any:
-        ...
-
-    @overload
     def render(
-        self, id: Union[int, str], *, type: Optional[Literal["perf"]], renderer: Callable[[pstats.Stats], Any]
+        self, id: Union[int, str], *, type: Optional[str] = None, renderer: Optional[str] = None
     ) -> Any:
         ...
 
     @overload
     def render(
-        self, id: Union[int, str], *, type: Literal["memory"], renderer: Callable[[CodeMapDict], Any]
+        self,
+        id: Union[int, str],
+        *,
+        type: Optional[Literal["perf"]],
+        renderer: Callable[[pstats.Stats], Any],
+    ) -> Any:
+        ...
+
+    @overload
+    def render(
+        self,
+        id: Union[int, str],
+        *,
+        type: Literal["memory"],
+        renderer: Callable[[CodeMapDict], Any],
     ) -> Any:
         ...
 
