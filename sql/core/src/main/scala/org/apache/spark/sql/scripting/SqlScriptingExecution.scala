@@ -186,7 +186,7 @@ class SqlScriptingExecution(
       }
     }
     // If there are still frames available, get the next statement.
-    if (context.frames.nonEmpty && context.frames.last.hasNext) {
+    if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
     None
