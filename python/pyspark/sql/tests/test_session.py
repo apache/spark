@@ -28,6 +28,7 @@ from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
 )
+from pyspark.errors.exceptions.captured import SparkNoSuchElementException
 from pyspark.sql.profiler import Profile
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
@@ -460,6 +461,160 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             errorClass="UNSUPPORTED_LOCAL_CONNECTION_STRING",
             messageParameters={},
         )
+
+
+class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
+    """
+    Tests for SparkSession.Builder.create() API.
+    """
+
+    def _get_builder(self):
+        """
+        Helper method to get a SparkSession.builder pre-configured for testing.
+
+        Returns:
+            SparkSession.Builder: A builder with basic configurations
+        """
+        return SparkSession.builder.master("local[4]")
+
+    def setUp(self):
+        """Initialize session variable for tests."""
+        self.session = None
+
+    def tearDown(self):
+        """Clean up SparkSession after each test."""
+        if self.session is not None:
+            self.session.stop()
+
+    def test_create_basic_functionality(self):
+        # Ensure that there is no active session initially
+        self.assertIsNone(SparkSession.getActiveSession())
+        self.session = self._get_builder().create()
+
+        # Verify session was created
+        self.assertIsNotNone(self.session)
+        self.assertIsNotNone(self.session.sparkContext)
+        self.assertIsNotNone(self.session._jsparkSession)
+
+        # Verify we can perform basic operations
+        df = self.session.range(10)
+        self.assertEqual(df.count(), 10)
+
+        # Ensure the active session is updated when it was previously None
+        self.assertEqual(self.session, SparkSession.getActiveSession())
+        # Check that calling create again will create a different session
+        session2 = self._get_builder().create()
+        # Ensure that the active session is not updated since it is already set
+        self.assertNotEqual(session2, SparkSession.getActiveSession())
+        # Ensure that a brand new session was created
+        self.assertNotEqual(self.session, session2)
+        self.assertNotEqual(self.session._jsparkSession, session2._jsparkSession)
+
+    def test_create_works_with_or_without_existing_spark_context(self):
+        """
+        Test create() both without a pre-existing SparkContext and with a pre-existing SparkContext.
+        """
+        sc = None
+        session = None
+        try:
+            # Stop any existing SparkContext first to ensure a clean state
+            existing_sc = SparkContext._active_spark_context
+            if existing_sc is not None:
+                existing_sc.stop()
+
+            # Create session without a pre-existing SparkContext
+            session = SparkSession.builder.master("local[4]").create()
+            sc = session.sparkContext
+            self.assertIsNotNone(sc)
+            # Call create again while the SparkContext is still running
+            session2 = SparkSession.builder.create()
+            # Verify SparkSession attaches to the existing SparkContext
+            self.assertEqual(session2.sparkContext, sc)
+
+        finally:
+            # Stop the SparkContext which also stops all sessions
+            if sc is not None:
+                sc.stop()
+
+    def test_create_respects_spark_configs(self):
+        """
+        Test that Spark configs are properly applied and not leaked between sessions.
+        """
+        # Create a session which also starts the SparkContext
+        self.session = self._get_builder().create()
+
+        # Create a second session with additional custom config
+        session2 = (
+            self._get_builder()
+            .config("spark.sql.shuffle.partitions", "10")
+            .config("spark.test.additional.config", "extra_value")
+            .create()
+        )
+        self.assertEqual(session2.conf.get("spark.sql.shuffle.partitions"), "10")
+        self.assertEqual(session2.conf.get("spark.test.additional.config"), "extra_value")
+
+        session3 = self._get_builder().config("spark.sql.shuffle.partitions", "20").create()
+        self.assertEqual(session3.conf.get("spark.sql.shuffle.partitions"), "20")
+        # Ensure config doesn't leak between sessions
+        with self.assertRaises(SparkNoSuchElementException):
+            session3.conf.get("spark.test.additional.config")
+
+    def test_create_and_getOrCreate_interaction(self):
+        """
+        Test interaction between create() and getOrCreate().
+        """
+        self.session = self._get_builder().create()
+        # getOrCreate() should return the active session (self.session)
+        session2 = SparkSession.builder.getOrCreate()
+        self.assertEqual(self.session, session2)
+
+    def test_create_with_invalid_master(self):
+        """Test create() with invalid master URL."""
+        with self.assertRaises(Exception):
+            self.session = SparkSession.builder.master("invalid://localhost").create()
+
+    def test_create_with_app_name(self):
+        """Test create() with appName() builder method."""
+        app_name = "TestCreateAppName"
+        self.session = self._get_builder().appName(app_name).create()
+
+        self.assertEqual(self.session.sparkContext.appName, app_name)
+        self.assertEqual(self.session.range(5).count(), 5)
+
+    def test_create_default_session_behavior(self):
+        """Test that first create() sets active session, subsequent calls don't override."""
+        self.assertIsNone(SparkSession.getActiveSession())
+
+        self.session = self._get_builder().appName("DefaultSessionTest1").create()
+        self.assertEqual(self.session, SparkSession.getActiveSession())
+
+        session2 = self._get_builder().appName("DefaultSessionTest2").create()
+        try:
+            self.assertEqual(self.session, SparkSession.getActiveSession())
+            self.assertNotEqual(session2, SparkSession.getActiveSession())
+            self.assertEqual(self.session.range(3).count(), 3)
+            self.assertEqual(session2.range(5).count(), 5)
+        finally:
+            session2.stop()
+
+    def test_create_sessions_share_spark_context(self):
+        """Test that multiple create() sessions share SparkContext but have independent state."""
+        self.session = self._get_builder().appName("SharedContextTest1").create()
+        session2 = self._get_builder().appName("SharedContextTest2").create()
+        try:
+            self.assertEqual(self.session.sparkContext, session2.sparkContext)
+            self.assertIsNotNone(self.session.sparkContext)
+
+            df1 = self.session.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"])
+            self.assertEqual(df1.count(), 2)
+
+            df2 = session2.createDataFrame([(3, "Charlie"), (4, "David")], ["id", "name"])
+            self.assertEqual(df2.count(), 2)
+
+            self.assertNotEqual(self.session, session2)
+            self.assertNotEqual(self.session._jsparkSession, session2._jsparkSession)
+        finally:
+            session2.stop()
 
 
 class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
