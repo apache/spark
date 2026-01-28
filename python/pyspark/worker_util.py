@@ -198,11 +198,11 @@ def send_accumulator_updates(outfile: IO) -> None:
 
 class Conf:
     def __init__(self, infile: Optional[IO] = None) -> None:
-        self._conf = {}
+        self._conf: dict[str, Any] = {}
         if infile is not None:
             self.load(infile)
 
-    def load(self, infile):
+    def load(self, infile: IO) -> None:
         num_conf = read_int(infile)
         # We do a sanity check here to reduce the possibility to stuck indefinitely
         # due to an invalid messsage. If the numer of configurations is obviously
@@ -221,7 +221,7 @@ class Conf:
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
 
-    def get(self, key: str, default: Any = ""):
+    def get(self, key: str, default: Any = "") -> Any:
         val = self._conf.get(key, default)
         if isinstance(val, str):
             return val.lower()
