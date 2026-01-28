@@ -1094,6 +1094,8 @@ object SparkConnectClient {
    */
   private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
       extends ClientInterceptor {
+    metadata.foreach { case (key, value) => assert(key != null && value != null) }
+
     override def interceptCall[ReqT, RespT](
         method: MethodDescriptor[ReqT, RespT],
         callOptions: CallOptions,
@@ -1104,7 +1106,7 @@ object SparkConnectClient {
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
           metadata.foreach { case (key, value) =>
-            if (key != null && value != null && key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+            if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
               // Expects a base64-encoded value string.
               val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
               headers.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
