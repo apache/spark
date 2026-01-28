@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.{
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
-       0.97463185
+       0.9746319
   """,
   since = "4.2.0",
   group = "vector_funcs"
@@ -216,6 +216,138 @@ case class VectorL2Distance(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
+    _FUNC_(vector, degree) - Returns the Lp norm of a float vector using the specified degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
+    2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3.0F, 4.0F), 2.0F);
+       5.0
+      > SELECT _FUNC_(array(3.0F, 4.0F), 1.0F);
+       7.0
+      > SELECT _FUNC_(array(3.0F, 4.0F), float('inf'));
+       4.0
+  """,
+  since = "4.2.0",
+  group = "vector_funcs"
+)
+// scalastyle:on line.size.limit
+case class VectorNorm(vector: Expression, degree: Expression)
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  def this(vector: Expression) = this(vector, Literal(2.0f))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (vector.dataType, degree.dataType) match {
+      case (ArrayType(FloatType, _), FloatType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(FloatType),
+            "inputSql" -> toSQLExpr(degree),
+            "inputType" -> toSQLType(degree.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(vector),
+            "inputType" -> toSQLType(vector.dataType)))
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[VectorFunctionImplUtils],
+    FloatType,
+    "vectorNorm",
+    Seq(vector, degree, Literal(prettyName)),
+    Seq(ArrayType(FloatType), FloatType, StringType)
+  )
+
+  override def prettyName: String = "vector_norm"
+
+  override def children: Seq[Expression] = Seq(vector, degree)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VectorNorm = {
+    copy(vector = newChildren(0), degree = newChildren(1))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(vector, degree) - Normalizes a float vector to unit length using the specified norm degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
+    2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3.0F, 4.0F), 2.0F);
+       [0.6,0.8]
+      > SELECT _FUNC_(array(3.0F, 4.0F), 1.0F);
+       [0.42857143,0.5714286]
+      > SELECT _FUNC_(array(3.0F, 4.0F), float('inf'));
+       [0.75,1.0]
+  """,
+  since = "4.2.0",
+  group = "vector_funcs"
+)
+// scalastyle:on line.size.limit
+case class VectorNormalize(vector: Expression, degree: Expression)
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  def this(vector: Expression) = this(vector, Literal(2.0f))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (vector.dataType, degree.dataType) match {
+      case (ArrayType(FloatType, _), FloatType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(FloatType),
+            "inputSql" -> toSQLExpr(degree),
+            "inputType" -> toSQLType(degree.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(vector),
+            "inputType" -> toSQLType(vector.dataType)))
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[VectorFunctionImplUtils],
+    ArrayType(FloatType),
+    "vectorNormalize",
+    Seq(vector, degree, Literal(prettyName)),
+    Seq(ArrayType(FloatType), FloatType, StringType)
+  )
+
+  override def prettyName: String = "vector_normalize"
+
+  override def children: Seq[Expression] = Seq(vector, degree)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VectorNormalize = {
+    copy(vector = newChildren(0), degree = newChildren(1))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
     _FUNC_(array) - Returns the element-wise mean of float vectors in a group.
     All vectors must have the same dimension.
   """,
@@ -338,7 +470,8 @@ case class VectorAvg(
 
     if (currentCount == 0L) {
       // First valid vector - just copy it as the initial average
-      val byteBuffer = ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val byteBuffer =
+        ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (i <- 0 until inputLen) {
         byteBuffer.putFloat(inputArray.getFloat(i))
       }
@@ -366,8 +499,10 @@ case class VectorAvg(
       // Update running average: new_avg = old_avg + (new_value - old_avg) / (count + 1)
       val newCount = currentCount + 1L
       val currentAvgBytes = buffer.getBinary(mutableAggBufferOffset + avgIndex)
-      val currentAvgBuffer = ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newAvgBuffer = ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val currentAvgBuffer =
+        ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val newAvgBuffer =
+        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (i <- 0 until currentDim) {
         val oldAvg = currentAvgBuffer.getFloat()
         val newVal = inputArray.getFloat(i)
@@ -419,9 +554,12 @@ case class VectorAvg(
       //   (right_avg * right_count) / (left_count + right_count)
       val newCount = currentCount + inputCount
       val currentAvgBytes = buffer.getBinary(mutableAggBufferOffset + avgIndex)
-      val currentAvgBuffer = ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val inputAvgBuffer = ByteBuffer.wrap(inputAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newAvgBuffer = ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val currentAvgBuffer =
+        ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val inputAvgBuffer =
+        ByteBuffer.wrap(inputAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val newAvgBuffer =
+        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (_ <- 0 until currentDim) {
         // getFloat() will auto-increment the buffer's current position by 4
         val leftAvg = currentAvgBuffer.getFloat()
@@ -526,7 +664,8 @@ case class VectorSum(
     )
   )
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Seq(sumAttr, dimAttr)
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    Seq(sumAttr, dimAttr)
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
@@ -568,7 +707,8 @@ case class VectorSum(
 
     if (buffer.isNullAt(mutableAggBufferOffset + sumIndex)) {
       // First valid vector - just copy it as the initial sum
-      val byteBuffer = ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val byteBuffer =
+        ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (i <- 0 until inputLen) {
         byteBuffer.putFloat(inputArray.getFloat(i))
       }
@@ -593,10 +733,14 @@ case class VectorSum(
 
       // Update sum: new_sum = old_sum + new_value
       val currentSumBytes = buffer.getBinary(mutableAggBufferOffset + sumIndex)
-      val currentSumBuffer = ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newSumBuffer = ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val currentSumBuffer =
+        ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val newSumBuffer =
+        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (i <- 0 until currentDim) {
-        newSumBuffer.putFloat(currentSumBuffer.getFloat() + inputArray.getFloat(i))
+        newSumBuffer.putFloat(
+          currentSumBuffer.getFloat() + inputArray.getFloat(i)
+        )
       }
       buffer.update(mutableAggBufferOffset + sumIndex, newSumBuffer.array())
     }
@@ -633,11 +777,16 @@ case class VectorSum(
 
       // Merge sums: combined_sum = left_sum + right_sum
       val currentSumBytes = buffer.getBinary(mutableAggBufferOffset + sumIndex)
-      val currentSumBuffer = ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val inputSumBuffer = ByteBuffer.wrap(inputSumBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newSumBuffer = ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val currentSumBuffer =
+        ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val inputSumBuffer =
+        ByteBuffer.wrap(inputSumBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val newSumBuffer =
+        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
       for (_ <- 0 until currentDim) {
-        newSumBuffer.putFloat(currentSumBuffer.getFloat() + inputSumBuffer.getFloat())
+        newSumBuffer.putFloat(
+          currentSumBuffer.getFloat() + inputSumBuffer.getFloat()
+        )
       }
       buffer.update(mutableAggBufferOffset + sumIndex, newSumBuffer.array())
     }
