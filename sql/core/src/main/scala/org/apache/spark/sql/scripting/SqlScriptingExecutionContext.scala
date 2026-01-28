@@ -389,7 +389,7 @@ class SqlScriptingExecutionFrame(
   def enterScope(
       label: String,
       triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap): Unit = {
-    // Note: Labels are already lowercased in ParserUtils#enterLabeledScope during parsing,
+    // Labels are already lowercased in ParserUtils#enterLabeledScope during parsing,
     // so no need to normalize here. Labels are always case-insensitive in SQL/PSM.
     scopes.append(new SqlScriptingExecutionScope(label, triggerToExceptionHandlerMap))
   }
