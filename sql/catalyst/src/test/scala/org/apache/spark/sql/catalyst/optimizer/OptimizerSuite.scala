@@ -21,13 +21,16 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayCompact, AttributeReference, CreateArray, CreateStruct, IntegerLiteral, Literal, MapFromEntries, Multiply, NamedExpression, Remainder}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayCompact, AttributeReference, CreateArray, CreateStruct, IntegerLiteral, IsNotNull, Literal, MapFromEntries, Multiply, NamedExpression, Remainder, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructField, StructType, TimestampType}
+
+import java.util
 
 /**
  * A dummy optimizer rule for testing that decrements integer literals until 0.
@@ -333,5 +336,38 @@ class OptimizerSuite extends PlanTest {
     val optimized2 = optimizer.execute(plan2)
     assert(optimized2.schema ===
       StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
+  }
+
+  test("SPARK-55241:PropagateEmptyRelation InferFiltersFromConstraints in fixed iterations") {
+    val optimizerToUse = new RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("InferAndPushDownFilters", FixedPoint(100),
+          PushDownPredicates,
+          PruneFilters,
+          PropagateEmptyRelation,
+          InferFiltersFromConstraints
+        ) :: Nil
+    }
+
+    def checkIdempotencyReached(isStreaming: Boolean): Unit = {
+      // empty relation
+      val emptyRelLeft = LocalRelation(
+        Seq(AttributeReference("eventTime", TimestampType)(), $"id".string, $"comment".string),
+        Nil, isStreaming = isStreaming).withWatermark(util.UUID.randomUUID(), $"eventTime",
+        IntervalUtils.fromIntervalString("2 minutes")).analyze
+      val emptyRelRight = LocalRelation(
+        Seq(AttributeReference("eventTime", TimestampType)(), $"id".string, $"name".string),
+        Nil, isStreaming = isStreaming).withWatermark(util.UUID.randomUUID(), $"eventTime",
+          IntervalUtils.fromIntervalString("4 minutes")).where(IsNotNull($"eventTime")).
+        where(IsNotNull($"id")).analyze
+
+      val join = emptyRelLeft.join(emptyRelRight, LeftOuter, Some(emptyRelLeft.output.find(_.name
+        == "id").get === emptyRelRight.output.find(_.name == "id").get && emptyRelLeft.output.find
+      (_.name == "eventTime").get >= TimestampAddInterval(emptyRelRight.output.find(_.name ==
+        "eventTime").get, Literal(IntervalUtils.fromIntervalString("1 minutes"))))).analyze
+      optimizerToUse.execute(join)
+    }
+    checkIdempotencyReached(isStreaming = false)
+    checkIdempotencyReached(isStreaming = true)
   }
 }
