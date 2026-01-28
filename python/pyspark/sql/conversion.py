@@ -1005,6 +1005,89 @@ class ArrowTimestampConversion:
 
 
 class ArrowArrayToPandasConversion:
+    @classmethod
+    def convert_legacy(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
+
+        Parameters
+        ----------
+        arr : pa.Array or pa.ChunkedArray
+            The arrow column to convert.
+        spark_type : DataType
+            Target spark type, should always be specified.
+        timezone : str, optional
+            The timezone to convert from. If there is a timestamp type, it's required.
+        struct_in_pandas : str, optional
+            How to handle struct type. If there is a struct type, it's required.
+        ndarray_as_list : bool, optional
+            Whether `np.ndarray` is converted to a list or not.
+        df_for_struct : bool, optional
+            When true, and spark type is a StructType, return a DataFrame.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            Converted pandas Series. If df_for_struct is True and the type is StructType,
+            returns a DataFrame with columns corresponding to struct fields.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if df_for_struct and isinstance(spark_type, StructType):
+            import pyarrow.types as types
+
+            assert types.is_struct(arr.type)
+            assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
+
+            series = [
+                cls.convert_legacy(
+                    field_arr,
+                    spark_type=field.dataType,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    ndarray_as_list=ndarray_as_list,
+                    df_for_struct=False,  # always False for child fields
+                )
+                for field_arr, field in zip(arr.flatten(), spark_type)
+            ]
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names  # type: ignore[assignment]
+            return pdf
+
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+        return converter(ser)
+
     @staticmethod
     def convert(
         arrow_column: Union["pa.Array", "pa.ChunkedArray"],
@@ -1016,6 +1099,8 @@ class ArrowArrayToPandasConversion:
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
+
+        This is a convenience method that calls convert_legacy with a more intuitive signature.
 
         Parameters
         ----------
@@ -1038,55 +1123,11 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
-        import pyarrow as pa
-        import pandas as pd
-
-        if spark_type is None:
-            spark_type = from_arrow_type(arrow_column.type)
-
-        assert isinstance(arrow_column, (pa.Array, pa.ChunkedArray))
-
-        if df_for_struct and isinstance(spark_type, StructType):
-            import pyarrow.types as types
-
-            assert types.is_struct(arrow_column.type)
-            assert len(spark_type.names) == len(
-                arrow_column.type.names
-            ), f"{spark_type} {arrow_column.type} "
-
-            series = [
-                ArrowArrayToPandasConversion.convert(
-                    field_arr,
-                    timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    ndarray_as_list=ndarray_as_list,
-                    spark_type=field.dataType,
-                    df_for_struct=False,  # always False for child fields
-                )
-                for field_arr, field in zip(arrow_column.flatten(), spark_type)
-            ]
-            pdf = pd.concat(series, axis=1)
-            pdf.columns = spark_type.names  # type: ignore[assignment]
-            return pdf
-
-        # If the given column is a date type column, creates a series of datetime.date directly
-        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-        # datetime64[ns] type handling.
-        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        pandas_options = {
-            "date_as_object": True,
-            "coerce_temporal_nanoseconds": True,
-            "integer_object_nulls": True,
-        }
-        ser = arrow_column.to_pandas(**pandas_options)
-
-        converter = _create_converter_to_pandas(
-            data_type=spark_type,
-            nullable=True,
+        return ArrowArrayToPandasConversion.convert_legacy(
+            arrow_column,
+            spark_type or from_arrow_type(arrow_column.type),
             timezone=timezone,
             struct_in_pandas=struct_in_pandas,
-            error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
-            integer_object_nulls=True,
+            df_for_struct=df_for_struct,
         )
-        return converter(ser)
