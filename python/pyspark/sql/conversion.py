@@ -1058,48 +1058,65 @@ class ArrowTimestampConversion:
 
 
 class ArrowArrayToPandasConversion:
-    @classmethod
-    def convert_legacy(
-        cls,
-        arr: Union["pa.Array", "pa.ChunkedArray"],
-        spark_type: DataType,
-        *,
-        timezone: Optional[str] = None,
-        struct_in_pandas: Optional[str] = None,
+    @staticmethod
+    def convert(
+        arrow_column: Union["pa.Array", "pa.ChunkedArray"],
+        timezone: str,
+        struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
+        spark_type: Optional[DataType] = None,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
+
         Parameters
         ----------
-        arr : :class:`pyarrow.Array`.
-        spark_type: target spark type, should always be specified.
-        timezone : The timezone to convert from. If there is a timestamp type, it's required.
-        struct_in_pandas : How to handle struct type. If there is a struct type, it's required.
-        ndarray_as_list : Whether `np.ndarray` is converted to a list or not.
-        df_for_struct: when true, and spark type is a StructType, return a DataFrame.
+        arrow_column : pa.Array or pa.ChunkedArray
+            The arrow column to convert.
+        timezone : str
+            Timezone for timestamp conversion.
+        struct_in_pandas : str, optional
+            How to represent struct in pandas ("dict", "row", etc.). Default is "dict".
+        ndarray_as_list : bool, optional
+            Whether to convert ndarray as list. Default is False.
+        spark_type : DataType, optional
+            Spark type for the column. If None, inferred from arrow type.
+        df_for_struct : bool, optional
+            If True, convert struct columns to DataFrame instead of Series. Default is False.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            Converted pandas Series. If df_for_struct is True and the type is StructType,
+            returns a DataFrame with columns corresponding to struct fields.
         """
         import pyarrow as pa
         import pandas as pd
 
-        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+        if spark_type is None:
+            spark_type = from_arrow_type(arrow_column.type)
+
+        assert isinstance(arrow_column, (pa.Array, pa.ChunkedArray))
 
         if df_for_struct and isinstance(spark_type, StructType):
             import pyarrow.types as types
 
-            assert types.is_struct(arr.type)
-            assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
+            assert types.is_struct(arrow_column.type)
+            assert len(spark_type.names) == len(
+                arrow_column.type.names
+            ), f"{spark_type} {arrow_column.type} "
 
             series = [
-                cls.convert_legacy(
+                ArrowArrayToPandasConversion.convert(
                     field_arr,
-                    spark_type=field.dataType,
-                    timezone=timezone,
+                    timezone,
                     struct_in_pandas=struct_in_pandas,
                     ndarray_as_list=ndarray_as_list,
+                    spark_type=field.dataType,
                     df_for_struct=False,  # always False for child fields
                 )
-                for field_arr, field in zip(arr.flatten(), spark_type)
+                for field_arr, field in zip(arrow_column.flatten(), spark_type)
             ]
             pdf = pd.concat(series, axis=1)
             pdf.columns = spark_type.names  # type: ignore[assignment]
@@ -1114,7 +1131,7 @@ class ArrowArrayToPandasConversion:
             "coerce_temporal_nanoseconds": True,
             "integer_object_nulls": True,
         }
-        ser = arr.to_pandas(**pandas_options)
+        ser = arrow_column.to_pandas(**pandas_options)
 
         converter = _create_converter_to_pandas(
             data_type=spark_type,
@@ -1126,68 +1143,3 @@ class ArrowArrayToPandasConversion:
             integer_object_nulls=True,
         )
         return converter(ser)
-
-    @classmethod
-    def create_converter(
-        cls,
-        timezone: str,
-        struct_in_pandas: str = "dict",
-        ndarray_as_list: bool = False,
-        df_for_struct: bool = False,
-        input_types: Optional[List] = None,
-    ) -> Callable[["pa.Array", int], Union["pd.Series", "pd.DataFrame"]]:
-        """
-        Create an arrow_to_pandas converter function.
-
-        Parameters
-        ----------
-        timezone : str
-            Timezone for timestamp conversion.
-        struct_in_pandas : str
-            How to represent struct in pandas ("dict", "row", etc.)
-        ndarray_as_list : bool
-            Whether to convert ndarray as list.
-        df_for_struct : bool
-            If True, convert struct columns to DataFrame instead of Series.
-        input_types : list, optional
-            Spark types for each column, used for precise type conversion.
-
-        Returns
-        -------
-        callable
-            Function (arrow_column, idx) -> pd.Series or pd.DataFrame
-        """
-        import pyarrow.types as types
-
-        def convert(arr: "pa.Array", spark_type: Optional[DataType] = None) -> "pd.Series":
-            return cls.convert_legacy(
-                arr,
-                spark_type or from_arrow_type(arr.type),
-                timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
-                ndarray_as_list=ndarray_as_list,
-            )
-
-        def converter(arrow_column: "pa.Array", idx: int) -> Union["pd.Series", "pd.DataFrame"]:
-            spark_type = input_types[idx] if input_types is not None else None
-
-            # If the arrow struct is actually a Variant, which is an atomic type,
-            # treat it as a non-struct arrow type.
-            if (
-                not df_for_struct
-                or not types.is_struct(arrow_column.type)
-                or is_variant(arrow_column.type)
-            ):
-                return convert(arrow_column, spark_type)
-
-            # Struct case: return a pandas DataFrame where the fields of the struct
-            # correspond to columns in the DataFrame.
-            import pandas as pd
-
-            series = [
-                convert(col, spark_type[i].dataType if spark_type else None).rename(field.name)
-                for i, (col, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
-            ]
-            return pd.concat(series, axis=1)
-
-        return converter
