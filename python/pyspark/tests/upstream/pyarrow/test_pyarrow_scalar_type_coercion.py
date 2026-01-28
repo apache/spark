@@ -22,12 +22,16 @@ This test monitors the behavior of PyArrow's type coercion to ensure PySpark's a
 about PyArrow behavior remain valid across versions.
 
 Test categories:
-1. Null coercion - None to numeric types
+1. Null coercion - None to all types
 2. Numeric types - int, float, decimal coercion and boundaries
+3. Boolean coercion - bool to other types
+4. String/Binary coercion - string, bytes, large_string, large_binary
+5. Temporal types - date, time, datetime, timedelta
 
 The helper method pattern is adapted from PR #53721 (pa.array type coercion tests).
 """
 
+import datetime
 import math
 import unittest
 from decimal import Decimal
@@ -63,11 +67,11 @@ class PyArrowScalarTypeCoercionTests(unittest.TestCase):
             self.assertEqual(scalar.type, target_type)
             self.assertEqual(scalar.as_py(), expected)
 
-    def _run_error_tests(self, cases, error_type):
-        """Run tests expecting errors: (value, target_type)."""
+    def _run_error_tests(self, cases):
+        """Run tests expecting errors: (value, target_type, error_type)."""
         import pyarrow as pa
 
-        for value, target_type in cases:
+        for value, target_type, error_type in cases:
             with self.assertRaises(error_type):
                 pa.scalar(value, type=target_type)
 
@@ -76,10 +80,11 @@ class PyArrowScalarTypeCoercionTests(unittest.TestCase):
     # =========================================================================
 
     def test_null_coercion(self):
-        """Test that None can be coerced to numeric types as a null scalar."""
+        """Test that None can be coerced to any type as a null scalar."""
         import pyarrow as pa
 
         target_types = [
+            # Numeric
             pa.int8(),
             pa.int16(),
             pa.int32(),
@@ -91,6 +96,27 @@ class PyArrowScalarTypeCoercionTests(unittest.TestCase):
             pa.float32(),
             pa.float64(),
             pa.decimal128(20, 2),
+            # Boolean
+            pa.bool_(),
+            # String/Binary
+            pa.string(),
+            pa.large_string(),
+            pa.binary(),
+            pa.large_binary(),
+            # Temporal
+            pa.date32(),
+            pa.date64(),
+            pa.time32("s"),
+            pa.time32("ms"),
+            pa.time64("us"),
+            pa.time64("ns"),
+            pa.timestamp("s"),
+            pa.timestamp("ms"),
+            pa.timestamp("us"),
+            pa.timestamp("ns"),
+            pa.timestamp("us", tz="UTC"),
+            pa.duration("s"),
+            pa.duration("us"),
         ]
 
         for target_type in target_types:
@@ -183,55 +209,180 @@ class PyArrowScalarTypeCoercionTests(unittest.TestCase):
         """Test numeric coercion error cases."""
         import pyarrow as pa
 
-        # Integer overflow
-        overflow_cases = [
-            (128, pa.int8()),
-            (-129, pa.int8()),
-            (256, pa.uint8()),
-            (32768, pa.int16()),
-            (2**62, pa.int32()),
+        error_cases = [
+            # Integer overflow
+            (128, pa.int8(), pa.ArrowInvalid),
+            (-129, pa.int8(), pa.ArrowInvalid),
+            (256, pa.uint8(), pa.ArrowInvalid),
+            (32768, pa.int16(), pa.ArrowInvalid),
+            (2**62, pa.int32(), pa.ArrowInvalid),
+            # Negative to unsigned
+            (-1, pa.uint8(), OverflowError),
+            (-1, pa.uint16(), OverflowError),
+            (-1, pa.uint32(), OverflowError),
+            (-1, pa.uint64(), OverflowError),
+            # Integer precision loss in float32 (2^24 + 1)
+            (16777217, pa.float32(), pa.ArrowInvalid),
+            # NaN/Inf to integer
+            (float("nan"), pa.int64(), pa.ArrowInvalid),
+            (float("inf"), pa.int64(), pa.ArrowInvalid),
+            (float("-inf"), pa.int64(), pa.ArrowInvalid),
+            # Float to decimal
+            (42.5, pa.decimal128(10, 2), pa.ArrowTypeError),
+            (0.0, pa.decimal128(10, 2), pa.ArrowTypeError),
+            (3.14, pa.decimal128(10, 2), pa.ArrowTypeError),
+            (float("nan"), pa.decimal128(10, 2), pa.ArrowTypeError),
+            # Decimal precision loss
+            (Decimal("123.456"), pa.decimal128(10, 2), pa.ArrowInvalid),
+            # Decimal to float
+            (Decimal("123.45"), pa.float64(), pa.ArrowInvalid),
         ]
-        self._run_error_tests(overflow_cases, pa.ArrowInvalid)
+        self._run_error_tests(error_cases)
 
-        # Negative to unsigned
-        negative_to_unsigned_cases = [
-            (-1, pa.uint8()),
-            (-1, pa.uint16()),
-            (-1, pa.uint32()),
-            (-1, pa.uint64()),
+    # =========================================================================
+    # SECTION 3: Boolean Coercion
+    # =========================================================================
+
+    def test_boolean_coercion(self):
+        """Test boolean type coercion."""
+        import pyarrow as pa
+
+        cases = [
+            # Boolean to Boolean
+            (True, pa.bool_(), True),
+            (False, pa.bool_(), False),
+            # Boolean to Float
+            (True, pa.float64(), 1.0),
+            (False, pa.float64(), 0.0),
+            (True, pa.float32(), 1.0),
+            (False, pa.float32(), 0.0),
         ]
-        for value, target_type in negative_to_unsigned_cases:
-            with self.assertRaises(OverflowError):
-                pa.scalar(value, type=target_type)
+        self._run_coercion_tests_with_values(cases)
 
-        # Integer precision loss in float32 (2^24 + 1)
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.scalar(16777217, type=pa.float32())
+    def test_boolean_coercion_errors(self):
+        """Test boolean coercion error cases."""
+        import pyarrow as pa
 
-        # NaN/Inf to integer
-        nan_inf_cases = [
-            (float("nan"), pa.int64()),
-            (float("inf"), pa.int64()),
-            (float("-inf"), pa.int64()),
+        error_cases = [
+            # Boolean to integer
+            (True, pa.int64(), pa.ArrowTypeError),
+            (False, pa.int64(), pa.ArrowTypeError),
+            # Boolean to string
+            (True, pa.string(), pa.ArrowTypeError),
+            (False, pa.string(), pa.ArrowTypeError),
+            # Boolean to decimal
+            (True, pa.decimal128(10, 2), pa.ArrowInvalid),
+            (False, pa.decimal128(10, 2), pa.ArrowInvalid),
         ]
-        self._run_error_tests(nan_inf_cases, pa.ArrowInvalid)
+        self._run_error_tests(error_cases)
 
-        # Float to decimal
-        float_to_decimal_cases = [
-            (42.5, pa.decimal128(10, 2)),
-            (0.0, pa.decimal128(10, 2)),
-            (3.14, pa.decimal128(10, 2)),
-            (float("nan"), pa.decimal128(10, 2)),
+    # =========================================================================
+    # SECTION 4: String/Binary Coercion
+    # =========================================================================
+
+    def test_string_binary_coercion(self):
+        """Test string and binary type coercion."""
+        import pyarrow as pa
+
+        cases = [
+            # String to String
+            ("hello", pa.string(), "hello"),
+            ("", pa.string(), ""),
+            ("42", pa.string(), "42"),
+            ("hello", pa.large_string(), "hello"),
+            ("", pa.large_string(), ""),
+            # String to Binary (UTF-8 encode)
+            ("hello", pa.binary(), b"hello"),
+            ("", pa.binary(), b""),
+            ("42", pa.binary(), b"42"),
+            ("hello", pa.large_binary(), b"hello"),
+            # Binary to Binary
+            (b"hello", pa.binary(), b"hello"),
+            (b"", pa.binary(), b""),
+            (b"hello", pa.large_binary(), b"hello"),
+            # Binary to String (UTF-8 decode)
+            (b"hello", pa.string(), "hello"),
+            (b"", pa.string(), ""),
+            (b"hello", pa.large_string(), "hello"),
         ]
-        self._run_error_tests(float_to_decimal_cases, pa.ArrowTypeError)
+        self._run_coercion_tests_with_values(cases)
 
-        # Decimal precision loss
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.scalar(Decimal("123.456"), type=pa.decimal128(10, 2))
+    def test_string_binary_coercion_errors(self):
+        """Test string/binary coercion error cases."""
+        import pyarrow as pa
 
-        # Decimal to float
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.scalar(Decimal("123.45"), type=pa.float64())
+        error_cases = [
+            # String to numeric
+            ("hello", pa.int64(), pa.ArrowInvalid),
+            ("", pa.int64(), pa.ArrowInvalid),
+            ("42", pa.int64(), pa.ArrowInvalid),
+            ("hello", pa.float64(), pa.ArrowInvalid),
+            ("3.14", pa.float64(), pa.ArrowInvalid),
+            # String to date
+            ("2024-01-15", pa.date32(), pa.ArrowTypeError),
+        ]
+        self._run_error_tests(error_cases)
+
+    # =========================================================================
+    # SECTION 5: Temporal Type Coercion
+    # =========================================================================
+
+    def test_temporal_coercion(self):
+        """Test temporal type coercion: date, time, datetime, timedelta."""
+        import pyarrow as pa
+
+        date_val = datetime.date(2024, 1, 15)
+        time_val = datetime.time(12, 30, 45, 123456)
+        dt = datetime.datetime(2024, 1, 15, 12, 30, 45, 123456)
+        td = datetime.timedelta(days=1, hours=2, minutes=30, seconds=45, microseconds=123456)
+
+        cases_with_values = [
+            # Date to Date
+            (date_val, pa.date32(), date_val),
+            (date_val, pa.date64(), date_val),
+            # Datetime to Date (extracts date part)
+            (dt, pa.date32(), dt.date()),
+        ]
+        self._run_coercion_tests_with_values(cases_with_values)
+
+        cases = [
+            # Time to Time
+            (time_val, pa.time32("s")),
+            (time_val, pa.time32("ms")),
+            (time_val, pa.time64("us")),
+            (time_val, pa.time64("ns")),
+            # Datetime to Timestamp
+            (dt, pa.timestamp("s")),
+            (dt, pa.timestamp("ms")),
+            (dt, pa.timestamp("us")),
+            (dt, pa.timestamp("ns")),
+            (dt, pa.timestamp("us", tz="UTC")),
+            (dt, pa.timestamp("us", tz="America/New_York")),
+            # Timedelta to Duration
+            (td, pa.duration("s")),
+            (td, pa.duration("ms")),
+            (td, pa.duration("us")),
+            (td, pa.duration("ns")),
+        ]
+        self._run_coercion_tests(cases)
+
+    def test_temporal_coercion_errors(self):
+        """Test temporal coercion error cases."""
+        import pyarrow as pa
+
+        error_cases = [
+            # Date to string
+            (datetime.date(2024, 1, 15), pa.string(), pa.ArrowTypeError),
+            # Date to timestamp
+            (datetime.date(2024, 1, 15), pa.timestamp("us"), pa.ArrowTypeError),
+            # Time to string
+            (datetime.time(12, 30, 45), pa.string(), pa.ArrowTypeError),
+            # Datetime to string
+            (datetime.datetime(2024, 1, 15, 12, 30, 45), pa.string(), pa.ArrowTypeError),
+            # Timedelta to integer
+            (datetime.timedelta(days=1), pa.int64(), pa.ArrowInvalid),
+        ]
+        self._run_error_tests(error_cases)
 
 
 if __name__ == "__main__":

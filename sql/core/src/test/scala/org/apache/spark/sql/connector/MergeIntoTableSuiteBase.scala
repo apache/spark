@@ -2148,6 +2148,41 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-55074: imerge with type coercion from INT to STRING") {
+    // INT -> STRING is allowed in ANSI mode, merge should succeed via type coercion
+    // without requiring schema evolution
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, value STRING, dep STRING",
+        """{ "pk": 1, "value": "100", "dep": "hr" }
+          |{ "pk": 2, "value": "200", "dep": "finance" }
+          |{ "pk": 3, "value": "300", "dep": "engineering" }
+          |""".stripMargin)
+
+      // Source has INT type for 'value' column
+      Seq((2, 999, "finance"), (4, 400, "marketing"))
+        .toDF("pk", "value", "dep")
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET value = s.value, dep = s.dep
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, value, dep) VALUES (s.pk, s.value, s.dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, "100", "hr"),
+          Row(2, "999", "finance"), // updated, INT 999 coerced to STRING "999"
+          Row(3, "300", "engineering"),
+          Row(4, "400", "marketing"))) // inserted, INT 400 coerced to STRING "400"
+    }
+  }
+
   private def findMergeExec(query: String): MergeRowsExec = {
     val plan = executeAndKeepPlan {
       sql(query)

@@ -24,7 +24,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{StreamingCheckpointConstants, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.functions.col
@@ -142,7 +142,7 @@ class OfflineStateRepartitionRunner(
       createNewBatchFromLastCommitted(lastBatchId, lastCommittedBatchId)
     } else {
       // Means there are uncommitted batches.
-      if (isRepartitionBatch(lastBatchId, checkpointMetadata.offsetLog, checkpointLocation)) {
+      if (isRepartitionBatch(lastBatchId, checkpointMetadata.offsetLog)) {
         // If it is a failed repartition batch, lets check if the shuffle partitions
         // is the same as the requested. If same, then we can retry the batch.
         val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
@@ -299,52 +299,5 @@ class OfflineStateRepartitionRunner(
     if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
     }
-  }
-}
-
-object OfflineStateRepartitionUtils {
-  def isRepartitionBatch(
-      batchId: Long, offsetLog: OffsetSeqLog, checkpointLocation: String): Boolean = {
-    assert(batchId >= 0, "Batch ID must be non-negative")
-    batchId match {
-      // first batch can never be a repartition batch since we require at least one committed batch
-      case 0 => false
-      case _ =>
-        // A repartition batch is a batch where the number of shuffle partitions changed
-        // compared to the previous batch.
-        val batch = offsetLog.get(batchId).getOrElse(throw OfflineStateRepartitionErrors
-          .offsetSeqNotFoundError(checkpointLocation, batchId))
-        val prevBatchId = batchId - 1
-        val previousBatch = offsetLog.get(prevBatchId).getOrElse(
-          throw OfflineStateRepartitionErrors
-            .offsetSeqNotFoundError(checkpointLocation, prevBatchId))
-
-        // Determine version from the batch type
-        val batchVersion = batch match {
-          case _: OffsetSeq => 1
-          case _: OffsetMap => 2
-          case _ => -1
-        }
-        val batchMetadata = batch.metadataOpt.getOrElse(
-          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
-            checkpointLocation, version = batchVersion, batchId = batchId))
-        val shufflePartitions = getShufflePartitions(batchMetadata).get
-
-        val prevBatchVersion = previousBatch match {
-          case _: OffsetSeq => 1
-          case _: OffsetMap => 2
-          case _ => -1
-        }
-        val previousBatchMetadata = previousBatch.metadataOpt.getOrElse(
-          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
-            checkpointLocation, version = prevBatchVersion, batchId = prevBatchId))
-        val previousShufflePartitions = getShufflePartitions(previousBatchMetadata).get
-
-        previousShufflePartitions != shufflePartitions
-    }
-  }
-
-  def getShufflePartitions(metadata: OffsetSeqMetadataBase): Option[Int] = {
-    metadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).map(_.toInt)
   }
 }

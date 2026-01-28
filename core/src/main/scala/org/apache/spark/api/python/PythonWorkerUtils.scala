@@ -20,12 +20,20 @@ package org.apache.spark.api.python
 import java.io.{DataInputStream, DataOutputStream, File}
 import java.nio.charset.StandardCharsets
 
+import scala.jdk.CollectionConverters._
+
+import org.json4s.{Formats, NoTypeHints}
+import org.json4s.jackson.Serialization
+
+import org.apache.spark._
 import org.apache.spark.{SparkEnv, SparkFiles}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 
 private[spark] object PythonWorkerUtils extends Logging {
+
+  implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   /**
    * Write a string in UTF-8 charset.
@@ -54,6 +62,37 @@ private[spark] object PythonWorkerUtils extends Logging {
    */
   def writePythonVersion(pythonVer: String, dataOut: DataOutputStream): Unit = {
     writeUTF(pythonVer, dataOut)
+  }
+
+
+  /**
+   * Write the task context information to the data output stream.
+   *
+   * It will be read and used by `worker_util.setup_task_context`.
+   */
+  def writeTaskContext(
+      context: TaskContext,
+      connInfo: Either[String, Int],
+      secret: Option[String],
+      dataOut: DataOutputStream): Unit = {
+    val json = Serialization.write(Map(
+        "isBarrier" -> context.isInstanceOf[BarrierTaskContext],
+        "connInfo" -> connInfo.merge,
+        "secret" -> secret,
+        "stageId" -> context.stageId(),
+        "partitionId" -> context.partitionId(),
+        "attemptNumber" -> context.attemptNumber(),
+        "taskAttemptId" -> context.taskAttemptId(),
+        "cpus" -> context.cpus(),
+        "resources" -> context.resources().map { case (k, v) =>
+          k -> Map(
+            "name" -> v.name,
+            "addresses" -> v.addresses
+          )
+        },
+        "localProperties" -> context.getLocalProperties.asScala.toMap
+      ))
+    writeUTF(json, dataOut)
   }
 
   /**

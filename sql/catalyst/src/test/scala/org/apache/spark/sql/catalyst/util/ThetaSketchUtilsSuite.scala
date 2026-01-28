@@ -33,7 +33,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-
   test("checkLgNomLongs: throws exception for values below minimum") {
     val invalidValues = Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS - 1, 0, -5)
     invalidValues.foreach { value =>
@@ -41,14 +40,12 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkRuntimeException] {
           ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
-        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
           "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
           "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
-          "value" -> value.toString
-        )
-      )
+          "value" -> value.toString))
     }
   }
 
@@ -59,14 +56,12 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkRuntimeException] {
           ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
-        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
           "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
           "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
-          "value" -> value.toString
-        )
-      )
+          "value" -> value.toString))
     }
   }
 
@@ -79,7 +74,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact
     val validBytes = compactSketch.toByteArrayCompressed
 
-    // Test that wrapCompactSketch can successfully wrap the valid bytes.
+    // Test that wrapCompactSketch can successfully wrap the valid bytes
     val wrappedSketch = ThetaSketchUtils.wrapCompactSketch(validBytes, "test_function")
 
     assert(wrappedSketch != null)
@@ -93,8 +88,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         ThetaSketchUtils.wrapCompactSketch(null, "test_function")
       },
       condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map("function" -> "`test_function`")
-    )
+      parameters = Map("function" -> "`test_function`"))
   }
 
   test("wrapCompactSketch: throws exception for empty bytes") {
@@ -103,8 +97,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         ThetaSketchUtils.wrapCompactSketch(Array.empty[Byte], "test_function")
       },
       condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map("function" -> "`test_function`")
-    )
+      parameters = Map("function" -> "`test_function`"))
   }
 
   test("wrapCompactSketch: throws exception for invalid bytes") {
@@ -114,7 +107,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         ThetaSketchUtils.wrapCompactSketch(invalidBytes, "test_function")
       },
       condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map("function" -> "`test_function`")
-    )
+      parameters = Map("function" -> "`test_function`"))
   }
 }

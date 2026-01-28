@@ -20,7 +20,7 @@ import cProfile
 import os
 import pstats
 from threading import RLock
-from types import TracebackType
+from types import CodeType, TracebackType
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
 import warnings
 
@@ -125,13 +125,16 @@ class WorkerMemoryProfiler:
         self,
         accumulator: Accumulator["ProfileResults"],
         result_key: Union[int, str],
-        func: Callable,
+        func_or_code: Union[Callable, CodeType],
     ) -> None:
         from pyspark.profiler import UDFLineProfilerV2
 
         self._accumulator = accumulator
         self._profiler = UDFLineProfilerV2()
-        self._profiler.add_function(func)
+        if isinstance(func_or_code, CodeType):
+            self._profiler.add_code(func_or_code)
+        else:
+            self._profiler.add_function(func_or_code)
         self._result_key = result_key
 
     def start(self) -> None:

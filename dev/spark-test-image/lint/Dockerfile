@@ -91,7 +91,7 @@ RUN python3.11 -m pip install \
     'jinja2' \
     'matplotlib' \
     'mypy==1.8.0' \
-    'numpy==2.0.2' \
+    'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \
     'pandas-stubs' \

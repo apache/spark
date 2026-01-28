@@ -23,8 +23,9 @@ import org.apache.spark.internal.LogKeys.NAMESPACE
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.util.Utils
 
 /**
@@ -37,22 +38,14 @@ case class CreateNamespaceExec(
     private var properties: Map[String, String])
     extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-
     val ns = namespace.toArray
-    if (!catalog.namespaceExists(ns)) {
-      try {
-        val ownership =
-          Map(PROP_OWNER -> Utils.getCurrentUserName())
-        catalog.createNamespace(ns, (properties ++ ownership).asJava)
-      } catch {
-        case _: NamespaceAlreadyExistsException if ifNotExists =>
-          logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
-            log"Ignoring.")
-      }
-    } else if (!ifNotExists) {
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(ns)
+    try {
+      val ownership = Map(PROP_OWNER -> Utils.getCurrentUserName())
+      catalog.createNamespace(ns, (properties ++ ownership).asJava)
+    } catch {
+      case _: NamespaceAlreadyExistsException if ifNotExists =>
+        logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
+          log"Ignoring.")
     }
 
     Seq.empty
