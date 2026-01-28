@@ -26,7 +26,6 @@ from pyspark.sql.pandas.types import (
     _deduplicate_field_names,
     _create_converter_to_pandas,
     from_arrow_type,
-    is_variant,
     to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
