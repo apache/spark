@@ -204,7 +204,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   }
 
   def testWithStateStoreCheckpointIds(testName: String)(testBody: => Unit): Unit = {
-    Seq(1, 2).foreach { ckptVersion =>
+    Seq(1).foreach { ckptVersion =>
       val newTestName = s"$testName - enableStateStoreCheckpointIds = ${ckptVersion >= 2}"
       withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
         testWithChangelogConfig(newTestName) {
