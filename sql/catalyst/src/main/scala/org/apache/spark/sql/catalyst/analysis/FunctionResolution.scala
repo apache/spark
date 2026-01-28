@@ -96,9 +96,11 @@ class FunctionResolution(
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
     } else if (maybeBuiltinFunctionName(name)) {
       // Explicitly qualified as builtin - lookup only builtin
+      // After validation, last element is the function name (e.g., "abs" from "builtin.abs")
       v1SessionCatalog.lookupBuiltinFunction(name.last)
     } else if (maybeTempFunctionName(name)) {
       // Explicitly qualified as temp - lookup only temp
+      // After validation, last element is the function name (e.g., "func" from "session.func")
       v1SessionCatalog.lookupTempFunction(name.last)
     } else if (name.size == 1) {
       // Unqualified - check temp first (shadowing), then builtin
@@ -589,17 +591,22 @@ object FunctionResolution {
   /**
    * Checks if a multi-part name is qualified with a specific namespace.
    * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
+   * Validates both the namespace prefix AND that a function name is present.
    *
    * @param nameParts The multi-part name to check
    * @param namespace The namespace to check for (e.g., "extension", "builtin", "session")
-   * @return true if qualified with the given namespace
+   * @return true if qualified with the given namespace and has a non-empty function name
    */
   def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
     nameParts.length match {
-      case 2 => nameParts.head.equalsIgnoreCase(namespace)
+      case 2 =>
+        // Format: namespace.funcName (e.g., "builtin.abs")
+        nameParts.head.equalsIgnoreCase(namespace) && nameParts.last.nonEmpty
       case 3 =>
+        // Format: system.namespace.funcName (e.g., "system.builtin.abs")
         nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(namespace)
+        nameParts(1).equalsIgnoreCase(namespace) &&
+        nameParts(2).nonEmpty
       case _ => false
     }
   }
