@@ -677,7 +677,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
 
-    def _create_batch(self, series, *, arrow_cast=False, prefers_large_types=False):
+    def _create_batch(
+        self, series, *, arrow_cast=False, prefers_large_types=False, struct_in_pandas="dict"
+    ):
         """
         Create an Arrow record batch from the given pandas.Series, pandas.DataFrame,
         or list of Series/DataFrame, with optional Spark type.
@@ -691,6 +693,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             If True, use Arrow's cast method for type conversion.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
+        struct_in_pandas : str, optional
+            How to represent struct types in pandas: "dict" or "row".
 
         Returns
         -------
@@ -713,13 +717,20 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         for s, spark_type in series:
             # DataFrame with StructType → struct array; otherwise → regular array
             # Note: callers are responsible for providing DataFrame for struct types
-            is_struct_output = (
-                isinstance(s, pd.DataFrame)
+            is_struct_type = (
+                struct_in_pandas == "dict"
                 and spark_type is not None
                 and isinstance(spark_type, StructType)
                 and not isinstance(spark_type, VariantType)
             )
-            if is_struct_output:
+            if is_struct_type:
+                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
+                # If it returns a pd.Series, it should throw an error.
+                if not isinstance(s, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
                 arrs.append(
                     self._create_struct_array(
                         s, spark_type, prefers_large_types=prefers_large_types
@@ -749,6 +760,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     series,
                     arrow_cast=self._arrow_cast,
                     prefers_large_types=self._prefers_large_types,
+                    struct_in_pandas=self._struct_in_pandas,
                 )
                 for series in iterator
             ),
@@ -954,7 +966,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
 
-    def _create_batch(self, series, *, arrow_cast=False, prefers_large_types=False):
+    def _create_batch(
+        self, series, *, arrow_cast=False, prefers_large_types=False, struct_in_pandas="dict"
+    ):
         """
         Create an Arrow record batch from the given iterable of (dataframe, spark_type) tuples.
 
@@ -966,6 +980,8 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             Unused, kept for compatibility with parent class signature.
         prefers_large_types : bool, optional
             Whether to prefer large Arrow types (e.g., large_string instead of string).
+        struct_in_pandas : str, optional
+            Unused, kept for compatibility with parent class signature.
 
         Returns
         -------
