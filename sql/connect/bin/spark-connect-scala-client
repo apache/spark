@@ -71,6 +71,7 @@ JVM_ARGS="-XX:+IgnoreUnrecognizedVMOptions \
   --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED \
   -Djdk.reflect.useDirectMethodHandle=false \
   -Dio.netty.tryReflectionSetAccessible=true \
+  -Dio.netty.noUnsafe=false
   --enable-native-access=ALL-UNNAMED \
   $SCJVM_ARGS"
 
