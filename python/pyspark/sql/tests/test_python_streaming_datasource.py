@@ -32,7 +32,6 @@ from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
     ReadMaxRows,
-    SupportsAdmissionControl,
     SupportsTriggerAvailableNow,
 )
 from pyspark.sql.streaming import StreamingQueryException
@@ -148,7 +147,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         return TestDataSource
 
     def _get_test_data_source_for_admission_control(self):
-        class TestDataStreamReader(DataSourceStreamReader, SupportsAdmissionControl):
+        class TestDataStreamReader(DataSourceStreamReader):
             def initialOffset(self):
                 return {"partition-1": 0}
 
