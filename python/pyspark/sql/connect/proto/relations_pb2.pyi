@@ -1219,7 +1219,6 @@ class Read(google.protobuf.message.Message):
 
             This is only supported by the JDBC data source.
             """
-
         source_name: builtins.str
         """(Optional) A user-provided name for the streaming source.
         This name is used in checkpoint metadata and enables stable checkpoint locations
