@@ -28223,11 +28223,11 @@ def tuple_sketch_summary_double(
     >>> df = spark.createDataFrame([(1, 10.0), (2, 20.0), (2, 30.0)], ["key", "value"])
     >>> df.agg(sf.tuple_sketch_summary_double(
     ...     sf.tuple_sketch_agg_double("key", "value"))).show()
-    +-------------------------------------------------------------------------+
-    |tuple_sketch_summary_double(tuple_sketch_agg_double(key, value, 12, sum))|
-    +-------------------------------------------------------------------------+
-    |                                                                     60.0|
-    +-------------------------------------------------------------------------+
+    +------------------------------------------------------------------------------+
+    |tuple_sketch_summary_double(tuple_sketch_agg_double(key, value, 12, sum), sum)|
+    +------------------------------------------------------------------------------+
+    |                                                                          60.0|
+    +------------------------------------------------------------------------------+
     """
     fn = "tuple_sketch_summary_double"
     if mode is None:
@@ -28269,11 +28269,11 @@ def tuple_sketch_summary_integer(
     >>> df = spark.createDataFrame([(1, 10), (2, 20), (2, 30)], ["key", "value"])
     >>> df.agg(sf.tuple_sketch_summary_integer(
     ...     sf.tuple_sketch_agg_integer("key", "value"))).show()
-    +---------------------------------------------------------------------------+
-    |tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, value, 12, sum))|
-    +---------------------------------------------------------------------------+
-    |                                                                         60|
-    +---------------------------------------------------------------------------+
+    +--------------------------------------------------------------------------------+
+    |tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, value, 12, sum), sum)|
+    +--------------------------------------------------------------------------------+
+    |                                                                              60|
+    +--------------------------------------------------------------------------------+
     """
     fn = "tuple_sketch_summary_integer"
     if mode is None:
