@@ -32,3 +32,5 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
+    with:
+      java: 25
