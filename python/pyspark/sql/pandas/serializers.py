@@ -570,7 +570,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
                         spark_type=(
-                            self._input_type[i]
+                            self._input_type[i].dataType
                             if hasattr(self, "_input_type") and self._input_type
                             else None
                         ),
@@ -1117,7 +1117,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                         self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i] if self._input_type else None,
+                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(batch.columns)
@@ -1171,7 +1171,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                         self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i] if self._input_type else None,
+                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i in range(batch.num_columns)
@@ -1238,7 +1238,7 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                         self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i] if self._input_type else None,
+                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(pa.Table.from_batches(left_batches).itercolumns())
@@ -1249,7 +1249,7 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                         self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i] if self._input_type else None,
+                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(pa.Table.from_batches(right_batches).itercolumns())
@@ -1424,7 +1424,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i] if self._input_type else None,
+                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(state_arrow)
@@ -1466,7 +1466,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                             self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i] if self._input_type else None,
+                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(data_arrow)
@@ -1743,7 +1743,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                             self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i] if self._input_type else None,
+                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1880,7 +1880,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                             self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i] if self._input_type else None,
+                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(flatten_state_table.itercolumns())
@@ -1893,7 +1893,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                             self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i] if self._input_type else None,
+                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(flatten_init_table.itercolumns())
