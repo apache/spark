@@ -346,12 +346,13 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   /**
-   * Builds an ExtensionRegistry containing all extensions found in the FileDescriptorSet. This
-   * iterates through all FileDescriptors and collects extensions defined at file level and within
-   * nested message types, grouping them by their containing (extended) message type.
+   * Builds an ExtensionRegistry and an index from full name to field descriptor for all extensions
+   * found in the list of provided file descriptors.
+   * 
+   * This method will traverse the AST to ensure extensions in nested scopes are registered as well.
    *
    * @param fileDescriptors
-   *   List of all FileDescriptors from the FileDescriptorSet.
+   *   List of all file descriptors to process
    * @return
    *   The populated ExtensionRegistry and a map from message full names to extension fields
    *   sorted by field number
@@ -359,7 +360,7 @@ private[sql] object ProtobufUtils extends Logging {
   private def buildExtensionRegistry(fileDescriptors: List[Descriptors.FileDescriptor])
       : (ExtensionRegistry, Map[String, Seq[FieldDescriptor]]) = {
     val registry = ExtensionRegistry.newInstance()
-    val messageNameToExtensions = mutable.Map[String, ArrayBuffer[FieldDescriptor]]()
+    val fullNameToExtensions = mutable.Map[String, ArrayBuffer[FieldDescriptor]]()
 
     // Adds an extension to both the registry and map.
     def addExtension(extField: FieldDescriptor): Unit = {
@@ -371,7 +372,7 @@ private[sql] object ProtobufUtils extends Logging {
       } else {
         registry.add(extField)
       }
-      messageNameToExtensions
+      fullNameToExtensions
         .getOrElseUpdate(extendeeName, mutable.ArrayBuffer())
         .append(extField)
     }
@@ -388,7 +389,7 @@ private[sql] object ProtobufUtils extends Logging {
     }
 
     // Sort extension fields by field number for consistent ordering.
-    val sortedMap = messageNameToExtensions.map { case (name, extensions) =>
+    val sortedMap = fullNameToExtensions.map { case (name, extensions) =>
       name -> extensions.sortBy(_.getNumber).toSeq
     }.toMap
     (registry, sortedMap)
