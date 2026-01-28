@@ -194,13 +194,8 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             self.spark._streamingCheckpointManager.repartition("test", 0)
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
-        cast(
-            str,
-            pandas_requirement_message
-            or pyarrow_requirement_message
-            or "Not supported in no-GIL mode",
-        ),
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_repartition_with_apply_in_pandas_with_state(self):
         """Test repartition for a streaming query using applyInPandasWithState."""
@@ -410,6 +405,10 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
 
         self._run_tws_repartition_test(is_pandas=False)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_repartition_with_streaming_tws_in_pandas(self):
         """Test repartition for streaming transformWithStateInPandas."""
 
@@ -525,13 +524,8 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         self._run_repartition_with_streaming_tws_multiple_state_vars_test(is_pandas=False)
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
-        cast(
-            str,
-            pandas_requirement_message
-            or pyarrow_requirement_message
-            or "Not supported in no-GIL mode",
-        ),
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_repartition_with_streaming_tws_in_pandas_multiple_state_vars(self):
         """Test repartition with transformWithStateInPandas using multiple state variable types (value + list + map)."""
