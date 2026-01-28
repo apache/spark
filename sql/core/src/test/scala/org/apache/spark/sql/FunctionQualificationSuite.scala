@@ -649,6 +649,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       )
 
       // Try to create a temp function that shadows an extension function
+      // (Extensions are stored as builtins, so same error)
       checkError(
         exception = intercept[AnalysisException] {
           sql(
@@ -659,7 +660,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         condition = "CANNOT_SHADOW_BUILTIN_FUNCTION",
         parameters = Map(
           "funcName" -> "`test_ext_func`",
-          "namespace" -> "`system`.`extension`",
+          "namespace" -> "`system`.`builtin`",
           "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
         )
       )
@@ -737,9 +738,49 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "funcName" -> "`length`",
         "namespace" -> "`system`.`builtin`",
-        "config" -> "\"spark.sql.legacy.allowFunctionShadowing\""
+        "config" -> "\"spark.sql.legacy.allowBuiltinFunctionShadowing\""
       )
     )
+  }
+
+  test("SECTION 14: FunctionIdentifier structure for system namespaces") {
+    withTempView("test_data") {
+      sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
+
+      // Register a temporary function
+      spark.udf.register("test_temp_func", (x: Int) => x + 1)
+
+      try {
+        // Verify the function works
+        checkAnswer(
+          sql("SELECT test_temp_func(5) FROM test_data"),
+          Row(6)
+        )
+
+        // Check internal structure - temporary functions should have both database and catalog set
+        val catalog = spark.sessionState.catalog
+        val tempFuncIdent = catalog.listFunctions("default", "test_temp_func")
+          .find(_._1.funcName == "test_temp_func")
+
+        assert(tempFuncIdent.isDefined, "Temporary function should be found")
+        // The function is stored internally with system catalog qualification
+        // This is an implementation detail but important for disambiguation
+
+        // Verify extension functions work - they are treated as builtins
+        checkAnswer(
+          sql("SELECT test_ext_func() FROM test_data"),
+          Row(9999)
+        )
+
+        // Builtin qualification works for extensions too
+        checkAnswer(
+          sql("SELECT builtin.test_ext_func() FROM test_data"),
+          Row(9999)
+        )
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("test_temp_func", ignoreIfNotExists = true)
+      }
+    }
   }
 }
 

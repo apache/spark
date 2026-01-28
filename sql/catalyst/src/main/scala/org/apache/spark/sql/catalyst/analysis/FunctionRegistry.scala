@@ -87,7 +87,10 @@ trait FunctionRegistryBase[T] {
     } else {
       // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
       // to enable coexistence with builtin functions of the same name
-      FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
+      FunctionIdentifier(
+        name,
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
     }
     registerFunction(identifier, builder, source)
   }

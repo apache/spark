@@ -97,14 +97,15 @@ class SessionCatalog(
   private val EXTENSION_FUNCTION_DB = CatalogManager.EXTENSION_NAMESPACE
 
   /**
-   * Creates a FunctionIdentifier for an extension function with the EXTENSION_FUNCTION_DB database
-   * qualifier. This enables extension functions to coexist with builtin and temp functions.
+   * Creates a FunctionIdentifier for an extension function.
+   * Extension functions are treated as builtins and stored unqualified.
+   * This allows them to overwrite existing builtins if registered by power users.
    *
    * @param name The function name (unqualified)
-   * @return FunctionIdentifier with database = EXTENSION_FUNCTION_DB
+   * @return FunctionIdentifier without qualification (same as builtins)
    */
   private def extensionFunctionIdentifier(name: String): FunctionIdentifier =
-    FunctionIdentifier(format(name), Some(EXTENSION_FUNCTION_DB))
+    FunctionIdentifier(format(name))
 
   /**
    * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
@@ -114,7 +115,10 @@ class SessionCatalog(
    * @return FunctionIdentifier with database = TEMP_FUNCTION_DB
    */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
-    FunctionIdentifier(format(name), Some(TEMP_FUNCTION_DB))
+    FunctionIdentifier(
+      format(name),
+      Some(TEMP_FUNCTION_DB),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
   /**
    * Checks if a FunctionIdentifier represents an extension function by checking for the
@@ -178,16 +182,14 @@ class SessionCatalog(
     database = Some(CatalogManager.BUILTIN_NAMESPACE),
     catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
-  // The resolution path: extension -> builtin -> session (security-focused order)
+  // The resolution path: builtin -> session (security-focused order)
   private val RESOLUTION_PATH = Seq(
-    EXTENSION_NAMESPACE_TEMPLATE,
     BUILTIN_NAMESPACE_TEMPLATE,
     SESSION_NAMESPACE_TEMPLATE
   )
 
-  // Legacy resolution path: extension -> session -> builtin (pre-4.0 behavior, allows shadowing)
+  // Legacy resolution path: session -> builtin (pre-4.0 behavior, allows shadowing)
   private val LEGACY_RESOLUTION_PATH = Seq(
-    EXTENSION_NAMESPACE_TEMPLATE,
     SESSION_NAMESPACE_TEMPLATE,
     BUILTIN_NAMESPACE_TEMPLATE
   )
@@ -222,16 +224,12 @@ class SessionCatalog(
       namespace: FunctionIdentifier,
       name: String): FunctionIdentifier = {
     namespace.database match {
-      case Some(CatalogManager.EXTENSION_NAMESPACE) =>
-        // Extension functions: stored with database="extension", no catalog
-        extensionFunctionIdentifier(name)
-
       case Some(CatalogManager.SESSION_NAMESPACE) =>
-        // Temp functions: stored with database="session", no catalog
+        // Temp functions: stored with database="session", catalog="system"
         tempFunctionIdentifier(name)
 
       case Some(CatalogManager.BUILTIN_NAMESPACE) =>
-        // Builtin functions: stored with no database or catalog
+        // Builtin functions (including extensions): stored unqualified
         FunctionIdentifier(format(name))
 
       case other =>
@@ -2187,23 +2185,16 @@ class SessionCatalog(
     }
 
     // Security check: When legacy mode is disabled, block creation of temporary functions
-    // that would shadow builtin or extension functions
+    // that would shadow builtin functions (including extensions)
     if (func.database.isEmpty && useCompositeKey && !conf.legacyAllowBuiltinFunctionShadowing &&
         !overrideIfExists) {
       val funcName = func.funcName
-      // Check if function exists in builtin namespace
+      // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionIdentifier(format(funcName))
       if (functionRegistry.functionExists(builtinIdent) ||
           tableFunctionRegistry.functionExists(builtinIdent)) {
         throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
           funcName, "system.builtin")
-      }
-      // Check if function exists in extension namespace
-      val extensionIdent = extensionFunctionIdentifier(funcName)
-      if (functionRegistry.functionExists(extensionIdent) ||
-          tableFunctionRegistry.functionExists(extensionIdent)) {
-        throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
-          funcName, "system.extension")
       }
     }
 
@@ -2311,22 +2302,15 @@ class SessionCatalog(
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
       // Security check: When legacy mode is disabled, block creation of temporary functions
-      // that would shadow builtin or extension functions
+      // that would shadow builtin functions (including extensions)
       if (!conf.legacyAllowBuiltinFunctionShadowing && !overrideIfExists) {
         val funcName = function.name.funcName
-        // Check if function exists in builtin namespace
+        // Check if function exists in builtin namespace (extensions are stored as builtins)
         val builtinIdent = FunctionIdentifier(format(funcName))
         if (functionRegistry.functionExists(builtinIdent) ||
             tableFunctionRegistry.functionExists(builtinIdent)) {
           throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
             funcName, "system.builtin")
-        }
-        // Check if function exists in extension namespace
-        val extensionIdent = extensionFunctionIdentifier(funcName)
-        if (functionRegistry.functionExists(extensionIdent) ||
-            tableFunctionRegistry.functionExists(extensionIdent)) {
-          throw QueryCompilationErrors.cannotShadowBuiltinFunctionError(
-            funcName, "system.extension")
         }
       }
 

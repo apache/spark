@@ -544,7 +544,7 @@
   "CANNOT_SHADOW_BUILTIN_FUNCTION" : {
     "message" : [
       "Cannot create temporary function <funcName>: a function with this name already exists in namespace <namespace>.",
-      "Temporary functions cannot shadow builtin or session functions unless <config> is set to true."
+      "Temporary functions cannot shadow builtin functions (including extensions) unless <config> is set to true."
     ],
     "sqlState" : "42723"
   },
