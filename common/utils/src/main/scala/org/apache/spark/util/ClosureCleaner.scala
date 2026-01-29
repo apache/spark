@@ -18,10 +18,10 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
+import java.lang.invoke.{LambdaMetafactory, MethodHandle, MethodHandleInfo, MethodHandles, MethodType, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
-import scala.collection.mutable.{Map, Queue, Set, Stack}
+import scala.collection.mutable.{ArrayBuffer, Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Opcodes, Type}
@@ -190,10 +190,12 @@ private[spark] object ClosureCleaner extends Logging {
    * @param accessedFields    a map from a class to a set of its fields that are accessed by
    *                          the starting closure
    */
-  private[spark] def clean(
-      func: AnyRef,
+  private[spark] def clean[F <: AnyRef](
+      func: F,
       cleanTransitively: Boolean,
-      accessedFields: Map[Class[_], Set[String]]): Boolean = {
+      accessedFields: Map[Class[_], Set[String]]): Option[F] = {
+    var cleanedFunc: F = func
+
     // indylambda check. Most likely to be the case with 2.12, 2.13
     // so we check first
     // non LMF-closures should be less frequent from now on
@@ -201,14 +203,14 @@ private[spark] object ClosureCleaner extends Logging {
 
     if (!isClosure(func.getClass) && maybeIndylambdaProxy.isEmpty) {
       logDebug(s"Expected a closure; got ${func.getClass.getName}")
-      return false
+      return None
     }
 
     // TODO: clean all inner closures first. This requires us to find the inner objects.
     // TODO: cache outerClasses / innerClasses / accessedFields
 
     if (func == null) {
-      return false
+      return None
     }
 
     if (maybeIndylambdaProxy.isEmpty) {
@@ -232,9 +234,9 @@ private[spark] object ClosureCleaner extends Logging {
 
       val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
         // only need to clean when there is an enclosing non-null "this" captured by the closure
-        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return false)
+        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return None)
       } else {
-        return false
+        return None
       }
 
       // clean only if enclosing "this" is something cleanable, i.e. a Scala REPL line object or
@@ -244,22 +246,28 @@ private[spark] object ClosureCleaner extends Logging {
       if (isDefinedInAmmonite(outerThis.getClass)) {
         // If outerThis is a lambda, we have to clean that instead
         IndylambdaScalaClosures.getSerializationProxy(outerThis).foreach { _ =>
-          return clean(outerThis, cleanTransitively, accessedFields)
+          val cleanedOuterThis = clean(outerThis, cleanTransitively, accessedFields)
+          if (cleanedOuterThis.isEmpty) {
+            return None
+          } else {
+            return Some(
+              cloneIndyLambda(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
+          }
         }
-        cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
+        cleanedFunc = cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
       } else {
         val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
           capturingClassName.endsWith("$iw")
         if (isClosureDeclaredInScalaRepl && outerThis.getClass.getName == capturingClassName) {
           assert(accessedFields.isEmpty)
-          cleanupScalaReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
+          cleanedFunc = cleanupScalaReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
         }
       }
 
       logDebug(s" +++ indylambda closure ($implMethodName) is now cleaned +++")
     }
 
-    true
+    Some(cleanedFunc)
   }
 
   /**
@@ -395,11 +403,11 @@ private[spark] object ClosureCleaner extends Logging {
    * @param outerThis lambda enclosing class
    * @param cleanTransitively whether to clean enclosing closures transitively
    */
-  private def cleanupScalaReplClosure(
-      func: AnyRef,
+  private def cleanupScalaReplClosure[F <: AnyRef](
+      func: F,
       lambdaProxy: SerializedLambda,
       outerThis: AnyRef,
-      cleanTransitively: Boolean): Unit = {
+      cleanTransitively: Boolean): F = {
 
     val capturingClass = outerThis.getClass
     val accessedFields: Map[Class[_], Set[String]] = Map.empty
@@ -421,13 +429,17 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
       val clonedOuterThis = cloneAndSetFields(
         parent = null, outerThis, capturingClass, accessedFields)
-
-      val outerField = func.getClass.getDeclaredField("arg$1")
-      // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-      // the content of `outerField` cannot be set by reflect api directly.
-      // But we can remove the `final` modifier of `outerField` before set value
-      // and reset the modifier after set value.
-      setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+      cloneIndyLambda(func, clonedOuterThis, lambdaProxy).getOrElse {
+        val outerField = func.getClass.getDeclaredField("arg$1")
+        // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+        // the content of `outerField` cannot be set by reflect api directly.
+        // But we can remove the `final` modifier of `outerField` before set value
+        // and reset the modifier after set value.
+        setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+        func
+      }
+    } else {
+      func
     }
   }
 
@@ -456,11 +468,11 @@ private[spark] object ClosureCleaner extends Logging {
    * @param outerThis         lambda enclosing class
    * @param cleanTransitively whether to clean enclosing closures transitively
    */
-  private def cleanupAmmoniteReplClosure(
-      func: AnyRef,
+  private def cleanupAmmoniteReplClosure[F <: AnyRef](
+      func: F,
       lambdaProxy: SerializedLambda,
       outerThis: AnyRef,
-      cleanTransitively: Boolean): Unit = {
+      cleanTransitively: Boolean): F = {
 
     val accessedFields: Map[Class[_], Set[String]] = Map.empty
     initAccessedFields(accessedFields, Seq(outerThis.getClass))
@@ -549,9 +561,12 @@ private[spark] object ClosureCleaner extends Logging {
       cmdClones(outerThis.getClass)
     }
 
-    val outerField = func.getClass.getDeclaredField("arg$1")
-    // update lambda capturing class reference
-    setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+    cloneIndyLambda(func, outerThisClone, lambdaProxy).getOrElse {
+      val outerField = func.getClass.getDeclaredField("arg$1")
+      // update lambda capturing class reference
+      setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+      func
+    }
   }
 
   private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
@@ -594,6 +609,91 @@ private[spark] object ClosureCleaner extends Logging {
       field.set(obj, enclosingObject)
     }
     obj
+  }
+
+  private def cloneIndyLambda[F <: AnyRef](
+      indyLambda: F,
+      outerThis: AnyRef,
+      lambdaProxy: SerializedLambda): Option[F] = {
+    val javaVersion = Runtime.version().feature()
+    val useClone = System.getProperty("spark.cloneBasedClosureCleaner.enabled") == "true" ||
+      System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22
+
+    if (useClone) {
+      val factory = makeClonedIndyLambdaFacory(indyLambda.getClass, lambdaProxy)
+
+      val argsBuffer = new ArrayBuffer[Object]()
+      var i = 0
+      while (i < lambdaProxy.getCapturedArgCount) {
+        val arg = lambdaProxy.getCapturedArg(i)
+        argsBuffer.append(arg)
+        i += 1
+      }
+      val clonedLambda =
+        factory.invokeWithArguments(outerThis +: argsBuffer.tail.toArray: _*).asInstanceOf[F]
+      Some(clonedLambda)
+    } else {
+      None
+    }
+  }
+
+  private def makeClonedIndyLambdaFacory(
+      originalFuncClass: Class[_],
+      lambdaProxy: SerializedLambda): MethodHandle = {
+    val classLoader = originalFuncClass.getClassLoader
+
+    // scalastyle:off classforname
+    val fInterface = Class.forName(
+      lambdaProxy.getFunctionalInterfaceClass.replace("/", "."), false, classLoader)
+    // scalastyle:on classforname
+    val numCapturedArgs = lambdaProxy.getCapturedArgCount
+    val implMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getImplMethodSignature, classLoader)
+    val invokedMethodType = MethodType.methodType(
+      fInterface, (0 until numCapturedArgs).map(i => implMethodType.parameterType(i)).toArray)
+
+    // scalastyle:off classforname
+    val implClassName = lambdaProxy.getImplClass.replace("/", ".")
+    val implClass = Class.forName(implClassName, false, classLoader)
+    // scalastyle:on classforname
+    val replLookup = getFullPowerLookupFor(implClass)
+
+    val implMethodName = lambdaProxy.getImplMethodName
+    val implMethodHandle = replLookup.findStatic(implClass, implMethodName, implMethodType)
+    val funcMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getFunctionalInterfaceMethodSignature, classLoader)
+    val instantiatedMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getInstantiatedMethodType, classLoader)
+
+    val callSite = LambdaMetafactory.altMetafactory(
+      replLookup,
+      lambdaProxy.getFunctionalInterfaceMethodName,
+      invokedMethodType,
+      funcMethodType,
+      implMethodHandle,
+      instantiatedMethodType,
+      LambdaMetafactory.FLAG_SERIALIZABLE)
+
+    callSite.getTarget
+  }
+
+  /**
+   * This method is used for full-power lookup for `targetClass` which is used for cloning lambdas
+   * crated at each REPL line. `targetClass` is expected the enclosing class of a lambda.
+   * `MethodHandles.privateLookupIn(targetClass, MethodHandles.lookup())` is not
+   * helpful for such use case because targetClass and `ClosureCleaner` which
+   * `MethodHandles.lookup()` calls are loaded into different class loaders, and the method returns
+   * a lookup which doesn't enough privilege to create a lambda using
+   * LambdaMetaFactory.altMetafactory.
+   */
+  private def getFullPowerLookupFor(targetClass: Class[_]): MethodHandles.Lookup = {
+    val replLookupCtor = classOf[MethodHandles.Lookup].getDeclaredConstructor(
+      classOf[Class[_]],
+      classOf[Class[_]],
+      classOf[Int])
+    replLookupCtor.setAccessible(true)
+    // -1 means full-power.
+    replLookupCtor.newInstance(targetClass, null, -1)
   }
 }
 
