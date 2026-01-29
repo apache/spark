@@ -457,13 +457,13 @@ org.apache.spark.sql.AnalysisException
 BEGIN
   DECLARE v1 INT;
   DECLARE no_data_flag BOOLEAN DEFAULT false;
-  
+
   -- Handler catches NO DATA condition
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET no_data_flag = true;
-  
+
   SET VAR v1 = 42;
   SELECT id INTO v1 FROM tbl_view WHERE 1=0;  -- Triggers handler
-  
+
   -- Execution continues, variables unchanged, flag set
   SELECT v1, no_data_flag;
 END;
@@ -481,13 +481,13 @@ BEGIN
   DECLARE v1 INT;
   DECLARE v2 STRING;
   DECLARE found BOOLEAN DEFAULT true;
-  
+
   DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' SET found = false;
-  
+
   SET VAR v1 = 99;
   SET VAR v2 = 'initial';
   SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999;  -- Triggers handler
-  
+
   SELECT v1, v2, found;
 END;
 -- !query schema
@@ -502,15 +502,15 @@ struct<v1:int,v2:string,found:boolean>
 -- !query
 BEGIN
   DECLARE v1 INT;
-  
+
   -- EXIT handler terminates the block
   DECLARE EXIT HANDLER FOR NOT FOUND BEGIN
     VALUES ('Handler executed - no data found');
   END;
-  
+
   SET VAR v1 = 100;
   SELECT id INTO v1 FROM tbl_view WHERE FALSE;  -- Triggers handler, exits block
-  
+
   VALUES ('This should not execute');
 END;
 -- !query schema
@@ -526,12 +526,12 @@ Handler executed - no data found
 BEGIN
   DECLARE my_struct STRUCT<x: INT, y: STRING>;
   DECLARE handled BOOLEAN DEFAULT false;
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET handled = true;
-  
+
   SET VAR my_struct = named_struct('x', 100, 'y', 'original');
   SELECT id, name INTO my_struct FROM tbl_view WHERE id < 0;  -- Triggers handler
-  
+
   SELECT my_struct, handled;
 END;
 -- !query schema
