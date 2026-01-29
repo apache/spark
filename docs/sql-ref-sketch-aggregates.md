@@ -22,10 +22,11 @@ license: |
 Spark's SQL and DataFrame APIs provide a collection of sketch-based approximate functions powered by the [Apache DataSketches](https://datasketches.apache.org/) library. These functions enable efficient probabilistic computations on large datasets with bounded memory usage and accuracy guarantees.
 
 Sketches are compact data structures that summarize large datasets, supporting distributed aggregation through serialization and merging. This makes them ideal for use cases including (so far):
-- **Approximate count distinct** (HLL and Theta sketches)
+- **Approximate count distinct** (HLL, Theta, and Tuple sketches)
 - **Approximate quantile estimation** (KLL sketches)
 - **Approximate frequent items** (Top-K sketches)
-- **Set operations** on distinct counts (Theta sketches)
+- **Set operations** on distinct counts (Theta and Tuple sketches)
+- **Distinct counting with aggregated summaries** (Tuple sketches)
 
 ### Table of Contents
 
@@ -42,6 +43,16 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [theta_union](#theta_union)
   * [theta_intersection](#theta_intersection)
   * [theta_difference](#theta_difference)
+* [Tuple Sketch Functions](#tuple-sketch-functions)
+  * [tuple_sketch_agg_*](#tuple_sketch_agg_)
+  * [tuple_union_agg_*](#tuple_union_agg_)
+  * [tuple_intersection_agg_*](#tuple_intersection_agg_)
+  * [tuple_sketch_estimate_*](#tuple_sketch_estimate_)
+  * [tuple_sketch_summary_*](#tuple_sketch_summary_)
+  * [tuple_sketch_theta_*](#tuple_sketch_theta_)
+  * [tuple_union_*](#tuple_union_)
+  * [tuple_intersection_*](#tuple_intersection_)
+  * [tuple_difference_*](#tuple_difference_)
 * [KLL Quantile Sketch Functions](#kll-quantile-sketch-functions)
   * [kll_sketch_agg_*](#kll_sketch_agg_)
   * [kll_merge_agg_*](#kll_merge_agg_)
@@ -63,6 +74,7 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [Example: Computing Percentiles Over Time with KLL Sketches](#example-computing-percentiles-over-time-with-kll-sketches)
   * [Example: Set Operations with Theta Sketches](#example-set-operations-with-theta-sketches)
   * [Example: Finding Trending Items with Top-K Sketches](#example-finding-trending-items-with-top-k-sketches)
+  * [Example: Distinct Users with Aggregated Metrics Using Tuple Sketches](#example-distinct-users-with-aggregated-metrics-using-tuple-sketches)
 
 ---
 
@@ -219,6 +231,8 @@ FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
 ## Theta Sketch Functions
 
 Theta sketches provide approximate count distinct with support for set operations (union, intersection, and difference). This makes them ideal for computing unique counts across overlapping datasets.
+
+**Note:** If you need to track both distinct counts AND aggregated metrics (like sum, min, or max of associated values), consider using [Tuple Sketch Functions](#tuple-sketch-functions) instead, which extend Theta sketches with numeric summary values.
 
 See the [Apache DataSketches Theta documentation](https://datasketches.apache.org/docs/Theta/ThetaSketches.html) for more information.
 
@@ -429,6 +443,307 @@ SELECT theta_sketch_estimate(
     theta_sketch_agg(col2)))
 FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
 -- Result: 2 (values 2 and 3 are in col1 but not col2)
+```
+
+---
+
+## Tuple Sketch Functions
+
+Tuple sketches extend Theta sketches by associating a numeric summary value with each distinct key. They provide approximate distinct counting with set operations (union, intersection, difference) while also aggregating summary values using configurable modes (sum, min, max, etc.). This makes them useful for scenarios where you need both cardinality estimation and aggregated metrics.
+
+**Note:** If you only need distinct counting without aggregated metrics, consider using [Theta Sketch Functions](#theta-sketch-functions) instead, which are more memory-efficient for pure cardinality estimation with set operations.
+
+See the [Apache DataSketches Tuple documentation](https://datasketches.apache.org/docs/Tuple/TupleOverview.html) for more information.
+
+Tuple functions are type-specific:
+- **DOUBLE** variants: For double-precision floating-point summary values
+- **INTEGER** variants: For integer summary values
+
+**Summary Aggregation Modes:**
+When multiple values are associated with the same key (during sketch creation or set operations), the mode parameter determines how summary values are combined:
+- **sum**: Adds all summary values together (default)
+- **min**: Keeps the minimum summary value
+- **max**: Keeps the maximum summary value
+- **alwaysone**: Sets all summary values to 1, effectively treating the sketch like a Theta sketch (useful for converting Tuple sketches to cardinality-only analysis)
+
+### tuple_sketch_agg_*
+
+Creates a Tuple sketch from key-value pairs, aggregating summary values for distinct keys.
+
+**Syntax:**
+```sql
+tuple_sketch_agg_double(key, summary [, lgNomEntries] [, mode])
+tuple_sketch_agg_integer(key, summary [, lgNomEntries] [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `key` | INT, BIGINT, FLOAT, DOUBLE, STRING, BINARY, ARRAY&lt;INT&gt;, or ARRAY&lt;BIGINT&gt; | The key column for distinct counting |
+| `summary` | DOUBLE (for _double) or INT (for _integer) | The numeric value to aggregate for each key |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns a BINARY containing the Tuple sketch in compact binary representation.
+
+**Examples:**
+```sql
+-- Basic usage: count distinct keys and sum their values
+SELECT
+  tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, value)) as distinct_keys,
+  tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, value)) as total_value
+FROM VALUES (1, 10), (2, 20), (2, 30) tab(key, value);
+-- Result: distinct_keys=2, total_value=60
+
+-- With custom lgNomEntries and mode
+SELECT tuple_sketch_summary_double(
+  tuple_sketch_agg_double(key, value, 16, 'sum'), 'max')
+FROM VALUES (1, 10.0), (2, 20.0), (2, 30.0) tab(key, value);
+-- Result: 50.0 (max value for distinct keys)
+```
+
+**Notes:**
+- NULL keys are ignored during aggregation.
+- When the same key appears multiple times, summary values are aggregated according to the mode parameter.
+- The sketch can be stored and later merged using tuple union/intersection functions.
+
+---
+
+### tuple_union_agg_*
+
+Aggregates multiple Tuple sketches using union operation, combining distinct keys from all sketches.
+
+**Syntax:**
+```sql
+tuple_union_agg_double(sketch [, lgNomEntries] [, mode])
+tuple_union_agg_integer(sketch [, lgNomEntries] [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A Tuple sketch in binary format |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns a BINARY containing the merged Tuple sketch.
+
+**Examples:**
+```sql
+-- Merge sketches from different data sources
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch))
+FROM (
+  SELECT tuple_sketch_agg_double(key, value) as sketch
+  FROM VALUES (1, 10.0), (2, 20.0) tab(key, value)
+  UNION ALL
+  SELECT tuple_sketch_agg_double(key, value) as sketch
+  FROM VALUES (3, 30.0), (4, 40.0) tab(key, value)
+);
+-- Result: 4.0 (union of keys 1,2,3,4)
+```
+
+---
+
+### tuple_intersection_agg_*
+
+Aggregates multiple Tuple sketches using intersection operation, finding common distinct keys.
+
+**Syntax:**
+```sql
+tuple_intersection_agg_double(sketch [, mode])
+tuple_intersection_agg_integer(sketch [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A Tuple sketch in binary format |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns a BINARY containing the intersected Tuple sketch.
+
+**Examples:**
+```sql
+-- Find common keys across sketches
+SELECT tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch))
+FROM (
+  SELECT tuple_sketch_agg_integer(key, value) as sketch
+  FROM VALUES (1, 10), (2, 20), (3, 30) tab(key, value)
+  UNION ALL
+  SELECT tuple_sketch_agg_integer(key, value) as sketch
+  FROM VALUES (2, 40), (3, 50), (4, 60) tab(key, value)
+);
+-- Result: 2.0 (keys 2 and 3 are common)
+```
+
+---
+
+### tuple_sketch_estimate_*
+
+Estimates the number of distinct keys from a Tuple sketch.
+
+**Syntax:**
+```sql
+tuple_sketch_estimate_double(sketch)
+tuple_sketch_estimate_integer(sketch)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A Tuple sketch in binary format |
+
+Returns a DOUBLE representing the estimated count of distinct keys.
+
+**Examples:**
+```sql
+SELECT tuple_sketch_estimate_double(
+  tuple_sketch_agg_double(key, value))
+FROM VALUES (1, 10.0), (2, 20.0), (2, 30.0) tab(key, value);
+-- Result: 2.0
+```
+
+---
+
+### tuple_sketch_summary_*
+
+Returns the aggregated summary value from a Tuple sketch.
+
+**Syntax:**
+```sql
+tuple_sketch_summary_double(sketch [, mode])
+tuple_sketch_summary_integer(sketch [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A Tuple sketch in binary format |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns the aggregated summary value (DOUBLE or BIGINT depending on variant).
+
+**Examples:**
+```sql
+-- Get the sum of all summary values
+SELECT tuple_sketch_summary_integer(
+  tuple_sketch_agg_integer(key, value))
+FROM VALUES (1, 10), (2, 20), (2, 30) tab(key, value);
+-- Result: 60 (10 + 20 + 30, with key 2's values summed)
+```
+
+---
+
+### tuple_sketch_theta_*
+
+Returns the theta value from a Tuple sketch, indicating sampling rate.
+
+**Syntax:**
+```sql
+tuple_sketch_theta_double(sketch)
+tuple_sketch_theta_integer(sketch)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A Tuple sketch in binary format |
+
+Returns a DOUBLE between 0.0 and 1.0 representing the theta value (1.0 means no sampling).
+
+**Examples:**
+```sql
+SELECT tuple_sketch_theta_double(
+  tuple_sketch_agg_double(key, value))
+FROM VALUES (1, 10.0), (2, 20.0) tab(key, value);
+-- Result: 1.0
+```
+
+---
+
+### tuple_union_*
+
+Merges two Tuple sketches using union (scalar function).
+
+**Syntax:**
+```sql
+tuple_union_double(first, second [, lgNomEntries] [, mode])
+tuple_union_integer(first, second [, lgNomEntries] [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `first` | BINARY | First Tuple sketch |
+| `second` | BINARY | Second Tuple sketch |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns a BINARY containing the merged Tuple sketch.
+
+**Examples:**
+```sql
+-- Union of two sketches from different columns
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, v1),
+    tuple_sketch_agg_double(key2, v2)))
+FROM VALUES (1, 10.0, 3, 30.0), (2, 20.0, 4, 40.0) tab(key1, v1, key2, v2);
+-- Result: 4.0 (keys 1,2,3,4 are in the union)
+```
+
+---
+
+### tuple_intersection_*
+
+Computes the intersection of two Tuple sketches (scalar function).
+
+**Syntax:**
+```sql
+tuple_intersection_double(first, second [, mode])
+tuple_intersection_integer(first, second [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `first` | BINARY | First Tuple sketch |
+| `second` | BINARY | Second Tuple sketch |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
+
+Returns a BINARY containing the intersected Tuple sketch.
+
+**Examples:**
+```sql
+-- Find keys present in both sketches
+SELECT tuple_sketch_estimate_integer(
+  tuple_intersection_integer(
+    tuple_sketch_agg_integer(key1, v1),
+    tuple_sketch_agg_integer(key2, v2)))
+FROM VALUES (1, 10, 2, 20), (2, 20, 3, 30), (3, 30, 4, 40) tab(key1, v1, key2, v2);
+-- Result: 2.0 (keys 2 and 3 are common)
+```
+
+---
+
+### tuple_difference_*
+
+Computes the set difference of two Tuple sketches (A - B), returning keys in the first sketch but not in the second.
+
+**Syntax:**
+```sql
+tuple_difference_double(first, second)
+tuple_difference_integer(first, second)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `first` | BINARY | First Tuple sketch (A) |
+| `second` | BINARY | Second Tuple sketch (B) |
+
+Returns a BINARY containing a Tuple sketch representing keys in A but not in B.
+
+**Examples:**
+```sql
+-- Find keys only in first sketch
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, v1),
+    tuple_sketch_agg_double(key2, v2)))
+FROM VALUES (1, 10.0, 4, 40.0), (2, 20.0, 4, 40.0), (3, 30.0, 5, 50.0), (4, 40.0, 5, 50.0) tab(key1, v1, key2, v2);
+-- Result: 3.0 (keys 1, 2, 3 are in key1 but not key2)
 ```
 
 ---
@@ -782,14 +1097,16 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 
 ## Best Practices
 
-### Choosing Between HLL and Theta Sketches
+### Choosing Between HLL, Theta, and Tuple Sketches
 
 | Use Case | Recommended Sketch |
 |----------|-------------------|
-| Simple count distinct | HLL (more memory efficient) |
-| Set operations (union, intersection, difference) | Theta |
+| Simple count distinct | HLL (most memory efficient) |
+| Set operations (union, intersection, difference) | Theta or Tuple |
+| Distinct count with aggregated metrics (sum, min, max) | Tuple |
 | Very high cardinality with moderate accuracy | HLL with higher lgConfigK |
-| Need to compute overlaps between datasets | Theta |
+| Need to compute overlaps between datasets | Theta or Tuple |
+| Counting distinct users with total spend | Tuple (key=user_id, summary=spend) |
 
 ### Accuracy vs. Memory Trade-offs
 
@@ -797,6 +1114,7 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 |-------------|-----------|---------------------|
 | HLL | lgConfigK | Higher accuracy, more memory (2^lgConfigK bytes) |
 | Theta | lgNomEntries | Higher accuracy, more memory (8 * 2^lgNomEntries bytes) |
+| Tuple | lgNomEntries | Higher accuracy, more memory (16 * 2^lgNomEntries bytes for double, 12 * 2^lgNomEntries bytes for integer) |
 | KLL | k | Higher accuracy, more memory |
 | Top-K | maxItemsTracked | Better heavy-hitter detection, more memory |
 
@@ -980,9 +1298,87 @@ WHERE hour_ts = TIMESTAMP'2024-01-15 14:00:00';
 
 -- Query: Get top 10 searches across the full day by combining sketches
 SELECT approx_top_k_estimate(
-  approx_top_k_combine(search_sketch, 10000), 
+  approx_top_k_combine(search_sketch, 10000),
   10
 ) as daily_top_searches
 FROM hourly_search_sketches
 WHERE DATE(hour_ts) = DATE'2024-01-15';
+```
+
+### Example: Distinct Users with Aggregated Metrics Using Tuple Sketches
+
+Tuple sketches enable tracking both distinct counts and aggregated metrics simultaneously. This is useful for scenarios like counting unique users while also summing their activity metrics.
+
+```sql
+-- Create a table to store daily tuple sketches tracking users and their spend
+CREATE TABLE daily_user_spend_sketches (
+  event_date DATE,
+  user_spend_sketch BINARY
+) USING PARQUET;
+
+-- Day 1: Track distinct users with their total spend
+INSERT INTO daily_user_spend_sketches
+SELECT
+  DATE'2024-01-01' as event_date,
+  tuple_sketch_agg_double(user_id, purchase_amount) as user_spend_sketch
+FROM purchases_day1;
+
+-- Day 2: Track next day's users and spend
+INSERT INTO daily_user_spend_sketches
+SELECT
+  DATE'2024-01-02' as event_date,
+  tuple_sketch_agg_double(user_id, purchase_amount) as user_spend_sketch
+FROM purchases_day2;
+
+-- Query: Get distinct users and total spend for a single day
+SELECT
+  event_date,
+  tuple_sketch_estimate_double(user_spend_sketch) as unique_users,
+  tuple_sketch_summary_double(user_spend_sketch) as total_spend
+FROM daily_user_spend_sketches
+WHERE event_date = DATE'2024-01-01';
+
+-- Query: Get unique users and total spend across a week (merging sketches)
+SELECT
+  tuple_sketch_estimate_double(tuple_union_agg_double(user_spend_sketch)) as weekly_unique_users,
+  tuple_sketch_summary_double(tuple_union_agg_double(user_spend_sketch)) as weekly_total_spend
+FROM daily_user_spend_sketches
+WHERE event_date BETWEEN DATE'2024-01-01' AND DATE'2024-01-07';
+
+-- Query: Find users who made purchases in week 1 but not week 2
+WITH week1_sketch AS (
+  SELECT tuple_union_agg_double(user_spend_sketch) as sketch
+  FROM daily_user_spend_sketches
+  WHERE event_date BETWEEN DATE'2024-01-01' AND DATE'2024-01-07'
+),
+week2_sketch AS (
+  SELECT tuple_union_agg_double(user_spend_sketch) as sketch
+  FROM daily_user_spend_sketches
+  WHERE event_date BETWEEN DATE'2024-01-08' AND DATE'2024-01-14'
+)
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    (SELECT sketch FROM week1_sketch),
+    (SELECT sketch FROM week2_sketch)
+  )
+) as churned_users;
+
+-- Query: Find users who purchased in both weeks (intersection)
+WITH week1_sketch AS (
+  SELECT tuple_union_agg_double(user_spend_sketch) as sketch
+  FROM daily_user_spend_sketches
+  WHERE event_date BETWEEN DATE'2024-01-01' AND DATE'2024-01-07'
+),
+week2_sketch AS (
+  SELECT tuple_union_agg_double(user_spend_sketch) as sketch
+  FROM daily_user_spend_sketches
+  WHERE event_date BETWEEN DATE'2024-01-08' AND DATE'2024-01-14'
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_intersection_double(
+      (SELECT sketch FROM week1_sketch),
+      (SELECT sketch FROM week2_sketch)
+    )
+  ) as retained_users;
 ```
