@@ -125,7 +125,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     dataSchema: StructType,
     initStateSchema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -133,12 +133,12 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
-    funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
+    funcs, evalType, argOffsets, dataSchema, processorHandle, timeZoneId,
     initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[GroupedInType] {
 
-  override protected lazy val schema: StructType = new StructType()
+  override protected val schema: StructType = new StructType()
     .add("inputData", dataSchema)
     .add("initState", initStateSchema)
 
