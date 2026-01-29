@@ -303,7 +303,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           executorSummary = None,
           speculationSummary = None,
           killedTasksSummary = Map(),
-          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
+          resourceProfileId = ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
           peakExecutorMetrics = None,
           taskMetricsDistributions = None,
           executorMetricsDistributions = None,
