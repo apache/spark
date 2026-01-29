@@ -35,7 +35,7 @@ import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
@@ -2264,6 +2264,81 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
       }
     }
+  }
+
+  test("RocksDB: merge operator version 1 uses comma delimiter") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete()
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          db.put("a", "1")
+          db.merge("a", "2")
+          db.commit()
+
+          db.load(1)
+          db.merge("a", "3")
+          db.commit()
+
+          db.load(1)
+          assert(new String(db.get("a")) === "1,2")
+
+          db.load(2)
+          assert(new String(db.get("a")) === "1,2,3")
+        }
+      }
+    }
+  }
+
+  test("RocksDB: merge operator version 2 uses empty delimiter") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete()
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          // Test that merge concatenates without any delimiter
+          db.put("key1", "hello")
+          db.merge("key1", "world")
+          db.commit()
+
+          db.load(1)
+          assert(new String(db.get("key1")) === "helloworld")
+
+          // Test multiple merges concatenate directly
+          db.put("key2", "a")
+          db.merge("key2", "b")
+          db.merge("key2", "c")
+          db.commit()
+
+          db.load(2)
+          assert(new String(db.get("key2")) === "abc")
+
+          // Test merging with special characters and numbers
+          db.put("key3", "test123")
+          db.merge("key3", "!@#")
+          db.merge("key3", "456")
+          db.commit()
+
+          db.load(3)
+          assert(new String(db.get("key3")) === "test123!@#456")
+        }
+      }
+    }
+  }
+
+  test("RocksDB: merge operator version validation") {
+    // Validation happens at SQLConf level
+    val ex = intercept[SparkIllegalArgumentException] {
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "99") {
+        // This should fail before we get here
+      }
+    }
+    assert(ex.getMessage.contains("Must be 1 or 2"))
+    assert(ex.getMessage.contains("99"))
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies("RocksDBFileManager: delete orphan files",

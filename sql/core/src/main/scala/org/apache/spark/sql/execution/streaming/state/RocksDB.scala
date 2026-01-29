@@ -127,7 +127,15 @@ class RocksDB(
   rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
   rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
   rocksDbOptions.setAvoidFlushDuringShutdown(true)
-  rocksDbOptions.setMergeOperator(new StringAppendOperator())
+  // Set merge operator based on version for backward compatibility
+  // Version 1: comma delimiter ",", Version 2: empty string ""
+  val mergeDelimiter = conf.mergeOperatorVersion match {
+    case 1 => ","
+    case 2 => ""
+    case v => throw new IllegalArgumentException(
+      s"Invalid merge operator version: $v. Supported versions are 1 and 2")
+  }
+  rocksDbOptions.setMergeOperator(new StringAppendOperator(mergeDelimiter))
 
   if (conf.boundedMemoryUsage) {
     rocksDbOptions.setWriteBufferManager(writeBufferManager)
@@ -2391,6 +2399,7 @@ case class RocksDBConf(
     fileChecksumEnabled: Boolean,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
+    mergeOperatorVersion: Int,
     stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
@@ -2498,6 +2507,15 @@ object RocksDBConf {
   private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
     SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
 
+  // Configuration to set the merge operator version for backward compatibility.
+  // Version 1 (default): Uses comma "," as delimiter for StringAppendOperator
+  // Version 2: Uses empty string "" as delimiter (no delimiter, direct concatenation)
+  //
+  // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION`.
+  // These two places should be updated together.
+  val MERGE_OPERATOR_VERSION_CONF_KEY = "mergeOperatorVersion"
+  private val MERGE_OPERATOR_VERSION_CONF = SQLConfEntry(MERGE_OPERATOR_VERSION_CONF_KEY, "2")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2594,6 +2612,7 @@ object RocksDBConf {
       storeConf.checkpointFileChecksumEnabled,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
+      getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),
       storeConf)
   }
 
