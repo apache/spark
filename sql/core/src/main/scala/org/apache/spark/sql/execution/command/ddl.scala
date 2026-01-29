@@ -271,7 +271,16 @@ case class DropTableCommand(
 
 case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(ident.namespace().isEmpty || ident.namespace().length == 1)
+    import org.apache.spark.sql.connector.catalog.CatalogManager
+
+    // Support qualified temp view names: viewName, session.viewName, or system.session.viewName
+    // Also support global temp views: globalTempDB.viewName
+    assert(ident.namespace().isEmpty ||
+           ident.namespace().length == 1 ||
+           (ident.namespace().length == 2 &&
+            ident.namespace()(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            ident.namespace()(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)))
+
     val nameParts = (ident.namespace() :+ ident.name()).toImmutableArraySeq
     val catalog = sparkSession.sessionState.catalog
     catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
@@ -279,10 +288,16 @@ case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
       sparkSession.sharedState.cacheManager.uncacheTableOrView(
         sparkSession, nameParts, cascade = hasViewText)
       view.refresh()
-      if (ident.namespace().isEmpty) {
-        catalog.dropTempView(ident.name())
-      } else {
+
+      // Determine if it's a global temp view or local temp view
+      val isGlobalTempView = ident.namespace().length == 1 &&
+                             ident.namespace().head.equalsIgnoreCase(catalog.globalTempDatabase)
+
+      if (isGlobalTempView) {
         catalog.dropGlobalTempView(ident.name())
+      } else {
+        // Local temp view (unqualified or qualified with session/system.session)
+        catalog.dropTempView(ident.name())
       }
     }
     Seq.empty[Row]

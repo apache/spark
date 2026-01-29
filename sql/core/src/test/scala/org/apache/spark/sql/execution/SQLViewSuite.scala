@@ -464,11 +464,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
+    // Only unqualified names, session.name, or system.session.name are allowed
     val e = intercept[ParseException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
     }
     assert(e.message.contains(
-      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
+      "CREATE TEMPORARY VIEW only accepts single-part names or qualified names with " +
+      "`session` or `system.session` prefix"))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
