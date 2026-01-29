@@ -11050,10 +11050,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO(SPARK-46165): axis and **kwargs should be implemented.
     def all(
-        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
-    ) -> "Series":
+        self,
+        axis: Optional[Axis] = 0,
+        bool_only: Optional[bool] = None,
+        skipna: bool = True,
+    ) -> Union["Series", bool]:
         """
         Return whether all elements are True.
 
@@ -11062,13 +11064,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : {0, 'index', 1, or 'columns'}, default 0
+        axis : {0, 'index', 1, 'columns', or None}, default 0
             Indicate which axis or axes should be reduced.
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
             * 1 / 'columns' : reduce the columns, return a Series whose index is the
               original index.
+            * None : reduce all dimensions, return a single boolean value.
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
@@ -11123,7 +11126,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col2    False
         dtype: bool
         """
-        axis = validate_axis(axis)
+        if axis is not None:
+            axis = validate_axis(axis)
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
@@ -11175,7 +11179,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
+            return self.all(axis=1, bool_only=bool_only, skipna=skipna).all()
 
     def any(
         self,
