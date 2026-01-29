@@ -30,12 +30,12 @@ import jakarta.servlet.http._
 import org.eclipse.jetty.client.{Response => CResponse}
 import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.transport.HttpClientTransportOverHTTP
+import org.eclipse.jetty.compression.server.CompressionHandler
 import org.eclipse.jetty.ee10.proxy.ProxyServlet
 import org.eclipse.jetty.ee10.servlet._
 import org.eclipse.jetty.http.{HttpField, HttpFields, HttpHeader}
 import org.eclipse.jetty.server._
 import org.eclipse.jetty.server.handler.{ContextHandler, ContextHandlerCollection, ErrorHandler}
-import org.eclipse.jetty.server.handler.gzip.GzipHandler
 import org.eclipse.jetty.util.{Callback, URIUtil}
 import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
@@ -475,14 +475,14 @@ private[spark] case class ServerInfo(
     handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
     addFilters(handler, securityMgr)
 
-    val gzipHandler = new GzipHandler()
-    gzipHandler.setHandler(handler)
-    rootHandler.addHandler(gzipHandler)
+    val compressionHandler = new CompressionHandler()
+    compressionHandler.setHandler(handler)
+    rootHandler.addHandler(compressionHandler)
 
     if (!handler.isStarted()) {
       handler.start()
     }
-    gzipHandler.start()
+    compressionHandler.start()
   }
 
   def removeHandler(handler: ServletContextHandler): Unit = synchronized {
@@ -490,7 +490,8 @@ private[spark] case class ServerInfo(
     // and remove it.
     rootHandler.getHandlers.asScala
       .find { h =>
-        h.isInstanceOf[GzipHandler] && h.asInstanceOf[GzipHandler].getHandler() == handler
+        h.isInstanceOf[CompressionHandler] &&
+          h.asInstanceOf[CompressionHandler].getHandler() == handler
       }
       .foreach { h =>
         rootHandler.removeHandler(h)
