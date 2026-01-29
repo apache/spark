@@ -42,13 +42,13 @@ import org.apache.spark.util.Utils
  * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
-  protected val schema: StructType
+  protected def schema: StructType
 
-  protected val timeZoneId: String
+  protected def timeZoneId: String
 
-  protected val errorOnDuplicatedFieldNames: Boolean
+  protected def errorOnDuplicatedFieldNames: Boolean
 
-  protected val largeVarTypes: Boolean
+  protected def largeVarTypes: Boolean
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
@@ -62,15 +62,16 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
 
-  private val arrowSchema = ArrowUtils.toArrowSchema(
+  private def arrowSchema = ArrowUtils.toArrowSchema(
     schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-  protected val allocator =
+
+  protected lazy val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
-  protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+  protected lazy val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
   // Create compression codec based on config
-  private val compressionCodecName = SQLConf.get.arrowCompressionCodec
-  private val codec = compressionCodecName match {
+  protected def codec = SQLConf.get.arrowCompressionCodec match {
     case "none" => NoCompressionCodec.INSTANCE
     case "zstd" =>
       val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
@@ -85,7 +86,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       throw SparkException.internalError(
         s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
   }
-  protected val unloader = new VectorUnloader(root, true, codec, true)
 
   protected var writer: ArrowStreamWriter = _
 
@@ -130,7 +130,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+  protected lazy val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+  protected lazy val unloader = new VectorUnloader(root, true, codec, true)
 
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
