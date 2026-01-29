@@ -46,8 +46,7 @@ The installation should be done on all nodes of the cluster. Generic version of 
 
 For Debian / Ubuntu:
 ```
-sudo apt-get install libopenblas-base
-sudo update-alternatives --config libblas.so.3
+sudo apt-get install libopenblas-dev
 ```
 For CentOS / RHEL:
 ```
@@ -75,6 +74,8 @@ java.lang.RuntimeException: Unable to load native implementation
 You can also point `dev.ludovic.netlib` to specific libraries names and paths. For example, `-Ddev.ludovic.netlib.blas.nativeLib=libmkl_rt.so` or `-Ddev.ludovic.netlib.blas.nativeLibPath=$MKLROOT/lib/intel64/libmkl_rt.so` for Intel MKL. You have similar parameters for LAPACK and ARPACK: `-Ddev.ludovic.netlib.lapack.nativeLib=...`, `-Ddev.ludovic.netlib.lapack.nativeLibPath=...`, `-Ddev.ludovic.netlib.arpack.nativeLib=...`, and `-Ddev.ludovic.netlib.arpack.nativeLibPath=...`.
 
 If native libraries are not properly configured in the system, the Java implementation (javaBLAS) will be used as fallback option.
+
+You can also set spark conf `spark.ml.allowNativeBlas` or Java system property `netlib.allowNativeBlas` to `false` to disable native BLAS and always use the Java implementation.
 
 ## Spark Configuration
 
