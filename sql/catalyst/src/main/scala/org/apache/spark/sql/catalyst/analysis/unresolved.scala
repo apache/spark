@@ -1263,6 +1263,9 @@ case class UnresolvedSelectInto(
 
   override def child: LogicalPlan = query
 
+  // Forward child's output so scalar subquery validation sees correct column count
+  override def output: Seq[Attribute] = child.output
+
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSelectInto =
     copy(query = newChild)
 }

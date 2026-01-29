@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, Except, Intersect, LogicalPlan, Project, SelectIntoVariable, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -95,8 +95,17 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
         // For other nodes, recursively mark their children
         // Unary nodes pass through top-level status to their single child
         val childIsTopLevel = isTopLevel && plan.children.length == 1
-        plan.mapChildren(child =>
+        val planWithMarkedChildren = plan.mapChildren(child =>
           markContext(child, childIsTopLevel, isInSetOperation))
+
+        // Also mark any SELECT INTO in subquery expressions
+        planWithMarkedChildren.transformExpressionsUp {
+          case subquery: SubqueryExpression =>
+            // All subqueries are never top-level
+            val markedSubqueryPlan =
+              markContext(subquery.plan, isTopLevel = false, isInSetOperation)
+            subquery.withNewPlan(markedSubqueryPlan)
+        }
     }
   }
 

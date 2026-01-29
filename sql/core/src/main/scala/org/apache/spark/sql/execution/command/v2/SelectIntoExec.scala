@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
@@ -56,11 +56,36 @@ case class SelectIntoExec(
     } else {
       // Exactly one row: assign values to variables
       val row = values(0)
+
+      // Validate arity
+      if (variables.length != row.numFields) {
+        throw new AnalysisException(
+          errorClass = "ASSIGNMENT_ARITY_MISMATCH",
+          messageParameters = Map(
+            "numTarget" -> variables.length.toString,
+            "numExpr" -> row.numFields.toString))
+      }
+
       variables.zipWithIndex.foreach { case (v, index) =>
-        val value = row.get(index, v.dataType)
+        val sourceValue = row.get(index, query.output(index).dataType)
+        val sourceType = query.output(index).dataType
+        val targetType = v.dataType
+
+        // Apply ANSI cast if source and target types differ
+        val castedValue = if (sourceType == targetType) {
+          sourceValue
+        } else {
+          val cast = Cast(
+            Literal(sourceValue, sourceType),
+            targetType,
+            Option(session.sessionState.conf.sessionLocalTimeZone),
+            ansiEnabled = true)
+          cast.eval(InternalRow.empty)
+        }
+
         VariableAssignmentUtils.assignVariable(
           v,
-          value,
+          castedValue,
           session.sessionState.catalogManager.tempVariableManager,
           session.sessionState.conf)
       }
