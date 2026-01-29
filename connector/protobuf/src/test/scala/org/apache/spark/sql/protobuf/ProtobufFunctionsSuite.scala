@@ -22,8 +22,10 @@ import java.time.Duration
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
+import com.google.protobuf.DescriptorProtos.FileDescriptorSet
 import org.json4s.jackson.JsonMethods
 
+import org.apache.spark.{SparkException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
@@ -163,8 +165,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils
+      .buildDescriptor("RepeatedMessage", Some(testFileDesc))
+      .descriptor
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -200,8 +206,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils
+      .buildDescriptor("RepeatedMessage", Some(testFileDesc))
+      .descriptor
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage1 = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -251,7 +261,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Map") {
-    val messageMapDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageMap")
+    val messageMapDesc = ProtobufUtils
+      .buildDescriptor("SimpleMessageMap", Some(testFileDesc))
+      .descriptor
 
     val mapStr1 = DynamicMessage
       .newBuilder(messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
@@ -345,8 +357,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Enum") {
-    val messageEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageEnum")
-    val basicEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicEnumMessage")
+    val messageEnumDesc = ProtobufUtils
+      .buildDescriptor("SimpleMessageEnum", Some(testFileDesc))
+      .descriptor
+    val basicEnumDesc = ProtobufUtils
+      .buildDescriptor("BasicEnumMessage", Some(testFileDesc))
+      .descriptor
 
     val dynamicMessage = DynamicMessage
       .newBuilder(messageEnumDesc)
@@ -389,9 +405,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("round trip in from_protobuf and to_protobuf - Multiple Message") {
-    val messageMultiDesc = ProtobufUtils.buildDescriptor(testFileDesc, "MultipleExample")
-    val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
-    val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
+    val messageMultiDesc = ProtobufUtils
+      .buildDescriptor("MultipleExample", Some(testFileDesc))
+      .descriptor
+    val messageIncludeDesc = ProtobufUtils
+      .buildDescriptor("IncludedExample", Some(testFileDesc))
+      .descriptor
+    val messageOtherDesc = ProtobufUtils
+      .buildDescriptor("OtherExample", Some(testFileDesc))
+      .descriptor
 
     val otherMessage = DynamicMessage
       .newBuilder(messageOtherDesc)
@@ -470,8 +492,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
-    val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
-    val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
+    val oldProducer = ProtobufUtils.buildDescriptor("oldProducer", Some(descBytes)).descriptor
+    val newConsumer = ProtobufUtils.buildDescriptor("newConsumer", Some(descBytes)).descriptor
 
     val oldProducerMessage = DynamicMessage
       .newBuilder(oldProducer)
@@ -512,8 +534,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
-    val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
-    val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
+    val newProducer = ProtobufUtils.buildDescriptor("newProducer", Some(descBytes)).descriptor
+    val oldConsumer = ProtobufUtils.buildDescriptor("oldConsumer", Some(descBytes)).descriptor
 
     val newProducerMessage = DynamicMessage
       .newBuilder(newProducer)
@@ -560,7 +582,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val binary = toProtobuf.first().get(0).asInstanceOf[Array[Byte]]
 
-    val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
+    val messageDescriptor = ProtobufUtils
+      .buildDescriptor("requiredMsg", Some(testFileDesc))
+      .descriptor
     val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
     assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
@@ -582,7 +606,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("from_protobuf filter to_protobuf") {
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -714,7 +740,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEvent")
+    val descriptor = ProtobufUtils.buildDescriptor("OneOfEvent", Some(testFileDesc)).descriptor
     val oneOfEvent = OneOfEvent.newBuilder()
       .setKey("key")
       .setCol1(123)
@@ -804,7 +830,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Verify recursion field with complex schema with recursive.fields.max.depth") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
+    val descriptor = ProtobufUtils.buildDescriptor("Employee", Some(testFileDesc)).descriptor
 
     val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
     val em2 = EM2.newBuilder().setTeamsize(100).setEm2Manager(manager).build()
@@ -846,7 +872,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf." +
     "and struct -> from_protobuf") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
+    val descriptor = ProtobufUtils
+      .buildDescriptor("OneOfEventWithRecursion", Some(testFileDesc))
+      .descriptor
 
     val nestedTwo = OneOfEventWithRecursion.newBuilder()
       .setKey("keyNested2").setValue("valueNested2").build()
@@ -2278,5 +2306,398 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       functions.from_protobuf($"value", messageName, testFileDesc, options) as Symbol("sample"))
     assert(expectedDf.schema === fromProtoDf.schema)
     checkAnswer(fromProtoDf, expectedDf)
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension basic types") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions(descriptor.getFullName)
+
+    val extStringField = extensionFields.find(_.getName == "extension_string").get
+    val extIntField = extensionFields.find(_.getName == "extension_int").get
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "test_name")
+      .setField(descriptor.findFieldByName("id"), 42)
+      .setField(extStringField, "ext_value")
+      .setField(extIntField, 123)
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("value_from"))
+
+    // Verify extension field values are correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "test_name")
+    assert(row.getAs[Int]("id") == 42)
+    assert(row.getAs[String]("extension_string") == "ext_value")
+    assert(row.getAs[Int]("extension_int") == 123)
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", proto2FileDesc).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension enum") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions(descriptor.getFullName)
+
+    val extEnumField = extensionFields.find(_.getName == "extension_enum").get
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "enum_test")
+      .setField(descriptor.findFieldByName("id"), 99)
+      .setField(extEnumField, extEnumField.getEnumType.findValueByName("FIRST"))
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("value_from"))
+
+    // Verify extension field value is correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "enum_test")
+    assert(row.getAs[Int]("id") == 99)
+    assert(row.getAs[String]("extension_enum") == "FIRST")
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", proto2FileDesc).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension nested message") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions
+      .getOrElse(descriptor.getFullName, Seq.empty)
+
+    val extMessageField = extensionFields.find(_.getName == "extension_message").get
+
+    val nestedMessage = DynamicMessage
+      .newBuilder(extMessageField.getMessageType)
+      .setField(extMessageField.getMessageType.findFieldByName("nested_value"), "nested_test")
+      .setField(extMessageField.getMessageType.findFieldByName("nested_id"), 99)
+      .build()
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "main")
+      .setField(extMessageField, nestedMessage)
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("value_from"))
+
+    // Verify extension field value is correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "main")
+    val nestedRow = row.getAs[Row]("extension_message")
+    assert(nestedRow.getAs[String]("nested_value") == "nested_test")
+    assert(nestedRow.getAs[Int]("nested_id") == 99)
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", proto2FileDesc).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension repeated") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions
+      .getOrElse(descriptor.getFullName, Seq.empty)
+
+    val extRepeatedField = extensionFields.find(_.getName == "extension_repeated_int").get
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "repeated_test")
+      .addRepeatedField(extRepeatedField, 1)
+      .addRepeatedField(extRepeatedField, 2)
+      .addRepeatedField(extRepeatedField, 3)
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("value_from"))
+
+    // Verify extension field value is correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "repeated_test")
+    val repeatedValues = row.getSeq[Int](row.fieldIndex("extension_repeated_int"))
+    assert(repeatedValues == Seq(1, 2, 3))
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", proto2FileDesc).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension defined in another message") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions
+      .getOrElse(descriptor.getFullName, Seq.empty)
+
+    val nestedExtBoolField = extensionFields.find(_.getName == "nested_extension_bool")
+    assert(
+      nestedExtBoolField.isDefined,
+      "Should find extension defined in message ContainerWithNestedExtension")
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "nested_ext_test")
+      .setField(nestedExtBoolField.get, true)
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("value_from"))
+
+    // Verify extension field value is correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "nested_ext_test")
+    assert(row.getAs[Boolean]("nested_extension_bool"))
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", proto2FileDesc).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension on nested message") {
+    val descWithExt =
+      ProtobufUtils.buildDescriptor("MessageWithExtendableNested", Some(proto2FileDesc))
+    val topLevelDescriptor = descWithExt.descriptor
+
+    val nestedFieldDesc = topLevelDescriptor.findFieldByName("nested")
+    val nestedMsgDescriptor = nestedFieldDesc.getMessageType
+    val nestedExtensions = descWithExt.fullNamesToExtensions
+      .getOrElse(nestedMsgDescriptor.getFullName, Seq.empty)
+
+    assert(
+      nestedExtensions.nonEmpty,
+      "Should find extensions for nested message type ExtendableNestedMessage")
+    val nestedExtField = nestedExtensions.find(_.getName == "nested_ext_field").get
+    val nestedExtInt = nestedExtensions.find(_.getName == "nested_ext_int").get
+
+    val nestedMessage = DynamicMessage
+      .newBuilder(nestedMsgDescriptor)
+      .setField(nestedMsgDescriptor.findFieldByName("nested_name"), "nested_name_value")
+      .setField(nestedMsgDescriptor.findFieldByName("nested_id"), 42)
+      .setField(nestedExtField, "ext_field_value")
+      .setField(nestedExtInt, 123)
+      .build()
+
+    val topLevelMessage = DynamicMessage
+      .newBuilder(topLevelDescriptor)
+      .setField(topLevelDescriptor.findFieldByName("top_level_name"), "top_name")
+      .setField(nestedFieldDesc, nestedMessage)
+      .build()
+
+    val df = Seq(topLevelMessage.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions
+        .from_protobuf($"value", "MessageWithExtendableNested", proto2FileDesc)
+        .as("value_from"))
+
+    // Verify nested extension field values are correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("top_level_name") == "top_name")
+    val nestedRow = row.getAs[Row]("nested")
+    assert(nestedRow.getAs[String]("nested_name") == "nested_name_value")
+    assert(nestedRow.getAs[Int]("nested_id") == 42)
+    assert(nestedRow.getAs[String]("nested_ext_field") == "ext_field_value")
+    assert(nestedRow.getAs[Int]("nested_ext_int") == 123)
+
+    // Verify roundtrip preserves values
+    val toProtoDF = fromProtoDF.select(
+      functions
+        .to_protobuf($"value_from", "MessageWithExtendableNested", proto2FileDesc)
+        .as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "MessageWithExtendableNested", proto2FileDesc)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: roundtrip - proto2 extension in separate file") {
+    // NB: We manually construct a merged descriptor file because Maven's Protobuf plugin generates
+    // a single descriptor file for each .proto file.
+    val extDescriptorPath = protobufDescriptorFile("proto2_messages_ext.desc")
+    val fdsExt = FileDescriptorSet.parseFrom(
+      CommonProtobufUtils.readDescriptorFileContent(extDescriptorPath))
+    val fds = FileDescriptorSet.parseFrom(proto2FileDesc)
+    val combinedFds = FileDescriptorSet.newBuilder
+      .addAllFile(fdsExt.getFileList)
+      .addAllFile(fds.getFileList)
+      .build()
+    val combinedFdsBytes = combinedFds.toByteArray
+
+    val descWithExt = ProtobufUtils.buildDescriptor(
+      "Proto2ExtensionTest", Some(combinedFds.toByteArray))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions
+      .getOrElse(descriptor.getFullName, Seq.empty)
+
+    val extMessageField = extensionFields.find(_.getName == "cross_file_extension").get
+
+    val nestedMessage = DynamicMessage
+      .newBuilder(extMessageField.getMessageType)
+      .setField(extMessageField.getMessageType.findFieldByName("foo"), 1)
+      .build()
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "main")
+      .setField(extMessageField, nestedMessage)
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", combinedFdsBytes).as("value_from"))
+
+    // Verify extension field value is correct
+    val row = fromProtoDF.select($"value_from.*").collect().head
+    assert(row.getAs[String]("name") == "main")
+    val crossFileExtRow = row.getAs[Row]("cross_file_extension")
+    assert(crossFileExtRow.getAs[Int]("foo") == 1)
+
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", "Proto2ExtensionTest", combinedFdsBytes).as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", "Proto2ExtensionTest", combinedFdsBytes)
+        .as("value_to_from"))
+
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("SPARK-55062: proto2 extension field name collision with regular field") {
+    val descriptor =
+      ProtobufUtils
+        .buildDescriptor("Proto2ExtensionCollisionTest", Some(proto2FileDesc))
+        .descriptor
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "test")
+      .build()
+
+    val df = Seq(message.toByteArray).toDF("value")
+
+    // Some unwrapping required to get to the root error, as it is thrown during execution.
+    val e = intercept[SparkException] {
+      df.select(
+        functions.from_protobuf($"value", "Proto2ExtensionCollisionTest", proto2FileDesc))
+        .collect()
+    }
+    checkError(
+      exception = e.getCause
+        .asInstanceOf[AnalysisException]
+        .getCause
+        .asInstanceOf[AnalysisException],
+      condition = "PROTOBUF_FIELD_MISSING",
+      parameters = Map(
+        "field" -> "name",
+        "protobufSchema" -> "top-level record",
+        "matchSize" -> "2",
+        "matches" -> "[name, NAME]"
+      )
+    )
+  }
+
+  test("SPARK-55062: schema evolution - data without extensions read with extension schema") {
+    val descriptorWithoutExt =
+      ProtobufUtils.buildDescriptor("Proto2ExtensionTestBase", Some(proto2FileDesc)).descriptor
+    val messageWithoutExtensions = DynamicMessage
+      .newBuilder(descriptorWithoutExt)
+      .setField(descriptorWithoutExt.findFieldByName("name"), "base_name")
+      .setField(descriptorWithoutExt.findFieldByName("id"), 42)
+      .build()
+
+    val df = Seq(messageWithoutExtensions.toByteArray).toDF("value")
+
+    // Read using schema WITH extensions
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", "Proto2ExtensionTest", proto2FileDesc).as("parsed"))
+    val result = fromProtoDF.select($"parsed.*").collect()
+    assert(result.length == 1)
+    val row = result(0)
+
+    // Regular fields have expected values, while extension fields are null/empty
+    assert(row.getAs[String]("name") == "base_name")
+    assert(row.getAs[Int]("id") == 42)
+    assert(row.getAs[String]("extension_string") == null)
+    assert(row.isNullAt(row.fieldIndex("extension_int")))
+    assert(row.isNullAt(row.fieldIndex("extension_enum")))
+    assert(row.isNullAt(row.fieldIndex("extension_message")))
+    assert(row.isNullAt(row.fieldIndex("nested_extension_bool")))
+    assert(row.getSeq[Int](row.fieldIndex("extension_repeated_int")).isEmpty)
+  }
+
+  test("SPARK-55062: Java class fallback drops extensions") {
+    val descWithExt = ProtobufUtils.buildDescriptor("Proto2ExtensionTest", Some(proto2FileDesc))
+    val descriptor = descWithExt.descriptor
+    val extensionFields = descWithExt.fullNamesToExtensions(descriptor.getFullName)
+
+    val extStringField = extensionFields.find(_.getName == "extension_string").get
+
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "test_name")
+      .setField(descriptor.findFieldByName("id"), 42)
+      .setField(extStringField, "ext_value")
+      .build()
+    val df = Seq(message.toByteArray).toDF("value")
+
+    // Read using Java class, which does not support extensions
+    val fromProtoDF = df.select(
+      functions
+        .from_protobuf($"value", proto2JavaClassNamePrefix + "Proto2ExtensionTest")
+        .as("parsed"))
+
+    // Schema should only have regular fields, not extension fields
+    val row = fromProtoDF.select($"parsed.*").collect().head
+    val schema = row.schema
+    assert(row.getAs[String]("name") == "test_name")
+    assert(row.getAs[Int]("id") == 42)
+    assert(!schema.fieldNames.contains("extension_string"))
+    assert(!schema.fieldNames.contains("extension_int"))
   }
 }
