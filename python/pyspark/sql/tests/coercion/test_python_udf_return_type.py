@@ -148,7 +148,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         return spark_type.simpleString()
 
     def repr_value(self, value):
-        return f"{str(value)}({type(value).__name__})"
+        return f"{str(value)}@{type(value).__name__}"
 
     def test_str_repr(self):
         self.assertEqual(
@@ -223,11 +223,12 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 result = repr(row[0])
                 # Normalize Java object hash codes to make tests deterministic
                 result = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result)
-                # "\t" is used as the delimiter
-                result = result.replace("\t", "")
-                result = result[:30]
+                result = result[:40]
             except Exception:
                 result = "X"
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
 
             err = None
             if testing:
