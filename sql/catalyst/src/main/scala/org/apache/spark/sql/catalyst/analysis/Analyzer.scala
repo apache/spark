@@ -1821,22 +1821,58 @@ class Analyzer(
     }
 
     /**
+     * Checks if the given function name parts match the expected builtin function name.
+     * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
+     * should only apply to builtin functions, not to user-defined functions.
+     *
+     * Valid patterns (returns true):
+     * - 1 part: "count" (unqualified, will resolve to builtin due to resolution order)
+     * - 2 parts: "builtin.count"
+     * - 3 parts: "system.builtin.count"
+     *
+     * Invalid patterns (returns false):
+     * - "session.count" (could be a non-aggregate UDF)
+     * - "extension.count" (could be a non-aggregate UDF)
+     * - "foo.bar.count" (invalid qualification)
+     * - "catalog.db.count" (persistent function)
+     * - More than 3 parts
+     */
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+      if (!nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName))) {
+        return false
+      }
+
+      nameParts.length match {
+        case 1 => true  // Unqualified: safe due to resolution order (builtin wins)
+        case 2 =>
+          // Only allow explicit builtin qualification
+          nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+        case 3 =>
+          // Only allow system.builtin.name
+          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+        case _ => false
+      }
+    }
+
+    /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
-          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
+          // Preserve the original qualification (if any) in the transformed node.
+          f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.nameParts == Seq("count") &&
+              matchesFunctionName(f1.nameParts, "count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
@@ -1984,8 +2020,13 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   * In order to avoid duplicate external functions lookup, the external function identifier will
-   * store in the local hash set externalFunctionNameSet.
+   *
+   * To avoid duplicate external catalog lookups, this rule maintains a per-plan cache of
+   * persistent function names (externalFunctionNameSet). Builtin and temporary functions are
+   * validated on every occurrence since they're fast in-memory lookups, but persistent functions
+   * are cached after the first validation to avoid repeated external catalog calls for the same
+   * function within a single plan.
+   *
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
@@ -1995,24 +2036,75 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          // For builtin/temp functions, we can do a quick check without catalog lookup
+          val quickCheck = if (nameParts.size == 1) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts) ||
+                     FunctionResolution.maybeTempFunctionName(nameParts)) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else {
+            None
+          }
+
+          if (quickCheck.isDefined) {
+            // It's a builtin or temp function - no need for catalog lookup or caching
             f
           } else {
-            val CatalogAndIdentifier(catalog, ident) =
-              relationResolution.expandIdentifier(nameParts)
-            val fullName =
-              normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+            // Might be a persistent function - compute full name and check cache first
+            // Use try-catch to handle session catalog with invalid multi-part namespace
+            val (catalog, ident) = try {
+              val CatalogAndIdentifier(cat, id) = relationResolution.expandIdentifier(nameParts)
+              (cat, id)
+            } catch {
+              case e: AnalysisException if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+                // Session catalog doesn't support multi-part namespaces for tables, but for
+                // function lookups we want to report this as "function not found" rather than
+                // "invalid namespace". This handles cases like foo.bar.count where foo.bar is
+                // treated as a multi-part namespace in the session catalog.
+                val catalogPath = (catalogManager.currentCatalog.name +:
+                  catalogManager.currentNamespace).mkString(".")
+                throw QueryCompilationErrors.unresolvedRoutineError(
+                  nameParts,
+                  Seq("system.builtin", "system.session", catalogPath),
+                  f.origin)
+            }
+
+            val fullName = normalizeFuncName(
+              (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
             if (externalFunctionNameSet.contains(fullName)) {
-              f
-            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
-              externalFunctionNameSet.add(fullName)
+              // Already validated this function exists - skip lookup
               f
             } else {
-              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                Seq("system.builtin", "system.session", catalogPath),
-                f.origin)
+              // Not in cache - do full lookup to determine type
+              val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+
+              functionType match {
+                case FunctionType.Builtin | FunctionType.Temporary =>
+                  // This indicates a logic bug - the quick check said this was NOT a
+                  // builtin/temp function, but the full lookup says it IS.
+                  throw SparkException.internalError(
+                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
+                    s"classified as $functionType by full lookup but not found by quick check. " +
+                    s"Check maybeBuiltinFunctionName/maybeTempFunctionName logic.")
+
+                case FunctionType.Persistent =>
+                  // Cache it to avoid repeated external catalog lookups
+                  externalFunctionNameSet.add(fullName)
+                  f
+
+                case FunctionType.TableOnly =>
+                  // Function exists ONLY in table registry - cannot be used in scalar context
+                  throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+                case FunctionType.NotFound =>
+                  // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
+                  val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    Seq("system.builtin", "system.session", catalogPath),
+                    f.origin)
+              }
             }
           }
       }

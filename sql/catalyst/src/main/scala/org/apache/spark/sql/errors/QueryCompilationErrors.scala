@@ -694,8 +694,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1021",
-      messageParameters = Map("targetString" -> targetString))
+      errorClass = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+      messageParameters = Map("tableName" -> toSQLId(targetString)))
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
@@ -949,6 +949,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
       ),
       origin = context)
+  }
+
+  def notAScalarFunctionError(
+      functionName: String,
+      u: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_SCALAR_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)),
+      origin = u.origin)
+  }
+
+  def notATableFunctionError(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_TABLE_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
   }
 
   def wrongNumArgsError(
@@ -1254,6 +1269,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
     new FunctionAlreadyExistsException(func.nameParts)
+  }
+
+  def cannotShadowBuiltinFunctionError(funcName: String, namespace: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SHADOW_BUILTIN_FUNCTION",
+      messageParameters = Map(
+        "funcName" -> toSQLId(funcName),
+        "namespace" -> toSQLId(namespace),
+        "config" -> toSQLConf(SQLConf.LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING.key)
+      )
+    )
   }
 
   def cannotLoadClassWhenRegisteringFunctionError(
@@ -3065,6 +3091,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1255",
       messageParameters = Map("functionName" -> functionName))
+  }
+
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_TEMP_OBJ_QUALIFIER",
+      messageParameters = Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)))
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String, t: TreeNode[_]): Throwable = {

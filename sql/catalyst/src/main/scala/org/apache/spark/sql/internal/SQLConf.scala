@@ -2308,6 +2308,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING =
+    buildConf("spark.sql.legacy.allowBuiltinFunctionShadowing")
+      .internal()
+      .version("4.2.0")
+      .doc("When false (default, secure mode), all session functions can be registered " +
+        "but builtins take precedence during resolution " +
+        "(order: builtin -> session -> persistent). " +
+        "When true (legacy mode), Scala UDFs shadow builtins " +
+        "(order: session -> builtin -> persistent), " +
+        "but SQL-based registration (CREATE TEMPORARY FUNCTION) is blocked when " +
+        "conflicting with builtins to preserve master behavior.")
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -8024,6 +8038,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def legacyAllowBuiltinFunctionShadowing: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING)
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

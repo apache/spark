@@ -365,14 +365,33 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension functions are treated as builtins - stored unqualified.
+      // This allows power users (Sedona, Delta, etc.) to overwrite existing builtins if needed.
+      // Extension functions cannot be shadowed by temporary/session functions in secure mode.
+      val identifier = if (name.database.isEmpty && name.catalog.isEmpty) {
+        // Unqualified extension - store as builtin (unqualified)
+        FunctionIdentifier(name.funcName)
+      } else {
+        // Already qualified - keep as-is (power user knows what they're doing)
+        name
+      }
+      functionRegistry.registerFunction(identifier, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension table functions are treated as builtins - stored unqualified.
+      // This allows power users to overwrite existing builtin table functions if needed.
+      val identifier = if (name.database.isEmpty && name.catalog.isEmpty) {
+        // Unqualified extension - store as builtin (unqualified)
+        FunctionIdentifier(name.funcName)
+      } else {
+        // Already qualified - keep as-is (power user knows what they're doing)
+        name
+      }
+      tableFunctionRegistry.registerFunction(identifier, expressionInfo, function)
     }
     tableFunctionRegistry
   }

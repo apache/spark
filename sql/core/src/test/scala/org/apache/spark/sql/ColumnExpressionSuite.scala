@@ -186,7 +186,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       testData.as("testData").selectExpr("count(testData.*)").collect()
     }
     assert(e.getMessage.contains(
-      "count(testData.*) is not allowed. Please use count(*) or expand the columns manually"))
+      "count(`testData`.*) is not allowed. Use count(*) or expand the columns manually"))
   }
 
   test("SPARK-34199: table star can be qualified inside a count function with multiple arguments") {

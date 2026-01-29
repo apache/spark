@@ -136,7 +136,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   /**
    * Resolves a function identifier, checking for builtin and temp functions first.
-   * Builtin and temp functions are only registered with unqualified names.
+   * Builtin and temp functions are only registered with unqualified names, but can be
+   * referenced with qualified names like builtin.abs, system.builtin.abs, session.func,
+   * or system.session.func.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],
@@ -154,6 +156,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, ident) = nameParts
         ResolvedIdentifier(catalog, ident)
       }
+    } else if (FunctionResolution.maybeBuiltinFunctionName(nameParts)) {
+      // Explicitly qualified as builtin (e.g., builtin.abs or system.builtin.abs)
+      val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.last)
+      ResolvedIdentifier(FakeSystemCatalog, ident)
+    } else if (FunctionResolution.maybeTempFunctionName(nameParts)) {
+      // Explicitly qualified as temp (e.g., session.func or system.session.func)
+      val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
+      ResolvedIdentifier(FakeSystemCatalog, ident)
     } else {
       val CatalogAndIdentifier(catalog, ident) = nameParts
       ResolvedIdentifier(catalog, ident)
