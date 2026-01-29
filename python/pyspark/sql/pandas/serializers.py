@@ -1745,15 +1745,13 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                     data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._input_type[i].dataType
-                            if self._input_type is not None
-                            else from_arrow_type(c.type),
+                            from_arrow_type(c.type),
                             timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
                             df_for_struct=self._df_for_struct,
                         )
-                        for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
+                        for c in pa.Table.from_batches([batch]).itercolumns()
                     ]
                     for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                         batch_key = tuple(row[s] for s in self.key_offsets)

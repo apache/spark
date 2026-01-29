@@ -25,7 +25,6 @@ from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
     _create_converter_to_pandas,
-    from_arrow_type,
     to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
@@ -69,7 +68,6 @@ class ArrowBatchTransformer:
         Flatten a struct column at given index into a RecordBatch.
 
         Used by:
-            - ArrowStreamGroupUDFSerializer.load_stream
             - ArrowStreamUDFSerializer.load_stream
             - SQL_GROUPED_MAP_ARROW_UDF mapper
             - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
