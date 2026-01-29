@@ -851,11 +851,18 @@ case class EnsureRequirements(
         reordered.withNewChildren(newChildren)
     }
 
+    // We can't disable partition grouping of a scan in a main query if it contributes the ouput
+    // partitioning of the query result because we don't know whether the query is
+    // cached/checkpointed and how the output of the query will be used later. The output must keep
+    // `KeyGroupedPartitioning` semantics in this case.
+    // But we can disable partition grouping in subqueries when grouping is not needed for anything
+    // in the subquery plan.
     val groupingDisabledPlan = if (subquery) {
       disableKeyGroupingIfNotNeeded(newPlan)
     } else {
       newPlan
     }
+
     if (requiredDistribution.isDefined) {
       val shuffleOrigin = if (requiredDistribution.get.requiredNumPartitions.isDefined) {
         REPARTITION_BY_NUM
