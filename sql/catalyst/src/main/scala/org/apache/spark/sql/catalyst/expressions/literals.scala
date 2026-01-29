@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.LiteralTypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToNanos}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
@@ -54,6 +55,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, perio
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.FormatTypeOps
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
@@ -187,6 +189,7 @@ object Literal {
    * Create a literal with default value for given DataType
    */
   def default(dataType: DataType): Literal = dataType match {
+    case _ if LiteralTypeOps.supports(dataType) => LiteralTypeOps(dataType).getDefaultLiteral
     case NullType => create(null, NullType)
     case BooleanType => Literal(false)
     case ByteType => Literal(0.toByte)
@@ -199,7 +202,6 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
-    case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case c: CharType =>
@@ -439,8 +441,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       dataType match {
         case DateType =>
           DateFormatter().format(value.asInstanceOf[Int])
-        case _: TimeType =>
-          new FractionTimeFormatter().format(value.asInstanceOf[Long])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
@@ -449,6 +449,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
           toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE, startField, endField)
+        case _ if FormatTypeOps.supports(dataType) => FormatTypeOps(dataType).format(value)
         case _ =>
           other.toString
       }
@@ -530,8 +531,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
+        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
           toExprCode(s"${value}L")
+        case _ if LiteralTypeOps.supports(dataType) =>
+          toExprCode(LiteralTypeOps(dataType).getJavaLiteral(value))
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
           ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
@@ -571,8 +574,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
-    case (_: Long, _: TimeType) =>
-      s"TIME '$toString'"
     case (v: Long, TimestampType) =>
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
@@ -610,6 +611,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       s"MAP(${keysAndValues.mkString(", ")})"
     case (v: VariantVal, variantType: VariantType) => s"PARSE_JSON('${v.toJson(timeZoneId)}')"
+    case _ if FormatTypeOps.supports(dataType) => FormatTypeOps(dataType).toSQLValue(value)
     case _ => value.toString
   }
 }

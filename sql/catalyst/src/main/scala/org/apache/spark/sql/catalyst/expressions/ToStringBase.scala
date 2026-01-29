@@ -22,11 +22,12 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.FormatTypeOps
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -35,7 +36,6 @@ import org.apache.spark.util.SparkStringUtils
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   private lazy val dateFormatter = DateFormatter()
-  private lazy val timeFormatter = new FractionTimeFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
   private lazy val timestampNTZFormatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
@@ -75,8 +75,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case _: TimeType =>
-      acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -176,6 +174,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
     case _: StringType => acceptAny[UTF8String](identity[UTF8String])
+    case _ if FormatTypeOps.supports(from) =>
+      t => UTF8String.fromString(FormatTypeOps(from).format(t))
     case _ => o => UTF8String.fromString(o.toString)
   }
 
@@ -228,10 +228,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
-      case _: TimeType =>
+      case t if FormatTypeOps.supports(t) =>
+        val formatter = FormatTypeOps(t)
         val tf = JavaCode.global(
-          ctx.addReferenceObj("timeFormatter", timeFormatter),
-          timeFormatter.getClass)
+          ctx.addReferenceObj("formatter", formatter),
+          formatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
       case CalendarIntervalType =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toString());"
