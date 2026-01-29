@@ -66,6 +66,83 @@ private[spark] object IsolatedSessionState {
   val sessions = new ConcurrentHashMap[String, IsolatedSessionState]()
 }
 
+/**
+ * Represents an isolated session state on the executor side, containing session-specific
+ * classloaders, files, jars, and archives. This class manages the lifecycle of these resources
+ * and prevents race conditions between concurrent task execution and cache eviction.
+ *
+ * == Architecture ==
+ *
+ * Sessions are managed through two mechanisms:
+ *  1. A Guava LRU cache (`isolatedSessionCache`) for active session lookup with size limits
+ *  2. An authoritative map (`IsolatedSessionState.sessions`) tracking all sessions until cleanup
+ *
+ * The Guava cache handles LRU eviction, while the authoritative map ensures there's only one
+ * IsolatedSessionState instance per UUID at any time and tracks sessions that are evicted but
+ * still in use.
+ *
+ * == State Machine ==
+ *
+ * Each session has two state variables protected by a synchronized lock:
+ *  - `refCount`: Number of tasks currently using this session
+ *  - `evicted`: Whether the session has been evicted from the Guava cache
+ *
+ * Valid state transitions:
+ * {{{
+ *   Common workflow (no contention):
+ *   [Created] --> acquire() --> [Active: refCount > 0]
+ *                                        |
+ *                                   release() (all tasks done)
+ *                                        |
+ *                                        v
+ *                               [Idle: refCount = 0]
+ *                                        |
+ *                               markEvicted() (cache eviction)
+ *                                        |
+ *                                        v
+ *                                    [Cleanup]
+ *
+ *   Contention case (eviction while tasks running):
+ *   [Active: refCount > 0] --> markEvicted() --> [Deferred: evicted = true]
+ *                                                       |
+ *             +---------------------------------------------+
+ *             |                                             |
+ *             v                                             v
+ *   release() (last task)                          tryUnEvict()
+ *             |                                             |
+ *             v                                             v
+ *         [Cleanup]                              [Active] (back in cache)
+ * }}}
+ *
+ * == Cleanup ==
+ *
+ * Cleanup happens when both conditions are met: `refCount == 0` AND `evicted == true`.
+ * This can occur either:
+ *  - Immediately when `markEvicted()` is called and no tasks are using the session
+ *  - Deferred when the last task calls `release()` after the session was evicted
+ *
+ * Cleanup closes the classloader, deletes session files, and removes the session
+ * from the authoritative map.
+ *
+ * == Concurrency Guarantees ==
+ *
+ * The key insight is that as long as a session is still in use (refCount > 0), it
+ * remains in the authoritative map and we can get its instance. When a new task needs
+ * a session that was evicted from the LRU cache but is still in use:
+ *
+ *  - If cleanup has NOT started (refCount > 0): we can cancel the pending cleanup
+ *    via `tryUnEvict()`, put the instance back into the LRU cache, and safely reuse it.
+ *
+ *  - If cleanup HAS started (refCount became 0): cleanup runs synchronously under the
+ *    lock, so it must complete before any new task can proceed. Once cleanup finishes,
+ *    the session is removed from the authoritative map, and a fresh instance is created.
+ *
+ * This design ensures there is never a race where a task uses a session that is being
+ * or has been cleaned up. The `acquire()` and `tryUnEvict()` methods are intentionally
+ * separate: `tryUnEvict()` is only called from the cache loader to guarantee the
+ * session is put back into the LRU cache, maintaining the invariant that a non-evicted
+ * session is always in the cache.
+ */
 private[spark] class IsolatedSessionState(
     val sessionUUID: String,
     var urlClassLoader: MutableURLClassLoader,
