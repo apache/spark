@@ -273,6 +273,92 @@ class FrameComputeMixin:
             psdf[["col2"]].rank(numeric_only=True),
         )
 
+    def test_rank_axis(self):
+        # Test basic axis parameter functionality
+        pdf = pd.DataFrame({"A": [1, 2, 2, 3], "B": [4, 3, 2, 1], "C": [2, 2, 3, 2]})
+        psdf = ps.from_pandas(pdf)
+
+        # Test axis=0 (explicit, should match default behavior)
+        self.assert_eq(pdf.rank(axis=0).sort_index(), psdf.rank(axis=0).sort_index())
+
+        # Test axis=1 (rank across columns)
+        self.assert_eq(pdf.rank(axis=1).sort_index(), psdf.rank(axis=1).sort_index())
+
+        # Test axis='index' and axis='columns'
+        self.assert_eq(pdf.rank(axis="index").sort_index(), psdf.rank(axis="index").sort_index())
+        self.assert_eq(
+            pdf.rank(axis="columns").sort_index(), psdf.rank(axis="columns").sort_index()
+        )
+
+        # Test all ranking methods with axis=1
+        for method in ["average", "min", "max", "first", "dense"]:
+            self.assert_eq(
+                pdf.rank(method=method, axis=1).sort_index(),
+                psdf.rank(method=method, axis=1).sort_index(),
+            )
+
+        # Test ascending parameter with axis=1
+        self.assert_eq(
+            pdf.rank(axis=1, ascending=True).sort_index(),
+            psdf.rank(axis=1, ascending=True).sort_index(),
+        )
+        self.assert_eq(
+            pdf.rank(axis=1, ascending=False).sort_index(),
+            psdf.rank(axis=1, ascending=False).sort_index(),
+        )
+
+        # Test numeric_only with axis=1
+        pdf_mixed = pd.DataFrame({"A": [1, 2, 3, 4], "B": [4, 3, 2, 1], "C": ["w", "x", "y", "z"]})
+        psdf_mixed = ps.from_pandas(pdf_mixed)
+        self.assert_eq(
+            pdf_mixed.rank(axis=1, numeric_only=True).sort_index(),
+            psdf_mixed.rank(axis=1, numeric_only=True).sort_index(),
+        )
+
+        # Test with single column DataFrame
+        pdf_single = pd.DataFrame({"A": [1, 2, 3, 4]})
+        psdf_single = ps.from_pandas(pdf_single)
+        self.assert_eq(
+            pdf_single.rank(axis=1).sort_index(),
+            psdf_single.rank(axis=1).sort_index(),
+        )
+
+        # Test with NaN values
+        pdf_nan = pd.DataFrame({"A": [1, np.nan, 3], "B": [4, 3, np.nan]})
+        psdf_nan = ps.from_pandas(pdf_nan)
+        self.assert_eq(
+            pdf_nan.rank(axis=1).sort_index(),
+            psdf_nan.rank(axis=1).sort_index(),
+        )
+
+        # Test with all equal values in a row
+        pdf_equal = pd.DataFrame({"A": [1, 1, 1], "B": [1, 1, 1], "C": [1, 1, 1]})
+        psdf_equal = ps.from_pandas(pdf_equal)
+        self.assert_eq(
+            pdf_equal.rank(axis=1).sort_index(),
+            psdf_equal.rank(axis=1).sort_index(),
+        )
+
+        # Test with multi-index columns
+        columns = pd.MultiIndex.from_tuples([("x", "A"), ("x", "B"), ("y", "C")])
+        pdf.columns = columns
+        psdf.columns = columns
+        self.assert_eq(pdf.rank(axis=1).sort_index(), psdf.rank(axis=1).sort_index())
+
+        # Test with large dataset to ensure UDF path is used (>1000 rows)
+        pdf_large = pd.DataFrame(
+            {"A": np.random.rand(1500), "B": np.random.rand(1500), "C": np.random.rand(1500)}
+        )
+        psdf_large = ps.from_pandas(pdf_large)
+        self.assert_eq(
+            pdf_large.rank(axis=1).sort_index(),
+            psdf_large.rank(axis=1).sort_index(),
+        )
+
+        # Test invalid axis value
+        with self.assertRaisesRegex(ValueError, "No axis named"):
+            psdf.rank(axis=2)
+
     def test_nunique(self):
         pdf = pd.DataFrame({"A": [1, 2, 3], "B": [np.nan, 3, np.nan]}, index=np.random.rand(3))
         psdf = ps.from_pandas(pdf)
