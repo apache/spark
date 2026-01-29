@@ -4311,3 +4311,288 @@ class CloneSessionResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CloneSessionResponse = CloneSessionResponse
+
+class GetStatusRequest(google.protobuf.message.Message):
+    """Next ID: 6"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OperationStatusRequest(google.protobuf.message.Message):
+        """Request to get status of operations."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OPERATION_IDS_FIELD_NUMBER: builtins.int
+        EXTENSIONS_FIELD_NUMBER: builtins.int
+        @property
+        def operation_ids(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """Get status of operations with these operation_ids.
+            If unset or empty, returns status of all operations in the session.
+            """
+        @property
+        def extensions(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """Extension point for custom operation-level status requests."""
+        def __init__(
+            self,
+            *,
+            operation_ids: collections.abc.Iterable[builtins.str] | None = ...,
+            extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extensions", b"extensions", "operation_ids", b"operation_ids"
+            ],
+        ) -> None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    OPERATION_STATUS_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a Spark session for a user identified by user_context.user_id.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required)
+
+        user_context.user_id and session_id both identify a unique remote spark session on the
+        server side.
+        """
+    client_type: builtins.str
+    """(Optional)
+
+    Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    client_observed_server_side_session_id: builtins.str
+    """(Optional)
+
+    Server-side generated idempotency key from the previous responses (if any). Server
+    can use this to validate that the server side session has not changed.
+    """
+    @property
+    def operation_status(self) -> global___GetStatusRequest.OperationStatusRequest:
+        """Get status of operations in the session."""
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """Extension point for custom status request types."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        operation_status: global___GetStatusRequest.OperationStatusRequest | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "extension",
+            b"extension",
+            "operation_status",
+            b"operation_status",
+            "status_type",
+            b"status_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "extension",
+            b"extension",
+            "operation_status",
+            b"operation_status",
+            "session_id",
+            b"session_id",
+            "status_type",
+            b"status_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["status_type", b"status_type"]
+    ) -> typing_extensions.Literal["operation_status", "extension"] | None: ...
+
+global___GetStatusRequest = GetStatusRequest
+
+class GetStatusResponse(google.protobuf.message.Message):
+    """Next ID: 4"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class OperationStatusResult(google.protobuf.message.Message):
+        """Result containing status of operations."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OPERATION_STATUSES_FIELD_NUMBER: builtins.int
+        @property
+        def operation_statuses(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___GetStatusResponse.OperationStatus
+        ]:
+            """Status information about requested operations."""
+        def __init__(
+            self,
+            *,
+            operation_statuses: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["operation_statuses", b"operation_statuses"]
+        ) -> None: ...
+
+    class OperationStatus(google.protobuf.message.Message):
+        """Status information for a single operation."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _OperationState:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _OperationStateEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 0
+            OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus._OperationState.ValueType  # 1
+            OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 2
+            OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 3
+            OPERATION_STATE_TERMINATED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 4
+
+        class OperationState(_OperationState, metaclass=_OperationStateEnumTypeWrapper): ...
+        OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 0
+        OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus.OperationState.ValueType  # 1
+        OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 2
+        OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 3
+        OPERATION_STATE_TERMINATED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 4
+
+        OPERATION_ID_FIELD_NUMBER: builtins.int
+        STATUS_FIELD_NUMBER: builtins.int
+        EXTENSIONS_FIELD_NUMBER: builtins.int
+        operation_id: builtins.str
+        """The operation_id of the operation."""
+        status: global___GetStatusResponse.OperationStatus.OperationState.ValueType
+        """The current status of the operation."""
+        @property
+        def extensions(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """Extension point for custom operation-level status fields."""
+        def __init__(
+            self,
+            *,
+            operation_id: builtins.str = ...,
+            status: global___GetStatusResponse.OperationStatus.OperationState.ValueType = ...,
+            extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extensions", b"extensions", "operation_id", b"operation_id", "status", b"status"
+            ],
+        ) -> None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    OPERATION_STATUS_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the session for which the status was requested."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session has not changed.
+    """
+    @property
+    def operation_status(self) -> global___GetStatusResponse.OperationStatusResult:
+        """Status information about requested operations."""
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """Extension point for custom status response types."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        operation_status: global___GetStatusResponse.OperationStatusResult | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "extension", b"extension", "operation_status", b"operation_status", "result", b"result"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "extension",
+            b"extension",
+            "operation_status",
+            b"operation_status",
+            "result",
+            b"result",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["result", b"result"]
+    ) -> typing_extensions.Literal["operation_status", "extension"] | None: ...
+
+global___GetStatusResponse = GetStatusResponse
