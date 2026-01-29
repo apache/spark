@@ -243,7 +243,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             def reportLatestOffset(self):
                 return {"partition-1": 1000000}
 
-            def prepare_for_trigger_available_now(self) -> None:
+            def prepareForTriggerAvailableNow(self) -> None:
                 self.desired_end_offset = {"partition-1": 10}
 
             def partitions(self, start: dict, end: dict):
