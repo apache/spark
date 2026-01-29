@@ -61,6 +61,7 @@ import org.apache.spark.network.util.MapConfigProvider
  *                            requires certChain and keyFile arguments
  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
  * @param enabledAlgorithms   a set of encryption algorithms that may be used
+ * @param disableHttpPort     enables or disables HTTP port
  */
 private[spark] case class SSLOptions(
     namespace: Option[String] = None,
@@ -81,7 +82,8 @@ private[spark] case class SSLOptions(
     openSslEnabled: Boolean = false,
     protocol: Option[String] = None,
     enabledAlgorithms: Set[String] = Set.empty,
-    privateKeyPassword: Option[String] = None)
+    privateKeyPassword: Option[String] = None,
+    disableHttpPort: Option[Boolean] = None)
     extends Logging {
 
   /**
@@ -186,7 +188,8 @@ private[spark] case class SSLOptions(
       s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"trustStoreReloadIntervalMs=$trustStoreReloadIntervalMs, " +
       s"trustStoreReloadingEnabled=$trustStoreReloadingEnabled, openSSLEnabled=$openSslEnabled, " +
-      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
+      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}, " +
+      s"disableHttpPort=$disableHttpPort}"
 }
 
 private[spark] object SSLOptions extends Logging {
@@ -217,6 +220,7 @@ private[spark] object SSLOptions extends Logging {
    * (if available on host system), requires certChain and keyFile arguments
    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
+   * $ - `[ns].disableHttpPort` - enables or disables HTTP port
    *
    * For a list of protocols and ciphers supported by particular Java versions, you may go to
    * <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">
@@ -310,6 +314,10 @@ private[spark] object SSLOptions extends Logging {
         .orElse(defaults.map(_.enabledAlgorithms))
         .getOrElse(Set.empty)
 
+    val disableHttpPort = conf.getWithSubstitution(s"$ns.disableHttpPort")
+      .map(_.toBoolean)
+      .orElse(defaults.flatMap(_.disableHttpPort))
+
     new SSLOptions(
       Some(ns),
       enabled,
@@ -329,7 +337,8 @@ private[spark] object SSLOptions extends Logging {
       openSslEnabled,
       protocol,
       enabledAlgorithms,
-      privateKeyPassword)
+      privateKeyPassword,
+      disableHttpPort)
   }
 
   // Config names and environment variables for propagating SSL passwords
