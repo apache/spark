@@ -979,8 +979,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
     @dispatch_df_method
     def _repr_html_(self) -> Optional[str]:
@@ -1715,12 +1714,10 @@ class DataFrame:
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
     @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @overload
-    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def repartition(
@@ -1831,12 +1828,10 @@ class DataFrame:
         ...
 
     @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def repartitionByRange(
@@ -2060,8 +2055,7 @@ class DataFrame:
         ...
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame":
-        ...
+    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -2069,8 +2063,7 @@ class DataFrame:
         withReplacement: Optional[bool],
         fraction: float,
         seed: Optional[int] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def sample(
@@ -3337,12 +3330,10 @@ class DataFrame:
         ...
 
     @overload
-    def head(self) -> Optional[Row]:
-        ...
+    def head(self) -> Optional[Row]: ...
 
     @overload
-    def head(self, n: int) -> List[Row]:
-        ...
+    def head(self, n: int) -> List[Row]: ...
 
     @dispatch_df_method
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
@@ -3406,12 +3397,10 @@ class DataFrame:
         ...
 
     @overload
-    def __getitem__(self, item: Union[int, str]) -> Column:
-        ...
+    def __getitem__(self, item: Union[int, str]) -> Column: ...
 
     @overload
-    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
-        ...
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame": ...
 
     @dispatch_df_method
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
@@ -3565,12 +3554,10 @@ class DataFrame:
         ...
 
     @overload
-    def select(self, *cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def select(self, *cols: "ColumnOrName") -> "DataFrame": ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> "DataFrame":
-        ...
+    def select(self, __cols: Union[List[Column], List[str]]) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
@@ -3621,12 +3608,10 @@ class DataFrame:
         ...
 
     @overload
-    def selectExpr(self, *expr: str) -> "DataFrame":
-        ...
+    def selectExpr(self, *expr: str) -> "DataFrame": ...
 
     @overload
-    def selectExpr(self, *expr: List[str]) -> "DataFrame":
-        ...
+    def selectExpr(self, *expr: List[str]) -> "DataFrame": ...
 
     @dispatch_df_method
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
@@ -3815,12 +3800,10 @@ class DataFrame:
         ...
 
     @overload
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
@@ -3925,12 +3908,10 @@ class DataFrame:
         ...
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
@@ -4008,12 +3989,10 @@ class DataFrame:
         ...
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":
@@ -5084,12 +5063,10 @@ class DataFrame:
         self,
         value: "LiteralType",
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame":
-        ...
+    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame": ...
 
     @dispatch_df_method
     def fillna(
@@ -5189,8 +5166,7 @@ class DataFrame:
         to_replace: "LiteralType",
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
@@ -5198,16 +5174,14 @@ class DataFrame:
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def replace(
@@ -5215,8 +5189,7 @@ class DataFrame:
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def replace(
@@ -5330,8 +5303,7 @@ class DataFrame:
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -5339,8 +5311,7 @@ class DataFrame:
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     @dispatch_df_method
     def approxQuantile(
@@ -5872,12 +5843,10 @@ class DataFrame:
         ...
 
     @overload
-    def drop(self, cols: "ColumnOrName") -> "DataFrame":
-        ...
+    def drop(self, cols: "ColumnOrName") -> "DataFrame": ...
 
     @overload
-    def drop(self, *cols: str) -> "DataFrame":
-        ...
+    def drop(self, *cols: str) -> "DataFrame": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
@@ -6234,12 +6203,10 @@ class DataFrame:
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
     @overload
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData": ...
 
     @dispatch_df_method  # type: ignore[misc]
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
@@ -7022,26 +6989,22 @@ class DataFrameNaFunctions:
         how: str = "any",
         thresh: Optional[int] = None,
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     drop.__doc__ = DataFrame.dropna.__doc__
 
     @overload
-    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> DataFrame:
-        ...
+    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> DataFrame: ...
 
     @overload
-    def fill(self, value: Dict[str, "LiteralType"]) -> DataFrame:
-        ...
+    def fill(self, value: Dict[str, "LiteralType"]) -> DataFrame: ...
 
     @dispatch_df_method
     def fill(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[List[str]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
@@ -7051,16 +7014,14 @@ class DataFrameNaFunctions:
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def replace(
@@ -7068,8 +7029,7 @@ class DataFrameNaFunctions:
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @dispatch_df_method  # type: ignore[misc]
     def replace(
@@ -7079,8 +7039,7 @@ class DataFrameNaFunctions:
             Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
         ] = _NoValue,
         subset: Optional[List[str]] = None,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     replace.__doc__ = DataFrame.replace.__doc__
 
@@ -7103,8 +7062,7 @@ class DataFrameStatFunctions:
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -7112,8 +7070,7 @@ class DataFrameStatFunctions:
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     @dispatch_df_method
     def approxQuantile(
@@ -7121,39 +7078,33 @@ class DataFrameStatFunctions:
         col: Union[str, List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> Union[List[float], List[List[float]]]:
-        ...
+    ) -> Union[List[float], List[List[float]]]: ...
 
     approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     @dispatch_df_method
-    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
-        ...
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float: ...
 
     corr.__doc__ = DataFrame.corr.__doc__
 
     @dispatch_df_method
-    def cov(self, col1: str, col2: str) -> float:
-        ...
+    def cov(self, col1: str, col2: str) -> float: ...
 
     cov.__doc__ = DataFrame.cov.__doc__
 
     @dispatch_df_method
-    def crosstab(self, col1: str, col2: str) -> DataFrame:
-        ...
+    def crosstab(self, col1: str, col2: str) -> DataFrame: ...
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
 
     @dispatch_df_method
-    def freqItems(self, cols: List[str], support: Optional[float] = None) -> DataFrame:
-        ...
+    def freqItems(self, cols: List[str], support: Optional[float] = None) -> DataFrame: ...
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
     @dispatch_df_method
     def sampleBy(
         self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     sampleBy.__doc__ = DataFrame.sampleBy.__doc__

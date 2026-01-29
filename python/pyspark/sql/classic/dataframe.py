@@ -542,12 +542,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
     @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     def repartition(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
@@ -573,12 +571,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             )
 
     @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     def repartitionByRange(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
@@ -634,8 +630,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame:
-        ...
+    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -643,8 +638,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         withReplacement: Optional[bool],
         fraction: float,
         seed: Optional[int] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     def sample(  # type: ignore[misc]
         self,
@@ -984,12 +978,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     @overload
-    def head(self) -> Optional[Row]:
-        ...
+    def head(self) -> Optional[Row]: ...
 
     @overload
-    def head(self, n: int) -> List[Row]:
-        ...
+    def head(self, n: int) -> List[Row]: ...
 
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
         if n is None:
@@ -1001,12 +993,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return self.head()
 
     @overload
-    def __getitem__(self, item: Union[int, str]) -> Column:
-        ...
+    def __getitem__(self, item: Union[int, str]) -> Column: ...
 
     @overload
-    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame:
-        ...
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame: ...
 
     def __getitem__(
         self, item: Union[int, str, Column, List, Tuple]
@@ -1041,24 +1031,20 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return sorted(attrs)
 
     @overload
-    def select(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def select(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame:
-        ...
+    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame: ...
 
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sparkSession)
 
     @overload
-    def selectExpr(self, *expr: str) -> ParentDataFrame:
-        ...
+    def selectExpr(self, *expr: str) -> ParentDataFrame: ...
 
     @overload
-    def selectExpr(self, *expr: List[str]) -> ParentDataFrame:
-        ...
+    def selectExpr(self, *expr: List[str]) -> ParentDataFrame: ...
 
     def selectExpr(self, *expr: Union[str, List[str]]) -> ParentDataFrame:
         if len(expr) == 1 and isinstance(expr[0], list):
@@ -1079,12 +1065,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     @overload
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData": ...
 
     def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         jgd = self._jdf.groupBy(self._jcols_ordinal(*cols))
@@ -1093,12 +1077,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return GroupedData(jgd, self)
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         jgd = self._jdf.rollup(self._jcols_ordinal(*cols))
@@ -1107,12 +1089,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return GroupedData(jgd, self)
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         jgd = self._jdf.cube(self._jcols_ordinal(*cols))
@@ -1295,12 +1275,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self,
         value: "LiteralType",
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
-    def fillna(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame:
-        ...
+    def fillna(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame: ...
 
     def fillna(
         self,
@@ -1340,8 +1318,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         to_replace: "LiteralType",
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
     def replace(
@@ -1349,16 +1326,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
     def replace(
@@ -1366,8 +1341,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     def replace(  # type: ignore[misc]
         self,
@@ -1491,8 +1465,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -1500,8 +1473,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     def approxQuantile(
         self,
@@ -1721,12 +1693,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 
     @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def drop(self, cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
+    def drop(self, *cols: str) -> ParentDataFrame: ...
 
     def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         column_names: List[str] = []
@@ -1794,12 +1764,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
     @overload
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData": ...
 
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         return self.groupBy(*cols)
@@ -1899,12 +1867,10 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         return self.df.dropna(how=how, thresh=thresh, subset=subset)
 
     @overload
-    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> ParentDataFrame:
-        ...
+    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> ParentDataFrame: ...
 
     @overload
-    def fill(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame:
-        ...
+    def fill(self, value: Dict[str, "LiteralType"]) -> ParentDataFrame: ...
 
     def fill(
         self,
@@ -1919,16 +1885,14 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         to_replace: List["LiteralType"],
         value: List["OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     @overload
     def replace(
@@ -1936,8 +1900,7 @@ class DataFrameNaFunctions(ParentDataFrameNaFunctions):
         to_replace: List["LiteralType"],
         value: "OptionalPrimitiveType",
         subset: Optional[List[str]] = ...,
-    ) -> ParentDataFrame:
-        ...
+    ) -> ParentDataFrame: ...
 
     def replace(  # type: ignore[misc]
         self,
@@ -1960,8 +1923,7 @@ class DataFrameStatFunctions(ParentDataFrameStatFunctions):
         col: str,
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[float]:
-        ...
+    ) -> List[float]: ...
 
     @overload
     def approxQuantile(
@@ -1969,8 +1931,7 @@ class DataFrameStatFunctions(ParentDataFrameStatFunctions):
         col: Union[List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],
         relativeError: float,
-    ) -> List[List[float]]:
-        ...
+    ) -> List[List[float]]: ...
 
     def approxQuantile(
         self,

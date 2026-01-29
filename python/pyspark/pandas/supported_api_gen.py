@@ -374,8 +374,10 @@ def _write_table(
         else:
             lines.append("    * - :func:`%s`\n" % func_str)
         lines.append("      - %s\n" % status.implemented)
-        lines.append("      - \n") if not status.missing else lines.append(
-            "      - %s\n" % status.missing
+        (
+            lines.append("      - \n")
+            if not status.missing
+            else lines.append("      - %s\n" % status.missing)
         )
     w_fd.writelines(lines)
 

@@ -490,13 +490,11 @@ class NumpyHelper:
 
 
 @overload
-def remote_only(func: property) -> property:
-    ...
+def remote_only(func: property) -> property: ...
 
 
 @overload
-def remote_only(func: FuncT) -> FuncT:
-    ...
+def remote_only(func: FuncT) -> FuncT: ...
 
 
 def remote_only(func: Union[FuncT, property]) -> Union[FuncT, property]:
