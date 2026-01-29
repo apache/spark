@@ -34,7 +34,7 @@ CreateDataSourceTableCommand `spark_catalog`.`showdb`.`show_t2`, false
 -- !query
 CREATE TEMPORARY VIEW show_t3(e int) USING parquet
 -- !query analysis
-CreateTempViewUsing [tableIdent:`show_t3` StructType(StructField(e,IntegerType,true)) replace:false provider:parquet Map()
+CreateTempViewUsing [tableIdent:`show_t3` StructType(StructField(e,IntegerType,true)) ignoreIfExists:false replace:false provider:parquet Map()
 
 
 -- !query

@@ -79,7 +79,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   private def createTempTable(name: String): Unit = {
-    createTempView(sessionCatalog, name, Range(1, 2, 3, 4), overrideIfExists = true)
+    createTempView(sessionCatalog, name, Range(1, 2, 3, 4),
+      ignoreIfExists = false, overrideIfExists = true)
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
@@ -774,7 +775,8 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
     assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
     createTempView(
-      forkedSession.sessionState.catalog, "fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
+      forkedSession.sessionState.catalog, "fork_table", Range(1, 2, 3, 4),
+      ignoreIfExists = false, overrideIfExists = true)
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
   }
 
