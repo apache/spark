@@ -51,6 +51,24 @@ utf8_deserializer = UTF8Deserializer()
 
 
 def add_path(path: str) -> bool:
+    """
+    Add a path to sys.path if it's not already present.
+
+    Parameters
+    ----------
+    path : str
+        The path to add to sys.path.
+
+    Returns
+    -------
+    bool
+        True if the path was added, False if it was already present.
+
+    Notes
+    -----
+    The path is inserted at position 1 to overwrite system packages.
+    Worker can be reused, so paths are not added multiple times.
+    """
     # worker can be used, so do not add path multiple times
     if path not in sys.path:
         # overwrite system packages
@@ -60,6 +78,22 @@ def add_path(path: str) -> bool:
 
 
 def read_command(serializer: FramedSerializer, file: IO) -> Any:
+    """
+    Read and deserialize a command from the input file.
+
+    Parameters
+    ----------
+    serializer : FramedSerializer
+        The serializer to use for reading the command.
+    file : IO
+        The input file to read from.
+
+    Returns
+    -------
+    Any
+        The deserialized command. If the command is a Broadcast object,
+        it will be deserialized from its value.
+    """
     if not is_remote_only():
         from pyspark.core.broadcast import Broadcast
 
