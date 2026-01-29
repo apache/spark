@@ -218,9 +218,9 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
+    override protected val schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    override protected val timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -244,10 +244,6 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
     )
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = _schema
-  override protected lazy val timeZoneId: String = _timeZoneId
   override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
