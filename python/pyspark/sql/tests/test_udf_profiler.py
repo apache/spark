@@ -28,7 +28,6 @@ from typing import Iterator
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
 from pyspark.sql import SparkSession
-from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.functions import col, arrow_udf, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
