@@ -192,6 +192,12 @@ object TTLProcessorUtils {
         Seq("partition_id", "key", "value")
     }
   }
+
+  def getTTLSelectExpressions(columnFamilyNames: Seq[String]): Map[String, Seq[String]] = {
+    columnFamilyNames.map { cfName =>
+      cfName -> TTLProcessorUtils.getTTLSelectExpressions(cfName)
+    }.toMap
+  }
 }
 
 /**
