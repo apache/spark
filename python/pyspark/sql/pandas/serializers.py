@@ -695,6 +695,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             Whether to prefer large Arrow types (e.g., large_string instead of string).
         struct_in_pandas : str, optional
             How to represent struct types in pandas: "dict" or "row".
+            Default is "dict".
 
         Returns
         -------
@@ -715,31 +716,44 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, spark_type in series:
-            # DataFrame with StructType → struct array; otherwise → regular array
-            # Check if this is a struct type that needs DataFrame representation
-            is_struct_type = (
-                spark_type is not None
-                and isinstance(spark_type, StructType)
-                and isinstance(s, pd.DataFrame)
+            # Convert spark_type to arrow_type for type checking (similar to master branch)
+            arrow_type = (
+                to_arrow_type(
+                    spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
+                )
+                if spark_type is not None
+                else None
             )
-            if is_struct_type:
+
+            # Variants are represented in arrow as structs with additional metadata (checked by
+            # is_variant). If the data type is Variant, return a VariantVal atomic type instead of
+            # a dict of two binary values.
+            if (
+                struct_in_pandas == "dict"
+                and arrow_type is not None
+                and pa.types.is_struct(arrow_type)
+                and not is_variant(arrow_type)
+            ):
+                # A pandas UDF should return pd.DataFrame when the return type is a struct type.
+                # If it returns a pd.Series, it should throw an error.
+                if not isinstance(s, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
+                    )
+                arrs.append(
+                    self._create_struct_array(
+                        s, spark_type, prefers_large_types=prefers_large_types
+                    )
+                )
+            elif isinstance(s, pd.DataFrame):
+                # If data is a DataFrame (e.g., from df_for_struct), use _create_struct_array
                 arrs.append(
                     self._create_struct_array(
                         s, spark_type, prefers_large_types=prefers_large_types
                     )
                 )
             else:
-                # For struct types with struct_in_pandas="dict", validate DataFrame is provided
-                if (
-                    struct_in_pandas == "dict"
-                    and spark_type is not None
-                    and isinstance(spark_type, StructType)
-                    and not isinstance(s, pd.DataFrame)
-                ):
-                    raise PySparkValueError(
-                        "Invalid return type. Please make sure that the UDF returns a "
-                        "pandas.DataFrame when the specified return type is StructType."
-                    )
                 arrs.append(
                     self._create_array(
                         s,

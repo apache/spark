@@ -431,19 +431,9 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
             )
         return result
 
-    if isinstance(return_type, StructType):
-        # Convert Series of dicts/Rows to DataFrame for struct types
-        def to_output_format(result):
-            return pd.DataFrame(list(result))
-
-    else:
-
-        def to_output_format(result):
-            return result
-
     return (
         args_kwargs_offsets,
-        lambda *a: (to_output_format(verify_result_length(evaluate(*a), len(a[0]))), return_type),
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), return_type),
     )
 
 
@@ -2794,10 +2784,19 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
             # Arrow-optimized Python UDF takes a struct type argument as a Row
+            # When legacy pandas conversion is enabled, use "row" and convert ndarray to list
             struct_in_pandas = (
-                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
+                "row"
+                if (
+                    eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                    or runner_conf.use_legacy_pandas_udf_conversion
+                )
+                else "dict"
             )
-            ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            ndarray_as_list = (
+                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                or runner_conf.use_legacy_pandas_udf_conversion
+            )
             # Arrow-optimized Python UDF takes input types
             input_type = (
                 _parse_datatype_json_string(utf8_deserializer.loads(infile))
