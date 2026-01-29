@@ -171,6 +171,14 @@ private[spark] class DAGScheduler(
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
+  // Track all the jobs submitted by the same query execution, will clean up after
+  // the query finishes. Use ConcurrentHashMap to allow thread-safe access from
+  // different threads (e.g., SQLExecution during testing).
+  private[spark] val activeQueryToJobs =
+    new ConcurrentHashMap[Long, java.util.Set[ActiveJob]]()
+
+  private[spark] val jobIdToQueryExecutionId = new ConcurrentHashMap[Int, java.lang.Long]()
+
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
   // this set, the job will be immediately cancelled.
@@ -1145,12 +1153,26 @@ private[spark] class DAGScheduler(
     eventProcessLoop.post(AllJobsCancelled)
   }
 
+  /**
+   * Cleanup the jobs of query execution tracked in the DAGScheduler.
+   */
+  def cleanupQueryJobs(executionId: Long): Unit = {
+    logInfo(s"Asked to cleanup jobs for query execution $executionId")
+    eventProcessLoop.post(CleanupQueryJobs(executionId))
+  }
+
   private[scheduler] def doCancelAllJobs(): Unit = {
     // Cancel all running jobs.
     runningStages.map(_.firstJobId).foreach(handleJobCancellation(_,
       Option("as part of cancellation of all jobs")))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
+  }
+
+  private[spark] def doCleanupQueryJobs(executionId: Long): Unit = {
+    Option(activeQueryToJobs.remove(executionId)).foreach { jobs =>
+      jobs.forEach(job => jobIdToQueryExecutionId.remove(job.jobId))
+    }
   }
 
   /**
@@ -1325,6 +1347,18 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
   }
 
+  private def getQueryExecutionIdFromProperties(properties: Properties): Option[Long] = {
+    try {
+      Option(properties)
+        .flatMap(properties => Option(properties.getProperty(SparkContext.SQL_EXECUTION_ID_KEY)))
+        .map(_.toLong)
+    } catch {
+      case e: Throwable =>
+        logWarning(log"Failed to get query execution ID from job properties", e)
+        None
+    }
+  }
+
   private[scheduler] def handleJobSubmitted(
       jobId: Int,
       finalRDD: RDD[_],
@@ -1398,6 +1432,10 @@ private[spark] class DAGScheduler(
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
     activeJobs += job
+    getQueryExecutionIdFromProperties(properties).foreach { qeId =>
+      activeQueryToJobs.computeIfAbsent(qeId, _ => ConcurrentHashMap.newKeySet()).add(job)
+      jobIdToQueryExecutionId.put(jobId, qeId)
+    }
     finalStage.setActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos =
@@ -1441,6 +1479,10 @@ private[spark] class DAGScheduler(
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
     activeJobs += job
+    getQueryExecutionIdFromProperties(properties).foreach { qeId =>
+      activeQueryToJobs.computeIfAbsent(qeId, _ => ConcurrentHashMap.newKeySet()).add(job)
+      jobIdToQueryExecutionId.put(jobId, qeId)
+    }
     finalStage.addActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos =
@@ -1898,22 +1940,28 @@ private[spark] class DAGScheduler(
    * stages will be resubmitted and re-try all the tasks, as the input data may be changed after
    * the map tasks are re-tried. For stages where rollback and retry all tasks are not possible,
    * we will need to abort the stages.
+   *
+   * @return true if the corresponding active jobs are not aborted and will continue to run after rollback, otherwise false
    */
   private[scheduler] def rollbackSucceedingStages(
       mapStage: ShuffleMapStage,
-      rollbackCurrentStage: Boolean = false): Unit = {
+      rollbackCurrentStage: Boolean = false): Boolean = {
     val stagesToRollback = if (rollbackCurrentStage) {
       collectSucceedingStages(mapStage)
     } else {
       collectSucceedingStages(mapStage).filterNot(_ == mapStage)
     }
+    logInfo(log"Found succeeding stages ${MDC(STAGES, stagesToRollback)} of " +
+      log"shuffle checksum mismatch stage ${MDC(STAGE, mapStage)} in active jobs")
     val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
+
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
     // left depending on the indeterminate stage and hence no need to roll back any stages.
     val numActiveJobsWithStageAfterRollback =
       activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-    if (numActiveJobsWithStageAfterRollback == 0) {
+    val hasActiveJobs = numActiveJobsWithStageAfterRollback > 0
+    if (!hasActiveJobs) {
       logInfo(log"All jobs depending on the indeterminate stage " +
         log"(${MDC(STAGE_ID, mapStage.id)}) were aborted.")
     } else {
@@ -1939,6 +1987,94 @@ private[spark] class DAGScheduler(
       logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output " +
         log"was retried, we will roll back and rerun its succeeding " +
         log"stages: ${MDC(STAGES, stagesCanRollback)}")
+    }
+    // Whether there are still active jobs which need to be processed
+    hasActiveJobs
+  }
+
+  private def getCompletedJobsFromSameQuery(mapStage: ShuffleMapStage): Array[ActiveJob] = {
+    import scala.jdk.CollectionConverters._
+    val executionIds = mapStage
+      .jobIds
+      .flatMap(jobId => Option(jobIdToQueryExecutionId.get(jobId)))
+    if (executionIds.size > 1) {
+      logWarning(log"There are multiple queries reuse the same stage: ${MDC(STAGE, mapStage)}")
+    }
+    executionIds
+      .flatMap(qeId => Option(activeQueryToJobs.get(qeId)).map(_.asScala).getOrElse(Set.empty))
+      .diff(activeJobs)
+      .toArray
+      .sortBy(_.jobId)
+  }
+
+  private def abortSucceedingFinalStages(mapStage: ShuffleMapStage, reason: String): Unit = {
+    val jobFinalStages = activeJobs.map(_.finalStage).toSet
+
+    collectSucceedingStages(mapStage)
+      .intersect(jobFinalStages)
+      .foreach { stage =>
+        // Abort stage will fail the jobs depending on it, cleaning up the stages for these jobs:
+        // 1. cancel running stages
+        // 2. clean up the stages from DAGScheduler if no active jobs depending on them, waiting
+        //    stages will be removed and won't be submitted.
+        // As we abort all the succeeding active jobs, all the succeeding stages should be
+        // cleaned up.
+        abortStage(stage, reason, exception = None)
+      }
+  }
+
+  // In rollbackSucceedingStages, we assume that the jobs are independent even if they reuse
+  // the same shuffle. If an active job hits fetch failure and keeps retrying upstream stages
+  // cascadingly, and a shuffle checksum mismatch is detected, these retried stages will be
+  // fully rolled back if possible, or the job will be aborted. However, we won't do anything for
+  // the other active jobs.
+  //
+  // For SQL query execution, all the jobs from the same query are related as they all contribute
+  // to the query result in some ways. For example, the jobs for subquery expressions are not part
+  // of the main query RDD, but they are still related. We need to guarantee the consistency of all
+  // the jobs, which means if a shuffle stage hits checksum mismatch, all its downstream stages in
+  // all the jobs of the same query execution should be rolled back if possible.
+  //
+  // This method does:
+  // 1. Find all the jobs triggered by the same query execution including the completed ones.
+  // 2. Find all the succeeding stages of the checksum mismatch shuffle stage based on shuffle id
+  //    as stage can be different in different jobs even they share the same shuffle.
+  // 3. Abort succeeding stages if their leaf result stages have started running.
+  // 4. Clean up shuffle outputs of the checksum mismatched shuffle stages which are available to
+  //    make sure all these stages would be resubmitted and fully retied.
+  // 5. Cancel running shuffle map stages and resubmit.
+  private[scheduler] def rollbackSucceedingStagesForQuery(mapStage: ShuffleMapStage): Unit = {
+    // Find the completed jobs triggered by the same query execution.
+    val completedJobs = getCompletedJobsFromSameQuery(mapStage)
+    val succeedingStagesInCompletedJobs =
+      collectSucceedingStagesByShuffleId(mapStage, completedJobs)
+    logInfo(log"Found succeeding stages ${MDC(STAGES, succeedingStagesInCompletedJobs)} of " +
+      log"shuffle checksum mismatch stage ${MDC(STAGE, mapStage)} in completed jobs: (" +
+      log"${MDC(JOB_IDS, completedJobs.map(_.jobId).mkString(","))})")
+
+    // Abort all the succeeding final stages in active jobs to fail fast and avoid wasting
+    // resources if there are succeeding result stages in completed jobs.
+    val completedResultStages =
+      succeedingStagesInCompletedJobs.collect { case r: ResultStage => r }
+    if (completedResultStages.nonEmpty) {
+      val reason = s"cannot rollback completed result stages ${completedResultStages}, " +
+        s"please re-run the query to ensure data correctness"
+      abortSucceedingFinalStages(mapStage, reason)
+      return
+    }
+
+    // Rollback the succeeding stages in active jobs. If there are no active jobs left after
+    // rollback, we can skip the rollback for completed jobs.
+    val hasActiveJobs = rollbackSucceedingStages(mapStage)
+    if (hasActiveJobs) {
+      // Rollback the shuffle map stages in completed jobs to make sure the completed shuffle
+      // map stages would be re-submitted and fully retried.
+      succeedingStagesInCompletedJobs.collect { case s: ShuffleMapStage => s }
+        .foreach(stage => rollbackShuffleMapStage(stage, "rolling back due to indeterminate " +
+          s"output of shuffle map stage $mapStage"))
+    } else {
+      logInfo(log"All jobs depending on the checksum mismatch stage " +
+        log"(${MDC(STAGE_ID, mapStage.id)}) were aborted, skip the rollback.")
     }
   }
 
@@ -2189,7 +2325,11 @@ private[spark] class DAGScheduler(
                       && shuffleStage.isRuntimeIndeterminate) {
                     if (shuffleStage.maxChecksumMismatchedId < smt.stageAttemptId) {
                       shuffleStage.maxChecksumMismatchedId = smt.stageAttemptId
-                      rollbackSucceedingStages(shuffleStage)
+                      if (shuffleStage.shuffleDep.checksumMismatchQueryLevelRollbackEnabled) {
+                        rollbackSucceedingStagesForQuery(shuffleStage)
+                      } else {
+                        rollbackSucceedingStages(shuffleStage)
+                      }
                     }
                   }
                 }
@@ -2484,6 +2624,32 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private def collectSucceedingStagesByShuffleId(
+      mapStage: ShuffleMapStage, jobs: Array[ActiveJob]): HashSet[Stage] = {
+    val succeedingStages = HashSet[Stage]()
+    val shuffleId = mapStage.shuffleDep.shuffleId
+
+    def getShuffleId(stage: Stage): Option[Int] = stage match {
+      case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
+      case _ => None
+    }
+
+    def collectSucceedingStagesInternal(stageChain: List[Stage]): Unit = {
+      val head = stageChain.head
+      if (getShuffleId(head).contains(shuffleId)) {
+        stageChain.drop(1).foreach { s =>
+          succeedingStages += s
+        }
+      } else {
+        head.parents.foreach { s =>
+          collectSucceedingStagesInternal(s :: stageChain)
+        }
+      }
+    }
+    jobs.foreach(job => collectSucceedingStagesInternal(job.finalStage :: Nil))
+    succeedingStages
+  }
+
   private def collectSucceedingStages(mapStage: ShuffleMapStage): HashSet[Stage] = {
     // TODO: perhaps materialize this if we are going to compute it often enough ?
     // It's a little tricky to find all the succeeding stages of `mapStage`, because
@@ -2543,6 +2709,8 @@ private[spark] class DAGScheduler(
           } else {
             rollingBackStages += mapStage
           }
+        } else if (runningStages.contains(mapStage)) {
+          rollingBackStages += mapStage
         }
 
       case resultStage: ResultStage if resultStage.activeJob.isDefined =>
@@ -2550,6 +2718,10 @@ private[spark] class DAGScheduler(
         if (numMissingPartitions < resultStage.numTasks) {
           // TODO: support to rollback result tasks.
           abortStage(resultStage, generateErrorMessage(resultStage), None)
+        } else if (runningStages.contains(resultStage)) {
+          val reason = "cannot rollback a running result stage, please re-run the query " +
+            "to ensure data correctness"
+          abortStage(resultStage, reason, None)
         }
 
       case _ =>
@@ -3361,6 +3533,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()
+
+    case CleanupQueryJobs(executionId) =>
+      dagScheduler.doCleanupQueryJobs(executionId)
 
     case ExecutorAdded(execId, host) =>
       dagScheduler.handleExecutorAdded(execId, host)
