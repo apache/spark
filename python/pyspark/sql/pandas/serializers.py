@@ -369,8 +369,6 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
                 pass
 
     def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-
         # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
         # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
         batch_iter = (
@@ -381,13 +379,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
 
         if self._assign_cols_by_name:
             batch_iter = (
-                (
-                    pa.RecordBatch.from_arrays(
-                        [batch.column(field.name) for field in arrow_type],
-                        names=[field.name for field in arrow_type],
-                    ),
-                    arrow_type,
-                )
+                (ArrowBatchTransformer.reorder_columns(batch, arrow_type), arrow_type)
                 for batch, arrow_type in batch_iter
             )
 
