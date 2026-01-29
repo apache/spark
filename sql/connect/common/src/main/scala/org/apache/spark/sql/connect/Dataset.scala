@@ -705,11 +705,8 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def zipWithIndex(indexColName: String): DataFrame = {
-    if (schema.fieldNames.contains(indexColName)) {
-      throw new AnalysisException(
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        messageParameters = Map("columnName" -> toSQLId(indexColName)))
-    }
+    // Note: Column existence check is handled server-side to avoid requiring
+    // a schema fetch which needs a server connection.
     select(col("*"), Column.internalFn("distributed_sequence_id").alias(indexColName))
   }
 
