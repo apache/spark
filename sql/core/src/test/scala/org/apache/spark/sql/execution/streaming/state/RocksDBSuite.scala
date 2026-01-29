@@ -2179,89 +2179,93 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   test("RocksDB: ensure merge operation correctness") {
-    withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
-      // minDeltasForSnapshot being 5 ensures that only changelog files are created
-      // for the 3 commits below
-      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-        db.load(0)
-        db.put("a", "1")
-        db.merge("a", "2")
-        db.commit()
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete() // to make sure that the directory gets created
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          db.put("a", "1")
+          db.merge("a", "2")
+          db.commit()
 
-        db.load(1)
-        db.merge("a", "3")
-        db.commit()
+          db.load(1)
+          db.merge("a", "3")
+          db.commit()
 
-        db.load(2)
-        db.remove("a")
-        db.commit()
+          db.load(2)
+          db.remove("a")
+          db.commit()
 
-        db.load(1)
-        assert(new String(db.get("a")) === "1,2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2")))
+          db.load(1)
+          assert(new String(db.get("a")) === "1,2")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1,2")))
 
-        db.load(2)
-        assert(new String(db.get("a")) === "1,2,3")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3")))
+          db.load(2)
+          assert(new String(db.get("a")) === "1,2,3")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3")))
 
-        db.load(3)
-        assert(db.get("a") === null)
-        assert(db.iterator().isEmpty)
+          db.load(3)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+        }
       }
     }
   }
 
   test("RocksDB: ensure putList / mergeList operation correctness") {
-    withTempDir { dir =>
-      val remoteDir = Utils.createTempDir().toString
-      // minDeltasForSnapshot being 5 ensures that only changelog files are created
-      // for the 3 commits below
-      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
-      new File(remoteDir).delete() // to make sure that the directory gets created
-      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-        db.load(0)
-        db.put("a", "1".getBytes)
-        db.mergeList("a", Seq("2", "3", "4").map(_.getBytes).toList)
-        db.commit()
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        // minDeltasForSnapshot being 5 ensures that only changelog files are created
+        // for the 3 commits below
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete() // to make sure that the directory gets created
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          db.put("a", "1".getBytes)
+          db.mergeList("a", Seq("2", "3", "4").map(_.getBytes).toList)
+          db.commit()
 
-        db.load(1)
-        db.mergeList("a", Seq("5", "6").map(_.getBytes).toList)
-        db.commit()
+          db.load(1)
+          db.mergeList("a", Seq("5", "6").map(_.getBytes).toList)
+          db.commit()
 
-        db.load(2)
-        db.remove("a")
-        db.commit()
+          db.load(2)
+          db.remove("a")
+          db.commit()
 
-        db.load(3)
-        db.putList("a", Seq("7", "8", "9").map(_.getBytes).toList)
-        db.commit()
+          db.load(3)
+          db.putList("a", Seq("7", "8", "9").map(_.getBytes).toList)
+          db.commit()
 
-        db.load(4)
-        db.putList("a", Seq("10", "11").map(_.getBytes).toList)
-        db.commit()
+          db.load(4)
+          db.putList("a", Seq("10", "11").map(_.getBytes).toList)
+          db.commit()
 
-        db.load(1)
-        assert(new String(db.get("a")) === "1,2,3,4")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4")))
+          db.load(1)
+          assert(new String(db.get("a")) === "1,2,3,4")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4")))
 
-        db.load(2)
-        assert(new String(db.get("a")) === "1,2,3,4,5,6")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
+          db.load(2)
+          assert(new String(db.get("a")) === "1,2,3,4,5,6")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
 
-        db.load(3)
-        assert(db.get("a") === null)
-        assert(db.iterator().isEmpty)
+          db.load(3)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
 
-        db.load(4)
-        assert(new String(db.get("a")) === "7,8,9")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "7,8,9")))
+          db.load(4)
+          assert(new String(db.get("a")) === "7,8,9")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "7,8,9")))
 
-        db.load(5)
-        assert(new String(db.get("a")) === "10,11")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
+          db.load(5)
+          assert(new String(db.get("a")) === "10,11")
+          assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
+        }
       }
     }
   }
@@ -2339,6 +2343,50 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
     assert(ex.getMessage.contains("Must be 1 or 2"))
     assert(ex.getMessage.contains("99"))
+  }
+
+  test("RocksDB: putList/mergeList with version 1 (comma delimiter)") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete()
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          db.putList("a", Seq("1", "2").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(2)
+          assert(new String(db.get("a")) === "1,2,3,4")
+        }
+      }
+    }
+  }
+
+  test("RocksDB: putList/mergeList with version 2 (empty delimiter)") {
+    withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+      withTempDir { dir =>
+        val remoteDir = Utils.createTempDir().toString
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        new File(remoteDir).delete()
+        withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+          db.load(0)
+          db.putList("a", Seq("1", "2").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
+          db.mergeList("a", Seq("3", "4").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(2)
+          assert(new String(db.get("a")) === "1234")
+        }
+      }
+    }
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies("RocksDBFileManager: delete orphan files",

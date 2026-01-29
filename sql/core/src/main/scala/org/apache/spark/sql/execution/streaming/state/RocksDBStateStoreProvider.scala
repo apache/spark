@@ -1443,7 +1443,7 @@ class RocksDBStateStoreChangeDataReader(
           val valueBytes = if (storeConf.rowChecksumEnabled &&
             nextRecord._1 != RecordType.DELETE_RECORD) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, keyBytes, nextRecord._3)
+              readVerifier, keyBytes, nextRecord._3, rocksDB.delimiterSize)
           } else {
             nextRecord._3
           }
@@ -1466,7 +1466,7 @@ class RocksDBStateStoreChangeDataReader(
             (nextRecord._1, key, nextRecord._3)
           case _ =>
             val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, nextRecord._2, nextRecord._3)
+              readVerifier, nextRecord._2, nextRecord._3, rocksDB.delimiterSize)
             (nextRecord._1, nextRecord._2, value)
         }
       } else {
