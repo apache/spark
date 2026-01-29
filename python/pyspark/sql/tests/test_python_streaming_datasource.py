@@ -353,10 +353,10 @@ class BasePythonStreamingDataSourceTestsMixin:
         q = df.writeStream.trigger(once=True).foreachBatch(check_batch).start()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
-        self.assertTrue(len(q.recentProgress) == 1)
-        self.assertTrue(q.lastProgress.numInputRows == 10)
-        self.assertTrue(q.lastProgress.sources[0].numInputRows == 10)
-        self.assertTrue(q.lastProgress.sources[0].latestOffset == """{"partition-1": 1000000}""")
+        self.assertEqual(len(q.recentProgress), 1)
+        self.assertEqual(q.lastProgress.numInputRows, 10)
+        self.assertEqual(q.lastProgress.sources[0].numInputRows, 10)
+        self.assertEqual(q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}""")
 
     def test_stream_reader_admission_control_processing_time_trigger(self):
         self.spark.dataSource.register(self._get_test_data_source_for_admission_control())
@@ -383,12 +383,12 @@ class BasePythonStreamingDataSourceTestsMixin:
         q.awaitTermination(timeout=30)
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
         # 2 rows * 5 batches = 10 rows
-        self.assertTrue(len(q.recentProgress) == 5)
+        self.assertEqual(len(q.recentProgress), 5)
         for progress in q.recentProgress:
-            self.assertTrue(progress.numInputRows == 2)
-            self.assertTrue(q.lastProgress.sources[0].numInputRows == 2)
-            self.assertTrue(
-                q.lastProgress.sources[0].latestOffset == """{"partition-1": 1000000}"""
+            self.assertEqual(progress.numInputRows, 2)
+            self.assertEqual(q.lastProgress.sources[0].numInputRows, 2)
+            self.assertEqual(
+                q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}"""
             )
 
     def test_simple_stream_reader(self):
