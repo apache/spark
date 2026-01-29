@@ -40,6 +40,11 @@ object V2CommandStrategy extends Strategy {
     case SetVariable(variables, query) =>
       SetVariableExec(variables.map(_.asInstanceOf[VariableReference]), planLater(query)) :: Nil
 
+    case SelectIntoVariable(variables, query) =>
+      SelectIntoVariableExec(
+        variables.map(_.asInstanceOf[VariableReference]),
+        planLater(query)) :: Nil
+
     case DeclareCursor(cursorName, queryText, asensitive) =>
       DeclareCursorExec(cursorName, queryText, asensitive) :: Nil
 

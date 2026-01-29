@@ -827,7 +827,7 @@ transformClause
     ;
 
 selectClause
-    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq (INTO targetVariable=multipartIdentifierList)?
     ;
 
 setClause

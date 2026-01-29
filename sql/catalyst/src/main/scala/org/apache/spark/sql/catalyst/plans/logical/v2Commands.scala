@@ -1928,6 +1928,22 @@ case class SetVariable(
 }
 
 /**
+ * The logical plan for SELECT INTO.
+ * When query returns zero rows, variables remain unchanged.
+ * When query returns more than one row, an error is thrown.
+ * @param targetVariables The variables to set
+ * @param sourceQuery The query that produces the values
+ */
+case class SelectIntoVariable(
+    targetVariables: Seq[Expression],
+    sourceQuery: LogicalPlan)
+  extends UnaryCommand {
+  override def child: LogicalPlan = sourceQuery
+  override protected def withNewChildInternal(newChild: LogicalPlan): SelectIntoVariable =
+    copy(sourceQuery = newChild)
+}
+
+/**
  * The logical plan of the DECLARE CURSOR statement.
  *
  * The queryText is stored to support both parameterized and non-parameterized cursors.
@@ -1972,7 +1988,6 @@ case class FetchCursor(
  * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
  */
 case class CloseCursor(cursor: Expression) extends LeafCommand
-
 
 /**
  * The logical plan of the CALL statement.
