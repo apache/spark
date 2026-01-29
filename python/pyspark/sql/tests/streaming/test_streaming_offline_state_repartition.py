@@ -400,14 +400,21 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             verify_after_decrease=verify_after_decrease,
         )
 
+    @unittest.skipIf(
+        not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        pyarrow_requirement_message or "Not supported in no-GIL mode",
+    )
     def test_repartition_with_streaming_tws(self):
         """Test repartition for streaming transformWithState"""
 
         self._run_tws_repartition_test(is_pandas=False)
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
+        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        cast(
+            str,
+            pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+        ),
     )
     def test_repartition_with_streaming_tws_in_pandas(self):
         """Test repartition for streaming transformWithStateInPandas."""
@@ -518,14 +525,21 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
             verify_after_decrease=verify_after_decrease,
         )
 
+    @unittest.skipIf(
+        not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        pyarrow_requirement_message or "Not supported in no-GIL mode",
+    )
     def test_repartition_with_streaming_tws_multiple_state_vars(self):
         """Test repartition with transformWithState using multiple state variable types (value + list + map)."""
 
         self._run_repartition_with_streaming_tws_multiple_state_vars_test(is_pandas=False)
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
+        not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+        cast(
+            str,
+            pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+        ),
     )
     def test_repartition_with_streaming_tws_in_pandas_multiple_state_vars(self):
         """Test repartition with transformWithStateInPandas using multiple state variable types (value + list + map)."""

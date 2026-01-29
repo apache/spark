@@ -299,7 +299,6 @@ class StatePartitionAllColumnFamiliesReader(
     isTWSOperator(operatorName) && colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME
   }
 
-
   // Using the heuristic that all operators that enable column families
   // have a non-default column family
   private lazy val useColumnFamilies: Boolean = {
