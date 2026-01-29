@@ -4541,7 +4541,7 @@ object SQLConf {
       .internal()
       .doc("When true, enables SELECT INTO statement within SQL scripts. " +
         "SELECT INTO allows assigning query results directly to variables.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
