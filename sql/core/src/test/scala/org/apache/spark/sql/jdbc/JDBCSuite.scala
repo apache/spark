@@ -772,7 +772,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:aws-wrapper:postgresql://127.0.0.1/db") === PostgresDialect())
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") === DB2Dialect())
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
     assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
