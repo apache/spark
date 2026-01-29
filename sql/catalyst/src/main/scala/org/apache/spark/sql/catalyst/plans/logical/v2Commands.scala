@@ -61,8 +61,7 @@ trait KeepAnalyzedQuery extends Command {
 trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
-    with CTEInChildren
-    with IgnoreCachedData {
+    with CTEInChildren {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
