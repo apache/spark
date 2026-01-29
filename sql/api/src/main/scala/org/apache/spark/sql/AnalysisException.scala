@@ -138,7 +138,7 @@ class AnalysisException protected (
       context = origin.getQueryContext,
       cause = cause)
 
-  def this(
+  private[sql] def this(
       errorClass: String,
       messageParameters: Map[String, String],
       context: Array[QueryContext],
