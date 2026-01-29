@@ -82,7 +82,7 @@ trait KeyGroupedPartitionedScan[T] {
       partitionValueAccessor: T => InternalRow): Seq[Seq[T]] = {
     assert(spjParams.keyGroupedPartitioning.isDefined)
 
-    if (spjParams.noGrouping) {
+    if (spjParams.disableGrouping) {
       return filteredPartitions.flatten.map(Seq(_))
     }
 

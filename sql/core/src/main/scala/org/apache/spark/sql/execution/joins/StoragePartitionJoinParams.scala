@@ -30,14 +30,14 @@ case class StoragePartitionJoinParams(
     reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
     applyPartialClustering: Boolean = false,
     replicatePartitions: Boolean = false,
-    noGrouping: Boolean = false) {
+    disableGrouping: Boolean = false) {
   override def equals(other: Any): Boolean = other match {
     case other: StoragePartitionJoinParams =>
       this.commonPartitionValues == other.commonPartitionValues &&
       this.replicatePartitions == other.replicatePartitions &&
       this.applyPartialClustering == other.applyPartialClustering &&
       this.joinKeyPositions == other.joinKeyPositions &&
-      this.noGrouping == other.noGrouping
+      this.disableGrouping == other.disableGrouping
     case _ =>
       false
   }
@@ -47,5 +47,5 @@ case class StoragePartitionJoinParams(
     commonPartitionValues: Option[Seq[(InternalRow, Int)]],
     applyPartialClustering: java.lang.Boolean,
     replicatePartitions: java.lang.Boolean,
-    noGrouping: java.lang.Boolean)
+    disableGrouping: java.lang.Boolean)
 }
