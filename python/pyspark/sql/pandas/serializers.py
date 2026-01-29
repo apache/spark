@@ -566,14 +566,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 pandas_batches = [
                     ArrowArrayToPandasConversion.convert(
                         batch.column(i),
-                        self._timezone,
+                        self._input_type[i].dataType
+                        if self._input_type is not None
+                        else from_arrow_type(batch.column(i).type),
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=(
-                            self._input_type[i].dataType
-                            if hasattr(self, "_input_type") and self._input_type
-                            else None
-                        ),
                         df_for_struct=self._df_for_struct,
                     )
                     for i in range(batch.num_columns)
@@ -1114,10 +1112,12 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 tuple(
                     ArrowArrayToPandasConversion.convert(
                         c,
-                        self._timezone,
+                        self._input_type[i].dataType
+                        if self._input_type is not None
+                        else from_arrow_type(c.type),
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(batch.columns)
@@ -1164,14 +1164,15 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         def process_group(batches: "Iterator[pa.RecordBatch]"):
             # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
             for batch in batches:
-                # The batch from ArrowStreamSerializer is already flattened (no struct wrapper)
                 series = [
                     ArrowArrayToPandasConversion.convert(
                         batch.column(i),
-                        self._timezone,
+                        self._input_type[i].dataType
+                        if self._input_type is not None
+                        else from_arrow_type(batch.column(i).type),
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i in range(batch.num_columns)
@@ -1235,10 +1236,12 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 [
                     ArrowArrayToPandasConversion.convert(
                         c,
-                        self._timezone,
+                        self._input_type[i].dataType
+                        if self._input_type is not None
+                        else from_arrow_type(c.type),
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(pa.Table.from_batches(left_batches).itercolumns())
@@ -1246,10 +1249,12 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 [
                     ArrowArrayToPandasConversion.convert(
                         c,
-                        self._timezone,
+                        self._input_type[i].dataType
+                        if self._input_type is not None
+                        else from_arrow_type(c.type),
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
                     for i, c in enumerate(pa.Table.from_batches(right_batches).itercolumns())
@@ -1418,16 +1423,21 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
                 state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
+                state_spark_type = (
+                    self._input_type[-1].dataType
+                    if self._input_type is not None
+                    else from_arrow_type(state_batch.schema[0])
+                )
                 state_pandas = [
                     ArrowArrayToPandasConversion.convert(
                         c,
-                        self._timezone,
+                        state_spark_type,
+                        timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
-                        spark_type=self._input_type[i].dataType if self._input_type else None,
                         df_for_struct=self._df_for_struct,
                     )
-                    for i, c in enumerate(state_arrow)
+                    for c in state_arrow
                 ][0]
 
                 for state_idx in range(0, len(state_pandas)):
@@ -1463,10 +1473,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._timezone,
+                            self._input_type[i].dataType
+                            if self._input_type is not None
+                            else from_arrow_type(c.type),
+                            timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(data_arrow)
@@ -1740,10 +1752,12 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                     data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._timezone,
+                            self._input_type[i].dataType
+                            if self._input_type is not None
+                            else from_arrow_type(c.type),
+                            timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1877,10 +1891,12 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._timezone,
+                            self._input_type[i].dataType
+                            if self._input_type is not None
+                            else from_arrow_type(c.type),
+                            timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(flatten_state_table.itercolumns())
@@ -1890,10 +1906,12 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     init_data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._timezone,
+                            self._input_type[i].dataType
+                            if self._input_type is not None
+                            else from_arrow_type(c.type),
+                            timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
-                            spark_type=self._input_type[i].dataType if self._input_type else None,
                             df_for_struct=self._df_for_struct,
                         )
                         for i, c in enumerate(flatten_init_table.itercolumns())
