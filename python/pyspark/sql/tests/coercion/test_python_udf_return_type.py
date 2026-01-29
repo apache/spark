@@ -150,6 +150,18 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
     def repr_value(self, value):
         return f"{str(value)}({type(value).__name__})"
 
+    def test_str_repr(self):
+        self.assertEqual(
+            len(self.test_types),
+            len(set(self.repr_type(t) for t in self.test_types)),
+            "String representations of types should be different!",
+        )
+        self.assertEqual(
+            len(self.test_data),
+            len(set(self.repr_value(d) for d in self.test_data)),
+            "String representations of values should be different!",
+        )
+
     def test_python_return_type_coercion_vanilla(self):
         self._run_udf_return_type_coercion(
             use_arrow=False,

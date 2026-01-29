@@ -21,7 +21,9 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.StreamingErrors
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * An interface for accessing the checkpoint metadata associated with a streaming query.
@@ -52,6 +54,18 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
     val metadataPath = new Path(checkpointFile(StreamingCheckpointConstants.DIR_NAME_METADATA))
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
+      // Before creating a new metadata file with a new query ID, validate that the checkpoint
+      // is not in an inconsistent state where the metadata file is missing but offset/commit
+      // logs have data. This prevents data duplication when using exactly-once sinks
+      // which rely on the query ID for deduplication.
+      if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS)) {
+        val hasOffsetData = offsetLog.getLatestBatchId().isDefined
+        val hasCommitData = commitLog.getLatestBatchId().isDefined
+        if (hasOffsetData || hasCommitData) {
+          throw StreamingErrors
+            .missingMetadataFile(resolvedCheckpointRoot)
+        }
+      }
       val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
       StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
       newMetadata

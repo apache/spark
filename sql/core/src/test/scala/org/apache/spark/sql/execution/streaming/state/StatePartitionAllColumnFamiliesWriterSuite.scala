@@ -22,7 +22,7 @@ import java.time.Duration
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
-import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StreamingAggregationStateManager}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
@@ -801,7 +801,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       testRoundTripForAggrStateVersion(2)
     }
 
-    Seq(1, 2).foreach { version =>
+    StreamingAggregationStateManager.supportedVersions.foreach { version =>
       testWithChangelogConfig(s"SPARK-54420: composite key aggregation state ver $version") {
         testCompositeKeyRoundTripForStateVersion(version)
       }

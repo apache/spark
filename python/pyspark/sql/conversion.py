@@ -21,7 +21,12 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.types import (
+    _dedup_names,
+    _deduplicate_field_names,
+    _create_converter_to_pandas,
+    to_arrow_schema,
+)
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
@@ -48,6 +53,46 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    import pandas as pd
+
+
+class ArrowBatchTransformer:
+    """
+    Pure functions that transform RecordBatch -> RecordBatch.
+    They should have no side effects (no I/O, no writing to streams).
+    """
+
+    @staticmethod
+    def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
+        """
+        Flatten a struct column at given index into a RecordBatch.
+
+        Used by:
+            - ArrowStreamUDFSerializer.load_stream
+            - SQL_GROUPED_MAP_ARROW_UDF mapper
+            - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
+        """
+        import pyarrow as pa
+
+        struct = batch.column(column_index)
+        return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+
+    @staticmethod
+    def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+        """
+        Wrap a RecordBatch's columns into a single struct column.
+
+        Used by: ArrowStreamUDFSerializer.dump_stream
+        """
+        import pyarrow as pa
+
+        if batch.num_columns == 0:
+            # When batch has no column, it should still create
+            # an empty batch with the number of rows set.
+            struct = pa.array([{}] * batch.num_rows)
+        else:
+            struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
+        return pa.RecordBatch.from_arrays([struct], ["_0"])
 
 
 class LocalDataToArrowConversion:
@@ -954,3 +999,74 @@ class ArrowTimestampConversion:
             )
         else:  # pragma: no cover
             assert False, f"Need converter for {pa_type} but failed to find one."
+
+
+class ArrowArrayToPandasConversion:
+    @classmethod
+    def convert_legacy(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        """
+        Parameters
+        ----------
+        arr : :class:`pyarrow.Array`.
+        spark_type: target spark type, should always be specified.
+        timezone : The timezone to convert from. If there is a timestamp type, it's required.
+        struct_in_pandas : How to handle struct type. If there is a struct type, it's required.
+        ndarray_as_list : Whether `np.ndarray` is converted to a list or not.
+        df_for_struct: when true, and spark type is a StructType, return a DataFrame.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if df_for_struct and isinstance(spark_type, StructType):
+            import pyarrow.types as types
+
+            assert types.is_struct(arr.type)
+            assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
+
+            series = [
+                cls.convert_legacy(
+                    field_arr,
+                    spark_type=field.dataType,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    ndarray_as_list=ndarray_as_list,
+                    df_for_struct=False,  # always False for child fields
+                )
+                for field_arr, field in zip(arr.flatten(), spark_type)
+            ]
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names  # type: ignore[assignment]
+            return pdf
+
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+        return converter(ser)

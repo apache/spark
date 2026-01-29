@@ -465,6 +465,11 @@
       "Parameter value <arg_name> must be a valid UUID format: <origin>"
     ]
   },
+  "INVALID_STREAMING_SOURCE_NAME": {
+    "message": [
+      "Invalid streaming source name '<source_name>'. Source names must contain only ASCII letters, digits, and underscores."
+    ]
+  },
   "INVALID_TIMEOUT_TIMESTAMP": {
     "message": [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."

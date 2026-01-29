@@ -169,20 +169,20 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
-      - name: Install Python 3.11
+      - name: Install Python 3.12
         uses: actions/setup-python@v5
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           architecture: ${{ inputs.arch }}
-      - name: Install Python packages (Python 3.11)
+      - name: Install Python packages (Python 3.12)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'zstandard==0.25.0'
-          python3.11 -m pip list
+          python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'zstandard==0.25.0'
+          python3.12 -m pip list
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
       # The kind of script command is tested by `script -qec true`.
