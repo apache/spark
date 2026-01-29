@@ -353,7 +353,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         q = df.writeStream.trigger(once=True).foreachBatch(check_batch).start()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
-        self.assertTrue(q.recentProgress.length == 1)
+        self.assertTrue(len(q.recentProgress) == 1)
         self.assertTrue(q.lastProgress.numInputRows == 10)
         self.assertTrue(q.lastProgress.sources[0].numInputRows == 10)
         self.assertTrue(q.lastProgress.sources[0].latestOffset == """{"partition-1": 1000000}""")
@@ -383,7 +383,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         q.awaitTermination(timeout=30)
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
         # 2 rows * 5 batches = 10 rows
-        self.assertTrue(q.recentProgress.length == 5)
+        self.assertTrue(len(q.recentProgress) == 5)
         for progress in q.recentProgress:
             self.assertTrue(progress.numInputRows == 2)
             self.assertTrue(q.lastProgress.sources[0].numInputRows == 2)
