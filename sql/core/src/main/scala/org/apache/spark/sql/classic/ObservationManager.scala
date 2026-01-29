@@ -18,6 +18,8 @@ package org.apache.spark.sql.classic
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.util.Try
+
 import org.apache.spark.sql.{Observation, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.catalyst.trees.TreePattern
@@ -54,7 +56,8 @@ private[sql] class ObservationManager(session: SparkSession) {
   private[sql] def tryComplete(qe: QueryExecution): Unit = {
     // Use lazy val to defer collecting the observed metrics until it is needed so that tryComplete
     // can finish faster (e.g., when the logical plan doesn't contain CollectMetrics).
-    lazy val lazyObservedMetrics = qe.observedMetrics
+    // Wrap in Try to capture potential failures when collecting metrics.
+    lazy val lazyObservedMetrics = Try(qe.observedMetrics)
     qe.logical.foreachWithSubqueriesAndPruning(
       _.containsPattern(TreePattern.COLLECT_METRICS)) {
       case c: CollectMetrics =>
@@ -63,7 +66,8 @@ private[sql] class ObservationManager(session: SparkSession) {
           // If the key exists but no metrics were collected, it means for some reason the
           // metrics could not be collected. This can happen e.g., if the CollectMetricsExec
           // was optimized away.
-          observation.setMetricsAndNotify(lazyObservedMetrics.getOrElse(c.name, Row.empty))
+          val metricsResult = lazyObservedMetrics.map(_.getOrElse(c.name, Row.empty))
+          observation.setMetricsAndNotify(metricsResult)
         }
       case _ =>
     }

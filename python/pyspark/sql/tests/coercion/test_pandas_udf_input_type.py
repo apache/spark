@@ -312,13 +312,14 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase):
                 types = [row["python_type"] for row in results_data]
 
                 result.append(str(types))
-                result.append(str(values).replace("\n", " "))
+                result.append(str(values))
 
             except Exception as e:
                 print("error_msg", e)
-                # Clean up exception message to remove newlines and extra whitespace
-                e = str(e).replace("\n", " ").replace("\r", " ").replace("\t", " ")
-                result.append(f"✗ {e}")
+                result.append(f"✗ {str(e)}")
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = [r.replace("\n", " ").replace("\r", " ").replace("\t", " ") for r in result]
 
             error_msg = None
             if testing and result != list(golden.iloc[idx]):
