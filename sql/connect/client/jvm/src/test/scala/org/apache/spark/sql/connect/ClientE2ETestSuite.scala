@@ -772,6 +772,30 @@ class ClientE2ETestSuite
     assert(spark.range(10).count() === 10)
   }
 
+  test("Dataset zipWithIndex") {
+    val df = spark.range(5).repartition(3)
+    val result = df.zipWithIndex()
+    assert(result.columns === Array("id", "index"))
+    assert(result.schema.last.dataType === LongType)
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("Dataset zipWithIndex with custom column name") {
+    val result = spark.range(3).zipWithIndex("row_num")
+    assert(result.columns === Array("id", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === Array(0L, 1L, 2L))
+  }
+
+  test("Dataset zipWithIndex should throw if column name already exists") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val ex = intercept[AnalysisException] {
+      df.zipWithIndex()
+    }
+    assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+  }
+
   test("Dataset collect tuple") {
     val session = spark
     import session.implicits._

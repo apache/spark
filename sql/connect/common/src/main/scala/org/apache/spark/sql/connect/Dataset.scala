@@ -704,6 +704,13 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def zipWithIndex(indexColName: String): DataFrame = {
+    // Note: Column existence check is handled server-side to avoid requiring
+    // a schema fetch which needs a server connection.
+    select(col("*"), Column.internalFn("distributed_sequence_id").alias(indexColName))
+  }
+
+  /** @inheritdoc */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
     sparkSession.newDataset(agnosticEncoder) { builder =>
       builder.getSampleBuilder
@@ -1443,6 +1450,9 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   override def unionByName(other: sql.Dataset[T]): Dataset[T] = super.unionByName(other)
+
+  /** @inheritdoc */
+  override def zipWithIndex(): DataFrame = super.zipWithIndex()
 
   /** @inheritdoc */
   override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)
