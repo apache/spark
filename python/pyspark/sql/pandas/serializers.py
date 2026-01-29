@@ -1423,15 +1423,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
                 state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
-                state_spark_type = (
-                    self._input_type[-1].dataType
-                    if self._input_type is not None
-                    else from_arrow_type(state_batch.schema[0].type)
-                )
                 state_pandas = [
                     ArrowArrayToPandasConversion.convert(
                         c,
-                        state_spark_type,
+                        from_arrow_type(c.type),
                         timezone=self._timezone,
                         struct_in_pandas=self._struct_in_pandas,
                         ndarray_as_list=self._ndarray_as_list,
@@ -1473,15 +1468,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
-                            self._input_type[i].dataType
-                            if self._input_type is not None
-                            else from_arrow_type(c.type),
+                            from_arrow_type(c.type),
                             timezone=self._timezone,
                             struct_in_pandas=self._struct_in_pandas,
                             ndarray_as_list=self._ndarray_as_list,
                             df_for_struct=self._df_for_struct,
                         )
-                        for i, c in enumerate(data_arrow)
+                        for c in data_arrow
                     ]
 
                     # state info
