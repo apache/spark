@@ -41,7 +41,7 @@ object V2CommandStrategy extends Strategy {
       SetVariableExec(variables.map(_.asInstanceOf[VariableReference]), planLater(query)) :: Nil
 
     case SelectIntoVariable(variables, query) =>
-      SelectIntoVariableExec(
+      SelectIntoExec(
         variables.map(_.asInstanceOf[VariableReference]),
         planLater(query)) :: Nil
 

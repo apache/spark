@@ -25,21 +25,22 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
 /**
- * Physical plan node for setting a variable.
- * Used by EXECUTE IMMEDIATE INTO.
+ * Physical plan node for SELECT INTO.
+ * When query returns zero rows, variables remain unchanged.
+ * When query returns more than one row, an error is thrown.
+ * @param variables The variables to set
+ * @param query The query that produces the values
  */
-case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
+case class SelectIntoExec(
+    variables: Seq[VariableReference],
+    query: SparkPlan)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
 
     if (values.length == 0) {
-      // EXECUTE IMMEDIATE INTO: set all variables to null
-      variables.foreach { v =>
-        VariableAssignmentUtils.assignVariable(
-          v, null, session.sessionState.catalogManager.tempVariableManager, session.sessionState.conf)
-      }
+      // SELECT INTO: do nothing, variables remain unchanged
     } else if (values.length > 1) {
       throw new SparkException(
         errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
