@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -26,8 +27,10 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
 /**
  * Physical plan node for SELECT INTO.
- * When query returns zero rows, variables remain unchanged.
- * When query returns more than one row, an error is thrown.
+ * Behaves identically to DECLARE + OPEN + FETCH + CLOSE cursor sequence:
+ * - When query returns zero rows, raises NO DATA condition (SQLSTATE 02000)
+ * - When query returns more than one row, an error is thrown
+ * - When query returns exactly one row, values are assigned to variables
  * @param variables The variables to set
  * @param query The query that produces the values
  */
@@ -40,7 +43,11 @@ case class SelectIntoExec(
     val values = query.executeCollect()
 
     if (values.length == 0) {
-      // SELECT INTO: do nothing, variables remain unchanged
+      // SELECT INTO: raise NO DATA condition (SQLSTATE 02000)
+      // This allows handlers to catch the condition, matching FETCH cursor INTO behavior
+      throw new AnalysisException(
+        errorClass = "SELECT_INTO_NO_DATA",
+        messageParameters = Map.empty)
     } else if (values.length > 1) {
       throw new SparkException(
         errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
@@ -52,7 +59,10 @@ case class SelectIntoExec(
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
         VariableAssignmentUtils.assignVariable(
-          v, value, session.sessionState.catalogManager.tempVariableManager, session.sessionState.conf)
+          v,
+          value,
+          session.sessionState.catalogManager.tempVariableManager,
+          session.sessionState.conf)
       }
     }
 

@@ -320,7 +320,7 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
     assert(result(0).getInt(1) == 105000)
   }
 
-  test("SELECT INTO - Zero rows with CTE (variables remain unchanged)") {
+  test("SELECT INTO - Zero rows with CTE raises NO DATA exception") {
     val script =
       """
         |BEGIN
@@ -342,10 +342,13 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
         |END;
       """.stripMargin
 
-    val result = spark.sql(script).collect()
-    assert(result.length == 1)
-    assert(result(0).getInt(0) == 999)
-    assert(result(0).getString(1) == "unchanged")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(script).collect()
+      },
+      condition = "SELECT_INTO_NO_DATA",
+      parameters = Map.empty,
+      sqlState = Some("02000"))
   }
 
   test("SELECT INTO - CTE with HAVING clause") {
@@ -549,7 +552,7 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
     assert(result(0).isNullAt(0))
   }
 
-  test("SELECT INTO - Edge case: Zero rows preserves NULL value") {
+  test("SELECT INTO - Edge case: Zero rows raises NO DATA") {
     val script =
       """
         |BEGIN
@@ -558,16 +561,73 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
         |  CREATE OR REPLACE TEMP VIEW tbl AS
         |  SELECT * FROM VALUES (1, 'Alice') AS t(id, name);
         |
-        |  -- Zero rows: variable remains NULL
+        |  -- Zero rows: raises NO DATA condition
         |  SELECT name INTO test_var FROM tbl WHERE id > 100;
         |
         |  SELECT test_var;
         |END;
       """.stripMargin
 
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(script).collect()
+      },
+      condition = "SELECT_INTO_NO_DATA",
+      parameters = Map.empty,
+      sqlState = Some("02000"))
+  }
+
+  test("SELECT INTO - Zero rows handled by CONTINUE HANDLER") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE test_var STRING = 'initial';
+        |  DECLARE no_data_flag BOOLEAN DEFAULT false;
+        |
+        |  -- Handler catches NO DATA condition
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND SET no_data_flag = true;
+        |
+        |  CREATE OR REPLACE TEMP VIEW tbl AS
+        |  SELECT * FROM VALUES (1, 'Alice') AS t(id, name);
+        |
+        |  -- Zero rows triggers handler, execution continues
+        |  SELECT name INTO test_var FROM tbl WHERE id > 100;
+        |
+        |  -- Variables unchanged, flag set by handler
+        |  SELECT test_var, no_data_flag;
+        |END;
+      """.stripMargin
+
     val result = spark.sql(script).collect()
     assert(result.length == 1)
-    assert(result(0).isNullAt(0))
+    assert(result(0).getString(0) == "initial")
+    assert(result(0).getBoolean(1) == true)
+  }
+
+  test("SELECT INTO - Zero rows handled by EXIT HANDLER") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE test_var INT = 999;
+        |
+        |  -- EXIT handler terminates the block
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '02000' BEGIN
+        |    VALUES ('NO DATA - handler executed', test_var);
+        |  END;
+        |
+        |  CREATE OR REPLACE TEMP VIEW tbl AS
+        |  SELECT * FROM VALUES (1, 'Alice') AS t(id, name);
+        |
+        |  SELECT id INTO test_var FROM tbl WHERE id < 0;  -- Triggers handler, exits
+        |
+        |  VALUES ('Should not reach here');
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).getString(0) == "NO DATA - handler executed")
+    assert(result(0).getInt(1) == 999)
   }
 
   test("SELECT INTO - Error: SELECT INTO inside CTE definition") {

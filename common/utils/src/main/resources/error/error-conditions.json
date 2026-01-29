@@ -5469,6 +5469,12 @@
     ],
     "sqlState" : "21000"
   },
+  "SELECT_INTO_NO_DATA" : {
+    "message" : [
+      "SELECT INTO returned no rows."
+    ],
+    "sqlState" : "02000"
+  },
   "SELECT_INTO_VARIABLE_COUNT_MISMATCH" : {
     "message" : [
       "The number of target variables in the INTO clause (<numVars>) does not match the number of columns in the SELECT statement (<numCols>)."

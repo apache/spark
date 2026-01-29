@@ -33,11 +33,12 @@
 --  19. Struct field access after unpacking
 --  20. Struct field count mismatch (error)
 --
--- F. ZERO ROWS BEHAVIOR
---  21. Single variable remains unchanged on zero rows
---  22. Multiple variables remain unchanged on zero rows
---  23. NULL variables remain NULL on zero rows
---  24. Struct variables remain unchanged on zero rows
+-- F. ZERO ROWS BEHAVIOR (NO DATA CONDITION)
+--  21. SELECT INTO raises NO DATA (SQLSTATE 02000) on zero rows - unhandled
+--  22. SELECT INTO with CONTINUE HANDLER for NOT FOUND
+--  23. SELECT INTO with CONTINUE HANDLER for SQLSTATE '02000'
+--  24. SELECT INTO with EXIT HANDLER for NOT FOUND
+--  24b. SELECT INTO NO DATA with struct variable and handler
 --
 -- G. RESULT SET BEHAVIOR
 --  25. SELECT INTO does not return a result set
@@ -425,81 +426,118 @@ org.apache.spark.sql.AnalysisException
 }
 
 -- =============================================================================
--- SECTION F: ZERO ROWS BEHAVIOR
+-- SECTION F: ZERO ROWS BEHAVIOR (NO DATA CONDITION)
 -- =============================================================================
 
 -- =============================================================================
--- Test 21: Single variable remains unchanged on zero rows
+-- Test 21: SELECT INTO raises NO DATA (SQLSTATE 02000) on zero rows - unhandled
 -- =============================================================================
 
 -- !query
 BEGIN
   DECLARE v1 INT;
   SET VAR v1 = 42;
-  SELECT v1;
   SELECT id INTO v1 FROM tbl_view WHERE 1=0;
-  SELECT v1;
+  SELECT v1;  -- Should not execute
 END;
 -- !query schema
-struct<v1:int>
+struct<>
 -- !query output
-42
-42
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_NO_DATA",
+  "sqlState" : "02000"
+}
 
 -- =============================================================================
--- Test 22: Multiple variables remain unchanged on zero rows
+-- Test 22: SELECT INTO with CONTINUE HANDLER for NOT FOUND
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  DECLARE no_data_flag BOOLEAN DEFAULT false;
+  
+  -- Handler catches NO DATA condition
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET no_data_flag = true;
+  
+  SET VAR v1 = 42;
+  SELECT id INTO v1 FROM tbl_view WHERE 1=0;  -- Triggers handler
+  
+  -- Execution continues, variables unchanged, flag set
+  SELECT v1, no_data_flag;
+END;
+-- !query schema
+struct<v1:int,no_data_flag:boolean>
+-- !query output
+42	true
+
+-- =============================================================================
+-- Test 23: SELECT INTO with CONTINUE HANDLER for SQLSTATE '02000'
 -- =============================================================================
 
 -- !query
 BEGIN
   DECLARE v1 INT;
   DECLARE v2 STRING;
+  DECLARE found BOOLEAN DEFAULT true;
+  
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' SET found = false;
+  
   SET VAR v1 = 99;
   SET VAR v2 = 'initial';
-  SELECT v1, v2;
-  SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999;
-  SELECT v1, v2;
+  SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999;  -- Triggers handler
+  
+  SELECT v1, v2, found;
 END;
 -- !query schema
-struct<v1:int,v2:string>
+struct<v1:int,v2:string,found:boolean>
 -- !query output
-99	initial
-99	initial
+99	initial	false
 
 -- =============================================================================
--- Test 23: NULL variables remain NULL on zero rows
+-- Test 24: SELECT INTO with EXIT HANDLER for NOT FOUND
 -- =============================================================================
 
 -- !query
 BEGIN
   DECLARE v1 INT;
-  SELECT v1;
-  SELECT id INTO v1 FROM tbl_view WHERE FALSE;
-  SELECT v1;
+  
+  -- EXIT handler terminates the block
+  DECLARE EXIT HANDLER FOR NOT FOUND BEGIN
+    VALUES ('Handler executed - no data found');
+  END;
+  
+  SET VAR v1 = 100;
+  SELECT id INTO v1 FROM tbl_view WHERE FALSE;  -- Triggers handler, exits block
+  
+  VALUES ('This should not execute');
 END;
 -- !query schema
-struct<v1:int>
+struct<col1:string>
 -- !query output
-NULL
-NULL
+Handler executed - no data found
 
 -- =============================================================================
--- Test 24: Struct variables remain unchanged on zero rows
+-- Test 24b: SELECT INTO NO DATA with struct variable and handler
 -- =============================================================================
 
 -- !query
 BEGIN
   DECLARE my_struct STRUCT<x: INT, y: STRING>;
+  DECLARE handled BOOLEAN DEFAULT false;
+  
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET handled = true;
+  
   SET VAR my_struct = named_struct('x', 100, 'y', 'original');
-  SELECT my_struct;
-  SELECT id, name INTO my_struct FROM tbl_view WHERE id < 0;
-  SELECT my_struct;
+  SELECT id, name INTO my_struct FROM tbl_view WHERE id < 0;  -- Triggers handler
+  
+  SELECT my_struct, handled;
 END;
 -- !query schema
-struct<my_struct:struct<x:int,y:string>>
+struct<my_struct:struct<x:int,y:string>,handled:boolean>
 -- !query output
-{"x":100,"y":"original"}
-{"x":100,"y":"original"}
+{"x":100,"y":"original"}	true
 
 -- =============================================================================
 -- SECTION G: RESULT SET BEHAVIOR

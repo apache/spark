@@ -38,7 +38,10 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       // EXECUTE IMMEDIATE INTO: set all variables to null
       variables.foreach { v =>
         VariableAssignmentUtils.assignVariable(
-          v, null, session.sessionState.catalogManager.tempVariableManager, session.sessionState.conf)
+          v,
+          null,
+          session.sessionState.catalogManager.tempVariableManager,
+          session.sessionState.conf)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -51,7 +54,10 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
         VariableAssignmentUtils.assignVariable(
-          v, value, session.sessionState.catalogManager.tempVariableManager, session.sessionState.conf)
+          v,
+          value,
+          session.sessionState.catalogManager.tempVariableManager,
+          session.sessionState.conf)
       }
     }
 
