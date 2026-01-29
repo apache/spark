@@ -690,6 +690,95 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\\\"\"]")
   }
 
+  test("SPARK-52621: variant_get with TimeType") {
+    // TimeType - simple types.
+
+    // Default TimeType.
+    testVariantGet("0", "$", TimeType(), 0L) // 00:00:00
+    testVariantGet("3723000000000", "$", TimeType(), 3723000000000L) // 01:02:03
+    testVariantGet("43200000000", "$", TimeType(), 43200000000L) // 12:00:00
+    testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
+
+    // Parameterized TimeType.
+    testVariantGet("0", "$", TimeType(3), 0L) // 00:00:00.000
+    testVariantGet("3723000000000", "$", TimeType(3), 3723000000000L) // 01:02:03.000
+    testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
+    testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
+
+    // TimeType - complex types.
+
+    // Array of TimeType.
+    testVariantGet(
+      "[0, 3723000000000, 43200000000, 86399000000]",
+      "$",
+      ArrayType(TimeType()),
+      Array(0L, 3723000000000L, 43200000000L, 86399000000L)
+    )
+    // Map with TimeType.
+    testVariantGet(
+      """{"noon": 43200000000}""",
+      "$",
+      DataType.fromDDL("map<string, time>"),
+      Map("noon" -> 43200000000L)
+    )
+    // Struct with TimeType.
+    testVariantGet(
+      """{"start": 32400000000, "end": 61200000000, "ind": "timeslot"}""",
+      "$",
+      DataType.fromDDL("struct<start time, end time, ind string>"),
+      Row(32400000000L, 61200000000L, "timeslot")
+    )
+
+    // Array of structs with TimeType.
+    testVariantGet(
+      """[{"time": 0, "activity": "sleep"}, {"time": 28800000000, "activity": "work"}]""",
+      "$",
+      DataType.fromDDL("array<struct<time time, activity string>>"),
+      Array(Row(0L, "sleep"), Row(28800000000L, "work"))
+    )
+    // Struct with array of TimeType.
+    testVariantGet(
+      """{"break_times": [36000000000, 39600000000, 46800000000], "employee_id": 123}""",
+      "$",
+      DataType.fromDDL("struct<break_times array<time>, employee_id int>"),
+      Row(Array(36000000000L, 39600000000L, 46800000000L), 123)
+    )
+    // Map with array of TimeType.
+    testVariantGet(
+      """{"monday": [32400000000, 61200000000]}""",
+      "$",
+      DataType.fromDDL("map<string, array<time>>"),
+      Map("monday" -> Array(32400000000L, 61200000000L))
+    )
+    // Complex nested structure with TimeType.
+    testVariantGet(
+      """{"schedule": {"days": [{"day": "Monday", "noon": 43200000000}]}}""",
+      "$",
+      DataType.fromDDL("struct<schedule struct<days array<struct<day string, noon time>>>>"),
+      Row(Row(Array(Row("Monday", 43200000000L))))
+    )
+
+    // Path extraction with TimeType in complex types.
+    testVariantGet(
+      """{"shifts": [{"morning": 28800000000}, {"evening": 64800000000}]}""",
+      "$.shifts[0].morning",
+      TimeType(),
+      28800000000L
+    )
+    testVariantGet(
+      """{"daily_schedule": {"lunch_time": 43200000000, "meetings": [32400000000, 50400000000]}}""",
+      "$.daily_schedule.lunch_time",
+      TimeType(),
+      43200000000L
+    )
+    testVariantGet(
+      """{"daily_schedule": {"lunch_time": 43200000000, "meetings": [32400000000, 50400000000]}}""",
+      "$.daily_schedule.meetings[1]",
+      TimeType(),
+      50400000000L
+    )
+  }
+
   test("cast from variant") {
     // We do not test too many type combinations, as the cast implementation is mostly the same as
     // variant_get.
@@ -716,6 +805,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // cast can produce NULL when the input is a variant null (not NULL).
     checkCast(parseJson("null"), StringType, null)
     checkCast(parseJson("\"1\""), IntegerType, 1)
+
+    // SPARK-52621: Test TIME casting - simple types.
+    checkCast(parseJson("0"), TimeType(), 0L) // 00:00:00
+    checkCast(parseJson("3723000000000"), TimeType(), 3723000000000L) // 01:02:03
+    // SPARK-52621: Test TIME casting - complex types.
+    checkCast(parseJson("[0, 3723000000000, 43200000000]"), ArrayType(TimeType()),
+      Array(0L, 3723000000000L, 43200000000L))
 
     checkInvalidCast(parseJson("2147483648"), IntegerType, null)
     checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
@@ -776,65 +872,74 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
 
     val time1 = littleEndianLong(0)
+    val time2 = littleEndianLong(3723000000000L)
+    val time3 = littleEndianLong(3723456000000L)
+    val time4 = littleEndianLong(86399999999999L)
     // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
     // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
     val skippedTime = 1300010400000000L
-    val time2 = littleEndianLong(skippedTime)
-    val time3 = littleEndianLong(skippedTime - 1)
-    val time4 = littleEndianLong(Long.MinValue)
-    val time5 = littleEndianLong(Long.MaxValue)
-    val time6 = littleEndianLong(-62198755200000000L)
+    val ts2 = littleEndianLong(skippedTime)
+    val ts3 = littleEndianLong(skippedTime - 1)
+    val ts4 = littleEndianLong(Long.MinValue)
+    val ts5 = littleEndianLong(Long.MaxValue)
+    val ts6 = littleEndianLong(-62198755200000000L)
+    val timeHeader = Array(primitiveHeader(TIME))
     val timestampHeader = Array(primitiveHeader(TIMESTAMP))
     val timestampNtzHeader = Array(primitiveHeader(TIMESTAMP_NTZ))
+
+    checkToJson(timeHeader ++ time1, "\"00:00\"")
+    checkToJson(timeHeader ++ time2, "\"01:02:03\"")
+    checkToJson(timeHeader ++ time3, "\"01:02:03.456\"")
+    checkToJson(timeHeader ++ time4, "\"23:59:59.999999999\"")
 
     for (timeZone <- Seq("UTC", "America/Los_Angeles")) {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         checkToJson(timestampNtzHeader ++ time1, "\"1970-01-01 00:00:00\"")
-        checkToJson(timestampNtzHeader ++ time2, "\"2011-03-13 10:00:00\"")
-        checkToJson(timestampNtzHeader ++ time3, "\"2011-03-13 09:59:59.999999\"")
-        checkToJson(timestampNtzHeader ++ time4, "\"-290308-12-21 19:59:05.224192\"")
-        checkToJson(timestampNtzHeader ++ time5, "\"+294247-01-10 04:00:54.775807\"")
-        checkToJson(timestampNtzHeader ++ time6, "\"-0001-01-01 00:00:00\"")
+        checkToJson(timestampNtzHeader ++ ts2, "\"2011-03-13 10:00:00\"")
+        checkToJson(timestampNtzHeader ++ ts3, "\"2011-03-13 09:59:59.999999\"")
+        checkToJson(timestampNtzHeader ++ ts4, "\"-290308-12-21 19:59:05.224192\"")
+        checkToJson(timestampNtzHeader ++ ts5, "\"+294247-01-10 04:00:54.775807\"")
+        checkToJson(timestampNtzHeader ++ ts6, "\"-0001-01-01 00:00:00\"")
 
         checkCast(timestampNtzHeader ++ time1, DateType, 0)
-        checkCast(timestampNtzHeader ++ time2, DateType, 15046)
-        checkCast(timestampNtzHeader ++ time3, DateType, 15046)
-        checkCast(timestampNtzHeader ++ time4, DateType, -106751992)
-        checkCast(timestampNtzHeader ++ time5, DateType, 106751991)
-        checkCast(timestampNtzHeader ++ time6, DateType, -719893)
+        checkCast(timestampNtzHeader ++ ts2, DateType, 15046)
+        checkCast(timestampNtzHeader ++ ts3, DateType, 15046)
+        checkCast(timestampNtzHeader ++ ts4, DateType, -106751992)
+        checkCast(timestampNtzHeader ++ ts5, DateType, 106751991)
+        checkCast(timestampNtzHeader ++ ts6, DateType, -719893)
       }
     }
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       checkToJson(timestampHeader ++ time1, "\"1970-01-01 00:00:00+00:00\"")
-      checkToJson(timestampHeader ++ time2, "\"2011-03-13 10:00:00+00:00\"")
-      checkToJson(timestampHeader ++ time3, "\"2011-03-13 09:59:59.999999+00:00\"")
-      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 19:59:05.224192+00:00\"")
-      checkToJson(timestampHeader ++ time5, "\"+294247-01-10 04:00:54.775807+00:00\"")
-      checkToJson(timestampHeader ++ time6, "\"-0001-01-01 00:00:00+00:00\"")
+      checkToJson(timestampHeader ++ ts2, "\"2011-03-13 10:00:00+00:00\"")
+      checkToJson(timestampHeader ++ ts3, "\"2011-03-13 09:59:59.999999+00:00\"")
+      checkToJson(timestampHeader ++ ts4, "\"-290308-12-21 19:59:05.224192+00:00\"")
+      checkToJson(timestampHeader ++ ts5, "\"+294247-01-10 04:00:54.775807+00:00\"")
+      checkToJson(timestampHeader ++ ts6, "\"-0001-01-01 00:00:00+00:00\"")
 
       checkCast(timestampHeader ++ time1, DateType, 0)
-      checkCast(timestampHeader ++ time2, DateType, 15046)
-      checkCast(timestampHeader ++ time3, DateType, 15046)
-      checkCast(timestampHeader ++ time4, DateType, -106751992)
-      checkCast(timestampHeader ++ time5, DateType, 106751991)
-      checkCast(timestampHeader ++ time6, DateType, -719893)
+      checkCast(timestampHeader ++ ts2, DateType, 15046)
+      checkCast(timestampHeader ++ ts3, DateType, 15046)
+      checkCast(timestampHeader ++ ts4, DateType, -106751992)
+      checkCast(timestampHeader ++ ts5, DateType, 106751991)
+      checkCast(timestampHeader ++ ts6, DateType, -719893)
     }
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       checkToJson(timestampHeader ++ time1, "\"1969-12-31 16:00:00-08:00\"")
-      checkToJson(timestampHeader ++ time2, "\"2011-03-13 03:00:00-07:00\"")
-      checkToJson(timestampHeader ++ time3, "\"2011-03-13 01:59:59.999999-08:00\"")
-      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 12:06:07.224192-07:52\"")
-      checkToJson(timestampHeader ++ time5, "\"+294247-01-09 20:00:54.775807-08:00\"")
-      checkToJson(timestampHeader ++ time6, "\"-0002-12-31 16:07:02-07:52\"")
+      checkToJson(timestampHeader ++ ts2, "\"2011-03-13 03:00:00-07:00\"")
+      checkToJson(timestampHeader ++ ts3, "\"2011-03-13 01:59:59.999999-08:00\"")
+      checkToJson(timestampHeader ++ ts4, "\"-290308-12-21 12:06:07.224192-07:52\"")
+      checkToJson(timestampHeader ++ ts5, "\"+294247-01-09 20:00:54.775807-08:00\"")
+      checkToJson(timestampHeader ++ ts6, "\"-0002-12-31 16:07:02-07:52\"")
 
       checkCast(timestampHeader ++ time1, DateType, -1)
-      checkCast(timestampHeader ++ time2, DateType, 15046)
-      checkCast(timestampHeader ++ time3, DateType, 15046)
-      checkCast(timestampHeader ++ time4, DateType, -106751992)
-      checkCast(timestampHeader ++ time5, DateType, 106751990)
-      checkCast(timestampHeader ++ time6, DateType, -719894)
+      checkCast(timestampHeader ++ ts2, DateType, 15046)
+      checkCast(timestampHeader ++ ts3, DateType, 15046)
+      checkCast(timestampHeader ++ ts4, DateType, -106751992)
+      checkCast(timestampHeader ++ ts5, DateType, 106751990)
+      checkCast(timestampHeader ++ ts6, DateType, -719894)
     }
 
     checkToJson(Array(primitiveHeader(FLOAT)) ++
@@ -921,6 +1026,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
 
+    // SPARK-52621: TimeType - simple types.
+    check(Literal(0L, TimeType()), "\"00:00\"")
+    check(Literal(3723000000000L, TimeType()), "\"01:02:03\"")
+    // SPARK-52621: TimeType - complex types.
+    val timeArray = Array(0L, 3723000000000L, 43200000000L)
+    check(Literal.create(timeArray, ArrayType(TimeType())),
+      "[\"00:00\",\"01:02:03\",\"00:00:43.200\"]")
+
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
       parseJson("""{"c": true,"d": {"e": "str"}}""")),
@@ -966,6 +1079,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+  }
+
+  test("cast to variant and then to string") {
+    // Test TIMESTAMP casting to Variant, and then to String.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkEvaluation(
+        Cast(Cast(Literal.create(0L, TimestampType), VariantType), StringType),
+        "1970-01-01 00:00:00"
+      )
+    }
+    // SPARK-52621: Test TIME casting to Variant, and then to String.
+    checkEvaluation(
+      Cast(Cast(Literal.create(0L, TimeType()), VariantType), StringType),
+      "00:00:00"
+    )
   }
 
   test("schema_of_variant - unknown type") {
