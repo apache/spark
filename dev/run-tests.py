@@ -254,7 +254,11 @@ def build_spark_sbt(extra_profiles):
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
-    exec_sbt(profiles_and_goals)
+    if "GITHUB_ACTIONS" in os.environ:
+        # Reduce verbosity in GitHub Actions logs
+        exec_sbt(["-error"] + profiles_and_goals)
+    else:
+        exec_sbt(profiles_and_goals)
 
 
 def build_spark_unidoc_sbt(extra_profiles):
