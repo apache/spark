@@ -81,6 +81,11 @@ trait KeyGroupedPartitionedScan[T] {
       filteredPartitions: Seq[Seq[T]],
       partitionValueAccessor: T => InternalRow): Seq[Seq[T]] = {
     assert(spjParams.keyGroupedPartitioning.isDefined)
+
+    if (spjParams.noGrouping) {
+      return filteredPartitions.flatten.map(Seq(_))
+    }
+
     val expressions = spjParams.keyGroupedPartitioning.get
 
     // Re-group the input partitions if we are projecting on a subset of join keys

@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterized
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
+import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -622,6 +623,11 @@ object QueryExecution {
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
+    val requiredDistribution = if (subquery) {
+      Some(UnspecifiedDistribution)
+    } else {
+      None
+    }
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
@@ -630,7 +636,7 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
-      EnsureRequirements(),
+      EnsureRequirements(requiredDistribution = requiredDistribution),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the

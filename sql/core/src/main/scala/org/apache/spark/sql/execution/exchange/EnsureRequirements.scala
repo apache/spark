@@ -66,19 +66,22 @@ case class EnsureRequirements(
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         ensureOrdering(child, distribution)
       case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
+        val newChild = disableKeyGroupingIfNotNeeded(child)
+        BroadcastExchangeExec(mode, newChild)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
         distribution match {
           case _: StatefulOpClusteredDistribution =>
+            val newChild = disableKeyGroupingIfNotNeeded(child)
             ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child,
+              distribution.createPartitioning(numPartitions), newChild,
               REQUIRED_BY_STATEFUL_OPERATOR)
 
           case _ =>
+            val newChild = disableKeyGroupingIfNotNeeded(child)
             ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+              distribution.createPartitioning(numPartitions), newChild, shuffleOrigin)
         }
     }
 
@@ -224,8 +227,11 @@ case class EnsureRequirements(
 
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
-                ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case _ => ShuffleExchangeExec(newPartitioning, child)
+                val newChild = disableKeyGroupingIfNotNeeded(c)
+                ShuffleExchangeExec(newPartitioning, newChild, so, ps)
+              case _ =>
+                val newChild = disableKeyGroupingIfNotNeeded(child)
+                ShuffleExchangeExec(newPartitioning, newChild)
             }
           }
       }
@@ -695,6 +701,21 @@ case class EnsureRequirements(
         child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
   }
 
+  private def disableKeyGroupingIfNotNeeded(child: SparkPlan) = {
+    if (canApplyPartialClusteredDistribution(child)) {
+      populateNoGroupingPartitionInfo(child)
+    } else {
+      child
+    }
+  }
+
+  private def populateNoGroupingPartitionInfo(plan: SparkPlan): SparkPlan = plan match {
+    case scan: BatchScanExec =>
+      val newScan = scan.copy(spjParams = scan.spjParams.copy(noGrouping = true))
+      newScan.copyTagsFrom(scan)
+      newScan
+    case node => node.mapChildren(child => populateNoGroupingPartitionInfo(child))
+  }
 
   private def populateJoinKeyPositions(
       plan: SparkPlan,
@@ -843,9 +864,14 @@ case class EnsureRequirements(
       } else {
         REPARTITION_BY_COL
       }
+      val groupingDisabledPlan = if (requiredDistribution.get == UnspecifiedDistribution) {
+        disableKeyGroupingIfNotNeeded(newPlan)
+      } else {
+        newPlan
+      }
       val finalPlan = ensureDistributionAndOrdering(
         None,
-        newPlan :: Nil,
+        groupingDisabledPlan :: Nil,
         requiredDistribution.get :: Nil,
         Seq(Nil),
         shuffleOrigin)
