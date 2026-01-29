@@ -546,7 +546,9 @@ class Index(IndexOpsMixin):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
+        result = np.asarray(
+            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined]
+        )
         if copy:
             result = result.copy()
         return result
