@@ -413,7 +413,9 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
         cast(
             str,
-            pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+            pandas_requirement_message
+            or pyarrow_requirement_message
+            or "Not supported in no-GIL mode",
         ),
     )
     def test_repartition_with_streaming_tws_in_pandas(self):
@@ -538,7 +540,9 @@ class StreamingOfflineStateRepartitionTests(ReusedSQLTestCase):
         not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
         cast(
             str,
-            pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+            pandas_requirement_message
+            or pyarrow_requirement_message
+            or "Not supported in no-GIL mode",
         ),
     )
     def test_repartition_with_streaming_tws_in_pandas_multiple_state_vars(self):
