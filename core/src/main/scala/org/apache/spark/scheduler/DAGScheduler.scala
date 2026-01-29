@@ -1941,7 +1941,7 @@ private[spark] class DAGScheduler(
    * the map tasks are re-tried. For stages where rollback and retry all tasks are not possible,
    * we will need to abort the stages.
    *
-   * @return true if jobs are not aborted and will continue to run after rollback, otherwise false
+   * @return true if the corresponding active jobs are not aborted and will continue to run after rollback, otherwise false
    */
   private[scheduler] def rollbackSucceedingStages(
       mapStage: ShuffleMapStage,
