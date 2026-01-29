@@ -83,7 +83,7 @@ class BasePythonStreamingDataSourceTestsMixin:
                 return {"offset": 0}
 
             def latestOffset(self, start, limit):
-                return {"offset": start + 2}
+                return {"offset": start["offset"] + 2}
 
             def partitions(self, start, end):
                 return [RangePartition(start["offset"], end["offset"])]
@@ -236,7 +236,8 @@ class BasePythonStreamingDataSourceTestsMixin:
                     assert isinstance(
                         readLimit, ReadMaxRows
                     ), "Expected ReadMaxRows read limit but got " + str(type(readLimit))
-                    end_offset = min(start_idx + readLimit.max_rows, self.desired_end_offset)
+                    end_offset = min(start_idx + readLimit.max_rows,
+                                     self.desired_end_offset["partition-1"])
                 return {"partition-1": end_offset}
 
             def reportLatestOffset(self):
