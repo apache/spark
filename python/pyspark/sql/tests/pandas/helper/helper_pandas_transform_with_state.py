@@ -724,8 +724,8 @@ class PandasTTLStatefulProcessor(StatefulProcessor):
         if self.ttl_count_state.exists():
             ttl_count = self.ttl_count_state.get()[0]
         if self.ttl_list_state.exists():
-            iter = self.ttl_list_state.get()
-            for s in iter:
+            list_iter = self.ttl_list_state.get()
+            for s in list_iter:
                 ttl_list_state_count += s[0]
         if self.ttl_map_state.exists():
             ttl_map_state_count = self.ttl_map_state.getValue(key)[0]
@@ -777,8 +777,8 @@ class RowTTLStatefulProcessor(StatefulProcessor):
         if self.ttl_count_state.exists():
             ttl_count = self.ttl_count_state.get()[0]
         if self.ttl_list_state.exists():
-            iter = self.ttl_list_state.get()
-            for s in iter:
+            list_iter = self.ttl_list_state.get()
+            for s in list_iter:
                 ttl_list_state_count += s[0]
         if self.ttl_map_state.exists():
             ttl_map_state_count = self.ttl_map_state.getValue(key)[0]

@@ -299,6 +299,12 @@ class StatePartitionAllColumnFamiliesReader(
     isTWSOperator(operatorName) && colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME
   }
 
+  // Using the heuristic that all operators that enable column families
+  // have a non-default column family
+  private lazy val useColumnFamilies: Boolean = {
+    stateStoreColFamilySchemas.exists(_.colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME)
+  }
+
   // Create extractors for each column family - each column family may have different key schema
   private lazy val cfPartitionKeyExtractors: Map[String, StatePartitionKeyExtractor] = {
 
@@ -331,7 +337,6 @@ class StatePartitionAllColumnFamiliesReader(
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val useColumnFamilies = stateStoreColFamilySchemas.size > 1
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
@@ -373,7 +378,7 @@ class StatePartitionAllColumnFamiliesReader(
     )
 
     // Register all column families from the schema
-    if (stateStoreColFamilySchemas.size > 1) {
+    if (useColumnFamilies) {
       checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName).toList, stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {

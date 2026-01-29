@@ -156,8 +156,6 @@ class StateRewriter(
       // Use the same conf in the offset log to create the store conf,
       // to make sure the state is written with the right conf.
       val (storeConf, sqlConf) = createConfsFromOffsetLog()
-      // SQLConf doesn't serialize properly (reader becomes null), so extract as Map
-      val sqlConfEntries: Map[String, String] = sqlConf.getAllConfs
 
       // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
       val hadoopConfBroadcast =
@@ -181,8 +179,7 @@ class StateRewriter(
             storeConf,
             hadoopConfBroadcast,
             storeToSchemaFilesMap(stateStoreMetadata.storeName),
-            stateVarsIfTws,
-            sqlConfEntries
+            stateVarsIfTws
           )
         }.toArray
         opMetadata.operatorInfo.operatorId -> checkpointInfo
@@ -204,8 +201,7 @@ class StateRewriter(
       storeConf: StateStoreConf,
       hadoopConfBroadcast: Broadcast[SerializableConfiguration],
       storeSchemaFiles: List[Path],
-      stateVarsIfTws: Map[String, TransformWithStateVariableInfo],
-      sqlConfEntries: Map[String, String]
+      stateVarsIfTws: Map[String, TransformWithStateVariableInfo]
   ): Array[StateStoreCheckpointInfo] = {
     // Read state
     val stateDf = sparkSession.read
@@ -250,10 +246,6 @@ class StateRewriter(
     val targetCheckpointLocation = resolvedCheckpointLocation
     val currentBatchId = writeBatchId
     updatedStateDf.queryExecution.toRdd.mapPartitions { partitionIter: Iterator[InternalRow] =>
-      // Recreate SQLConf on executor from serialized entries
-      val executorSqlConf = new SQLConf()
-      sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
-
       val partitionWriter = new StatePartitionAllColumnFamiliesWriter(
         storeConf,
         hadoopConfBroadcast.value.value,
@@ -263,9 +255,7 @@ class StateRewriter(
         stateStoreMetadata.storeName,
         currentBatchId,
         writerColFamilyInfoMap,
-        opMetadata.operatorInfo.operatorName,
-        schemaProvider,
-        executorSqlConf
+        schemaProvider
       )
       Iterator(partitionWriter.write(partitionIter))
     }.collect()
