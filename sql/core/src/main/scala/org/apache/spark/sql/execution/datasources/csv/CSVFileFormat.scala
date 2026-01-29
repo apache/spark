@@ -155,6 +155,8 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {
     case _: VariantType => allowVariant
 
+    case _: GeometryType | _: GeographyType => false
+
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)

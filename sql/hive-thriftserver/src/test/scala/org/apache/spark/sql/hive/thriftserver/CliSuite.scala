@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
@@ -875,5 +876,19 @@ class CliSuite extends SparkFunSuite {
       "SELECT 'hello' :parm;" -> "parm",
       "SELECT ?;" -> ""
     )
+  }
+
+  test("SPARK-55198: spark-sql should skip comment line with leading whitespaces") {
+    val sql = """SET x=
+                | -- comment
+                |1;
+                |""".stripMargin
+    runCliWithin(2.minutes)(sql -> "x\t1")
+
+    withTempDir { tmpDir =>
+      val sqlFilePath = tmpDir.toPath.resolve("test.sql").toAbsolutePath
+      Files.writeString(sqlFilePath, sql)
+      runCliWithin(2.minutes, extraArgs = Seq("-f", sqlFilePath.toString))("" -> "x\t1")
+    }
   }
 }
