@@ -209,7 +209,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=merge_pandas,
             errorClass=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Unexpected: add, more.\n",
+            "do not match specified schema. Unexpected: add, more.",
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -230,7 +230,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=merge_pandas,
             errorClass=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 4 Actual: 6\n",
+            "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
@@ -277,7 +277,7 @@ class CogroupedApplyInPandasTestsMixin:
                 with self.subTest(convert="double to string"):
                     expected = (
                         r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'k' to Arrow Array \(string\).\n"
+                        r"with name 'k' to Arrow Array \(string\)."
                     )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
