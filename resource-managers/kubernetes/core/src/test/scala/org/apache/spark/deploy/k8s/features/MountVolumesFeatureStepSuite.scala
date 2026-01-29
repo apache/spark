@@ -573,4 +573,39 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
     assert(configuredPod.container.getVolumeMounts.size() === 2)
   }
+
+  test("Mounts csiVolumeClaim") {
+    val volumeConf = KubernetesVolumeSpec(
+      "spark-local-dir-0",
+      "/mnt/disk1",
+      "",
+      "",
+      false,
+      KubernetesCSIVolumeConf("local.csi.xhs.com", Map(
+        "options.parentIndex" ->"0",
+        "options.size" -> "500",
+        "options.volumeType" -> "HostPath",
+        "options.mountOptions" -> "\"dir_mode=0777,actimeo=30,nosharesock\"")
+      )
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi.getDriver === "local.csi.xhs.com")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi.getVolumeAttributes.size() === 4)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+      .getVolumeAttributes.get("parentIndex") === "0")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+      .getVolumeAttributes.get("size") === "500")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+      .getVolumeAttributes.get("volumeType") === "HostPath")
+    assert(configuredPod.pod.getSpec.getVolumes.get(0).getCsi
+      .getVolumeAttributes.get("mountOptions") === "\"dir_mode=0777,actimeo=30,nosharesock\"")
+
+    assert(configuredPod.container.getVolumeMounts.size() === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0).getMountPath === "/mnt/disk1")
+    assert(configuredPod.container.getVolumeMounts.get(0).getName === "spark-local-dir-0")
+  }
 }
