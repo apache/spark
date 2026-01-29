@@ -236,8 +236,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                     assert isinstance(
                         readLimit, ReadMaxRows
                     ), "Expected ReadMaxRows read limit but got " + str(type(readLimit))
-                    end_offset = min(start_idx + readLimit.max_rows,
-                                     self.desired_end_offset["partition-1"])
+                    end_offset = min(
+                        start_idx + readLimit.max_rows, self.desired_end_offset["partition-1"]
+                    )
                 return {"partition-1": end_offset}
 
             def reportLatestOffset(self):
@@ -387,9 +388,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         for progress in q.recentProgress:
             self.assertEqual(progress.numInputRows, 2)
             self.assertEqual(q.lastProgress.sources[0].numInputRows, 2)
-            self.assertEqual(
-                q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}"""
-            )
+            self.assertEqual(q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}""")
 
     def test_simple_stream_reader(self):
         class SimpleStreamReader(SimpleDataSourceStreamReader):
