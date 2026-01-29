@@ -875,4 +875,46 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(map2.keyArray().array().mkString(",") == Array(1).mkString(","))
     assert(stringRepr(map2) == Array("bob", "40").mkString(","))
   }
+
+  test("SPARK-55056: triple nested array with empty outer array") {
+    // Schema: array<array<array<string>>>
+    // This triggers SIGSEGV without the fix. When the outer array is empty,
+    // the second-level ArrayWriter is never invoked, so its count stays 0.
+    // Arrow format requires ListArray offset buffer to have N+1 entries even
+    // when N=0, but getBufferSizeFor(0) returns 0 and the buffer is omitted.
+    val schema = new StructType()
+      .add("data", ArrayType(ArrayType(ArrayType(StringType))))
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema === schema)
+
+    // Write a row with an empty outer array
+    writer.write(InternalRow(ArrayData.toArrayData(Array.empty)))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+    val array0 = reader.getArray(0)
+    assert(array0.numElements() === 0)
+
+    writer.root.close()
+  }
+
+  test("SPARK-55056: nested array with map inside empty outer array") {
+    // Schema: array<array<map<string, string>>>
+    // Regression test - two-level array with map does not trigger the issue,
+    // but we keep this test to ensure the fix doesn't break normal cases.
+    val schema = new StructType()
+      .add("data", ArrayType(ArrayType(MapType(StringType, StringType))))
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema === schema)
+
+    // Write a row with an empty outer array
+    writer.write(InternalRow(ArrayData.toArrayData(Array.empty)))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+    val array0 = reader.getArray(0)
+    assert(array0.numElements() === 0)
+
+    writer.root.close()
+  }
 }
