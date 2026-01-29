@@ -2919,4 +2919,14 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val LIMIT_ACTIVE_PROCESSOR_COUNT =
+    ConfigBuilder("spark.yarn.limitActiveProcessorCount")
+      .internal()
+      .doc("Whether to limit what the JVM sees for the number of cores set by the user " +
+          "(spark.driver.cores or spark.executor.cores) by \"-XX:ActiveProcessorCount\". " +
+          "This flag only takes effect on YARN.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 }
