@@ -140,6 +140,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Registry for dataflow graphs specific to this session
   private[connect] lazy val dataflowGraphRegistry = new DataflowGraphRegistry()
 
+
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
