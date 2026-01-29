@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.concurrent.locks.ReentrantLock
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.protobuf.Message
 
@@ -70,13 +72,19 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def sessionStatus = sessionHolder.eventManager.status
 
-  private var _status: ExecuteStatus = ExecuteStatus.Pending
+  @volatile private var _status: ExecuteStatus = ExecuteStatus.Pending
 
   private var error = Option.empty[Boolean]
 
   private var canceled = Option.empty[Boolean]
 
   private var producedRowCount = Option.empty[Long]
+
+  /**
+   * A lock to avoid race conditions between transition from pending status and interrupt to this
+   * execution
+   */
+  private val cancelLock = new ReentrantLock()
 
   /**
    * @return
@@ -141,6 +149,33 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
   }
 
   /**
+   * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationStarted. This
+   * post fails if the status is being canceled or already canceled.
+   * @return
+   *   true if this post succeeds, false otherwise.
+   */
+  def tryPostStarted(): Boolean = {
+    if (cancelLock.tryLock()) {
+      if (status == ExecuteStatus.Pending) {
+        try {
+          postStarted()
+          true
+        } finally {
+          cancelLock.unlock()
+        }
+      } else {
+        // The status has already transitioned from pending to canceled, or transitioned from
+        // canceled to closed.
+        assert(status == ExecuteStatus.Canceled || status == ExecuteStatus.Closed)
+        false
+      }
+    } else {
+      // The status is transitioning to canceled
+      false
+    }
+  }
+
+  /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationAnalyzed.
    *
    * @param analyzedPlan
@@ -175,17 +210,25 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationCanceled.
    */
   def postCanceled(): Unit = {
-    assertStatus(
-      List(
-        ExecuteStatus.Started,
-        ExecuteStatus.Analyzed,
-        ExecuteStatus.ReadyForExecution,
-        ExecuteStatus.Finished,
-        ExecuteStatus.Failed),
-      ExecuteStatus.Canceled)
-    canceled = Some(true)
-    listenerBus
-      .post(SparkListenerConnectOperationCanceled(jobTag, operationId, clock.getTimeMillis()))
+    // Transition to canceled status can happen on interrupt asynchronously with transition to
+    // started status. So those transition need to be protected by lock.
+    cancelLock.lock()
+    try {
+      assertStatus(
+        List(
+          ExecuteStatus.Pending,
+          ExecuteStatus.Started,
+          ExecuteStatus.Analyzed,
+          ExecuteStatus.ReadyForExecution,
+          ExecuteStatus.Finished,
+          ExecuteStatus.Failed),
+        ExecuteStatus.Canceled)
+      canceled = Some(true)
+      listenerBus
+        .post(SparkListenerConnectOperationCanceled(jobTag, operationId, clock.getTimeMillis()))
+    } finally {
+      cancelLock.unlock()
+    }
   }
 
   /**
