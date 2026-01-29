@@ -24,9 +24,8 @@ import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.column.schema.{EdgeInterpolationAlgorithm => ParquetEdgeInterpolationAlgorithm}
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.LogicalTypeAnnotation.geographyType
+import org.apache.parquet.schema.LogicalTypeAnnotation
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BINARY
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
@@ -2258,8 +2257,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   test("Parquet to Catalyst - GEOGRAPHY with explicit algorithm") {
     val parquetSchema = Types.buildMessage()
       .addField(
-        Types.primitive(BINARY, Repetition.OPTIONAL)
-          .as(geographyType("OGC:CRS84", ParquetEdgeInterpolationAlgorithm.SPHERICAL))
+        Types.primitive(PrimitiveTypeName.BINARY, Repetition.OPTIONAL)
+          .as(LogicalTypeAnnotation.geographyType("OGC:CRS84",
+            ParquetEdgeInterpolationAlgorithm.SPHERICAL))
           .named("f1"))
       .named("root")
 
