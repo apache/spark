@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connect.client
 
 import java.net.URI
-import java.util.{Locale, UUID}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.Executor
 
 import scala.collection.mutable
@@ -1093,6 +1094,8 @@ object SparkConnectClient {
    */
   private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
       extends ClientInterceptor {
+    metadata.foreach { case (key, value) => assert(key != null && value != null) }
+
     override def interceptCall[ReqT, RespT](
         method: MethodDescriptor[ReqT, RespT],
         callOptions: CallOptions,
@@ -1103,7 +1106,13 @@ object SparkConnectClient {
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
           metadata.foreach { case (key, value) =>
-            headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+            if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+              // Expects a base64-encoded value string.
+              val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
+              headers.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
+            } else {
+              headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+            }
           }
           super.start(responseListener, headers)
         }
