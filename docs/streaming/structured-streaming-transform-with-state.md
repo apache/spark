@@ -345,9 +345,9 @@ q = (df.groupBy("key")
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val query = df.groupBy("key")
+val query = df.groupByKey(x => x.getAs("key"))
   .transformWithState(
-    statefulProcessor = new DownTimeDetector(),
+    statefulProcessor = new DownTimeDetector(new Duration(10000)),
     outputMode = OutputMode.Update,
     timeMode = TimeMode.None)
   .writeStream...
