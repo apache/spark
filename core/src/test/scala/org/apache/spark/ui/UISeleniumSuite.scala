@@ -122,6 +122,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       .set(UI_KILL_ENABLED, killEnabled)
       .set(UI_TIMELINE_ENABLED, timelineEnabled)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
