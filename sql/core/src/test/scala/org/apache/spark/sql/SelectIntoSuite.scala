@@ -93,6 +93,8 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
   // Setup test data view used by most tests
   override def beforeAll(): Unit = {
     super.beforeAll()
+    // Enable handler support for NO DATA conditions
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
     createTestView()
   }
 
