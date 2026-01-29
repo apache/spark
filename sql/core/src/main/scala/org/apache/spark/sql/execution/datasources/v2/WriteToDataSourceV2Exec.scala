@@ -514,7 +514,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       case w: WholeStageCodegenExec => Some(w.child)
       case i: InputAdapter => Some(i.child)
       case p: ProjectExec => Some(p.child)
-      case f: FilterExec => Some(f.child)
       case s: SortExec => Some(s.child)
       case e: ShuffleExchangeExec => Some(e.child)
       case a: AQEShuffleReadExec => Some(a.child)
