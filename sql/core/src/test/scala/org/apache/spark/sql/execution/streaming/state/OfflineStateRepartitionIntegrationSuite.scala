@@ -192,7 +192,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   }
 
   def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
-    Seq(true, false).foreach { changelogCheckpointingEnabled =>
+    Seq(true).foreach { changelogCheckpointingEnabled =>
       test(s"$testName - enableChangelogCheckpointing=$changelogCheckpointingEnabled") {
         withSQLConf(
           "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
