@@ -304,6 +304,7 @@ object SparkBuild extends PomBuild {
       // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
       // See https://storage-download.googleapis.com/maven-central/index.html for more info.
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+      "hadoop-staging" at "https://repository.apache.org/content/repositories/orgapachehadoop-1461/",
       "jitpack" at "https://jitpack.io",
       DefaultMavenRepository,
       Resolver.mavenLocal,
@@ -1879,6 +1880,7 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
+        "-Dio.netty.noUnsafe=false",
         "--enable-native-access=ALL-UNNAMED").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
