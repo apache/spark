@@ -42,6 +42,48 @@ class STExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(expectedDataType))
   }
 
+  // Test data: WKB representations of POINT(1 2) and POINT(3 4).
+  private final val wkbString1 = "0101000000000000000000F03F0000000000000040"
+  private final val wkbString2 = "010100000000000000000008400000000000001040"
+
+  /** Geospatial type storage. */
+
+  test("Parquet tables - unsupported geospatial types") {
+    val tableName = "tst_tbl"
+    Seq("GEOMETRY(ANY)", "GEOGRAPHY(ANY)").foreach { unsupportedType =>
+      withTable(tableName) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $tableName (g $unsupportedType) USING PARQUET")
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`g`",
+            "columnType" -> s""""$unsupportedType"""",
+            "format" -> "Parquet"))
+      }
+    }
+  }
+
+  test("Parquet write support for geometry and geography types") {
+    val tableName = "tst_tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (geom GEOMETRY(0), geog GEOGRAPHY(4326)) USING PARQUET")
+
+      val geomNull = "ST_GeomFromWKB(NULL)"
+      val geomNotNull = s"ST_GeomFromWKB(X'$wkbString1')"
+      val geogNull = "ST_GeogFromWKB(NULL)"
+      val geogNotNull = s"ST_GeogFromWKB(X'$wkbString2')"
+
+      sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNull)")
+      sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNull)")
+      sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNotNull)")
+      sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNotNull)")
+
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName"), Seq(Row(4)))
+    }
+  }
+
   /** Geospatial type casting. */
 
   test("Cast GEOGRAPHY(srid) to GEOGRAPHY(ANY)") {
