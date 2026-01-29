@@ -254,8 +254,11 @@ object Analyzer {
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
+      RETAINED_ANALYSIS_FLAGS.contains(key) ||
+      // Static configs should always apply.
+      SQLConf.isStaticConfigKey(key)
       // Also apply catalog configs
-      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+      key.startsWith("spark.sql.catalog.")
     }
 
     retainedConfigs.foreach { case (k, v) =>
