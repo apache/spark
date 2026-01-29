@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240911.1
+FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.12"
@@ -41,28 +41,25 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     libssl-dev \
     openjdk-17-jdk-headless \
+    python3.12 \
+    python3-pip \
+    python3-psutil \
+    python3-venv \
     pkg-config \
     tzdata \
     software-properties-common \
     zlib1g-dev
 
-# Install Python 3.12
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.12 \
-    && apt-get autoremove --purge -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-
-ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
-# Python deps for Spark Connect
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
+ARG TESTING_PIP_PKGS="unittest-xml-reporting lxml coverage"
 
 # Install Python 3.12 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
-RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
+ENV VIRTUAL_ENV /opt/spark-venv
+RUN python3.12 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS $TESTING_PIP_PKGS && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
     python3.12 -m pip cache purge
