@@ -2892,7 +2892,11 @@
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
-            <filereports>SparkTestSuite.txt</filereports>
+            <!--
+             without color (W), show all durations (D), show full stack traces (F),
+             show reminder of failed and canceled tests without stack traces (I)
+            -->
+            <filereports>WDFI SparkTestSuite.txt</filereports>
             <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs}</argLine>
             <stderr/>
             <environmentVariables>
