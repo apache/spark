@@ -23,6 +23,17 @@ import org.apache.spark.sql.functions._
 class DataFrameTableValuedFunctionsSuite extends QueryTest with RemoteSparkSession {
   import testImplicits._
 
+  test("preserve plan ID in ResolveSQLFunctions with UDF") {
+    // Create a simple SQL function / UDF for testing purposes.
+    spark.sql("""CREATE OR REPLACE FUNCTION funct(x INT) RETURNS STRING RETURN
+      CASE WHEN x >= 0 THEN 'foo' ELSE 'bar' END""")
+    val df = spark
+      .sql("SELECT * FROM VALUES (0, 1)")
+      .select(expr("funct(col1)").alias("col2"))
+    // Now use the UDF in a query that will initiate plan rewrite by ResolveSQLFunctions.
+    df.groupBy("col2").agg(count("*")).explain(true)
+  }
+
   test("explode") {
     val actual1 = spark.tvf.explode(array(lit(1), lit(2)))
     val expected1 = spark.sql("SELECT * FROM explode(array(1, 2))")
