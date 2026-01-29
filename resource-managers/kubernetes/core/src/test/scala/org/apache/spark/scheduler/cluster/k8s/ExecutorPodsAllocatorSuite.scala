@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
-import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.dsl.{NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, ServerSideApplicable}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
@@ -33,6 +33,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
@@ -144,6 +145,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    val apl = mock[NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[HasMetadata]]
+    val ssa = mock[ServerSideApplicable[java.util.List[HasMetadata]]]
+    when(apl.forceConflicts()).thenReturn(ssa)
+    when(kubernetesClient.resourceList()).thenReturn(apl)
+    when(kubernetesClient.resourceList(any[HasMetadata]())).thenReturn(apl)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
     when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
     when(pvcWithNamespace.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
