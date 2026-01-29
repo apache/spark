@@ -15,7 +15,7 @@ spark.conf.set("spark.sql.cache.serializer",
 spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
 spark.conf.set("spark.sql.arrow.compression.level", "3")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 ### Configuration 2: Maximum Performance
@@ -27,7 +27,7 @@ spark.conf.set("spark.sql.cache.serializer",
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
 spark.conf.set("spark.sql.arrow.compression.level", "1")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 ### Configuration 3: Memory Optimized
@@ -39,7 +39,7 @@ spark.conf.set("spark.sql.cache.serializer",
 spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
 spark.conf.set("spark.sql.arrow.compression.level", "9")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 ## Tuning Parameters
@@ -158,8 +158,8 @@ spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")
 
 ### 4. Vectorized Reader
 
-**Parameter**: `spark.sql.cache.vectorizedReader.enabled`
-**Default**: `false`
+**Parameter**: `spark.sql.inMemoryColumnarStorage.enableVectorizedReader`
+**Default**: `true`
 **Recommended**: `true` (for most workloads)
 
 #### When to Enable
@@ -177,7 +177,7 @@ spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")
 
 ```scala
 // Enable for best performance (recommended)
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 ## Workload-Specific Tuning
@@ -190,7 +190,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 ```scala
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast decompression
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Good balance
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")  // Vectorized filters
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")  // Vectorized filters
 ```
 
 **Why**: Filter pushdown with statistics benefits most from fast decompression and vectorized execution.
@@ -203,7 +203,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")  // Vectorize
 ```scala
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")  // Larger batches
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")  // Critical!
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")  // Critical!
 ```
 
 **Why**: Aggregations benefit from larger batches and vectorized execution.
@@ -217,7 +217,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")  // Critical!
 spark.conf.set("spark.sql.arrow.compression.codec", "zstd")  // Better compression
 spark.conf.set("spark.sql.arrow.compression.level", "5")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")  // Smaller batches
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 **Why**: Wide tables consume more memory; smaller batches and better compression help.
@@ -231,7 +231,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 spark.conf.set("spark.sql.arrow.compression.codec", "zstd")  // Strings compress well
 spark.conf.set("spark.sql.arrow.compression.level", "5")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 **Why**: Strings compress very well with zstd, saving significant memory.
@@ -244,7 +244,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 ```scala
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast compression/decompression
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Standard batch size
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 **Why**: Parquet/ORC use internal column vectors (not Arrow), so no zero-copy benefit. Fast codec and vectorized reads provide best performance.
@@ -420,7 +420,7 @@ spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "15000")
 **Solutions**:
 ```scala
 // Enable vectorization
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 
 // Use faster decompression
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")

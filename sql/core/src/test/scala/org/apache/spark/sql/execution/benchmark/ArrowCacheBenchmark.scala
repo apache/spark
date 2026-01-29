@@ -210,8 +210,6 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         val spark = createFreshSession(
           "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
         try {
-          spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
-
           // Create and cache initial data
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
@@ -236,8 +234,6 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - cache a cached DF (zero-copy)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
-
           // Create and cache initial data
           val df = spark.range(numRows).selectExpr(
             "id as int_col",

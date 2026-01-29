@@ -78,7 +78,7 @@ val sparkArrow = SparkSession.builder()
   .config("spark.sql.cache.serializer",
     "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
   .config("spark.sql.arrow.compression.codec", "lz4")  // Start with lz4
-  .config("spark.sql.cache.vectorizedReader.enabled", "true")
+  .config("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
   .getOrCreate()
 ```
 
@@ -143,7 +143,7 @@ spark.conf.set("spark.sql.arrow.compression.level", "5")      // Higher compress
 ```scala
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")  // Larger batches
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")     // Faster codec
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 #### For Balanced Configuration
@@ -152,7 +152,7 @@ spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Default
 spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
 spark.conf.set("spark.sql.arrow.compression.level", "3")       // Default
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
 ### Step 7: Monitor Memory Usage
@@ -271,7 +271,7 @@ cachedData.groupBy("product").count().show()
 **After**:
 ```scala
 // Configure Arrow cache with vectorization
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 
 val cachedData = spark.read.parquet("large_dataset.parquet").cache()
 
@@ -342,7 +342,7 @@ spark.conf.set("spark.sql.arrow.compression.level", "5")
 **Solution**:
 ```scala
 // Enable vectorization
-spark.conf.set("spark.sql.cache.vectorizedReader.enabled", "true")
+spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 
 // Use faster compression
 spark.conf.set("spark.sql.arrow.compression.codec", "lz4")

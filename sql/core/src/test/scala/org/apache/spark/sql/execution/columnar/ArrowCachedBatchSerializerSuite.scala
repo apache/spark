@@ -459,4 +459,22 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       )))
     ))
   }
+
+  test("verify Arrow cache serializer is actually used") {
+    val df = Seq((1, "a"), (2, "b"), (3, "c")).toDF("id", "value")
+    df.cache()
+    df.count() // Materialize the cache
+
+    // Verify the query plan uses InMemoryTableScan
+    val plan = df.queryExecution.executedPlan
+    val inMemoryScan = plan.collectFirst {
+      case scan: InMemoryTableScanExec => scan
+    }
+    assert(inMemoryScan.isDefined, "InMemoryTableScan should be present in cached query plan")
+
+    // Verify the serializer is ArrowCachedBatchSerializer
+    val serializer = inMemoryScan.get.relation.cacheBuilder.serializer
+    assert(serializer.isInstanceOf[ArrowCachedBatchSerializer],
+      s"Expected ArrowCachedBatchSerializer but got ${serializer.getClass.getName}")
+  }
 }
