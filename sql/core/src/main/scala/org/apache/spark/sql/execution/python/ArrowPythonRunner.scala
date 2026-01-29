@@ -172,12 +172,16 @@ object ArrowPythonRunner {
     val binaryAsBytes = Seq(
       SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
       conf.pysparkBinaryAsBytes.toString)
-    val profiler = conf.pythonUDFProfiler.map(p =>
+    val udfProfiler = conf.pythonUDFProfiler.map(p =>
       Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
+    ).getOrElse(Seq.empty)
+    val dataSourceProfiler = conf.pythonDataSourceProfiler.map(p =>
+      Seq(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
     ).getOrElse(Seq.empty)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
-      legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler: _*)
+      legacyPandasConversion ++ legacyPandasConversionUDF ++
+      udfProfiler ++ dataSourceProfiler: _*)
   }
 }

@@ -17,9 +17,14 @@
 
 import os
 import sys
-from typing import Callable, IO
+from typing import Callable, IO, Optional
 
-from pyspark.accumulators import _accumulatorRegistry
+from pyspark.accumulators import (
+    _accumulatorRegistry,
+    _deserialize_accumulator,
+    SpecialAccumulatorIds,
+)
+from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler, WorkerMemoryProfiler
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -36,7 +41,14 @@ from pyspark.worker_util import (
     setup_memory_limits,
     setup_spark_files,
     setup_broadcasts,
+    Conf,
 )
+
+
+class RunnerConf(Conf):
+    @property
+    def profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.dataSource.profiler", None)
 
 
 @with_faulthandler
@@ -51,10 +63,22 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
 
         setup_spark_files(infile)
         setup_broadcasts(infile)
+        conf = RunnerConf(infile)
 
         _accumulatorRegistry.clear()
+        accumulator = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        )
 
-        main(infile, outfile)
+        worker_module = main.__module__.split(".")[-1]
+        if conf.profiler == "perf":
+            with WorkerPerfProfiler(accumulator, worker_module):
+                main(infile, outfile)
+        elif conf.profiler == "memory":
+            with WorkerMemoryProfiler(accumulator, worker_module, main):
+                main(infile, outfile)
+        else:
+            main(infile, outfile)
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)

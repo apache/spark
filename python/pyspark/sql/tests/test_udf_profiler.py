@@ -663,35 +663,6 @@ class UDFProfiler2TestsMixin:
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-    def test_perf_profiler_data_source(self):
-        class TestDataSourceReader(DataSourceReader):
-            def __init__(self, schema):
-                self.schema = schema
-
-            def partitions(self):
-                raise NotImplementedError
-
-            def read(self, partition):
-                yield from ((1,), (2,), (3,))
-
-        class TestDataSource(DataSource):
-            def schema(self):
-                return "id long"
-
-            def reader(self, schema) -> "DataSourceReader":
-                return TestDataSourceReader(schema)
-
-        self.spark.dataSource.register(TestDataSource)
-
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            self.spark.read.format("TestDataSource").load().collect()
-
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-        for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
-
     def test_perf_profiler_render(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             _do_computation(self.spark)

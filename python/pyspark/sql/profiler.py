@@ -21,7 +21,18 @@ import os
 import pstats
 from threading import RLock
 from types import CodeType, TracebackType
-from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Literal,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+    overload,
+)
 import warnings
 
 from pyspark.accumulators import (
@@ -82,10 +93,12 @@ class WorkerPerfProfiler:
     PerfProfiler is a profiler for performance profiling.
     """
 
-    def __init__(self, accumulator: Accumulator["ProfileResults"], result_id: int) -> None:
+    def __init__(
+        self, accumulator: Accumulator[Optional["ProfileResults"]], result_key: Union[int, str]
+    ) -> None:
         self._accumulator = accumulator
         self._profiler = cProfile.Profile()
-        self._result_id = result_id
+        self._result_key = result_key
 
     def start(self) -> None:
         self._profiler.enable()
@@ -98,7 +111,7 @@ class WorkerPerfProfiler:
         # make it picklable
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
-        self._accumulator.add({self._result_id: (st, None)})
+        self._accumulator.add({self._result_key: (st, None)})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -121,8 +134,8 @@ class WorkerMemoryProfiler:
 
     def __init__(
         self,
-        accumulator: Accumulator["ProfileResults"],
-        result_id: int,
+        accumulator: Accumulator[Optional["ProfileResults"]],
+        result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
     ) -> None:
         from pyspark.profiler import UDFLineProfilerV2
@@ -133,7 +146,7 @@ class WorkerMemoryProfiler:
             self._profiler.add_code(func_or_code)
         else:
             self._profiler.add_function(func_or_code)
-        self._result_id = result_id
+        self._result_key = result_key
 
     def start(self) -> None:
         self._profiler.enable_by_count()
@@ -146,7 +159,7 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self._accumulator.add({self._result_id: (None, codemap_dict)})
+        self._accumulator.add({self._result_key: (None, codemap_dict)})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -173,7 +186,12 @@ class ProfilerCollector(ABC):
     def __init__(self) -> None:
         self._lock = RLock()
 
-    def show_perf_profiles(self, id: Optional[int] = None) -> None:
+    def _sorted_keys(self, keys: Iterable[Union[int, str]]) -> list[Union[int, str]]:
+        int_keys = sorted(x for x in keys if isinstance(x, int))
+        str_keys = sorted(x for x in keys if isinstance(x, str))
+        return str_keys + int_keys
+
+    def show_perf_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
         Show the perf profile results.
 
@@ -187,22 +205,25 @@ class ProfilerCollector(ABC):
         with self._lock:
             stats = self._perf_profile_results
 
-        def show(id: int) -> None:
+        def show(id: Union[int, str]) -> None:
             s = stats.get(id)
             if s is not None:
                 print("=" * 60)
-                print(f"Profile of UDF<id={id}>")
+                if isinstance(id, str):
+                    print(f"Profile of {id}")
+                else:
+                    print(f"Profile of UDF<id={id}>")
                 print("=" * 60)
                 s.sort_stats("time", "cumulative").print_stats()
 
         if id is not None:
             show(id)
         else:
-            for id in sorted(stats.keys()):
+            for id in self._sorted_keys(stats.keys()):
                 show(id)
 
     @property
-    def _perf_profile_results(self) -> Dict[int, pstats.Stats]:
+    def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
         with self._lock:
             return {
                 result_id: perf
@@ -210,7 +231,7 @@ class ProfilerCollector(ABC):
                 if perf is not None
             }
 
-    def show_memory_profiles(self, id: Optional[int] = None) -> None:
+    def show_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
         Show the memory profile results.
 
@@ -230,22 +251,25 @@ class ProfilerCollector(ABC):
                 UserWarning,
             )
 
-        def show(id: int) -> None:
+        def show(id: Union[int, str]) -> None:
             cm = code_map.get(id)
             if cm is not None:
                 print("=" * 60)
-                print(f"Profile of UDF<id={id}>")
+                if isinstance(id, str):
+                    print(f"Profile of {id}")
+                else:
+                    print(f"Profile of UDF<id={id}>")
                 print("=" * 60)
                 MemoryProfiler._show_results(cm)
 
         if id is not None:
             show(id)
         else:
-            for id in sorted(code_map.keys()):
+            for id in self._sorted_keys(code_map.keys()):
                 show(id)
 
     @property
-    def _memory_profile_results(self) -> Dict[int, CodeMapDict]:
+    def _memory_profile_results(self) -> Dict[Union[int, str], CodeMapDict]:
         with self._lock:
             return {
                 result_id: mem
@@ -261,7 +285,7 @@ class ProfilerCollector(ABC):
         """
         ...
 
-    def dump_perf_profiles(self, path: str, id: Optional[int] = None) -> None:
+    def dump_perf_profiles(self, path: str, id: Optional[Union[int, str]] = None) -> None:
         """
         Dump the perf profile results into directory `path`.
 
@@ -271,13 +295,13 @@ class ProfilerCollector(ABC):
         ----------
         path: str
             A directory in which to dump the perf profile.
-        id : int, optional
+        id : int or str, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
         """
         with self._lock:
             stats = self._perf_profile_results
 
-        def dump(id: int) -> None:
+        def dump(id: Union[int, str]) -> None:
             s = stats.get(id)
 
             if s is not None:
@@ -288,10 +312,10 @@ class ProfilerCollector(ABC):
         if id is not None:
             dump(id)
         else:
-            for id in sorted(stats.keys()):
+            for id in self._sorted_keys(stats.keys()):
                 dump(id)
 
-    def dump_memory_profiles(self, path: str, id: Optional[int] = None) -> None:
+    def dump_memory_profiles(self, path: str, id: Optional[Union[int, str]] = None) -> None:
         """
         Dump the memory profile results into directory `path`.
 
@@ -301,7 +325,7 @@ class ProfilerCollector(ABC):
         ----------
         path: str
             A directory in which to dump the memory profile.
-        id : int, optional
+        id : int or str, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
         """
         with self._lock:
@@ -313,7 +337,7 @@ class ProfilerCollector(ABC):
                 UserWarning,
             )
 
-        def dump(id: int) -> None:
+        def dump(id: Union[int, str]) -> None:
             cm = code_map.get(id)
 
             if cm is not None:
@@ -326,10 +350,10 @@ class ProfilerCollector(ABC):
         if id is not None:
             dump(id)
         else:
-            for id in sorted(code_map.keys()):
+            for id in self._sorted_keys(code_map.keys()):
                 dump(id)
 
-    def clear_perf_profiles(self, id: Optional[int] = None) -> None:
+    def clear_perf_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
         Clear the perf profile results.
 
@@ -337,7 +361,7 @@ class ProfilerCollector(ABC):
 
         Parameters
         ----------
-        id : int, optional
+        id : int or str, optional
             The UDF ID whose profiling results should be cleared.
             If not specified, all the results will be cleared.
         """
@@ -354,7 +378,7 @@ class ProfilerCollector(ABC):
                     if mem is None:
                         self._profile_results.pop(id, None)
 
-    def clear_memory_profiles(self, id: Optional[int] = None) -> None:
+    def clear_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
         Clear the memory profile results.
 
@@ -362,7 +386,7 @@ class ProfilerCollector(ABC):
 
         Parameters
         ----------
-        id : int, optional
+        id : int or str, optional
             The UDF ID whose profiling results should be cleared.
             If not specified, all the results will be cleared.
         """
@@ -407,7 +431,7 @@ class Profile:
     def __init__(self, profiler_collector: ProfilerCollector):
         self.profiler_collector = profiler_collector
 
-    def show(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
+    def show(self, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None) -> None:
         """
         Show the profile results.
 
@@ -415,7 +439,7 @@ class Profile:
 
         Parameters
         ----------
-        id : int, optional
+        id : int or str, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
         type : str, optional
             The profiler type, which can be either "perf" or "memory".
@@ -441,7 +465,9 @@ class Profile:
                 },
             )
 
-    def dump(self, path: str, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
+    def dump(
+        self, path: str, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None
+    ) -> None:
         """
         Dump the profile results into directory `path`.
 
@@ -451,7 +477,7 @@ class Profile:
         ----------
         path: str
             A directory in which to dump the profile.
-        id : int, optional
+        id : int or str, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
         type : str, optional
             The profiler type, which can be either "perf" or "memory".
@@ -472,24 +498,34 @@ class Profile:
             )
 
     @overload
-    def render(self, id: int, *, type: Optional[str] = None, renderer: Optional[str] = None) -> Any:
-        ...
-
-    @overload
     def render(
-        self, id: int, *, type: Optional[Literal["perf"]], renderer: Callable[[pstats.Stats], Any]
+        self, id: Union[int, str], *, type: Optional[str] = None, renderer: Optional[str] = None
     ) -> Any:
         ...
 
     @overload
     def render(
-        self, id: int, *, type: Literal["memory"], renderer: Callable[[CodeMapDict], Any]
+        self,
+        id: Union[int, str],
+        *,
+        type: Optional[Literal["perf"]],
+        renderer: Callable[[pstats.Stats], Any],
+    ) -> Any:
+        ...
+
+    @overload
+    def render(
+        self,
+        id: Union[int, str],
+        *,
+        type: Literal["memory"],
+        renderer: Callable[[CodeMapDict], Any],
     ) -> Any:
         ...
 
     def render(
         self,
-        id: int,
+        id: Union[int, str],
         *,
         type: Optional[str] = None,
         renderer: Optional[
@@ -503,7 +539,7 @@ class Profile:
 
         Parameters
         ----------
-        id : int
+        id : int or str
             The UDF ID whose profiling results should be rendered.
         type : str, optional
             The profiler type to render results for, which can be either "perf" or "memory".
@@ -550,7 +586,7 @@ class Profile:
         if result is not None:
             return render(result)  # type:ignore[arg-type]
 
-    def clear(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
+    def clear(self, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None) -> None:
         """
         Clear the profile results.
 
@@ -558,7 +594,7 @@ class Profile:
 
         Parameters
         ----------
-        id : int, optional
+        id : int or str, optional
             The UDF ID whose profiling results should be cleared.
             If not specified, all the results will be cleared.
         type : str, optional
