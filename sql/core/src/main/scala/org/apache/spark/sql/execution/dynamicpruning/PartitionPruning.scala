@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -184,6 +185,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   private def calculatePlanOverhead(plan: LogicalPlan): Float = {
     val (cached, notCached) = plan.collectLeaves().partition(p => p match {
       case _: InMemoryRelation => true
+      case _: LocalRelation => true
+      case l: LogicalRDD if isLogicalRDDWithStats(l) => true
       case _ => false
     })
     val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
@@ -195,8 +198,19 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         m.stats.sizeInBytes.toFloat * 0.2
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
         0.0
+      case _: LocalRelation => 0.0
+      case l: LogicalRDD if isLogicalRDDWithStats(l) => 0.0
     }.sum.toFloat
     scanOverhead + cachedOverhead
+  }
+
+  /**
+   * Check if a LogicalRDD has actual statistics (indicating materialized data)
+   * vs. just the default size estimate. LogicalRDD with rowCount stats indicates
+   * the data was already computed and stats were collected.
+   */
+  private def isLogicalRDDWithStats(rdd: LogicalRDD): Boolean = {
+    rdd.stats.rowCount.isDefined
   }
 
 
@@ -206,6 +220,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
     plan.exists {
       case f: Filter => isLikelySelective(f.condition)
+      case _: LocalRelation => true
+      case _: LogicalRDD => true
       case _ => false
     }
   }
