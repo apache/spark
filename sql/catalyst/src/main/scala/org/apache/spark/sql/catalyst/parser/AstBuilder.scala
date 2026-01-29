@@ -3253,7 +3253,7 @@ class AstBuilder extends DataTypeAstBuilder
     val order = ctx.sortItem.asScala.map(visitSortItem)
     val filter = Option(ctx.where).map(expression(_))
     val ignoreNulls =
-      Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
+      Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE)
 
     // Is this an IDENTIFIER clause instead of a function call?
     if (ctx.functionName.identFunc != null &&

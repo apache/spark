@@ -480,7 +480,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
 :  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
-:  :- Aggregate [collect_list(t2d#xL, 0, 0) AS collect_list(t2d)#x]
+:  :- Aggregate [collect_list(t2d#xL, 0, 0, true) AS collect_list(t2d)#x]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
 :  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
