@@ -138,6 +138,23 @@ class AnalysisException protected (
       context = origin.getQueryContext,
       cause = cause)
 
+  def this(
+      message: String,
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      sqlState: Option[String]) =
+    this(
+      message = message,
+      line = None,
+      startPosition = None,
+      cause = cause,
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      context = context,
+      sqlState = sqlState)
+
   def copy(
       message: String,
       line: Option[Int],

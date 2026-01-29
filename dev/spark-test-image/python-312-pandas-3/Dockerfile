@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260110
+ENV FULL_REFRESH_DATE=20260127
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -39,27 +39,14 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     git \
     gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
     libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
     libssl-dev \
-    libtiff5-dev \
-    libwebp-dev \
-    libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
-    qpdf \
     tzdata \
     software-properties-common \
-    wget \
     zlib1g-dev
 
 # Install Python 3.12

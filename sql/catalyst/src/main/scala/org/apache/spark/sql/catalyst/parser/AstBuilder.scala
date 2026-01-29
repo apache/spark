@@ -367,6 +367,8 @@ class AstBuilder extends DataTypeAstBuilder
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
               compoundBodyParserContext.variable(createVariable, isScope)
+            case SingleStatement(_: DeclareCursor) =>
+              compoundBodyParserContext.cursor()
             case _ => compoundBodyParserContext.statement()
           }
           buff += statement
@@ -6650,6 +6652,118 @@ class AstBuilder extends DataTypeAstBuilder
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       ctx.EXISTS() != null
     )
+  }
+
+  /**
+   * Create a [[DeclareCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   DECLARE cursor_name CURSOR FOR SELECT * FROM table;
+   * }}}
+   */
+  override def visitDeclareCursorStatement(
+      ctx: DeclareCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    val cursorName = getIdentifierText(ctx.name)
+    // Extract original SQL text to preserve parameter markers
+    val queryText = getOriginalText(ctx.query())
+
+    val asensitive = if (ctx.INSENSITIVE() != null) false else true
+    DeclareCursor(cursorName, queryText, asensitive)
+  }
+
+  /**
+   * Helper method to create an UnresolvedCursor with validation.
+   * Validates that cursor references have at most one qualifier (label.cursor).
+   *
+   * @param nameParts The cursor name parts from multipartIdentifier
+   * @return UnresolvedCursor instance
+   * @throws ParseException if more than two name parts are provided
+   */
+  private def createUnresolvedCursor(nameParts: Seq[String]): UnresolvedCursor = {
+    if (nameParts.length > 2) {
+      throw QueryParsingErrors.cursorInvalidQualifierError(nameParts.mkString("."))
+    }
+    UnresolvedCursor(nameParts)
+  }
+
+  /**
+   * Create an [[OpenCursor]] command.
+   *
+   * For example:
+   * {{{
+   *   OPEN cursor_name;
+   *   OPEN cursor_name USING expr1, expr2;
+   *   OPEN cursor_name USING (expr1 AS param1, expr2 AS param2);
+   * }}}
+   */
+  override def visitOpenCursorStatement(
+      ctx: OpenCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Create UnresolvedCursor from the cursor name
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    val cursor = createUnresolvedCursor(nameParts)
+
+    // Parse optional USING clause parameters
+    // Extract names from Alias nodes at parse time since Alias nodes may not survive analysis.
+    // The shared ParameterBindingUtils will use these pre-extracted names at execution time.
+    val (args, paramNames) = Option(ctx.params).map { params =>
+      params.namedExpression().asScala.toSeq.map(visitNamedExpression).map {
+        case alias: Alias => (alias.child, alias.name)
+        case expr => (expr, "")
+      }.unzip
+    }.getOrElse((Seq.empty, Seq.empty))
+
+    OpenCursor(cursor, args, paramNames)
+  }
+
+  /**
+   * Create a [[FetchCursor]] command.
+   *
+   * For example:
+   * {{{
+   *   FETCH cursor_name INTO var1, var2;
+   * }}}
+   */
+  override def visitFetchCursorStatement(
+      ctx: FetchCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Create UnresolvedCursor from the cursor name
+    val nameParts = visitMultipartIdentifier(ctx.cursorName)
+    val cursor = createUnresolvedCursor(nameParts)
+
+    val targetVariables = visitMultipartIdentifierList(ctx.targets)
+    FetchCursor(cursor, targetVariables)
+  }
+
+  /**
+   * Create a [[CloseCursor]] command.
+   *
+   * For example:
+   * {{{
+   *   CLOSE cursor_name;
+   * }}}
+   */
+  override def visitCloseCursorStatement(
+      ctx: CloseCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Create UnresolvedCursor from the cursor name
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    val cursor = createUnresolvedCursor(nameParts)
+    CloseCursor(cursor)
   }
 
   private def visitSetVariableImpl(

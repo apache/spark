@@ -8546,7 +8546,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         right: Object to merge with.
         how: Type of merge to be performed.
-            {'left', 'right', 'outer', 'inner'}, default 'inner'
+            {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'
 
             left: use only keys from left frame, like a SQL left outer join; not preserve
                 key order unlike pandas.
@@ -8556,6 +8556,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 lexicographically.
             inner: use intersection of keys from both frames, like a SQL inner join;
                 not preserve the order of the left keys unlike pandas.
+            cross: creates the cartesian product from both frames, preserves the order
+                of the left keys.
         on: Column or index level names to join on. These must be found in both DataFrames. If on
             is None and not merging on indexes then this defaults to the intersection of the
             columns in both DataFrames.
@@ -8661,7 +8663,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(right, ps.Series):
             right = right.to_frame()
 
-        if on:
+        if how == "cross":
+            if on or left_on or right_on:
+                raise ValueError("Can not pass on, left_on, or right_on to merge with how='cross'.")
+            if left_index or right_index:
+                raise ValueError(
+                    "Can not pass left_index=True or right_index=True to merge with how='cross'."
+                )
+            left_key_names: List[str] = []
+            right_key_names: List[str] = []
+        elif on:
             if left_on or right_on:
                 raise ValueError(
                     'Can only pass argument "on" OR "left_on" and "right_on", '
@@ -8741,12 +8752,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         left_key_columns = [scol_for(left_table, label) for label in left_key_names]
         right_key_columns = [scol_for(right_table, label) for label in right_key_names]
 
-        join_condition = reduce(
-            lambda x, y: x & y,
-            [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
-        )
-
-        joined_table = left_table.join(right_table, join_condition, how=how)
+        if how == "cross":
+            joined_table = left_table.crossJoin(right_table)
+        else:
+            join_condition = reduce(
+                lambda x, y: x & y,
+                [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
+            )
+            joined_table = left_table.join(right_table, join_condition, how=how)
 
         # Unpack suffixes tuple for convenience
         left_suffix = suffixes[0]
