@@ -45,6 +45,7 @@ try:
 except Exception:
     has_memory_profiler = False
 
+import pyspark
 from pyspark.accumulators import AccumulatorParam
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
@@ -477,7 +478,18 @@ class MemoryProfiler(Profiler):
             stream.write(header + "\n")
             stream.write("=" * len(header) + "\n")
 
-            all_lines = linecache.getlines(filename, module_globals=globals())
+            if "pyspark.zip/pyspark/" in filename:
+                # if the original filename is in pyspark.zip file, we try to find the actual
+                # file in pyspark module by concatenating pyspark module directory and the
+                # rest of the filename
+                # Eventually we should ask the data provider to provide the actual lines
+                # because there's no guarantee that we can always find the actual file
+                # on driver side
+                filename = os.path.join(
+                    os.path.dirname(pyspark.__file__), filename.rsplit("pyspark.zip/pyspark/", 1)[1]
+                )
+
+            all_lines = linecache.getlines(filename)
             if len(all_lines) == 0:
                 raise PySparkValueError(
                     errorClass="MEMORY_PROFILE_INVALID_SOURCE", messageParameters={}
