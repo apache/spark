@@ -95,6 +95,7 @@ private[protobuf] class ApplicationInfoWrapperSerializer
     info.attemptId.foreach{ id =>
       builder.setAttemptId(id)
     }
+    info.exitCode.foreach(builder.setExitCode)
     builder.build()
   }
 
@@ -110,7 +111,8 @@ private[protobuf] class ApplicationInfoWrapperSerializer
       duration = info.getDuration,
       sparkUser = getStringField(info.hasSparkUser, () => info.getSparkUser),
       completed = info.getCompleted,
-      appSparkVersion = getStringField(info.hasAppSparkVersion, () => info.getAppSparkVersion)
+      appSparkVersion = getStringField(info.hasAppSparkVersion, () => info.getAppSparkVersion),
+      exitCode = if (info.hasExitCode) Some(info.getExitCode) else None
     )
   }
 }
