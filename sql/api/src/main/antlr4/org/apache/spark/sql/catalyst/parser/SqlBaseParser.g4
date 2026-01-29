@@ -350,6 +350,13 @@ statement
         (COMMA identifierReferences+=identifierReference)*
         dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
+    | DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+                                                                       #declareCursorStatement
+    | OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
+                                                                       #openCursorStatement
+    | FETCH ((NEXT? FROM) | FROM)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
+                                                                       #fetchCursorStatement
+    | CLOSE multipartIdentifier                                        #closeCursorStatement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -1880,6 +1887,7 @@ ansiNonReserved
     | ARCHIVE
     | ARRAY
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | BEGIN
@@ -1902,6 +1910,7 @@ ansiNonReserved
     | CHAR
     | CHARACTER
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -1918,6 +1927,7 @@ ansiNonReserved
     | CONTAINS
     | CONTINUE
     | COST
+    | CURSOR
     | CUBE
     | CURRENT
     | DATA
@@ -2000,6 +2010,7 @@ ansiNonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2050,12 +2061,14 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
     | NULLS
     | NUMERIC
     | OF
+    | OPEN
     | OPTION
     | OPTIONS
     | OUT
@@ -2079,6 +2092,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER
@@ -2239,6 +2253,7 @@ nonReserved
     | ARRAY
     | AS
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2267,6 +2282,7 @@ nonReserved
     | CHARACTER
     | CHECK
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -2290,6 +2306,7 @@ nonReserved
     | CREATE
     | CUBE
     | CURRENT
+    | CURSOR
     | CURRENT_DATE
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
@@ -2389,6 +2406,7 @@ nonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2443,6 +2461,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
@@ -2453,6 +2472,7 @@ nonReserved
     | OF
     | OFFSET
     | ONLY
+    | OPEN
     | OPTION
     | OPTIONS
     | OR
@@ -2481,6 +2501,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER

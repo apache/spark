@@ -17,61 +17,14 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import java.util.Locale
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
-import org.apache.spark.sql.catalyst.catalog.VariableDefinition
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.internal.SQLConf
 
-/**
- * Helper object for setting variables, shared by SetVariableExec and SelectIntoVariableExec.
- */
-private[v2] object VariableSetter {
-  def setVariable(
-      variable: VariableReference,
-      value: Any,
-      conf: SQLConf,
-      tempVariableManager: org.apache.spark.sql.catalyst.catalog.TempVariableManager): Unit = {
-    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
-      variable.originalNameParts
-    } else {
-      variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
-    }
-
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
-
-    val variableManager = variable.catalog match {
-      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
-
-      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present " +
-          "because analysis has already determined it exists.")
-
-      case FakeLocalCatalog => scriptingVariableManager.get
-
-      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
-
-      case FakeSystemCatalog => tempVariableManager
-
-      case c => throw SparkException.internalError("Unexpected catalog: " + c)
-    }
-
-    val varDef = VariableDefinition(
-      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
-
-    variableManager.set(namePartsCaseAdjusted, varDef)
-  }
-}
 
 /**
  * Defines how variables should behave when the query returns zero rows.
@@ -132,7 +85,7 @@ private[v2] object VariableExecutor {
         case ZeroRowBehavior.SetToNull =>
           // EXECUTE IMMEDIATE INTO: set all variables to null
           variables.foreach { v =>
-            VariableSetter.setVariable(v, null, conf, tempVariableManager)
+            VariableAssignmentUtils.assignVariable(v, null, tempVariableManager, conf)
           }
         case ZeroRowBehavior.KeepUnchanged =>
           // SELECT INTO: do nothing, variables remain unchanged
@@ -147,7 +100,7 @@ private[v2] object VariableExecutor {
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        VariableSetter.setVariable(v, value, conf, tempVariableManager)
+        VariableAssignmentUtils.assignVariable(v, value, tempVariableManager, conf)
       }
     }
 

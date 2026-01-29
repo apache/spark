@@ -4046,6 +4046,13 @@ object SQLConf {
       .checkValue(_ >= 0, "This value must be equal to or greater than 0.")
       .createWithDefaultString("48MB")
 
+  val PYSPARK_TOJSON_RETURN_DATAFRAME =
+    buildConf("spark.sql.pyspark.toJSON.returnDataFrame")
+      .doc("When true, DataFrame.toJSON in PySpark Classic returns a Dataframe instead of RDD.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -4512,10 +4519,8 @@ object SQLConf {
   val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
     buildConf("spark.sql.scripting.continueHandlerEnabled")
       .internal()
-      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
-        "is under development and still not working as intended. This feature switch is intended " +
-        "to be used internally for development and testing, not by end users. " +
-        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .doc("SQL Scripting CONTINUE HANDLER feature enables CONTINUE exception handlers " +
+        "which are essential for cursor iteration with NOT FOUND conditions.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -4528,6 +4533,15 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val SQL_SCRIPTING_CURSOR_ENABLED =
+    buildConf("spark.sql.scripting.cursorEnabled")
+      .internal()
+      .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
+        "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
@@ -7682,6 +7696,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
   def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
+
+  def pysparkToJSONReturnDataFrame: Boolean = getConf(PYSPARK_TOJSON_RETURN_DATAFRAME)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
