@@ -271,7 +271,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
                  |LOCATION '${s"${path.getCanonicalPath}"}'""".stripMargin
             sql(topDirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("SELECT * FROM tbl1"), Nil)
+              checkAnswer(sql("SELECT * FROM tbl1"), (1 to 6).map(i => Row(i, i, s"parq$i")))
             } else {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl1").show()
@@ -289,7 +289,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
                  |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
             sql(l1DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("SELECT * FROM tbl2"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+              checkAnswer(sql("SELECT * FROM tbl2"), (1 to 6).map(i => Row(i, i, s"parq$i")))
             } else {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl2").show()
@@ -307,7 +307,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
                  |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
             sql(l2DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("SELECT * FROM tbl3"), (3 to 4).map(i => Row(i, i, s"parq$i")))
+              checkAnswer(sql("SELECT * FROM tbl3"), (3 to 6).map(i => Row(i, i, s"parq$i")))
             } else {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl3").show()
@@ -325,7 +325,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
                  |LOCATION '${new File(s"${path}/*").toURI}'""".stripMargin
             sql(wildcardTopDirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("SELECT * FROM tbl4"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+              checkAnswer(sql("SELECT * FROM tbl4"), (1 to 6).map(i => Row(i, i, s"parq$i")))
             } else {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl4").show()
@@ -343,7 +343,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
                  |LOCATION '${new File(s"${path}/l1/*").toURI}'""".stripMargin
             sql(wildcardL1DirStatement)
             if (parquetConversion == "true") {
-              checkAnswer(sql("SELECT * FROM tbl5"), (1 to 4).map(i => Row(i, i, s"parq$i")))
+              checkAnswer(sql("SELECT * FROM tbl5"), (1 to 6).map(i => Row(i, i, s"parq$i")))
             } else {
               val msg = intercept[IOException] {
                 sql("SELECT * FROM tbl5").show()

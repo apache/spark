@@ -860,12 +860,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
         // 1. Add file to src dir, should not read as globbing src/*/* does not capture files in
         //    dir, only captures files in dir/subdir/
-        // 2. Add files to dir/subDir/subsubdir/subsubsubdir, should not read as src/*/* should
-        //    not capture those files
+        // 2. Add files to dir/subDir/subsubdir/subsubsubdir. After SPARK-28098, we can also read
+        //    files in deeper nested directories.
         AddTextFileData("keep6", dir, tmp),
         AddTextFileData("keep7", subSubSubDir, tmp),
         AddTextFileData("keep8", subDir, tmp), // needed to make query detect new data
-        CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
+        CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep7", "keep8")
       )
     }
   }
