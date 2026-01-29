@@ -357,7 +357,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.assertEqual(len(q.recentProgress), 1)
         self.assertEqual(q.lastProgress.numInputRows, 10)
         self.assertEqual(q.lastProgress.sources[0].numInputRows, 10)
-        self.assertEqual(q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}""")
+        self.assertEqual(q.lastProgress.sources[0].latestOffset, """{'partition-1': 1000000}""")
 
     def test_stream_reader_admission_control_processing_time_trigger(self):
         self.spark.dataSource.register(self._get_test_data_source_for_admission_control())
@@ -388,7 +388,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         for progress in q.recentProgress:
             self.assertEqual(progress.numInputRows, 2)
             self.assertEqual(q.lastProgress.sources[0].numInputRows, 2)
-            self.assertEqual(q.lastProgress.sources[0].latestOffset, """{"partition-1": 1000000}""")
+            self.assertEqual(q.lastProgress.sources[0].latestOffset, """{'partition-1': 1000000}""")
 
     def test_simple_stream_reader(self):
         class SimpleStreamReader(SimpleDataSourceStreamReader):
