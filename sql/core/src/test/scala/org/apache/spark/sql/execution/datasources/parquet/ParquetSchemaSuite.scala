@@ -21,10 +21,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.column.schema.{EdgeInterpolationAlgorithm => ParquetEdgeInterpolationAlgorithm}
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.LogicalTypeAnnotation
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
@@ -2223,11 +2221,43 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     int96AsTimestamp = true)
 
   testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
     "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation",
     StructType(Seq(StructField("f1",
       GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
     """message root {
       |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS and algorithm)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84, SPHERICAL));
       |}
     """.stripMargin,
     binaryAsString = false,
@@ -2253,30 +2283,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true)
-
-  test("Parquet to Catalyst - GEOGRAPHY with explicit algorithm") {
-    val parquetSchema = Types.buildMessage()
-      .addField(
-        Types.primitive(PrimitiveTypeName.BINARY, Repetition.OPTIONAL)
-          .as(LogicalTypeAnnotation.geographyType("OGC:CRS84",
-            ParquetEdgeInterpolationAlgorithm.SPHERICAL))
-          .named("f1"))
-      .named("root")
-
-    val converter = new ParquetToSparkSchemaConverter(
-      assumeBinaryIsString = false,
-      assumeInt96IsTimestamp = true)
-    val actualParquetColumn = converter.convertParquetColumn(parquetSchema)
-    val actual = actualParquetColumn.sparkType
-
-    val expected = StructType(Seq(StructField("f1",
-      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL))))
-    assert(actual === expected,
-      s"""Schema mismatch.
-         |Expected schema: ${expected.json}
-         |Actual schema:   ${actual.json}
-       """.stripMargin)
-  }
 
   /** Catalyst to Parquet conversion for geospatial types. */
 
