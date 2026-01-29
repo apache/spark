@@ -831,6 +831,19 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
+   * Indicates that COMMENT ON COLUMN must specify a table name along with column name.
+   *
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def commentOnColumnRequiresTableNameError(ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(
+      errorClass = "COMMENT_ON_COLUMN_REQUIRES_TABLE_NAME",
+      messageParameters = Map("columnRef" -> ctx.getText),
+      ctx = ctx)
+  }
+
+  /**
    * Throws an internal error for unexpected parameter markers found during AST building. This
    * should be unreachable in normal operation due to grammar-level blocking.
    *
