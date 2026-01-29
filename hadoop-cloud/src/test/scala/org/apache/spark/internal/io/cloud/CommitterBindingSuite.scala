@@ -110,7 +110,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     val tempDir = File.createTempFile("ser", ".bin")
 
     tempDir.delete()
-    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString, false)
+    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString)
 
     val serData = File.createTempFile("ser", ".bin")
     var out: ObjectOutputStream = null
