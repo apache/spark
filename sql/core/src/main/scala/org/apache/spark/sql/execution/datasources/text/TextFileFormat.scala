@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -142,10 +142,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     }
   }
 
-  override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: GeometryType | _: GeographyType => false
-    case _: StringType => true
-    case _ => false
-  }
+  override def supportDataType(dataType: DataType): Boolean =
+    dataType.isInstanceOf[StringType]
 }
 
