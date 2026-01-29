@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.util.UUID
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.concurrent.Eventually
@@ -42,12 +43,13 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int): Unit = {
+  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
     service = new DummySparkConnectService
-    server = NettyServerBuilder
+    val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
-      .build()
+    interceptors.foreach(serverBuilder.intercept)
+    server = serverBuilder.build()
     server.start()
   }
 
@@ -227,13 +229,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -244,7 +248,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
@@ -618,6 +623,72 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.getPlanCompressionOptions.isEmpty)
     // The client should try to fetch the config only once.
     assert(service.getAndClearLatestConfigRequests().size == 1)
+  }
+
+  test("SPARK-55243: Binary headers use the correct marshaller") {
+    class HeadersInterceptor extends ServerInterceptor {
+      var headers: Option[Metadata] = None
+
+      override def interceptCall[ReqT, RespT](
+          call: ServerCall[ReqT, RespT],
+          headers: Metadata,
+          next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+        this.headers = Some(headers)
+        next.startCall(call, headers)
+      }
+    }
+
+    def buildClientWithHeader(key: String, value: String): SparkConnectClient = {
+      SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(key, value)
+        .build()
+    }
+
+    val headerInterceptor = new HeadersInterceptor()
+    startDummyServer(0, Seq(headerInterceptor))
+
+    val keyName = "test-bin"
+    val key = Metadata.Key.of(keyName, Metadata.BINARY_BYTE_MARSHALLER)
+    val binaryData = "test-binary-data"
+    val base64EncodedValue = Base64.getEncoder.encodeToString(binaryData.getBytes(UTF_8))
+
+    val plan = buildPlan("select * from range(10)")
+
+    // Successfully set and use base64-encoded -bin key.
+    client = buildClientWithHeader(keyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(key)))
+      val bytes = headerInterceptor.headers.get.get(key)
+      assert(new String(bytes, UTF_8) == binaryData)
+    }
+
+    // Non base64-encoded -bin header throws IllegalArgumentException.
+    client = buildClientWithHeader(keyName, binaryData)
+
+    assertThrows[IllegalArgumentException] {
+      client.execute(plan)
+    }
+
+    // Non -bin headers keep using the ASCII marshaller.
+    val asciiKeyName = "test"
+    val asciiKey = Metadata.Key.of(asciiKeyName, Metadata.ASCII_STRING_MARSHALLER)
+
+    headerInterceptor.headers = None // Reset captured headers.
+
+    client = buildClientWithHeader(asciiKeyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(asciiKey)))
+      val value = headerInterceptor.headers.get.get(asciiKey)
+      assert(value == base64EncodedValue)
+      // No BINARY_BYTE_MARSHALLER header.
+      assert(!headerInterceptor.headers.exists(_.containsKey(key)))
+    }
   }
 }
 

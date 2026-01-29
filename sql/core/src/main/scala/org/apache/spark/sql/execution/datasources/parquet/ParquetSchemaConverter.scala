@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.column.schema.EdgeInterpolationAlgorithm
 import org.apache.parquet.io.{ColumnIO, ColumnIOFactory, GroupColumnIO, PrimitiveColumnIO}
 import org.apache.parquet.schema._
 import org.apache.parquet.schema.LogicalTypeAnnotation._
@@ -31,6 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterpolationAlgorithm}
 
 /**
  * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]]
@@ -336,6 +338,17 @@ class ParquetToSparkSchemaConverter(
           case null => BinaryType
           case _: BsonLogicalTypeAnnotation => BinaryType
           case _: DecimalLogicalTypeAnnotation => makeDecimalType()
+          case geom: GeometryLogicalTypeAnnotation =>
+            GeometryType(Option(geom.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS))
+          case geog: GeographyLogicalTypeAnnotation =>
+            val crs = Option(geog.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS)
+            val sparkAlgorithm = if (geog.getAlgorithm != null) {
+              SparkEdgeInterpolationAlgorithm.fromString(geog.getAlgorithm.toString)
+                .getOrElse(SparkEdgeInterpolationAlgorithm.SPHERICAL)
+            } else {
+              SparkEdgeInterpolationAlgorithm.SPHERICAL
+            }
+            GeographyType(crs, sparkAlgorithm)
           case _ => illegalType()
         }
 
@@ -652,6 +665,17 @@ class SparkToParquetSchemaConverter(
       case _: StringType =>
         Types.primitive(BINARY, repetition)
           .as(LogicalTypeAnnotation.stringType()).named(field.name)
+
+      case geom: GeometryType =>
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.geometryType(geom.crs)).named(field.name)
+
+      case geog: GeographyType =>
+        val logicalType = LogicalTypeAnnotation.geographyType(
+          geog.crs,
+          EdgeInterpolationAlgorithm.valueOf(geog.algorithm.toString))
+        Types.primitive(BINARY, repetition)
+          .as(logicalType).named(field.name)
 
       case DateType =>
         Types.primitive(INT32, repetition)

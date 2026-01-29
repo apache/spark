@@ -21,6 +21,7 @@ import time
 import unittest
 import logging
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
 from pyspark.errors import PythonException
@@ -97,7 +98,17 @@ class MapInPandasTestsMixin:
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                else:
+                    # https://github.com/apache/arrow/issues/49002
+                    # PyArrow has a bug that it will convert pa.array([None], type="str") to
+                    # pd.Series([None], dtype=object) instead of pd.Series([None], dtype=str).
+                    # So for now we only check that dtype is either object or str.
+                    assert [d.name for d in list(pdf.dtypes)] in (
+                        ["int32", "str"],
+                        ["int32", "object"],
+                    )
                 yield pdf
 
         actual = df.mapInPandas(func, df.schema).collect()
@@ -288,9 +299,11 @@ class MapInPandasTestsMixin:
                         for pdf in iterator:
                             yield pdf.assign(id="test_string")
 
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
+
                     expected = (
                         r"ValueError: Exception thrown when converting pandas.Series "
-                        r"\(object\) with name 'id' to Arrow Array \(double\)."
+                        rf"\({pandas_type_name}\) with name 'id' to Arrow Array \(double\)."
                     )
                     if safely:
                         expected = expected + (
@@ -472,9 +485,10 @@ class MapInPandasTestsMixin:
                 yield pd.DataFrame({"id": ["x", "y"]})
 
         df = self.spark.range(2).mapInPandas(func, "id int")
+        pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkValueError: Exception thrown when converting pandas.Series \\(object\\) "
+            f"PySparkValueError: Exception thrown when converting pandas.Series \\({pandas_type_name}\\) "
             "with name 'id' to Arrow Array \\(int32\\)\\.",
         ):
             df.collect()
