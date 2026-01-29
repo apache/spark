@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.spark.{QueryContext, SparkArithmeticException, SparkBuildInfo, SparkDateTimeException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{DataType, DoubleType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
@@ -90,6 +90,13 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       to: DataType,
       context: QueryContext): SparkDateTimeException = {
     invalidInputInCastToDatetimeErrorInternal(toSQLValue(value), StringType, to, context)
+  }
+
+  def invalidInputInCastToDatetimeError(
+      value: Long,
+      to: DataType,
+      context: QueryContext): SparkDateTimeException = {
+    invalidInputInCastToDatetimeErrorInternal(toSQLValue(value), LongType, to, context)
   }
 
   def invalidInputInCastToDatetimeError(
