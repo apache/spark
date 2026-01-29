@@ -1629,6 +1629,38 @@ class SparkSubmitSuite
     assertResult(3)(runSparkSubmit(args, expectFailure = true))
   }
 
+  test("SPARK-54774: k8s submit failed should keep same exit code with user code") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val fileSystem = Utils.getHadoopFileSystem("/",
+      SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+    withTempDir { testDir =>
+      val testDirPath = new Path(testDir.getAbsolutePath())
+      val args = Seq(
+        "--class", K8sExitCodeTestApplication.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "k8s://host:port",
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.kubernetes.authenticate.driver.serviceAccountName=default",
+        "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.rolling.enabled=false",
+        "--conf", "spark.eventLog.testing=true",
+        "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
+        unusedJar.toString
+      )
+      // The test application throws SparkUserAppException with exit code 42,
+      // so SparkContext.stop(42) should be called in k8s mode
+      runSparkSubmit(args, expectFailure = true)
+      val listStatus = fileSystem.listStatus(testDirPath)
+      val logData = EventLogFileReader.openEventLog(listStatus.last.getPath, fileSystem)
+      Source.fromInputStream(logData)(Codec.UTF8).getLines().filter { line =>
+        line.contains("SparkListenerApplicationEnd")
+      }.foreach { line =>
+        assert(line.contains("\"ExitCode\":42"))
+      }
+    }
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -2116,4 +2148,24 @@ class TestSparkApplication extends SparkApplication with Matchers {
     throw new SparkException(args(0))
   }
 
+}
+
+object K8sExitCodeTestApplication {
+  def main(args: Array[String]): Unit = {
+    TestUtils.configTestLog4j2("INFO")
+    // Use local master to ensure SparkContext can be created in test environment
+    // The k8s master is set in SparkSubmit args, which triggers the finally block logic
+    val conf = new SparkConf().setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    try {
+      // Create a simple RDD to ensure SparkContext is active
+      sc.parallelize(1 to 10).count()
+      // Throw SparkUserAppException with a specific exit code
+      // This simulates a user application failure
+      throw new SparkUserAppException(42)
+    } finally {
+      // Note: In k8s mode, SparkSubmit should call sc.stop(42) in the finally block
+      // We don't call stop() here to let SparkSubmit handle it
+    }
+  }
 }

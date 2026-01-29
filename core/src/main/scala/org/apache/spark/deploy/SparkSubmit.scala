@@ -1047,7 +1047,7 @@ private[spark] class SparkSubmit extends Logging {
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
-          SparkContext.getActive.foreach(_.stop())
+          SparkContext.getActive.foreach(_.stop(exitCode))
         } catch {
           case e: Throwable => logError("Failed to close SparkContext", e)
         }
