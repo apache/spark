@@ -145,11 +145,18 @@ def exec_maven(mvn_args=()):
     run_cmd(flags + mvn_args)
 
 
-def exec_sbt(sbt_args=()):
+def exec_sbt(sbt_args=(), quiet=None):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
+    if quiet is None:
+        # If running in GitHub Actions, reduce verbosity
+        quiet = "GITHUB_ACTIONS" in os.environ
+
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
+
+    if quiet:
+        sbt_cmd += ["-error"]
 
     sbt_output_filter = re.compile(
         b"^.*[info].*Resolving" + b"|" + b"^.*[warn].*Merging" + b"|" + b"^.*[info].*Including"
@@ -254,11 +261,7 @@ def build_spark_sbt(extra_profiles):
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
-    if "GITHUB_ACTIONS" in os.environ:
-        # Reduce verbosity in GitHub Actions logs
-        exec_sbt(["-error"] + profiles_and_goals)
-    else:
-        exec_sbt(profiles_and_goals)
+    exec_sbt(profiles_and_goals)
 
 
 def build_spark_unidoc_sbt(extra_profiles):
@@ -344,7 +347,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
         "[info] Running Spark tests using SBT with these arguments: ", " ".join(profiles_and_goals)
     )
 
-    exec_sbt(profiles_and_goals)
+    exec_sbt(profiles_and_goals, quiet=False)
 
 
 def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags):
