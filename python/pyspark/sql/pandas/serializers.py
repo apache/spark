@@ -1426,7 +1426,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_spark_type = (
                     self._input_type[-1].dataType
                     if self._input_type is not None
-                    else from_arrow_type(state_batch.schema[0])
+                    else from_arrow_type(state_batch.schema[0].type)
                 )
                 state_pandas = [
                     ArrowArrayToPandasConversion.convert(

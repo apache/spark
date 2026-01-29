@@ -1014,8 +1014,9 @@ class ArrowArrayToPandasConversion:
     where Arrow data needs to be converted to pandas for Python UDF processing.
     """
 
-    @staticmethod
+    @classmethod
     def convert_legacy(
+        cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
         *,
@@ -1075,7 +1076,7 @@ class ArrowArrayToPandasConversion:
             )
 
             series = [
-                ArrowArrayToPandasConversion.convert_legacy(
+                cls.convert_legacy(
                     field_arr,
                     spark_type=field.dataType,
                     timezone=timezone,
@@ -1112,10 +1113,12 @@ class ArrowArrayToPandasConversion:
         )
         return converter(ser)
 
-    @staticmethod
+    @classmethod
     def convert(
+        cls,
         arrow_column: Union["pa.Array", "pa.ChunkedArray"],
         target_type: DataType,
+        *,
         timezone: Optional[str] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
@@ -1124,15 +1127,12 @@ class ArrowArrayToPandasConversion:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
 
-        This is a convenience method that provides a more intuitive API than
-        :meth:`convert_legacy`.
-
         Parameters
         ----------
         arrow_column : pa.Array or pa.ChunkedArray
             The Arrow column to convert.
         target_type : DataType
-            The target Spark type for the column to be coverted to.
+            The target Spark type for the column to be converted to.
         timezone : str, optional
             Timezone for timestamp conversion. Required if the data contains timestamp types.
         struct_in_pandas : str, optional
@@ -1149,12 +1149,8 @@ class ArrowArrayToPandasConversion:
         pd.Series or pd.DataFrame
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
-
-        See Also
-        --------
-        convert_legacy : Lower-level conversion method that requires explicit Spark type.
         """
-        return ArrowArrayToPandasConversion.convert_legacy(
+        return cls.convert_legacy(
             arrow_column,
             target_type,
             timezone=timezone,
