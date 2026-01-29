@@ -44,7 +44,7 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
           _,
           // Should not match AQE shuffle stage because we only target un-submitted stages which
           // we can still rewrite the query plan.
-          s @ ShuffleExchangeExec(SinglePartition, child, _, _),
+          s @ ShuffleExchangeExec(SinglePartition, child, _, _, _),
           _) if child.logicalLink.isDefined =>
         extractOrderingAndPropagateOrderingColumns(child) match {
           case Some((ordering, newChild)) =>

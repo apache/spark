@@ -21,9 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.internal.SQLConf
 
-object ShufflePartitionsUtil extends Logging {
+object ShufflePartitionsUtil extends SQLConfHelper with Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
   final val MERGED_PARTITION_FACTOR = 1.2
 
@@ -408,6 +410,13 @@ object ShufflePartitionsUtil extends Logging {
       })
     } else {
       None
+    }
+  }
+
+  def getAdvisorySizeByRebalance(addedByRebalance: Option[Boolean]): Long = {
+    addedByRebalance match {
+      case Some(true) => conf.getConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES)
+      case _ => conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     }
   }
 }
