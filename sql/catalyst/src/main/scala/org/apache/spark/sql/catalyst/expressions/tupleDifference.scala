@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (5, 5.0D, 4, 4.0D), (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 1, 1.0D) tab(col1, val1, col2, val2);
        2.0
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleDifferenceDouble(left: Expression, right: Expression)
@@ -72,7 +72,7 @@ case class TupleDifferenceDouble(left: Expression, right: Expression)
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (5, 5, 4, 4), (1, 1, 4, 4), (2, 2, 5, 5), (3, 3, 1, 1) tab(col1, val1, col2, val2);
        2.0
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleDifferenceInteger(left: Expression, right: Expression)

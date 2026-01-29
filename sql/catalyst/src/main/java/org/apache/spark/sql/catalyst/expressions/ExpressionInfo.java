@@ -48,8 +48,8 @@ public class ExpressionInfo {
             "bitwise_funcs", "collection_funcs", "predicate_funcs", "conditional_funcs",
             "conversion_funcs", "csv_funcs", "datetime_funcs", "generator_funcs", "hash_funcs",
             "json_funcs", "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs",
-            "protobuf_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs",
-            "table_funcs", "url_funcs", "variant_funcs", "vector_funcs", "st_funcs"));
+            "protobuf_funcs", "sketch_funcs", "string_funcs", "struct_funcs", "window_funcs",
+            "xml_funcs", "table_funcs", "url_funcs", "variant_funcs", "vector_funcs", "st_funcs"));
 
     private static final Set<String> validSources =
             new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "sql_udf",
