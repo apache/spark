@@ -21,7 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -114,6 +116,72 @@ class TryCastSuite extends CastWithAnsiOnSuite {
       .add("a", BooleanType, nullable = true)
       .add("b", BooleanType, nullable = false))
     assert(!c4.resolved)
+  }
+
+  test("TRY mode: try_cast invalid UTF-8 binary to string should return null") {
+    // In TRY mode, invalid UTF-8 returns null instead of throwing
+    checkEvaluation(cast(invalidUtf8Literal, StringType), null)
+
+    // Valid UTF-8 should work
+    checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+    // Empty binary should work
+    checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+  }
+
+  test("TRY mode: try_cast invalid UTF-8 with validation disabled (old behavior)") {
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      // With validation disabled, invalid UTF-8 passes through (old behavior)
+      val result = cast(invalidUtf8Literal, StringType).eval()
+      assert(result != null, "Should not return null when validation is disabled")
+      assert(!result.asInstanceOf[UTF8String].isValid(),
+        "Result should contain invalid UTF-8")
+
+      // Valid UTF-8 should still work
+      checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+      // Empty binary should work
+      checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
+  }
+
+  test("TRY mode: try_cast array with invalid UTF-8 returns array with nulls") {
+    val arrayLiteral = Literal.create(
+      Seq(validUtf8Bytes, invalidUtf8Bytes),
+      ArrayType(BinaryType, containsNull = false))
+
+    val result = cast(arrayLiteral, ArrayType(StringType, containsNull = true)).eval()
+    val resultArray = result.asInstanceOf[ArrayData]
+
+    assert(resultArray.getUTF8String(0) == UTF8String.fromString("Hello"))
+    assert(resultArray.isNullAt(1)) // Invalid UTF-8 becomes null
+  }
+
+  test("TRY mode: try_cast map with invalid UTF-8 value returns map with null value") {
+    val mapLiteral = Literal.create(
+      Map("key" -> invalidUtf8Bytes),
+      MapType(StringType, BinaryType, valueContainsNull = false))
+
+    val result = cast(mapLiteral,
+      MapType(StringType, StringType, valueContainsNull = true)).eval()
+    val resultMap = result.asInstanceOf[MapData]
+
+    // Map should have the key, but value should be null
+    val values = resultMap.valueArray()
+    assert(values.isNullAt(0))
+  }
+
+  test("TRY mode: try_cast struct with invalid UTF-8 field returns struct with null field") {
+    val structLiteral = Literal.create(
+      InternalRow(invalidUtf8Bytes),
+      StructType(Seq(StructField("field", BinaryType, nullable = false))))
+
+    val result = cast(structLiteral,
+      StructType(Seq(StructField("field", StringType, nullable = true)))).eval()
+    val resultRow = result.asInstanceOf[InternalRow]
+
+    // Field should be null
+    assert(resultRow.isNullAt(0))
   }
 }
 

@@ -158,6 +158,38 @@ bbaa
 
 
 -- !query
+WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query schema
+struct<len(col):int,regexp_count(col, X'41'):int,regexp_count(col, X'42'):int>
+-- !query output
+2	1	1
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query schema
+struct<len(col):int,regexp_count(col, X'41'):int,regexp_count(col, X'42'):int>
+-- !query output
+2	1	1
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(col1, X'43') FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'43'), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query schema
+struct<len(col):int,regexp_count(col, X'43'):int,regexp_count(col, X'41'):int,regexp_count(col, X'42'):int>
+-- !query output
+3	1	1	1
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	false
+
+
+-- !query
 WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
 -- !query schema
 struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
@@ -179,6 +211,14 @@ WITH t(col) AS (SELECT listagg(col1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF'))) 
 struct<len(col):int,regexp_count(col, X'42'):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
 -- !query output
 5	1	1	1
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	true
 
 
 -- !query
@@ -216,6 +256,38 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT listagg(c1, ', ') FROM (VALUES (X'41'), (X'42')) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"BINARY\" or \"STRING\")",
+    "functionName" : "`listagg`",
+    "sqlExpr" : "\"listagg(c1, , )\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "listagg(c1, ', ')"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	false
+
+
+-- !query
 SELECT listagg(c1, ', ') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query schema
 struct<>
@@ -237,6 +309,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "listagg(c1, ', ')"
   } ]
 }
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	true
 
 
 -- !query
