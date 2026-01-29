@@ -684,6 +684,42 @@ object WatermarkSupport {
     // pick the first element if exists
     eventTimeCols.headOption
   }
+
+  /**
+   * Find the index of the column which is marked as "event time" column.
+   *
+   * If there are multiple event time columns in given column list, the behavior depends on the
+   * parameter `allowMultipleEventTimeColumns`. If it's set to true, the first occurred column will
+   * be returned. If not, this method will throw an AnalysisException as it is not allowed to have
+   * multiple event time columns.
+   */
+  def findEventTimeColumnIndex(
+      attrs: Seq[Attribute],
+      allowMultipleEventTimeColumns: Boolean): Option[Int] = {
+    val eventTimeCols = attrs.zipWithIndex
+      .filter(_._1.metadata.contains(EventTimeWatermark.delayKey))
+    if (!allowMultipleEventTimeColumns) {
+      // There is a case projection leads the same column (same exprId) to appear more than one
+      // time. Allowing them does not hurt the correctness of state row eviction, hence let's start
+      // with allowing them.
+      val eventTimeColsSet = eventTimeCols.map(_._1.exprId).toSet
+      if (eventTimeColsSet.size > 1) {
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
+      }
+
+      // With above check, even there are multiple columns in eventTimeCols, all columns must be
+      // the same.
+    } else {
+      // This is for compatibility with previous behavior - we allow multiple distinct event time
+      // columns and pick up the first occurrence. This is incorrect if non-first occurrence is
+      // not smaller than the first one, but allow this as "escape hatch" in case we break the
+      // existing query.
+    }
+    // pick the first element if exists
+    eventTimeCols.headOption.map(_._2)
+  }
 }
 
 /**
