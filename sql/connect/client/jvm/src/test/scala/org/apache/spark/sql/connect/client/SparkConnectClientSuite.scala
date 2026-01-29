@@ -255,7 +255,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
-  test("Legacy error class is set") {
+  test("Legacy error class is set as default") {
     Seq(
       ("org.apache.spark.sql.AnalysisException", "_LEGACY_ERROR_TEMP_3100"),
       ("java.lang.NumberFormatException", "_LEGACY_ERROR_TEMP_3104"),
