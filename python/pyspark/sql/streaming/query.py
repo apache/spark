@@ -30,6 +30,8 @@ from pyspark.sql.streaming.listener import (
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
+# TODO: Add StreamingCheckpointManager to __all__ once we add streaming checkpoint manager to the
+# public API
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
 
@@ -719,6 +721,60 @@ class StreamingQueryManager:
         >>> spark.streams.removeListener(test_listener)
         """
         self._jsqm.removeListener(listener._jlistener)
+
+
+class StreamingCheckpointManager:
+    """
+    A class to manage operations on streaming query checkpoints.
+
+    .. versionadded:: 4.2.0
+
+    Notes
+    -----
+    This API is evolving and currently supported in Spark Classic.
+    """
+
+    def __init__(self, jmanager: "JavaObject") -> None:
+        self._jmanager = jmanager
+
+    def repartition(
+        self, checkpoint_location: str, num_partitions: int, enforce_exactly_once_sink: bool = True
+    ) -> None:
+        """
+        Repartition the stateful streaming operators state in the streaming checkpoint to have
+        `num_partitions` partitions. The streaming query MUST not be running. If `num_partitions` is
+        the same as the current number of partitions, this is a no-op, and an exception will be
+        thrown.
+
+        This produces a new microbatch in the checkpoint that contains the repartitioned state i.e.
+        if the last streaming batch was batch `N`, this will create batch `N+1` with the
+        repartitioned state. Note that this new batch doesn't read input data from sources, it only
+        represents the repartition operation. The next time the streaming query is started, it will
+        pick up from this new batch.
+
+        This will return only when the repartitioning is complete or fails.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        checkpoint_location : str
+            The checkpoint location of the streaming query, should be the `checkpointLocation` option
+            on the DataStreamWriter.
+        num_partitions : int
+            The target number of state partitions.
+        enforce_exactly_once_sink : bool, optional
+            If we shouldn't allow skipping failed batches, to avoid duplicates in exactly once sinks.
+            default ``True``.
+
+        Notes
+        -----
+        This API is experimental.
+
+        This operation should only be performed after the streaming query has been stopped. If not,
+        can lead to undefined behavior or checkpoint corruption.
+        """
+        self._jmanager.repartition(checkpoint_location, num_partitions, enforce_exactly_once_sink)
 
 
 def _test() -> None:

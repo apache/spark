@@ -47,12 +47,16 @@ from pyspark.serializers import (
     CPickleSerializer,
     BatchedSerializer,
 )
-from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
+from pyspark.sql.conversion import (
+    LocalDataToArrowConversion,
+    ArrowTableToRowsConversion,
+    ArrowBatchTransformer,
+)
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
-    GroupArrowUDFSerializer,
+    ArrowStreamGroupUDFSerializer,
     GroupPandasUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
@@ -2743,7 +2747,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
-            ser = GroupArrowUDFSerializer(runner_conf.assign_cols_by_name)
+            ser = ArrowStreamGroupUDFSerializer(runner_conf.assign_cols_by_name)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
@@ -3149,15 +3153,17 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def mapper(a):
-            batch_iter = iter(a)
+        def mapper(batches):
+            # Flatten struct column into separate columns
+            flattened = map(ArrowBatchTransformer.flatten_struct, batches)
+
             # Need to materialize the first batch to get the keys
-            first_batch = next(batch_iter)
+            first_batch = next(flattened)
 
             keys = batch_from_offset(first_batch, parsed_offsets[0][0])
             value_batches = (
-                batch_from_offset(b, parsed_offsets[0][1])
-                for b in itertools.chain((first_batch,), batch_iter)
+                batch_from_offset(batch, parsed_offsets[0][1])
+                for batch in itertools.chain((first_batch,), flattened)
             )
 
             return f(keys, value_batches)

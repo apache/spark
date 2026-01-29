@@ -206,8 +206,8 @@ class NamespaceTestsMixin:
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="ME"),
         )
 
         self.assert_eq(
