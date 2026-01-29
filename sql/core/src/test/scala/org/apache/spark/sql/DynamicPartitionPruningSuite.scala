@@ -1821,6 +1821,45 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
+
+  test("SPARK-54554: DPP with CommandResult from SHOW PARTITIONS in broadcast join") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      // Get max partition from SHOW PARTITIONS (CommandResult)
+      val maxPartitionDF = sql("SHOW PARTITIONS fact_stats")
+        .agg(max("partition").alias("max_partition"))
+        .selectExpr("split(max_partition, '=')[1] as max_store_id")
+
+      // Register as temp view
+      maxPartitionDF.createOrReplaceTempView("max_partition")
+
+      // Join partitioned table with CommandResult
+      val df = sql(
+        """
+          |SELECT f.date_id, f.product_id, f.store_id, f.units_sold
+          |FROM fact_stats f
+          |JOIN max_partition m ON f.store_id = m.max_store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df,
+        Row(1150, 1, 9, 20) :: Nil
+      )
+
+      // Verify DPP predicates exist in the optimized logical plan
+      val optimizedPlan = df.queryExecution.optimizedPlan.toString()
+      assert(optimizedPlan.contains("DynamicPruningSubquery") ||
+        optimizedPlan.contains("dynamicpruning"),
+        s"Optimized plan should contain DynamicPruningSubquery:\n$optimizedPlan")
+
+      // Verify the executed plan shows partition pruning happened
+      val executedPlan = df.queryExecution.executedPlan.toString()
+      assert(executedPlan.contains("SubqueryBroadcast") ||
+        executedPlan.contains("dynamicpruning"),
+        s"Executed plan should show dynamic pruning:\n$executedPlan")
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
