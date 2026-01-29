@@ -1292,8 +1292,8 @@ class FileBasedDataSourceSuite extends QueryTest
           val wkb = "0101000000000000000000F03F0000000000000040"
           // Test GEOMETRY and GEOGRAPHY data types.
           val geoTestCases = Seq(
-            (s"ST_GeomFromWKB(X'$wkb')", "GEOMETRY(0)"),
-            (s"ST_GeogFromWKB(X'$wkb')", "GEOGRAPHY(4326)")
+            (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+            (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
           )
           unsupportedDataSources.foreach { format =>
             geoTestCases.foreach { case (expr, expectedType) =>
@@ -1304,7 +1304,7 @@ class FileBasedDataSourceSuite extends QueryTest
                 condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
                 parameters = Map(
                   "columnName" -> "`g`",
-                  "columnType" -> s"\"$expectedType\"",
+                  "columnType" -> expectedType,
                   "format" -> formatMapping(format)))
             }
           }

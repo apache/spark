@@ -3491,8 +3491,8 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val wkb = "0101000000000000000000F03F0000000000000040"
       // Test GEOMETRY and GEOGRAPHY data types.
       val geoTestCases = Seq(
-        (s"ST_GeomFromWKB(X'$wkb')", "GEOMETRY(0)"),
-        (s"ST_GeogFromWKB(X'$wkb')", "GEOGRAPHY(4326)")
+        (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+        (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
       )
       geoTestCases.foreach { case (expr, expectedType) =>
         checkError(
@@ -3502,7 +3502,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
           condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
           parameters = Map(
             "columnName" -> "`g`",
-            "columnType" -> s"\"$expectedType\"",
+            "columnType" -> expectedType,
             "format" -> "Avro"))
       }
     }
