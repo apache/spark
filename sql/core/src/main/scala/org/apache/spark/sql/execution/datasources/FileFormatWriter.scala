@@ -404,7 +404,10 @@ object FileFormatWriter extends Logging {
 
       // Execute the task to write rows out and commit the task.
       dataWriter.writeWithIterator(iterator)
-      dataWriter.commit()
+      val (_, taskWriteDataTime) = Utils.timeTakenMs {
+        dataWriter.writeWithIterator(iterator)
+      }
+      dataWriter.commit(taskWriteDataTime)
     })(catchBlock = {
       // If there is an error, abort the task
       if (dataWriter != null) {
