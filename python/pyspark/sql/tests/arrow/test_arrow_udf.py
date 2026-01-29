@@ -109,7 +109,7 @@ class ArrowUDFTestsMixin:
             "America/Los_Angeles",
             "Pacific/Honolulu",
             "Europe/Amsterdam",
-            # "US/Pacific",
+            "US/Pacific",
         ]:
             with self.sql_conf({"spark.sql.session.timeZone": tz}):
                 # There is a time-zone conversion in df.collect:
@@ -145,10 +145,10 @@ class ArrowUDFTestsMixin:
                     return t
 
                 expected = [Row(ts=datetime.datetime(2019, 4, 12, 15, 50, 1))]
-                self.assertEqual(expected, df.collect(), tz)
+                self.assertEqual(expected, df.collect())
 
                 result1 = df.select(identity("ts").alias("ts"))
-                self.assertEqual(expected, result1.collect(), tz)
+                self.assertEqual(expected, result1.collect())
 
                 def identity2(iter):
                     for batch in iter:
@@ -157,7 +157,7 @@ class ArrowUDFTestsMixin:
                         yield batch
 
                 result2 = df.mapInArrow(identity2, "ts timestamp")
-                self.assertEqual(expected, result2.collect(), tz)
+                self.assertEqual(expected, result2.collect())
 
     def test_arrow_udf_wrong_arg(self):
         with self.quiet():
