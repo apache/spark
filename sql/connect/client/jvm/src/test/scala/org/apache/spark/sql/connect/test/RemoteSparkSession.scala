@@ -134,7 +134,7 @@ object SparkConnectServerUtils {
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Cache less sessions to save memory.
-      "spark.executor.isolatedSessionCache.size=5",
+      "spark.executor.isolatedSessionCache.size=10",
       // Disable UI
       "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }
