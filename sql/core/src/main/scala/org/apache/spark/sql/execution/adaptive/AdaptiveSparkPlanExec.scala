@@ -113,7 +113,7 @@ case class AdaptiveSparkPlanExec(
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
     // around this case.
     val ensureRequirements =
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution, isSubquery)
     // CoalesceBucketsInJoin can help eliminate shuffles and must be run before
     // EnsureRequirements
     Seq(
