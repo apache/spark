@@ -1203,7 +1203,7 @@ object DependencyOverrides {
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
-        "org.scala-lang" % "scalap" % scalaVersion.value,
+        "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
   )
