@@ -1325,6 +1325,23 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: QueryOrganizationContext,
       query: LogicalPlan,
       forPipeOperators: Boolean): LogicalPlan = withOrigin(ctx) {
+    // For UnresolvedSelectInto, apply query organization (ORDER BY/LIMIT/OFFSET) to the
+    // child query rather than wrapping the UnresolvedSelectInto node itself. This ensures
+    // UnresolvedSelectInto correctly wraps the entire organized query.
+    query match {
+      case selectInto: UnresolvedSelectInto =>
+        val organizedQuery = withQueryResultClauses(ctx, selectInto.query, forPipeOperators)
+        selectInto.copy(query = organizedQuery)
+      case _ =>
+        // Normal case: apply query organization clauses to the query
+        applyQueryOrganization(ctx, query, forPipeOperators)
+    }
+  }
+
+  private def applyQueryOrganization(
+      ctx: QueryOrganizationContext,
+      query: LogicalPlan,
+      forPipeOperators: Boolean): LogicalPlan = withOrigin(ctx) {
     import ctx._
     var clause = ""
 
@@ -1577,7 +1594,25 @@ class AstBuilder extends DataTypeAstBuilder
       isPipeOperatorSelect)
 
     // Hint
-    selectClause.hints.asScala.foldRight(plan)(withHints)
+    val planWithHints = selectClause.hints.asScala.foldRight(plan)(withHints)
+
+    // Check for INTO clause
+    if (selectClause.targetVariable != null) {
+      // Check if SELECT INTO feature is enabled
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_SELECT_INTO_ENABLED)) {
+        throw QueryCompilationErrors.selectIntoFeatureDisabled()
+      }
+
+      val targetVars = visitMultipartIdentifierList(selectClause.targetVariable)
+      // Create UnresolvedSelectInto with context flags set to their initial values.
+      // The analyzer will update these flags and perform validation.
+      UnresolvedSelectInto(planWithHints, targetVars,
+        isTopLevel = false,
+        isInSetOperation = false,
+        isPipeOperator = isPipeOperatorSelect)
+    } else {
+      planWithHints
+    }
   }
 
   def visitCommonSelectQueryClausePlan(
