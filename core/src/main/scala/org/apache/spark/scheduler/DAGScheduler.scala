@@ -1953,8 +1953,7 @@ private[spark] class DAGScheduler(
     }
     logInfo(log"Found succeeding stages ${MDC(STAGES, stagesToRollback)} of " +
       log"shuffle checksum mismatch stage ${MDC(STAGE, mapStage)} in active jobs")
-    val stagesCanRollback =
-      filterAndAbortUnrollbackableStages(stagesToRollback)
+    val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
 
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
