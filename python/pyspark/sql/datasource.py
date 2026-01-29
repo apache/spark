@@ -714,20 +714,41 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(self) -> dict:
+    def latestOffset(self, start: Optional[dict] = None) -> Union[dict, Tuple[dict, dict]]:
         """
         Returns the most recent offset available.
 
+        Parameters (optional - added in Spark 4.2 for admission control)
+        ----------------------------------------------------------------
+        start : dict, optional
+            The starting offset. Enables admission control when provided.
+
         Returns
         -------
-        dict
-            A dict or recursive dict whose key and value are primitive types, which includes
-            Integer, String and Boolean.
+        dict or Tuple[dict, dict]
+            - Old behavior: returns single offset dict
+            - New behavior (with start): returns (capped_offset, true_latest_offset)
 
         Examples
         --------
+        Old implementation (backward compatible):
+
         >>> def latestOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        ...     return {"partition-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+
+        New implementation (with admission control):
+
+        Admission control is configured via the options passed to the data source, e.g.
+        ``maxRecordsPerBatch``. The stream reader
+        can consult those options (typically stored on the data source instance) to compute a
+        capped offset.
+
+        >>> def latestOffset(self, start=None):
+        ...     if start is None:
+        ...         return {"offset": self.get_latest()}
+        ...     capped = self.calc_capped(start, self.max_records_per_batch)
+        ...     true_latest = self.get_latest()
+        ...     return (capped, true_latest)
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",

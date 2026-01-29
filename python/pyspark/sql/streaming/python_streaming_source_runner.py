@@ -51,6 +51,7 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
+LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890
 
 PREFETCHED_RECORDS_NOT_FOUND = 0
 NON_EMPTY_PYARROW_RECORD_BATCHES = 1
@@ -97,6 +98,42 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
+
+
+def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
+    """
+    Handler for function ID 890: latestOffset with admission control.
+
+    This function supports both old and new reader implementations:
+    - Old readers: latestOffset() with no parameters
+    - New readers: latestOffset(start) with an optional start offset
+
+    The reader may return either:
+    - A single offset dict
+    - A tuple of (capped_offset, true_latest_offset)
+    """
+    start_offset_str = utf8_deserializer.loads(infile)
+    start_offset = json.loads(start_offset_str)
+
+    # Type declarations for mypy
+    capped_offset: dict
+    true_latest_offset: dict
+
+    # New signature: latestOffset(start)
+    try:
+        result = reader.latestOffset(start_offset)
+    except TypeError:
+        # Old signature: latestOffset()
+        result = reader.latestOffset()
+
+    if isinstance(result, tuple):
+        capped_offset, true_latest_offset = result
+    else:
+        capped_offset = true_latest_offset = result
+
+    # Send both offsets back to JVM
+    write_with_length(json.dumps(capped_offset).encode("utf-8"), outfile)
+    write_with_length(json.dumps(true_latest_offset).encode("utf-8"), outfile)
 
 
 def send_batch_func(
@@ -176,6 +213,8 @@ def main(infile: IO, outfile: IO) -> None:
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
+                elif func_id == LATEST_OFFSET_WITH_REPORT_FUNC_ID:
+                    latest_offset_with_report_func(reader, infile, outfile)
                 else:
                     raise IllegalArgumentException(
                         errorClass="UNSUPPORTED_OPERATION",

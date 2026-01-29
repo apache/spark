@@ -332,6 +332,79 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             """
             pass
 
+**Admission Control for Streaming Sources**
+
+Spark supports admission control for streaming sources to limit the amount of data processed in each
+micro-batch. This helps control resource usage and maintain consistent processing times. Python
+streaming data sources support one admission control option:
+
+- **maxRecordsPerBatch**: Limit the maximum number of rows per batch
+
+These options can be specified when reading from a streaming source:
+
+.. code-block:: python
+
+    # Limit to 1000 rows per batch
+    query = spark.readStream \
+        .format("fake") \
+        .option("maxRecordsPerBatch", "1000") \
+        .load() \
+        .writeStream \
+        .format("console") \
+        .start()
+
+**Note**:
+
+- Only one admission control option should be specified at a time
+- All admission control values must be positive integers. If an invalid value is provided (negative,
+  zero, or non-numeric), an ``IllegalArgumentException`` will be thrown
+- This option applies to ``streamReader()`` implementations. ``simpleStreamReader()`` does not
+  support admission control.
+
+**Implementing Admission Control in Custom Data Sources (Advanced)**
+
+For users implementing the full ``DataSourceStreamReader`` API (not ``SimpleDataSourceStreamReader``),
+admission control is enabled through an optional ``start`` parameter on the ``latestOffset()`` method.
+As of Spark 4.2, the ``latestOffset()`` method signature has been enhanced to accept an optional start
+offset:
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSourceStreamReader
+    from typing import Optional, Union, Tuple
+
+    class MyStreamReader(DataSourceStreamReader):
+        def latestOffset(
+            self,
+            start: Optional[dict] = None
+        ) -> Union[dict, Tuple[dict, dict]]:
+            # Old behavior: if start is not provided, return latest offset without admission control
+            if start is None:
+                return {"offset": self.get_latest_offset()}
+
+            # New behavior: apply admission control based on configured data source options
+            true_latest = self.get_latest_offset()
+
+            max_rows = int(self.options.get("maxRecordsPerBatch", "0"))
+            if max_rows > 0:
+                capped_offset = self.calculate_capped_offset(start, max_rows)
+                return (capped_offset, true_latest)
+
+            # If the source does not implement admission control, it can return a single dict.
+            return true_latest
+
+**Key Points:**
+
+- **Backward Compatibility**: Old implementations that don't accept parameters continue to work
+  without modification
+- **Optional Parameters**: ``start`` is optional; if not provided, implement old behavior
+- **Return Type**: Return a single ``dict`` for old behavior, or a ``Tuple[dict, dict]`` for
+  admission control
+- **Admission Control Configuration**: Read admission control settings from the data source options
+  (for example, ``maxRecordsPerBatch``)
+- **SimpleDataSourceStreamReader**: The simple API does not support admission control; use the full
+  API for admission control support
+
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
