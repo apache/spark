@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types.{
@@ -35,7 +36,6 @@ import org.apache.spark.sql.types.{
   IntegerType,
   LongType,
   StringType,
-  StructField,
   StructType
 }
 
@@ -411,20 +411,11 @@ case class VectorAvg(
   private lazy val countAttr =
     AttributeReference("count", LongType, nullable = false)()
 
-  override def aggBufferSchema: StructType = StructType(
-    Seq(
-      StructField(
-        "avg",
-        BinaryType,
-        nullable = true
-      ),
-      StructField("dim", IntegerType, nullable = true),
-      StructField("count", LongType, nullable = false)
-    )
-  )
-
   override def aggBufferAttributes: Seq[AttributeReference] =
     Seq(avgAttr, dimAttr, countAttr)
+
+  override def aggBufferSchema: StructType =
+    DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
@@ -657,15 +648,11 @@ case class VectorSum(
     nullable = true
   )()
 
-  override def aggBufferSchema: StructType = StructType(
-    Seq(
-      StructField("sum", BinaryType, nullable = true),
-      StructField("dim", IntegerType, nullable = true)
-    )
-  )
-
   override def aggBufferAttributes: Seq[AttributeReference] =
     Seq(sumAttr, dimAttr)
+
+  override def aggBufferSchema: StructType =
+    DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())

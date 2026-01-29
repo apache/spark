@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow, VectorAvg, VectorSum}
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types.{ArrayType, FloatType}
 
 class VectorAggSuite extends SparkFunSuite {
@@ -53,6 +53,15 @@ class VectorAggSuite extends SparkFunSuite {
     val row = new SpecificInternalRow(Seq(ArrayType(FloatType)))
     row.setNullAt(0)
     row
+  }
+
+  // Helper to create input row with array containing null elements
+  def createInputRowWithNullElement(values: Array[java.lang.Float]): InternalRow = {
+    val arrayData = new GenericArrayData(values.map {
+      case null => null
+      case v => v.floatValue().asInstanceOf[AnyRef]
+    })
+    InternalRow(arrayData)
   }
 
   // Helper to extract result as float array
@@ -357,5 +366,132 @@ class VectorAggSuite extends SparkFunSuite {
     val result = evalAsFloatArray(agg, buffer)
     // Average of 1 to 100 = 50.5
     assertFloatArrayEquals(result, Array(50.5f, 50.5f), tolerance = 1e-3f)
+  }
+
+  test("VectorSum - mathematical correctness: element-wise sum") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f, 3.0f)))
+    agg.update(buffer, createInputRow(Array(10.0f, 20.0f, 30.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // [1, 2, 3] + [10, 20, 30] = [11, 22, 33]
+    assert(result === Array(11.0f, 22.0f, 33.0f))
+  }
+
+  test("VectorAvg - mathematical correctness: element-wise average") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(0.0f, 0.0f)))
+    agg.update(buffer, createInputRow(Array(10.0f, 20.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // avg([0, 0], [10, 20]) = [5, 10]
+    assert(result === Array(5.0f, 10.0f))
+  }
+
+  test("VectorAvg - mathematical correctness: negative values") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(-5.0f, 10.0f)))
+    agg.update(buffer, createInputRow(Array(5.0f, -10.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // avg([-5, 10], [5, -10]) = [0, 0]
+    assert(result === Array(0.0f, 0.0f))
+  }
+
+  test("VectorSum - vectors with null elements are skipped") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f)))
+    agg.update(buffer, createInputRowWithNullElement(Array(null, 10.0f)))
+    agg.update(buffer, createInputRow(Array(3.0f, 4.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // Vector with null element is skipped, so [1, 2] + [3, 4] = [4, 6]
+    assert(result === Array(4.0f, 6.0f))
+  }
+
+  test("VectorAvg - vectors with null elements are skipped") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f)))
+    agg.update(buffer, createInputRowWithNullElement(Array(null, 10.0f)))
+    agg.update(buffer, createInputRow(Array(3.0f, 4.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // Vector with null element is skipped, so avg([1, 2], [3, 4]) = [2, 3]
+    assert(result === Array(2.0f, 3.0f))
+  }
+
+  test("VectorSum - only vectors with null elements returns null") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRowWithNullElement(Array(1.0f, null)))
+    agg.update(buffer, createInputRowWithNullElement(Array(null, 2.0f)))
+    assert(agg.eval(buffer) === null)
+  }
+
+  test("VectorAvg - only vectors with null elements returns null") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRowWithNullElement(Array(1.0f, null)))
+    agg.update(buffer, createInputRowWithNullElement(Array(null, 2.0f)))
+    assert(agg.eval(buffer) === null)
+  }
+
+  test("VectorSum - mix of null vectors and vectors with null elements") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createNullInputRow())
+    agg.update(buffer, createInputRowWithNullElement(Array(1.0f, null)))
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f)))
+    agg.update(buffer, createInputRow(Array(3.0f, 4.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    // Only valid vectors are summed: [1, 2] + [3, 4] = [4, 6]
+    assert(result === Array(4.0f, 6.0f))
+  }
+
+  test("VectorSum - large vectors (16 elements)") {
+    val (agg, buffer, _) = createVectorSum()
+    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    agg.update(buffer, createInputRow(vec1))
+    agg.update(buffer, createInputRow(vec2))
+    val result = evalAsFloatArray(agg, buffer)
+    // Each element should sum to 17
+    assert(result === Array.fill(16)(17.0f))
+  }
+
+  test("VectorAvg - large vectors (16 elements)") {
+    val (agg, buffer, _) = createVectorAvg()
+    val vec1 = Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    agg.update(buffer, createInputRow(vec1))
+    agg.update(buffer, createInputRow(vec2))
+    val result = evalAsFloatArray(agg, buffer)
+    // Each element average should be 8.5
+    assert(result === Array.fill(16)(8.5f))
+  }
+
+  test("VectorSum - large vector with null element is skipped") {
+    val (agg, buffer, _) = createVectorSum()
+    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
+                     9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
+    val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
+                     8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
+    agg.update(buffer, createInputRowWithNullElement(vec1))
+    agg.update(buffer, createInputRow(vec2))
+    val result = evalAsFloatArray(agg, buffer)
+    // First vector is skipped due to null element, result is just vec2
+    assert(result === vec2)
+  }
+
+  test("VectorSum - single element vectors") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRow(Array(5.0f)))
+    agg.update(buffer, createInputRow(Array(3.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    assert(result === Array(8.0f))
+  }
+
+  test("VectorAvg - single element vectors") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(5.0f)))
+    agg.update(buffer, createInputRow(Array(3.0f)))
+    val result = evalAsFloatArray(agg, buffer)
+    assert(result === Array(4.0f))
   }
 }

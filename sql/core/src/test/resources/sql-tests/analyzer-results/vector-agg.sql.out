@@ -16,74 +16,6 @@ Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
 
 
 -- !query
-SELECT vector_sum(col) FROM VALUES (array(1.0F, 2.0F, 3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES (array(1.0F, 2.0F, 3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 1.0F)),
-    (array(2.0F, 2.0F)),
-    (array(3.0F, 3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 1.0F)),
-    (array(2.0F, 2.0F)),
-    (array(3.0F, 3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F, 3.0F)),
-    (array(10.0F, 20.0F, 30.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(0.0F, 0.0F)),
-    (array(10.0F, 20.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(-5.0F, 10.0F)),
-    (array(5.0F, -10.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
 SELECT category, vector_sum(embedding) AS sum_vector
 FROM VALUES
     ('A', array(1.0F, 2.0F, 3.0F)),
@@ -119,26 +51,6 @@ Sort [category#x ASC NULLS FIRST], true
 
 -- !query
 SELECT vector_sum(col) FROM VALUES
-    (CAST(array() AS ARRAY<FLOAT>)),
-    (CAST(array() AS ARRAY<FLOAT>)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (CAST(array() AS ARRAY<FLOAT>)),
-    (CAST(array() AS ARRAY<FLOAT>)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
     (array(1.0F, 2.0F)),
     (CAST(NULL AS ARRAY<FLOAT>)),
     (array(3.0F, 4.0F)) AS tab(col)
@@ -170,38 +82,9 @@ Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
 
 
 -- !query
-SELECT vector_avg(col) FROM VALUES
-    (CAST(NULL AS ARRAY<FLOAT>)),
-    (CAST(NULL AS ARRAY<FLOAT>)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES (CAST(NULL AS ARRAY<FLOAT>)) AS tab(col) WHERE col IS NOT NULL
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- Filter isnotnull(col#x)
-   +- SubqueryAlias tab
-      +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES (CAST(NULL AS ARRAY<FLOAT>)) AS tab(col) WHERE col IS NOT NULL
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- Filter isnotnull(col#x)
-   +- SubqueryAlias tab
-      +- LocalRelation [col#x]
-
-
--- !query
 SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST(NULL AS FLOAT), 10.0F)),
-    (array(3.0F, 4.0F)) AS tab(col)
+    (CAST(array() AS ARRAY<FLOAT>)),
+    (CAST(array() AS ARRAY<FLOAT>)) AS tab(col)
 -- !query analysis
 Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
 +- SubqueryAlias tab
@@ -209,82 +92,39 @@ Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
 
 
 -- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST(NULL AS FLOAT), 10.0F)),
-    (array(3.0F, 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, CAST(NULL AS FLOAT))),
-    (array(CAST(NULL AS FLOAT), 2.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, CAST(NULL AS FLOAT))),
-    (array(CAST(NULL AS FLOAT), 2.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (CAST(NULL AS ARRAY<FLOAT>)),
-    (array(1.0F, CAST(NULL AS FLOAT))),
-    (array(1.0F, 2.0F)),
-    (array(3.0F, 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT category, vector_sum(embedding) AS sum_vector
+SELECT key, vector_sum(vec) OVER (PARTITION BY grp) as sum_vec
 FROM VALUES
-    ('A', array(1.0F, 2.0F)),
-    ('A', CAST(NULL AS ARRAY<FLOAT>)),
-    ('A', array(3.0F, 4.0F)),
-    ('B', CAST(NULL AS ARRAY<FLOAT>)),
-    ('B', CAST(NULL AS ARRAY<FLOAT>))
-AS tab(category, embedding)
-GROUP BY category
-ORDER BY category
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
 -- !query analysis
-Sort [category#x ASC NULLS FIRST], true
-+- Aggregate [category#x], [category#x, vector_sum(embedding#x, 0, 0) AS sum_vector#x]
-   +- SubqueryAlias tab
-      +- LocalRelation [category#x, embedding#x]
+Sort [key#x ASC NULLS FIRST], true
++- Project [key#x, sum_vec#x]
+   +- Project [key#x, vec#x, grp#x, sum_vec#x, sum_vec#x]
+      +- Window [vector_sum(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum_vec#x], [grp#x]
+         +- Project [key#x, vec#x, grp#x]
+            +- SubqueryAlias tab
+               +- LocalRelation [key#x, grp#x, vec#x]
 
 
 -- !query
-SELECT category, vector_avg(embedding) AS avg_vector
+SELECT key, vector_avg(vec) OVER (PARTITION BY grp) as avg_vec
 FROM VALUES
-    ('A', array(1.0F, 2.0F)),
-    ('A', CAST(NULL AS ARRAY<FLOAT>)),
-    ('A', array(3.0F, 4.0F)),
-    ('B', CAST(NULL AS ARRAY<FLOAT>)),
-    ('B', CAST(NULL AS ARRAY<FLOAT>))
-AS tab(category, embedding)
-GROUP BY category
-ORDER BY category
+    ('a', 'g1', array(1.0F, 2.0F)),
+    ('b', 'g1', array(3.0F, 4.0F)),
+    ('c', 'g2', array(5.0F, 6.0F))
+AS tab(key, grp, vec)
+ORDER BY key
 -- !query analysis
-Sort [category#x ASC NULLS FIRST], true
-+- Aggregate [category#x], [category#x, vector_avg(embedding#x, 0, 0) AS avg_vector#x]
-   +- SubqueryAlias tab
-      +- LocalRelation [category#x, embedding#x]
+Sort [key#x ASC NULLS FIRST], true
++- Project [key#x, avg_vec#x]
+   +- Project [key#x, vec#x, grp#x, avg_vec#x, avg_vec#x]
+      +- Window [vector_avg(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_vec#x], [grp#x]
+         +- Project [key#x, vec#x, grp#x]
+            +- SubqueryAlias tab
+               +- LocalRelation [key#x, grp#x, vec#x]
 
 
 -- !query
@@ -303,17 +143,6 @@ SELECT vector_avg(col) FROM VALUES
     (array(1.0F, 2.0F)) AS tab(col)
 -- !query analysis
 Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F, 3.0F)),
-    (CAST(NULL AS ARRAY<FLOAT>)),
-    (array(1.0F, 2.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -338,54 +167,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 22,
     "fragment" : "vector_sum(col)"
-  } ]
-}
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES (array(1, 2)), (array(3, 4)) AS tab(col)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_sum(col)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "vector_sum(col)"
-  } ]
-}
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES (array(1.0D, 2.0D)), (array(3.0D, 4.0D)) AS tab(col)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"ARRAY<DOUBLE>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_avg(col)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "vector_avg(col)"
   } ]
 }
 
@@ -439,54 +220,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT vector_sum(col) FROM VALUES (1.0F), (2.0F) AS tab(col)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"FLOAT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_sum(col)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "vector_sum(col)"
-  } ]
-}
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES ('not an array'), ('also not an array') AS tab(col)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"col\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_avg(col)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "vector_avg(col)"
-  } ]
-}
-
-
--- !query
 SELECT vector_avg(col) FROM VALUES (1.0F), (2.0F) AS tab(col)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -508,167 +241,3 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "vector_avg(col)"
   } ]
 }
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F)),
-    (array(16.0F, 15.0F, 14.0F, 13.0F, 12.0F, 11.0F, 10.0F, 9.0F, 8.0F, 7.0F, 6.0F, 5.0F, 4.0F, 3.0F, 2.0F, 1.0F))
-AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F)),
-    (array(16.0F, 15.0F, 14.0F, 13.0F, 12.0F, 11.0F, 10.0F, 9.0F, 8.0F, 7.0F, 6.0F, 5.0F, 4.0F, 3.0F, 2.0F, 1.0F))
-AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F, 3.0F, 4.0F, 5.0F, CAST(NULL AS FLOAT), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F)),
-    (array(16.0F, 15.0F, 14.0F, 13.0F, 12.0F, 11.0F, 10.0F, 9.0F, 8.0F, 7.0F, 6.0F, 5.0F, 4.0F, 3.0F, 2.0F, 1.0F))
-AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 1.0F)),
-    (array(2.0F, 2.0F)),
-    (array(3.0F, 3.0F)),
-    (array(4.0F, 4.0F)),
-    (array(5.0F, 5.0F)),
-    (array(6.0F, 6.0F)),
-    (array(7.0F, 7.0F)),
-    (array(8.0F, 8.0F)),
-    (array(9.0F, 9.0F)),
-    (array(10.0F, 10.0F))
-AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES (array(5.0F)), (array(3.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT key, vector_sum(vec) OVER (PARTITION BY grp) as sum_vec
-FROM VALUES
-    ('a', 'g1', array(1.0F, 2.0F)),
-    ('b', 'g1', array(3.0F, 4.0F)),
-    ('c', 'g2', array(5.0F, 6.0F))
-AS tab(key, grp, vec)
-ORDER BY key
--- !query analysis
-Sort [key#x ASC NULLS FIRST], true
-+- Project [key#x, sum_vec#x]
-   +- Project [key#x, vec#x, grp#x, sum_vec#x, sum_vec#x]
-      +- Window [vector_sum(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum_vec#x], [grp#x]
-         +- Project [key#x, vec#x, grp#x]
-            +- SubqueryAlias tab
-               +- LocalRelation [key#x, grp#x, vec#x]
-
-
--- !query
-SELECT key, vector_avg(vec) OVER (PARTITION BY grp) as avg_vec
-FROM VALUES
-    ('a', 'g1', array(1.0F, 2.0F)),
-    ('b', 'g1', array(3.0F, 4.0F)),
-    ('c', 'g2', array(5.0F, 6.0F))
-AS tab(key, grp, vec)
-ORDER BY key
--- !query analysis
-Sort [key#x ASC NULLS FIRST], true
-+- Project [key#x, avg_vec#x]
-   +- Project [key#x, vec#x, grp#x, avg_vec#x, avg_vec#x]
-      +- Window [vector_avg(vec#x, 0, 0) windowspecdefinition(grp#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_vec#x], [grp#x]
-         +- Project [key#x, vec#x, grp#x]
-            +- SubqueryAlias tab
-               +- LocalRelation [key#x, grp#x, vec#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('NaN' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('Infinity' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_sum(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_sum(col#x, 0, 0) AS vector_sum(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
-SELECT vector_avg(col) FROM VALUES
-    (array(1.0F, 2.0F)),
-    (array(CAST('-Infinity' AS FLOAT), 4.0F)) AS tab(col)
--- !query analysis
-Aggregate [vector_avg(col#x, 0, 0) AS vector_avg(col)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
