@@ -147,7 +147,7 @@ class AnalysisException protected (
     this(
       message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause = cause,
-      errorClass = Option(errorClass),
+      errorClass = Some(errorClass),
       messageParameters = messageParameters,
       context = context,
       sqlState = sqlState)
