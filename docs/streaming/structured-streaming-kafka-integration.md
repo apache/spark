@@ -587,6 +587,46 @@ Also, the meaning of <code>timestamp</code> here can be vary according to Kafka 
 
 Timestamp offset options require Kafka 0.10.1.0 or higher.
 
+#### Timestamp offset behavior illustrated
+
+The following diagrams illustrate how Kafka resolves offsets when querying by timestamp for any particular topic partition. Each diagram shows a timeline with records (r1, r2, r3, ...) and the provided timestamp (ts), which can be global or per partition. The returned offset points to the **first record whose timestamp is greater than or equal to the provided timestamp**.
+
+**Scenario 1: Timestamp is before existing records**
+
+```
+Timeline:  ───────|────────|───|───|───|───|──▶
+                  ts       r1  r2  r3  r4  r5
+                           ↑
+                        returned
+
+Result: r1 is returned (first record with timestamp >= ts)
+```
+
+**Scenario 2: Timestamp is after all existing records**
+
+```
+Timeline:  ──|───|───|───|───|─────────────|──▶
+             r1  r2  r3  r4  r5            ts
+                                           ↑
+                                     no match found
+
+Result: No offset returned by Kafka; behavior falls back to
+        startingOffsetsByTimestampStrategy ("error" or "latest")
+```
+
+**Scenario 3: Timestamp falls between records**
+
+```
+Timeline:  ─────|─────────|──────|──────────|──▶
+                r1        ts     r2         r3
+                                 ↑
+                              returned
+
+Result: r2 is returned (first record with timestamp >= ts)
+```
+
+**Note:** For starting offsets, ingestion begins from the returned offset (inclusive), or follows <code>startingOffsetsByTimestampStrategy</code> in scenario 2. For ending offsets, ingestion stops at the returned offset (exclusive), or falls back to latest in scenario 2.
+
 ### Offset fetching
 
 In Spark 3.0 and before Spark uses <code>KafkaConsumer</code> for offset fetching which could cause infinite wait in the driver.
