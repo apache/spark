@@ -188,7 +188,7 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             // MaxEventTimeStatefulProcessor outputs (key, maxEventTimeSec)
             AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
             CheckNewAnswer(("a", 1), ("b", 2), ("c", 3)),
-            // Batch 2: More data - max event time for "a" becomes 5
+            // Batch 2: More data - max event time for "a" becomes 12
             AddData(inputData, ("a", 12L)),
             CheckNewAnswer(("a", 12)),
             StopStream
