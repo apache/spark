@@ -1245,16 +1245,11 @@ message GetStatusRequest {
   // can use this to validate that the server side session has not changed.
   optional string client_observed_server_side_session_id = 4;
 
-  // The type of status being requested.
-  // Implies mutually exlusive status types, e.g. session-level, operation-level, other custom
-  // stats.
-  oneof status_type {
-    // Get status of operations in the session.
-    OperationStatusRequest operation_status = 5;
+  // Get status of operations in the session.
+  OperationStatusRequest operation_status = 5;
 
-    // Extension point for custom status request types.
-    google.protobuf.Any extension = 999;
-  }
+  // Extension point for custom status request types.
+  repeated google.protobuf.Any extension = 999;
 
   // Request to get status of operations.
   message OperationStatusRequest {
@@ -1276,20 +1271,11 @@ message GetStatusResponse {
   // session has not changed.
   string server_side_session_id = 2;
 
-  // The response type corresponding to the request.
-  oneof result {
-    // Status information about requested operations.
-    OperationStatusResult operation_status = 3;
+  // Status information about requested operations.
+  repeated OperationStatus operation_status = 3;
 
-    // Extension point for custom status response types.
-    google.protobuf.Any extension = 999;
-  }
-
-  // Result containing status of operations.
-  message OperationStatusResult {
-    // Status information about requested operations.
-    repeated OperationStatus operation_statuses = 1;
-  }
+  // Extension point for custom status response types.
+  repeated google.protobuf.Any extensions = 999;
 
   // Status information for a single operation.
   message OperationStatus {
@@ -1304,7 +1290,9 @@ message GetStatusResponse {
       OPERATION_STATE_UNKNOWN = 1;
       OPERATION_STATE_RUNNING = 2;
       OPERATION_STATE_TERMINATING = 3;
-      OPERATION_STATE_TERMINATED = 4;
+      OPERATION_STATE_SUCCEEDED = 4;
+      OPERATION_STATE_FAILED = 5;
+      OPERATION_STATE_CANCELLED = 6;
     }
 
     // Extension point for custom operation-level status fields.
@@ -1366,6 +1354,7 @@ service SparkConnectService {
   // The request can optionally specify a custom session ID for the cloned session (must be
   // a valid UUID). If not provided, a new UUID will be generated automatically.
   rpc CloneSession(CloneSessionRequest) returns (CloneSessionResponse) {}
+
   // Get status information of different types.
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
 }

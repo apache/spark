@@ -4387,7 +4387,11 @@ class GetStatusRequest(google.protobuf.message.Message):
     def operation_status(self) -> global___GetStatusRequest.OperationStatusRequest:
         """Get status of operations in the session."""
     @property
-    def extension(self) -> google.protobuf.any_pb2.Any:
+    def extension(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
         """Extension point for custom status request types."""
     def __init__(
         self,
@@ -4397,7 +4401,7 @@ class GetStatusRequest(google.protobuf.message.Message):
         client_type: builtins.str | None = ...,
         client_observed_server_side_session_id: builtins.str | None = ...,
         operation_status: global___GetStatusRequest.OperationStatusRequest | None = ...,
-        extension: google.protobuf.any_pb2.Any | None = ...,
+        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -4410,12 +4414,8 @@ class GetStatusRequest(google.protobuf.message.Message):
             b"client_observed_server_side_session_id",
             "client_type",
             b"client_type",
-            "extension",
-            b"extension",
             "operation_status",
             b"operation_status",
-            "status_type",
-            b"status_type",
             "user_context",
             b"user_context",
         ],
@@ -4437,8 +4437,6 @@ class GetStatusRequest(google.protobuf.message.Message):
             b"operation_status",
             "session_id",
             b"session_id",
-            "status_type",
-            b"status_type",
             "user_context",
             b"user_context",
         ],
@@ -4454,10 +4452,6 @@ class GetStatusRequest(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["status_type", b"status_type"]
-    ) -> typing_extensions.Literal["operation_status", "extension"] | None: ...
 
 global___GetStatusRequest = GetStatusRequest
 
@@ -4465,29 +4459,6 @@ class GetStatusResponse(google.protobuf.message.Message):
     """Next ID: 4"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class OperationStatusResult(google.protobuf.message.Message):
-        """Result containing status of operations."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        OPERATION_STATUSES_FIELD_NUMBER: builtins.int
-        @property
-        def operation_statuses(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___GetStatusResponse.OperationStatus
-        ]:
-            """Status information about requested operations."""
-        def __init__(
-            self,
-            *,
-            operation_statuses: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
-            | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["operation_statuses", b"operation_statuses"]
-        ) -> None: ...
 
     class OperationStatus(google.protobuf.message.Message):
         """Status information for a single operation."""
@@ -4509,14 +4480,18 @@ class GetStatusResponse(google.protobuf.message.Message):
             OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus._OperationState.ValueType  # 1
             OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 2
             OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 3
-            OPERATION_STATE_TERMINATED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 4
+            OPERATION_STATE_SUCCEEDED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 4
+            OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 5
+            OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 6
 
         class OperationState(_OperationState, metaclass=_OperationStateEnumTypeWrapper): ...
         OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 0
         OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus.OperationState.ValueType  # 1
         OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 2
         OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus.OperationState.ValueType  # 3
-        OPERATION_STATE_TERMINATED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 4
+        OPERATION_STATE_SUCCEEDED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 4
+        OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 5
+        OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 6
 
         OPERATION_ID_FIELD_NUMBER: builtins.int
         STATUS_FIELD_NUMBER: builtins.int
@@ -4549,7 +4524,7 @@ class GetStatusResponse(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     OPERATION_STATUS_FIELD_NUMBER: builtins.int
-    EXTENSION_FIELD_NUMBER: builtins.int
+    EXTENSIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """Session id of the session for which the status was requested."""
     server_side_session_id: builtins.str
@@ -4557,42 +4532,40 @@ class GetStatusResponse(google.protobuf.message.Message):
     session has not changed.
     """
     @property
-    def operation_status(self) -> global___GetStatusResponse.OperationStatusResult:
+    def operation_status(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___GetStatusResponse.OperationStatus
+    ]:
         """Status information about requested operations."""
     @property
-    def extension(self) -> google.protobuf.any_pb2.Any:
+    def extensions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
         """Extension point for custom status response types."""
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        operation_status: global___GetStatusResponse.OperationStatusResult | None = ...,
-        extension: google.protobuf.any_pb2.Any | None = ...,
+        operation_status: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
+        | None = ...,
+        extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "extension", b"extension", "operation_status", b"operation_status", "result", b"result"
-        ],
-    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "extension",
-            b"extension",
+            "extensions",
+            b"extensions",
             "operation_status",
             b"operation_status",
-            "result",
-            b"result",
             "server_side_session_id",
             b"server_side_session_id",
             "session_id",
             b"session_id",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result", b"result"]
-    ) -> typing_extensions.Literal["operation_status", "extension"] | None: ...
 
 global___GetStatusResponse = GetStatusResponse
