@@ -192,6 +192,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   }
 
   def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
+    // TODO: add test with changelog checkpointing disabled after SPARK increases its test timeout
+    // because CI signal "sql - other tests" is timing out after adding the integration tests
     Seq(true).foreach { changelogCheckpointingEnabled =>
       test(s"$testName - enableChangelogCheckpointing=$changelogCheckpointingEnabled") {
         withSQLConf(
