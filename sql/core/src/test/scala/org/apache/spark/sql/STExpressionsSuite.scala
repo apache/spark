@@ -50,37 +50,49 @@ class STExpressionsSuite
 
   test("Parquet tables - unsupported geospatial types") {
     val tableName = "tst_tbl"
-    Seq("GEOMETRY(ANY)", "GEOGRAPHY(ANY)").foreach { unsupportedType =>
-      withTable(tableName) {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE $tableName (g $unsupportedType) USING PARQUET")
-          },
-          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-          parameters = Map(
-            "columnName" -> "`g`",
-            "columnType" -> s""""$unsupportedType"""",
-            "format" -> "Parquet"))
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) "parquet" else ""
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        Seq("GEOMETRY(ANY)", "GEOGRAPHY(ANY)").foreach { unsupportedType =>
+          withTable(tableName) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE TABLE $tableName (g $unsupportedType) USING PARQUET")
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`g`",
+                "columnType" -> s""""$unsupportedType"""",
+                "format" -> "Parquet"))
+          }
+        }
       }
     }
   }
 
   test("Parquet write support for geometry and geography types") {
     val tableName = "tst_tbl"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (geom GEOMETRY(0), geog GEOGRAPHY(4326)) USING PARQUET")
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) "parquet" else ""
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName (geom GEOMETRY(0), geog GEOGRAPHY(4326)) USING PARQUET")
 
-      val geomNull = "ST_GeomFromWKB(NULL)"
-      val geomNotNull = s"ST_GeomFromWKB(X'$wkbString1')"
-      val geogNull = "ST_GeogFromWKB(NULL)"
-      val geogNotNull = s"ST_GeogFromWKB(X'$wkbString2')"
+          val geomNull = "ST_GeomFromWKB(NULL)"
+          val geomNotNull = s"ST_GeomFromWKB(X'$wkbString1')"
+          val geogNull = "ST_GeogFromWKB(NULL)"
+          val geogNotNull = s"ST_GeogFromWKB(X'$wkbString2')"
 
-      sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNull)")
-      sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNull)")
-      sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNotNull)")
-      sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNotNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNotNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNotNull)")
 
-      checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName"), Seq(Row(4)))
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName"), Seq(Row(4)))
+        }
+      }
     }
   }
 
