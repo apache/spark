@@ -62,13 +62,14 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
 
-  private def arrowSchema = ArrowUtils.toArrowSchema(
-    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-
   protected lazy val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
-  protected lazy val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  protected lazy val root = {
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+    VectorSchemaRoot.create(arrowSchema, allocator)
+  }
 
   // Create compression codec based on config
   protected def codec = SQLConf.get.arrowCompressionCodec match {
