@@ -278,15 +278,15 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case _: GeometryType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          // Data is written to Parquet using the WKB format.
-          // WKB Spec: https://libgeos.org/specifications/wkb/.
+          // Data is written to Parquet using the WKB format, as per spec:
+          // https://parquet.apache.org/docs/file-format/types/geospatial/.
           val wkb = STUtils.stAsBinary(row.getGeometry(ordinal))
           recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
 
       case _: GeographyType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          // Data is written to Parquet using the WKB format.
-          // WKB Spec: https://libgeos.org/specifications/wkb/.
+          // Data is written to Parquet using the WKB format, as per spec:
+          // https://parquet.apache.org/docs/file-format/types/geospatial/.
           val wkb = STUtils.stAsBinary(row.getGeography(ordinal))
           recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
 
