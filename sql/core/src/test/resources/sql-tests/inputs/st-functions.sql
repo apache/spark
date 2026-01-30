@@ -80,7 +80,8 @@ SELECT ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 9999) AS re
 -- 2. Table-level queries.
 SELECT COUNT(*) FROM geodata WHERE ST_GeomFromWKB(wkb) IS NULL AND wkb IS NOT NULL;
 SELECT COUNT(*) FROM geodata WHERE ST_GeomFromWKB(wkb, 4326) IS NULL AND wkb IS NOT NULL;
-SELECT COUNT(*) FROM geodata WHERE hex(ST_AsBinary(ST_GeomFromWKB(wkb))) <=> '0101000000000000000000F03F0000000000000040';
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb, 4326)) <> wkb;
 -- Error handling: invalid SRID.
 SELECT COUNT(*) FROM geodata WHERE ST_GeomFromWKB(wkb, 1);
 

@@ -391,10 +391,19 @@ Aggregate [count(1) AS count(1)#xL]
 
 
 -- !query
-SELECT COUNT(*) FROM geodata WHERE hex(ST_AsBinary(ST_GeomFromWKB(wkb))) <=> '0101000000000000000000F03F0000000000000040'
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb
 -- !query analysis
 Aggregate [count(1) AS count(1)#xL]
-+- Filter (hex(st_asbinary(st_geomfromwkb(wkb#x, 0))) <=> 0101000000000000000000F03F0000000000000040)
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 0)) = wkb#x)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb, 4326)) <> wkb
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_asbinary(st_geomfromwkb(wkb#x, 4326)) = wkb#x)
    +- SubqueryAlias spark_catalog.default.geodata
       +- Relation spark_catalog.default.geodata[wkb#x] parquet
 
