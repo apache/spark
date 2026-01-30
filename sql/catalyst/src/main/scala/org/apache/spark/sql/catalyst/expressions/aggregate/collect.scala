@@ -48,7 +48,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(child.dataType, false)
+  // Subclasses can override bufferContainsNull to indicate if the result array contains nulls
+  override def dataType: DataType = ArrayType(child.dataType, bufferContainsNull)
 
   override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
@@ -119,9 +120,6 @@ case class CollectList(
   with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0, true)
-
-  // When ignoreNulls is false, the result array may contain nulls
-  override def dataType: DataType = ArrayType(child.dataType, containsNull = !ignoreNulls)
 
   // Buffer can contain nulls when ignoreNulls is false (RESPECT NULLS)
   override protected def bufferContainsNull: Boolean = !ignoreNulls

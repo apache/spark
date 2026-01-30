@@ -228,7 +228,8 @@ class FunctionResolution(
         "FILTER clause"
       )
     }
-    if (u.ignoreNulls.isDefined) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "IGNORE NULLS"
@@ -259,11 +260,15 @@ class FunctionResolution(
       case last: Last => last.copy(ignoreNulls = ignoreNulls)
       case anyValue: AnyValue => anyValue.copy(ignoreNulls = ignoreNulls)
       case collectList: CollectList => collectList.copy(ignoreNulls = ignoreNulls)
-      case _ =>
+      case _ if ignoreNulls =>
+        // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           func.prettyName,
           "IGNORE NULLS"
         )
+      case _ =>
+        // RESPECT NULLS is the default, silently return unchanged
+        func
     }
     result.asInstanceOf[T]
   }
@@ -314,7 +319,8 @@ class FunctionResolution(
         scalarFunc.name(),
         "FILTER clause"
       )
-    } else if (u.ignoreNulls.isDefined) {
+    } else if (u.ignoreNulls.contains(true)) {
+      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
         "IGNORE NULLS"
@@ -328,7 +334,8 @@ class FunctionResolution(
       aggFunc: V2AggregateFunction[_, _],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    if (u.ignoreNulls.isDefined) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
         "IGNORE NULLS"
