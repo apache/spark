@@ -791,7 +791,7 @@ class ClientE2ETestSuite
   test("Dataset zipWithIndex should throw if column name already exists") {
     val df = spark.range(3).withColumnRenamed("id", "index")
     val ex = intercept[AnalysisException] {
-      df.zipWithIndex()
+      df.zipWithIndex().collect()
     }
     assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
   }
