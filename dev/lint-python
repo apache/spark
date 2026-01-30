@@ -164,10 +164,14 @@ function mypy_data_test {
     fi
 
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -o "python_files=test_*.yml" \
       --rootdir python \
       --mypy-only-local-stub \
       --mypy-ini-file python/mypy.ini \
-      python/pyspark ) 2>&1)
+      python/pyspark/tests/typing \
+      python/pyspark/sql/tests/typing \
+      python/pyspark/ml/tests/typing \
+      ) 2>&1)
 
     PYTEST_STATUS=$?
 
