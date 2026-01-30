@@ -1200,9 +1200,6 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def zipWithIndex(indexColName: String): DataFrame = {
-    if (schema.fieldNames.contains(indexColName)) {
-      throw QueryCompilationErrors.columnAlreadyExistsError(indexColName)
-    }
     select(col("*"), Column(DistributedSequenceID()).alias(indexColName))
   }
 

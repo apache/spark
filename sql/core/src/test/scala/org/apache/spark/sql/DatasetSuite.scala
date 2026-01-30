@@ -3023,7 +3023,7 @@ class DatasetSuite extends QueryTest
   test("zipWithIndex should throw if column name already exists") {
     val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
     val ex = intercept[AnalysisException] {
-      ds.zipWithIndex()
+      ds.zipWithIndex().collect()
     }
     assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
   }
