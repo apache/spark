@@ -12,7 +12,7 @@ JAR_NAME=$4
 
 mvn deploy:deploy-file \
   --settings $BUILDKITE_BUILD_CHECKOUT_PATH/ci/settings.xml \
-  -Durl=https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local \
+  -Durl=https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-release-local \
   -DgroupId=$GROUP_ID \
   -DartifactId=$ARTIFACT_ID \
   -Dversion=$VERSION \

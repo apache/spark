@@ -352,7 +352,7 @@
     <repository>
       <id>openai-release</id>
       <name>OpenAI Maven Release Repository</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
+      <url>https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -363,7 +363,7 @@
     <repository>
       <id>openai-snapshot</id>
       <name>OpenAI Maven Snapshot Repository</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
+      <url>https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
       <releases>
         <enabled>false</enabled>
       </releases>
@@ -404,12 +404,12 @@
     <repository>
       <id>openai.release.artifactory</id>
       <name>OpenAI Release Artifactory</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
+      <url>https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
     </repository>
     <snapshotRepository>
       <id>openai.snapshot.artifactory</id>
       <name>OpenAI Snapshot Artifactory</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
+      <url>https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
     </snapshotRepository>
   </distributionManagement>
 

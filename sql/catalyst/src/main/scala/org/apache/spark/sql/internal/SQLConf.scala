@@ -3848,8 +3848,8 @@ object SQLConf {
       .createWithDefault(
         sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY",
           "https://maven-central.storage-download.googleapis.com/maven2/," +
-          "https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local," +
-          "https://artifactory.data-0.internal.api.openai.org/artifactory/libs-snapshot-local"))
+          "https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-release-local," +
+          "https://artifactory.gateway.data-0.internal.api.openai.org/artifactory/libs-snapshot-local"))
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
