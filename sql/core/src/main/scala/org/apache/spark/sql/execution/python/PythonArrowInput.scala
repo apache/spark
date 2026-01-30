@@ -20,6 +20,7 @@ import java.io.DataOutputStream
 import java.nio.channels.Channels
 
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
@@ -62,17 +63,17 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
 
-  protected lazy val allocator =
+  protected lazy val allocator: BufferAllocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
-  protected lazy val root = {
+  protected lazy val root: VectorSchemaRoot = {
     val arrowSchema = ArrowUtils.toArrowSchema(
       schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     VectorSchemaRoot.create(arrowSchema, allocator)
   }
 
   // Create compression codec based on config
-  protected def codec = SQLConf.get.arrowCompressionCodec match {
+  protected def codec: CompressionCodec = SQLConf.get.arrowCompressionCodec match {
     case "none" => NoCompressionCodec.INSTANCE
     case "zstd" =>
       val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
