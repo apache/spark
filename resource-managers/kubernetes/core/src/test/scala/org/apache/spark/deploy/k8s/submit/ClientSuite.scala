@@ -26,7 +26,8 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
@@ -187,7 +188,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
-    when(podsWithNamespace.resource(fullExpectedPod(testConfigMapName))).thenReturn(namedPods)
+    when(podsWithNamespace.resource(ArgumentMatchers.argThat[Pod](pod =>
+      pod != null && pod.getMetadata.getName == POD_NAME
+    ))).thenReturn(namedPods)
     when(resourceList.forceConflicts()).thenReturn(resourceList)
     when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(testConfigMapName))
     when(namedPods.create()).thenReturn(podWithOwnerReference(testConfigMapName))
