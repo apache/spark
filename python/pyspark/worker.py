@@ -52,6 +52,7 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
     PandasBatchTransformer,
+    ArrowArrayToPandasConversion,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
@@ -294,10 +295,8 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
 
     return (
         args_kwargs_offsets,
-        lambda *a: ArrowBatchTransformer.create_batch_from_arrays(
-            (verify_result_length(verify_result_type(func(*a)), len(a[0])), arrow_return_type),
-            arrow_cast=True,
-            safecheck=True,
+        lambda *a: ArrowBatchTransformer.zip_batches(
+            [(verify_result_length(verify_result_type(func(*a)), len(a[0])), arrow_return_type)],
         ),
     )
 
@@ -580,8 +579,8 @@ def wrap_arrow_array_iter_udf(f, return_type, runner_conf):
         return elem
 
     def to_batch(res):
-        return ArrowBatchTransformer.create_batch_from_arrays(
-            (res, arrow_return_type), arrow_cast=True, safecheck=True
+        return ArrowBatchTransformer.zip_batches(
+            [(res, arrow_return_type)],
         )
 
     return lambda *iterator: map(to_batch, map(verify_element, verify_result(f(*iterator))))
@@ -1145,8 +1144,8 @@ def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, run
         result = func(*series)
         array = pa.array([result])
         # Return RecordBatch directly instead of (array, type) tuple
-        return ArrowBatchTransformer.create_batch_from_arrays(
-            (array, arrow_return_type), arrow_cast=True, safecheck=True
+        return ArrowBatchTransformer.zip_batches(
+            [(array, arrow_return_type)],
         )
 
     return (
@@ -1169,8 +1168,8 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
         result = func(batch_iter)
         array = pa.array([result])
         # Return RecordBatch directly instead of (array, type) tuple
-        return ArrowBatchTransformer.create_batch_from_arrays(
-            (array, arrow_return_type), arrow_cast=True, safecheck=True
+        return ArrowBatchTransformer.zip_batches(
+            [(array, arrow_return_type)],
         )
 
     return (
@@ -1297,8 +1296,8 @@ def wrap_unbounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_
 
     return (
         args_kwargs_offsets,
-        lambda *a: ArrowBatchTransformer.create_batch_from_arrays(
-            (wrapped(*a), arrow_return_type), arrow_cast=True, safecheck=True
+        lambda *a: ArrowBatchTransformer.zip_batches(
+            [(wrapped(*a), arrow_return_type)],
         ),
     )
 
@@ -1378,8 +1377,8 @@ def wrap_bounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_ty
 
     return (
         args_offsets[:2] + args_kwargs_offsets,
-        lambda *a: ArrowBatchTransformer.create_batch_from_arrays(
-            (wrapped(*a), arrow_return_type), arrow_cast=True, safecheck=True
+        lambda *a: ArrowBatchTransformer.zip_batches(
+            [(wrapped(*a), arrow_return_type)],
         ),
     )
 
@@ -2513,14 +2512,24 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 if len(args) == 0:
                     for _ in range(num_rows):
                         for batch in convert_to_arrow(func()):
-                            # Wrap batch into struct for ArrowStreamUDTFSerializer.dump_stream
-                            yield ArrowBatchTransformer.wrap_struct(batch)
+                            # Handle empty batch: wrap it immediately for JVM
+                            if batch.num_columns == 0:
+                                yield ArrowBatchTransformer.wrap_struct(batch), arrow_return_type
+                            else:
+                                # Yield (batch, arrow_return_type) tuple for serializer
+                                # Serializer will handle type coercion and wrapping
+                                yield batch, arrow_return_type
 
                 else:
                     for row in zip(*args):
                         for batch in convert_to_arrow(func(*row)):
-                            # Wrap batch into struct for ArrowStreamUDTFSerializer.dump_stream
-                            yield ArrowBatchTransformer.wrap_struct(batch)
+                            # Handle empty batch: wrap it immediately for JVM
+                            if batch.num_columns == 0:
+                                yield ArrowBatchTransformer.wrap_struct(batch), arrow_return_type
+                            else:
+                                # Yield (batch, arrow_return_type) tuple for serializer
+                                # Serializer will handle type coercion and wrapping
+                                yield batch, arrow_return_type
 
             return evaluate
 
@@ -3282,9 +3291,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # Need to materialize the first batch to get the keys
             first_batch = next(flattened)
 
-            keys = ArrowBatchTransformer.partial_batch(first_batch, parsed_offsets[0][0])
+            keys = first_batch.select(parsed_offsets[0][0])
             value_batches = (
-                ArrowBatchTransformer.partial_batch(batch, parsed_offsets[0][1])
+                batch.select(parsed_offsets[0][1])
                 for batch in itertools.chain((first_batch,), flattened)
             )
 
@@ -3368,10 +3377,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
-            df1_keys = ArrowBatchTransformer.partial_table(a[0], parsed_offsets[0][0])
-            df1_vals = ArrowBatchTransformer.partial_table(a[0], parsed_offsets[0][1])
-            df2_keys = ArrowBatchTransformer.partial_table(a[1], parsed_offsets[1][0])
-            df2_vals = ArrowBatchTransformer.partial_table(a[1], parsed_offsets[1][1])
+            df1_keys = pa.Table.from_batches([batch.select(parsed_offsets[0][0]) for batch in a[0]])
+            df1_vals = pa.Table.from_batches([batch.select(parsed_offsets[0][1]) for batch in a[0]])
+            df2_keys = pa.Table.from_batches([batch.select(parsed_offsets[1][0]) for batch in a[1]])
+            df2_vals = pa.Table.from_batches([batch.select(parsed_offsets[1][1]) for batch in a[1]])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
@@ -3436,7 +3445,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             ]
             
             # Merge RecordBatches from all UDFs horizontally
-            return ArrowBatchTransformer.merge_batches(result_batches)
+            return ArrowBatchTransformer.zip_batches(result_batches)
 
     elif eval_type in (
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -3461,7 +3470,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             result_batches = [f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs]
             
             # Merge all RecordBatches horizontally
-            return ArrowBatchTransformer.merge_batches(result_batches)
+            return ArrowBatchTransformer.zip_batches(result_batches)
 
     else:
         import pyarrow as pa
@@ -3475,7 +3484,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs
             )
             # Merge all RecordBatches into a single RecordBatch with multiple columns
-            return ArrowBatchTransformer.merge_batches(result_batches)
+            return ArrowBatchTransformer.zip_batches(result_batches)
 
     # For grouped/cogrouped map UDFs:
     # All wrappers yield batches, so mapper returns generator → need flatten
