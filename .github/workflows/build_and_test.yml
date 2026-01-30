@@ -819,6 +819,7 @@ jobs:
       LANG: C.UTF-8
       NOLINT_ON_COMPILE: false
       GITHUB_PREV_SHA: ${{ github.event.before }}
+      BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
@@ -882,9 +883,9 @@ jobs:
       if: hashFiles('dev/structured_logging_style.py') != ''
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-4.0' ]]; then
+        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
           python3.9 ./dev/structured_logging_style.py
-        elif [[ "${{ inputs.branch }}" == 'branch-4.1' ]]; then
+        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
           python3.11 ./dev/structured_logging_style.py
         else
           python3.12 ./dev/structured_logging_style.py
@@ -903,18 +904,22 @@ jobs:
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-4.0' ]]; then
+        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
+          python3.9 --version
           python3.9 -m pip list
-        elif [[ "${{ inputs.branch }}" == 'branch-4.1' ]]; then
+        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
+          python3.11 --version
           python3.11 -m pip list
         else
+          python3.12 --version
           python3.12 -m pip list
         fi
     - name: Python linter
+      shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-4.0' ]]; then
+        if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
           PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-        elif [[ "${{ inputs.branch }}" == 'branch-4.1' ]]; then
+        elif [[ "$BRANCH" == 'branch-4.1' ]]; then
           PYTHON_EXECUTABLE=python3.11 ./dev/lint-python
         else
           PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
