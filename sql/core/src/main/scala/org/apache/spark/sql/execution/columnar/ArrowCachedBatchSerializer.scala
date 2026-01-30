@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -40,6 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -148,17 +149,23 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
-    // Convert to columnar batch first, then iterate rows
-    val columnarBatchRDD = convertCachedBatchToColumnarBatch(
-      input, cacheAttributes, selectedAttributes, conf)
-
+    // Direct conversion from ArrowCachedBatch to InternalRow without intermediate ColumnarBatch
+    val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
-    columnarBatchRDD.mapPartitionsInternal { batchIterator =>
-      val toUnsafe =
-        org.apache.spark.sql.catalyst.expressions.UnsafeProjection.create(selectedSchema)
-      batchIterator.flatMap { batch =>
-        batch.rowIterator().asScala.map(toUnsafe)
-      }
+    val timeZoneId = conf.sessionLocalTimeZone
+
+    // Calculate column indices for projection
+    val selectedIndices = selectedAttributes.map { attr =>
+      cacheAttributes.indexWhere(_.exprId == attr.exprId)
+    }.toArray
+
+    input.mapPartitionsInternal { batchIterator =>
+      new ArrowCachedBatchToInternalRowIterator(
+        batchIterator,
+        cacheSchema,
+        selectedSchema,
+        selectedIndices,
+        timeZoneId)
     }
   }
 }
@@ -189,6 +196,11 @@ private class InternalRowToArrowCachedBatchIterator(
   private val arrowWriter = ArrowWriter.create(root)
   private val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
+  // Create statistics collectors for each column
+  private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
+    createColumnStats(attr.dataType)
+  }.toArray
+
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
@@ -204,11 +216,26 @@ private class InternalRowToArrowCachedBatchIterator(
   override def next(): ArrowCachedBatch = {
     var rowCount = 0
 
+    // Reset statistics collectors for new batch
+    statsCollectors.foreach { stats =>
+      // Create new instance to reset state
+      val index = statsCollectors.indexOf(stats)
+      statsCollectors(index) = createColumnStats(schema(index).dataType)
+    }
+
     Utils.tryWithSafeFinally {
-      // Write rows to Arrow vectors
+      // Write rows to Arrow vectors and collect statistics incrementally
       while (rowIter.hasNext && rowCount < maxRecordsPerBatch) {
         val row = rowIter.next()
         arrowWriter.write(row)
+
+        // Collect statistics for this row
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
+        }
+
         rowCount += 1
       }
       arrowWriter.finish()
@@ -220,8 +247,8 @@ private class InternalRowToArrowCachedBatchIterator(
         // Serialize to Arrow IPC format
         val arrowData = serializeBatch(recordBatch)
 
-        // Collect statistics
-        val stats = collectStatistics(root, schema)
+        // Build statistics InternalRow from collected stats
+        val stats = buildStatisticsFromCollectors(statsCollectors, schema)
 
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
@@ -242,6 +269,38 @@ private class InternalRowToArrowCachedBatchIterator(
     val writeChannel = new WriteChannel(Channels.newChannel(out))
     MessageSerializer.serialize(writeChannel, batch)
     out.toByteArray
+  }
+
+  private def createColumnStats(dataType: DataType): ColumnStats = {
+    dataType match {
+      case BooleanType => new BooleanColumnStats
+      case ByteType => new ByteColumnStats
+      case ShortType => new ShortColumnStats
+      case IntegerType => new IntColumnStats
+      case DateType => new IntColumnStats  // Date is stored as Int
+      case LongType => new LongColumnStats
+      case TimestampType => new LongColumnStats  // Timestamp is stored as Long
+      case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
+      case FloatType => new FloatColumnStats
+      case DoubleType => new DoubleColumnStats
+      case StringType => new StringColumnStats(StringType)
+      case BinaryType => new BinaryColumnStats
+      case dt: DecimalType => new DecimalColumnStats(dt)
+      case CalendarIntervalType => new IntervalColumnStats
+      case VariantType => new VariantColumnStats
+      case _ => new ObjectColumnStats(dataType)
+    }
+  }
+
+  private def buildStatisticsFromCollectors(
+      collectors: Array[ColumnStats],
+      schema: Seq[Attribute]): InternalRow = {
+    val stats = collectors.flatMap { collector =>
+      val collected = collector.collectedStatistics
+      // ColumnStats returns: [lowerBound, upperBound, nullCount, count, sizeInBytes]
+      Seq(collected(0), collected(1), collected(2), collected(3), collected(4))
+    }
+    InternalRow.fromSeq(stats.toSeq)
   }
 
   private def collectStatistics(
@@ -682,17 +741,30 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val arrowWriter = ArrowWriter.create(root)
     val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
+    // Create statistics collectors for each column
+    val statsCollectors: Array[ColumnStats] = schema.map { attr =>
+      createColumnStats(attr.dataType)
+    }.toArray
+
     Utils.tryWithSafeFinally {
       val rowIterator = batch.rowIterator().asScala
       while (rowIterator.hasNext) {
-        arrowWriter.write(rowIterator.next())
+        val row = rowIterator.next()
+        arrowWriter.write(row)
+
+        // Collect statistics for this row
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
+        }
       }
       arrowWriter.finish()
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {
         val arrowData = serializeBatch(recordBatch)
-        val stats = collectStatistics(root, schema)
+        val stats = buildStatisticsFromCollectors(statsCollectors, schema)
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
         recordBatch.close()
@@ -701,6 +773,38 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       arrowWriter.reset()
       root.close()
     }
+  }
+
+  private def createColumnStats(dataType: DataType): ColumnStats = {
+    dataType match {
+      case BooleanType => new BooleanColumnStats
+      case ByteType => new ByteColumnStats
+      case ShortType => new ShortColumnStats
+      case IntegerType => new IntColumnStats
+      case DateType => new IntColumnStats  // Date is stored as Int
+      case LongType => new LongColumnStats
+      case TimestampType => new LongColumnStats  // Timestamp is stored as Long
+      case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
+      case FloatType => new FloatColumnStats
+      case DoubleType => new DoubleColumnStats
+      case StringType => new StringColumnStats(StringType)
+      case BinaryType => new BinaryColumnStats
+      case dt: DecimalType => new DecimalColumnStats(dt)
+      case CalendarIntervalType => new IntervalColumnStats
+      case VariantType => new VariantColumnStats
+      case _ => new ObjectColumnStats(dataType)
+    }
+  }
+
+  private def buildStatisticsFromCollectors(
+      collectors: Array[ColumnStats],
+      schema: Seq[Attribute]): InternalRow = {
+    val stats = collectors.flatMap { collector =>
+      val collected = collector.collectedStatistics
+      // ColumnStats returns: [lowerBound, upperBound, nullCount, count, sizeInBytes]
+      Seq(collected(0), collected(1), collected(2), collected(3), collected(4))
+    }
+    InternalRow.fromSeq(stats.toSeq)
   }
 
   private def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
@@ -1079,15 +1183,16 @@ private class ArrowCachedBatchToColumnarBatchIterator(
     0,
     Long.MaxValue)
 
-  // Track roots to close them when task completes
-  private val roots = new java.util.ArrayList[VectorSchemaRoot]()
+  // Track only the previous root to close it when next batch is produced
+  private var previousRoot: VectorSchemaRoot = null
 
-  // Register cleanup - close all roots and allocator when task completes
+  // Register cleanup - close remaining root and allocator when task completes
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
-      import scala.jdk.CollectionConverters._
-      roots.asScala.foreach(_.close())
-      roots.clear()
+      if (previousRoot != null) {
+        previousRoot.close()
+        previousRoot = null
+      }
       allocator.close()
     }
   }
@@ -1095,6 +1200,12 @@ private class ArrowCachedBatchToColumnarBatchIterator(
   override def hasNext: Boolean = batchIter.hasNext
 
   override def next(): ColumnarBatch = {
+    // Close the previous root since it's been consumed
+    if (previousRoot != null) {
+      previousRoot.close()
+      previousRoot = null
+    }
+
     val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
 
     // Deserialize Arrow IPC data
@@ -1110,8 +1221,8 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
-      // Track this root for cleanup at task completion
-      roots.add(root)
+      // Track this root as the current/previous root
+      previousRoot = root
 
       val loader = new VectorLoader(root)
       loader.load(recordBatch)
@@ -1126,6 +1237,179 @@ private class ArrowCachedBatchToColumnarBatchIterator(
       new ColumnarBatch(selectedColumns, cachedBatch.numRows)
     } {
       recordBatch.close()
+    }
+  }
+}
+
+/**
+ * Iterator that converts ArrowCachedBatch directly to InternalRow without intermediate
+ * ColumnarBatch, avoiding the overhead of creating ArrowColumnVector wrappers.
+ */
+private class ArrowCachedBatchToInternalRowIterator(
+    batchIter: Iterator[CachedBatch],
+    cacheSchema: StructType,
+    selectedSchema: StructType,
+    columnIndices: Array[Int],
+    timeZoneId: String) extends Iterator[InternalRow] {
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"ArrowCachedBatchToInternalRowIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private var currentRoot: VectorSchemaRoot = null
+  private var currentRowIndex: Int = 0
+  private var currentRowCount: Int = 0
+
+  // Mutable row for reading from Arrow vectors
+  private val row = new SpecificInternalRow(selectedSchema.map(_.dataType))
+
+  // UnsafeProjection to convert to UnsafeRow
+  private val toUnsafe = org.apache.spark.sql.catalyst.expressions.UnsafeProjection.create(
+    selectedSchema)
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      if (currentRoot != null) {
+        currentRoot.close()
+        currentRoot = null
+      }
+      allocator.close()
+    }
+  }
+
+  override def hasNext: Boolean = {
+    if (currentRowIndex < currentRowCount) {
+      true
+    } else if (batchIter.hasNext) {
+      loadNextBatch()
+      currentRowIndex < currentRowCount
+    } else {
+      if (currentRoot != null) {
+        currentRoot.close()
+        currentRoot = null
+      }
+      false
+    }
+  }
+
+  override def next(): InternalRow = {
+    if (!hasNext) {
+      throw new NoSuchElementException("No more rows")
+    }
+
+    // Read values from Arrow vectors directly into the row
+    var i = 0
+    while (i < columnIndices.length) {
+      val colIndex = columnIndices(i)
+      val vector = currentRoot.getVector(colIndex)
+
+      if (vector.isNull(currentRowIndex)) {
+        row.setNullAt(i)
+      } else {
+        readValueFromVector(vector, currentRowIndex, row, i, selectedSchema(i).dataType)
+      }
+      i += 1
+    }
+
+    currentRowIndex += 1
+    toUnsafe(row)
+  }
+
+  private def loadNextBatch(): Unit = {
+    // Close previous root
+    if (currentRoot != null) {
+      currentRoot.close()
+      currentRoot = null
+    }
+
+    val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+
+    // Deserialize Arrow IPC data
+    val arrowData = cachedBatch.arrowData
+    val in = new ByteArrayInputStream(arrowData)
+    val readChannel = new ReadChannel(Channels.newChannel(in))
+
+    // Deserialize the RecordBatch
+    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+
+    try {
+      // Create root and load batch
+      val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      currentRoot = root
+
+      val loader = new VectorLoader(root)
+      loader.load(recordBatch)
+
+      currentRowIndex = 0
+      currentRowCount = cachedBatch.numRows
+    } finally {
+      recordBatch.close()
+    }
+  }
+
+  private def readValueFromVector(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowIndex: Int,
+      row: SpecificInternalRow,
+      ordinal: Int,
+      dataType: DataType): Unit = {
+    dataType match {
+      case BooleanType =>
+        row.setBoolean(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(rowIndex) != 0)
+      case ByteType =>
+        row.setByte(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(rowIndex))
+      case ShortType =>
+        row.setShort(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(rowIndex))
+      case IntegerType =>
+        row.setInt(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(rowIndex))
+      case LongType =>
+        row.setLong(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(rowIndex))
+      case FloatType =>
+        row.setFloat(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(rowIndex))
+      case DoubleType =>
+        row.setDouble(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(rowIndex))
+      case DateType =>
+        row.setInt(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(rowIndex))
+      case TimestampType =>
+        row.setLong(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(rowIndex))
+      case TimestampNTZType =>
+        row.setLong(ordinal,
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(rowIndex))
+      case StringType =>
+        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(rowIndex)
+        row.update(ordinal, UTF8String.fromBytes(bytes))
+      case BinaryType =>
+        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarBinaryVector].get(rowIndex)
+        row.update(ordinal, bytes)
+      case dt: DecimalType =>
+        val decimalVector = vector.asInstanceOf[org.apache.arrow.vector.DecimalVector]
+        val decimal = decimalVector.getObject(rowIndex)
+        row.setDecimal(ordinal, Decimal(decimal, dt.precision, dt.scale), dt.precision)
+      case _: ArrayType =>
+        val arrowColumnVector = new ArrowColumnVector(vector)
+        row.update(ordinal, arrowColumnVector.getArray(rowIndex))
+      case _: StructType =>
+        val arrowColumnVector = new ArrowColumnVector(vector)
+        row.update(ordinal, arrowColumnVector.getStruct(rowIndex))
+      case _: MapType =>
+        val arrowColumnVector = new ArrowColumnVector(vector)
+        row.update(ordinal, arrowColumnVector.getMap(rowIndex))
+      case _ =>
+        // For other types, use getUTF8String as fallback
+        val arrowColumnVector = new ArrowColumnVector(vector)
+        row.update(ordinal, arrowColumnVector.getUTF8String(rowIndex))
     }
   }
 }

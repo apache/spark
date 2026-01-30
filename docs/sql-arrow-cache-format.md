@@ -56,7 +56,7 @@ df.unpersist()
 Arrow cache supports multiple compression codecs. Configure compression with:
 
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
 ```
 
 Available options:
@@ -67,7 +67,7 @@ Available options:
 For zstd, you can also configure the compression level:
 
 ```scala
-spark.conf.set("spark.sql.arrow.compression.level", "3")  // Default: 3, Range: 1-22
+spark.conf.set("spark.sql.execution.arrow.compression.level", "3")  // Default: 3, Range: 1-22
 ```
 
 ## Vectorized Reader
@@ -207,12 +207,12 @@ If you encounter OOM errors with Arrow cache:
 
 2. Enable compression:
    ```scala
-   spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
+   spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
    ```
 
 3. Reduce compression level:
    ```scala
-   spark.conf.set("spark.sql.arrow.compression.level", "1")
+   spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
    ```
 
 ### Slow Performance
@@ -226,7 +226,7 @@ If Arrow cache is slower than expected:
 
 2. Try different compression codec:
    ```scala
-   spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Faster than zstd
+   spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")  // Faster than zstd
    ```
 
 3. Increase batch size (if memory allows):
@@ -239,8 +239,8 @@ If Arrow cache is slower than expected:
 | Configuration | Default | Description |
 |---------------|---------|-------------|
 | `spark.sql.cache.serializer` | DefaultCachedBatchSerializer | Cache format serializer class |
-| `spark.sql.arrow.compression.codec` | `zstd` | Compression codec (none, lz4, zstd) |
-| `spark.sql.arrow.compression.level` | `3` | Zstd compression level (1-22) |
+| `spark.sql.execution.arrow.compression.codec` | `zstd` | Compression codec (none, lz4, zstd) |
+| `spark.sql.execution.arrow.compression.level` | `3` | Zstd compression level (1-22) |
 | `spark.sql.arrow.maxRecordsPerBatch` | `10000` | Maximum rows per Arrow batch |
 | `spark.sql.inMemoryColumnarStorage.enableVectorizedReader` | `true` | Enable vectorized cache reading |
 
@@ -257,7 +257,7 @@ object ArrowCacheExample {
       .master("local[*]")
       .config("spark.sql.cache.serializer",
         "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-      .config("spark.sql.arrow.compression.codec", "zstd")
+      .config("spark.sql.execution.arrow.compression.codec", "zstd")
       .config("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
       .getOrCreate()
 

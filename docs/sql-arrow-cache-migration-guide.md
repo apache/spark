@@ -77,7 +77,7 @@ val sparkArrow = SparkSession.builder()
   .master("local[*]")
   .config("spark.sql.cache.serializer",
     "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-  .config("spark.sql.arrow.compression.codec", "lz4")  // Start with lz4
+  .config("spark.sql.execution.arrow.compression.codec", "lz4")  // Start with lz4
   .config("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
   .getOrCreate()
 ```
@@ -134,15 +134,15 @@ Optimize Arrow cache configuration based on your workload:
 
 ```scala
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")  // Smaller batches
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")   // Better compression
-spark.conf.set("spark.sql.arrow.compression.level", "5")      // Higher compression
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")   // Better compression
+spark.conf.set("spark.sql.execution.arrow.compression.level", "5")      // Higher compression
 ```
 
 #### For Performance-Critical Applications
 
 ```scala
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")  // Larger batches
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")     // Faster codec
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")     // Faster codec
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
@@ -150,8 +150,8 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 ```scala
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Default
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "3")       // Default
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "3")       // Default
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
 
@@ -243,7 +243,7 @@ val spark = SparkSession.builder()
   .appName("BatchJob")
   .config("spark.sql.cache.serializer",
     "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-  .config("spark.sql.arrow.compression.codec", "lz4")
+  .config("spark.sql.execution.arrow.compression.codec", "lz4")
   .getOrCreate()
 
 val df = spark.read.parquet("input/*.parquet")
@@ -331,8 +331,8 @@ Based on benchmarks on Apple M4 Max (OpenJDK 21.0.8):
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")
 
 // Increase compression
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "5")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "5")
 ```
 
 ### Issue 2: Slower Performance
@@ -345,7 +345,7 @@ spark.conf.set("spark.sql.arrow.compression.level", "5")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 
 // Use faster compression
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
 
 // Increase batch size (if memory allows)
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")

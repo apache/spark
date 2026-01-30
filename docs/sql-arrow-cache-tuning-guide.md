@@ -12,8 +12,8 @@ Best for: Most workloads, good starting point
 ```scala
 spark.conf.set("spark.sql.cache.serializer",
   "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "3")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "3")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -24,8 +24,8 @@ Best for: Performance-critical applications, ample memory
 ```scala
 spark.conf.set("spark.sql.cache.serializer",
   "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
-spark.conf.set("spark.sql.arrow.compression.level", "1")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -36,8 +36,8 @@ Best for: Memory-constrained environments, large datasets
 ```scala
 spark.conf.set("spark.sql.cache.serializer",
   "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "9")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "9")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -46,7 +46,7 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 ### 1. Compression Codec
 
-**Parameter**: `spark.sql.arrow.compression.codec`
+**Parameter**: `spark.sql.execution.arrow.compression.codec`
 **Default**: `zstd`
 **Options**: `none`, `lz4`, `zstd`
 
@@ -67,7 +67,7 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 - Network/disk I/O is not a concern
 
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "none")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "none")
 ```
 
 **Use `lz4`** (Recommended for most workloads):
@@ -76,7 +76,7 @@ spark.conf.set("spark.sql.arrow.compression.codec", "none")
 - Data will be read multiple times
 
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
 ```
 
 **Use `zstd`** (Default):
@@ -86,12 +86,12 @@ spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
 - Network/disk I/O is a bottleneck
 
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
 ```
 
 ### 2. Compression Level (zstd only)
 
-**Parameter**: `spark.sql.arrow.compression.level`
+**Parameter**: `spark.sql.execution.arrow.compression.level`
 **Default**: `3`
 **Range**: `1` (fastest) to `22` (best compression)
 
@@ -108,14 +108,14 @@ spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
 
 ```scala
 // Start with default
-spark.conf.set("spark.sql.arrow.compression.level", "3")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "3")
 
 // If memory is tight, increase gradually
-spark.conf.set("spark.sql.arrow.compression.level", "5")
-spark.conf.set("spark.sql.arrow.compression.level", "7")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "5")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "7")
 
 // If CPU is bottleneck, decrease
-spark.conf.set("spark.sql.arrow.compression.level", "1")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
 ```
 
 ### 3. Batch Size
@@ -188,7 +188,7 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast decompression
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")  // Fast decompression
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Good balance
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")  // Vectorized filters
 ```
@@ -201,7 +201,7 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "20000")  // Larger batches
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")  // Critical!
 ```
@@ -214,8 +214,8 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")  // Better compression
-spark.conf.set("spark.sql.arrow.compression.level", "5")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")  // Better compression
+spark.conf.set("spark.sql.execution.arrow.compression.level", "5")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")  // Smaller batches
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -228,8 +228,8 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")  // Strings compress well
-spark.conf.set("spark.sql.arrow.compression.level", "5")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")  // Strings compress well
+spark.conf.set("spark.sql.execution.arrow.compression.level", "5")
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -242,7 +242,7 @@ spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true
 
 **Optimal Configuration**:
 ```scala
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")  // Fast compression/decompression
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")  // Fast compression/decompression
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "10000")  // Standard batch size
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 ```
@@ -284,7 +284,7 @@ val codec = (hasStrings, hasPrimitives) match {
   case _ => "lz4"  // Default to fast
 }
 
-spark.conf.set("spark.sql.arrow.compression.codec", codec)
+spark.conf.set("spark.sql.execution.arrow.compression.codec", codec)
 ```
 
 ### Technique 3: Memory Budget-Based Tuning
@@ -338,9 +338,9 @@ def benchmarkConfig(df: DataFrame, config: Map[String, String]): Long = {
 }
 
 val configs = Seq(
-  Map("spark.sql.arrow.compression.codec" -> "lz4"),
-  Map("spark.sql.arrow.compression.codec" -> "zstd"),
-  Map("spark.sql.arrow.compression.codec" -> "none")
+  Map("spark.sql.execution.arrow.compression.codec" -> "lz4"),
+  Map("spark.sql.execution.arrow.compression.codec" -> "zstd"),
+  Map("spark.sql.execution.arrow.compression.codec" -> "none")
 )
 
 val bestConfig = configs.minBy(config => benchmarkConfig(df, config))
@@ -392,8 +392,8 @@ def monitorArrowCache(df: DataFrame): Map[String, Any] = {
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "5000")
 
 // Increase compression
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "7")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "7")
 ```
 
 ### Problem 2: Slow Cache Writes
@@ -405,7 +405,7 @@ spark.conf.set("spark.sql.arrow.compression.level", "7")
 **Solutions**:
 ```scala
 // Use faster compression
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
 
 // Increase batch size (if memory allows)
 spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "15000")
@@ -423,7 +423,7 @@ spark.conf.set("spark.sql.arrow.maxRecordsPerBatch", "15000")
 spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
 
 // Use faster decompression
-spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
 ```
 
 ### Problem 4: Poor Compression Ratio
@@ -435,8 +435,8 @@ spark.conf.set("spark.sql.arrow.compression.codec", "lz4")
 **Solutions**:
 ```scala
 // Use better compression
-spark.conf.set("spark.sql.arrow.compression.codec", "zstd")
-spark.conf.set("spark.sql.arrow.compression.level", "9")
+spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+spark.conf.set("spark.sql.execution.arrow.compression.level", "9")
 ```
 
 ## Best Practices Summary

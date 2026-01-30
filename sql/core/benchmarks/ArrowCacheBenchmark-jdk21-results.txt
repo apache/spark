@@ -8,10 +8,13 @@ Cache primitive types
 
 OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 15.7.2
 Apple M4 Max
-Cache 5M rows with primitives:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------------------------------
-Default cache - write + read                        763            784          26          6.6         152.6       1.0X
-Arrow cache - write + read                          357            377          11         14.0          71.5       2.1X
+Cache 5M rows with primitives:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Default cache - write + read                           686            721          39          7.3         137.3       1.0X
+Default cache - write + read (uncompressed)            314            323           9         15.9          62.9       2.2X
+Arrow cache - write + read                             366            375           5         13.7          73.1       1.9X
+Arrow cache - write + read (zstd level 1)              606            609           3          8.2         121.3       1.1X
+Arrow cache - write + read (zstd level 3)              608            616           6          8.2         121.7       1.1X
 
 
 ================================================================================================
@@ -22,8 +25,11 @@ OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 15.7.2
 Apple M4 Max
 Cache 5M rows + filter:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Default cache - filter                              513            533          28          9.7         102.7       1.0X
-Arrow cache - filter (with stats)                   365            384          24         13.7          73.0       1.4X
+Default cache - filter                              504            511          12          9.9         100.9       1.0X
+Default cache - filter (uncompressed)               301            324          15         16.6          60.1       1.7X
+Arrow cache - filter (with stats)                   359            373          17         13.9          71.7       1.4X
+Arrow cache - filter (zstd level 1)                 561            571           7          8.9         112.2       0.9X
+Arrow cache - filter (zstd level 3)                 544            551           7          9.2         108.8       0.9X
 
 
 ================================================================================================
@@ -32,10 +38,13 @@ Cache columnar input (Parquet)
 
 OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 15.7.2
 Apple M4 Max
-Cache 2M rows from Parquet:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------------------------------
-Default cache - columnar input                      386            436          65          5.2         193.0       1.0X
-Arrow cache - columnar input                        242            273          53          8.3         120.8       1.6X
+Cache 2M rows from Parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Default cache - columnar input                           367            379           7          5.5         183.3       1.0X
+Default cache - columnar input (uncompressed)            216            223           8          9.3         108.0       1.7X
+Arrow cache - columnar input                             233            243          14          8.6         116.7       1.6X
+Arrow cache - columnar input (zstd level 1)              338            351          24          5.9         169.1       1.1X
+Arrow cache - columnar input (zstd level 3)              329            353          29          6.1         164.7       1.1X
 
 
 ================================================================================================
@@ -44,10 +53,13 @@ Re-cache Arrow cached data (zero-copy test)
 
 OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 15.7.2
 Apple M4 Max
-Re-cache 2M rows (zero-copy):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------
-Default cache - cache a cached DF                      547            558           9          3.7         273.3       1.0X
-Arrow cache - cache a cached DF (zero-copy)            248            259          10          8.1         123.9       2.2X
+Re-cache 2M rows (zero-copy):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Default cache - cache a cached DF                           254            257           3          7.9         126.9       1.0X
+Default cache - cache a cached DF (uncompressed)             89             92           4         22.4          44.7       2.8X
+Arrow cache - cache a cached DF (zero-copy)                  77             88          10         25.9          38.6       3.3X
+Arrow cache - cache a cached DF (zstd level 1)              176            180           6         11.4          87.8       1.4X
+Arrow cache - cache a cached DF (zstd level 3)              174            180           6         11.5          86.8       1.5X
 
 
 

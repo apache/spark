@@ -67,7 +67,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     runBenchmark("Cache primitive types") {
       val benchmark = new Benchmark("Cache 5M rows with primitives", numRows, output = output)
 
-      // Run Default cache benchmark
+      // Run Default cache benchmark (with compression - default)
       benchmark.addCase("Default cache - write + read") { _ =>
         val spark = createFreshSession(
           "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
@@ -78,7 +78,26 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count()
+          df.write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Default cache without compression
+      benchmark.addCase("Default cache - write + read (uncompressed)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+        try {
+          spark.conf.set("spark.sql.inMemoryColumnarStorage.compressed", "false")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save()
           df.unpersist(blocking = true)
         } finally {
           spark.stop()
@@ -95,7 +114,62 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count()
+          df.write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache with lz4 compression benchmark
+      // benchmark.addCase("Arrow cache - write + read (lz4)") { _ =>
+      //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+      //   try {
+      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     val df = spark.range(numRows).selectExpr(
+      //       "id as int_col",
+      //       "id * 2L as long_col",
+      //       "cast(id as double) as double_col"
+      //     )
+      //     df.cache()
+      //     df.write.format("noop").mode("overwrite").save()
+      //     df.unpersist(blocking = true)
+      //   } finally {
+      //     spark.stop()
+      //   }
+      // }
+
+      // Run Arrow cache with zstd level 1 compression benchmark
+      benchmark.addCase("Arrow cache - write + read (zstd level 1)") { _ =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache with zstd level 3 (default) compression benchmark
+      benchmark.addCase("Arrow cache - write + read (zstd level 3)") { _ =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save()
           df.unpersist(blocking = true)
         } finally {
           spark.stop()
@@ -111,7 +185,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     runBenchmark("Cache with filter pushdown") {
       val benchmark = new Benchmark("Cache 5M rows + filter", numRows, output = output)
 
-      // Default cache filter benchmark
+      // Default cache filter benchmark (with compression - default)
       benchmark.addCase("Default cache - filter") { _ =>
         val spark = createFreshSession(
           "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
@@ -121,7 +195,26 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count() // Materialize cache
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+          df.filter("int_col > 2500000").count()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Default cache filter without compression
+      benchmark.addCase("Default cache - filter (uncompressed)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+        try {
+          spark.conf.set("spark.sql.inMemoryColumnarStorage.compressed", "false")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
           df.filter("int_col > 2500000").count()
           df.unpersist(blocking = true)
         } finally {
@@ -138,7 +231,62 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count() // Materialize cache
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+          df.filter("int_col > 2500000").count()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Arrow cache filter with lz4 compression
+      // benchmark.addCase("Arrow cache - filter (lz4)") { _ =>
+      //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+      //   try {
+      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     val df = spark.range(numRows).selectExpr(
+      //       "id as int_col",
+      //       "cast(id as double) as double_col"
+      //     )
+      //     df.cache()
+      //     df.write.format("noop").mode("overwrite").save() // Materialize
+      //     df.filter("int_col > 2500000").count()
+      //     df.unpersist(blocking = true)
+      //   } finally {
+      //     spark.stop()
+      //   }
+      // }
+
+      // Arrow cache filter with zstd level 1
+      benchmark.addCase("Arrow cache - filter (zstd level 1)") { _ =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+          df.filter("int_col > 2500000").count()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Arrow cache filter with zstd level 3
+      benchmark.addCase("Arrow cache - filter (zstd level 3)") { _ =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
           df.filter("int_col > 2500000").count()
           df.unpersist(blocking = true)
         } finally {
@@ -177,7 +325,21 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
           try {
             val parquet = spark.read.parquet(path)
             parquet.cache()
-            parquet.count()
+            parquet.write.format("noop").mode("overwrite").save() // Force read all data
+            parquet.unpersist(blocking = true)
+          } finally {
+            spark.stop()
+          }
+        }
+
+        benchmark.addCase("Default cache - columnar input (uncompressed)") { _ =>
+          val spark = createFreshSession(
+            "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+          try {
+            spark.conf.set("spark.sql.inMemoryColumnarStorage.compressed", "false")
+            val parquet = spark.read.parquet(path)
+            parquet.cache()
+            parquet.write.format("noop").mode("overwrite").save() // Force read all data
             parquet.unpersist(blocking = true)
           } finally {
             spark.stop()
@@ -189,7 +351,47 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
           try {
             val parquet = spark.read.parquet(path)
             parquet.cache()
-            parquet.count()
+            parquet.write.format("noop").mode("overwrite").save() // Force read all data
+            parquet.unpersist(blocking = true)
+          } finally {
+            spark.stop()
+          }
+        }
+
+        // benchmark.addCase("Arrow cache - columnar input (lz4)") { _ =>
+        //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        //   try {
+        //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+        //     val parquet = spark.read.parquet(path)
+        //     parquet.cache()
+        //     parquet.write.format("noop").mode("overwrite").save() // Force read all data
+        //     parquet.unpersist(blocking = true)
+        //   } finally {
+        //     spark.stop()
+        //   }
+        // }
+
+        benchmark.addCase("Arrow cache - columnar input (zstd level 1)") { _ =>
+          val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+          try {
+            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+            spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+            val parquet = spark.read.parquet(path)
+            parquet.cache()
+            parquet.write.format("noop").mode("overwrite").save() // Force read all data
+            parquet.unpersist(blocking = true)
+          } finally {
+            spark.stop()
+          }
+        }
+
+        benchmark.addCase("Arrow cache - columnar input (zstd level 3)") { _ =>
+          val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+          try {
+            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+            val parquet = spark.read.parquet(path)
+            parquet.cache()
+            parquet.write.format("noop").mode("overwrite").save() // Force read all data
             parquet.unpersist(blocking = true)
           } finally {
             spark.stop()
@@ -206,24 +408,26 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     runBenchmark("Re-cache Arrow cached data (zero-copy test)") {
       val benchmark = new Benchmark("Re-cache 2M rows (zero-copy)", numRows, output = output)
 
-      benchmark.addCase("Default cache - cache a cached DF") { _ =>
+      benchmark.addTimerCase("Default cache - cache a cached DF") { timer =>
         val spark = createFreshSession(
           "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
         try {
-          // Create and cache initial data
+          // Create and cache initial data (NOT timed)
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "id * 2L as long_col",
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count() // Materialize cache
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
 
-          // Cache the cached DataFrame again
-          // Drop a column to create a different logical plan
+          // START TIMING: Cache the cached DataFrame again
           val df2 = df.drop("double_col")
+          timer.startTiming()
           df2.cache()
-          df2.count()
+          df2.write.format("noop").mode("overwrite").save() // Force read all data
+          timer.stopTiming()
+
           df2.unpersist(blocking = true)
           df.unpersist(blocking = true)
         } finally {
@@ -231,24 +435,137 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase("Arrow cache - cache a cached DF (zero-copy)") { _ =>
-        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+      benchmark.addTimerCase("Default cache - cache a cached DF (uncompressed)") { timer =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
         try {
-          // Create and cache initial data
+          spark.conf.set("spark.sql.inMemoryColumnarStorage.compressed", "false")
+          // Create and cache initial data (NOT timed)
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "id * 2L as long_col",
             "cast(id as double) as double_col"
           )
           df.cache()
-          df.count() // Materialize cache
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
 
-          // Cache the cached DataFrame again
+          // START TIMING: Cache the cached DataFrame again
+          val df2 = df.drop("double_col")
+          timer.startTiming()
+          df2.cache()
+          df2.write.format("noop").mode("overwrite").save() // Force read all data
+          timer.stopTiming()
+
+          df2.unpersist(blocking = true)
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      benchmark.addTimerCase("Arrow cache - cache a cached DF (zero-copy)") { timer =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          // Create and cache initial data (NOT timed)
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+
+          // START TIMING: Cache the cached DataFrame again
           // Drop a column to create a different logical plan
           // This preserves ArrowColumnVector for remaining columns, enabling zero-copy
           val df2 = df.drop("double_col")
+          timer.startTiming()
           df2.cache()
-          df2.count()
+          df2.write.format("noop").mode("overwrite").save() // Force read all data
+          timer.stopTiming()
+
+          df2.unpersist(blocking = true)
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // benchmark.addTimerCase("Arrow cache - cache a cached DF (lz4)") { timer =>
+      //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+      //   try {
+      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     // Create and cache initial data (NOT timed)
+      //     val df = spark.range(numRows).selectExpr(
+      //       "id as int_col",
+      //       "id * 2L as long_col",
+      //       "cast(id as double) as double_col"
+      //     )
+      //     df.cache()
+      //     df.write.format("noop").mode("overwrite").save() // Materialize
+
+      //     // START TIMING: Cache the cached DataFrame again
+      //     val df2 = df.drop("double_col")
+      //     timer.startTiming()
+      //     df2.cache()
+      //     df2.write.format("noop").mode("overwrite").save() // Force read all data
+      //     timer.stopTiming()
+
+      //     df2.unpersist(blocking = true)
+      //     df.unpersist(blocking = true)
+      //   } finally {
+      //     spark.stop()
+      //   }
+      // }
+
+      benchmark.addTimerCase("Arrow cache - cache a cached DF (zstd level 1)") { timer =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          // Create and cache initial data (NOT timed)
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+
+          // START TIMING: Cache the cached DataFrame again
+          val df2 = df.drop("double_col")
+          timer.startTiming()
+          df2.cache()
+          df2.write.format("noop").mode("overwrite").save() // Force read all data
+          timer.stopTiming()
+
+          df2.unpersist(blocking = true)
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      benchmark.addTimerCase("Arrow cache - cache a cached DF (zstd level 3)") { timer =>
+        val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+        try {
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          // Create and cache initial data (NOT timed)
+          val df = spark.range(numRows).selectExpr(
+            "id as int_col",
+            "id * 2L as long_col",
+            "cast(id as double) as double_col"
+          )
+          df.cache()
+          df.write.format("noop").mode("overwrite").save() // Materialize cache by reading all rows
+
+          // START TIMING: Cache the cached DataFrame again
+          val df2 = df.drop("double_col")
+          timer.startTiming()
+          df2.cache()
+          df2.write.format("noop").mode("overwrite").save() // Force read all data
+          timer.stopTiming()
+
           df2.unpersist(blocking = true)
           df.unpersist(blocking = true)
         } finally {
