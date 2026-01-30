@@ -204,7 +204,8 @@ object TTLProcessorUtils {
  * Stateful processor with multiple state variables (value + list + map)
  * for testing transformWithState operator.
  */
-class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, String)] {
+class MultiStateVarProcessor
+    extends StatefulProcessor[String, String, (String, String, String, String)] {
   @transient private var _countState: ValueState[Long] = _
   @transient private var _itemsList: ListState[String] = _
   @transient private var _itemsMap: MapState[String, SimpleMapValue] = _
@@ -219,7 +220,7 @@ class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String, String)] = {
     val currentCount = Option(_countState.get()).getOrElse(0L)
     var newCount = currentCount
     inputRows.foreach { item =>
@@ -228,7 +229,13 @@ class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, 
       _itemsMap.updateValue(item, SimpleMapValue(newCount.toInt))
     }
     _countState.update(newCount)
-    Iterator((key, newCount.toString))
+
+    // Convert list to human-readable string like "a,a"
+    val listStr = _itemsList.get().mkString(",")
+    // Convert map to human-readable string like "a=1"
+    val mapStr = _itemsMap.iterator().map { case (k, v) => s"$k=${v.count}" }.mkString(",")
+
+    Iterator((key, newCount.toString, listStr, mapStr))
   }
 }
 

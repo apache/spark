@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming.state
 
-import java.sql.Timestamp
 import java.time.Duration
 
 import org.apache.spark.sql.Dataset
@@ -25,8 +24,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, OutputEvent, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
-import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils, TTLProcessorUtils}
+import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputEvent, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
+import org.apache.spark.sql.streaming.util.{MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils, TTLProcessorUtils}
 
 /**
  * Integration test suite for transformWithState operator repartitioning.
@@ -102,7 +101,8 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
         listStateName = Some(MultiStateVarProcessorTestUtils.ITEMS_LIST))
       val selectExprs = MultiStateVarProcessorTestUtils.getColumnFamilyToSelectExprs()
 
-      def buildQuery(inputData: MemoryStream[String]): Dataset[(String, String)] = {
+      def buildQuery(
+          inputData: MemoryStream[String]): Dataset[(String, String, String, String)] = {
         inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new MultiStateVarProcessor(),
@@ -118,10 +118,16 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             StartStream(checkpointLocation = checkpointDir),
             // Batch 1: Creates state in all column families
             AddData(inputData, "a", "b", "c"),
-            CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+            CheckNewAnswer(
+              ("a", "1", "a", "a=1"),
+              ("b", "1", "b", "b=1"),
+              ("c", "1", "c", "c=1")),
             // Batch 2: Adds more state
             AddData(inputData, "a", "b", "d"),
-            CheckNewAnswer(("a", "2"), ("b", "2"), ("d", "1")),
+            CheckNewAnswer(
+              ("a", "2", "a,a", "a=2"),
+              ("b", "2", "b,b", "b=2"),
+              ("d", "1", "d", "d=1")),
             StopStream
           )
         },
@@ -131,7 +137,10 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             StartStream(checkpointLocation = checkpointDir),
             // Batch 3: Resume with new data after repartition
             AddData(inputData, "a", "c", "e"),
-            CheckNewAnswer(("a", "3"), ("c", "2"), ("e", "1"))
+            CheckNewAnswer(
+              ("a", "3", "a,a,a", "a=3"),
+              ("c", "2", "c,c", "c=2"),
+              ("e", "1", "e", "e=1"))
           )
         },
         storeToColumnFamilyToStateSourceOptions = Map(
@@ -145,21 +154,26 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
 
   testWithDifferentEncodingType("transformWithState with eventTime timers") {
     newPartitions =>
-      val columnFamilies = TimerTestUtils
-        .getTimerConfigsForCountState(TimeMode.EventTime()).keys.toSeq
-        .filterNot(_ == StateStore.DEFAULT_COL_FAMILY_NAME)
+      // MaxEventTimeStatefulProcessor uses maxEventTimeState and timerState
+      val (keyToTimestampCF, timestampToKeyCF) =
+        TimerStateUtils.getTimerStateVarNames(TimeMode.EventTime().toString)
+      val columnFamilies = Seq(
+        "maxEventTimeState",
+        "timerState",
+        keyToTimestampCF,
+        timestampToKeyCF)
       val stateSourceOptions = buildStateSourceOptionsForTWS(
         columnFamilies, timeMode = Some(TimeMode.EventTime()))
       val selectExprs = TimerTestUtils.getTimerColumnFamilyToSelectExprs(TimeMode.EventTime())
 
-      def buildQuery(inputData: MemoryStream[(String, Long)]): Dataset[(String, String)] = {
+      def buildQuery(inputData: MemoryStream[(String, Long)]): Dataset[(String, Int)] = {
         inputData.toDS()
           .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
           .withWatermark("eventTime", "10 seconds")
-          .as[(String, Timestamp)]
+          .as[(String, Long)]
           .groupByKey(_._1)
           .transformWithState(
-            new EventTimeTimerProcessor(),
+            new MaxEventTimeStatefulProcessor(),
             TimeMode.EventTime(),
             OutputMode.Update())
       }
@@ -171,11 +185,12 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
           testStream(query, OutputMode.Update())(
             StartStream(checkpointLocation = checkpointDir),
             // Batch 1: Creates state with event time timers
+            // MaxEventTimeStatefulProcessor outputs (key, maxEventTimeSec)
             AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
-            CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
-            // Batch 2: More data
-            AddData(inputData, ("a", 5L), ("d", 6L)),
-            CheckNewAnswer(("a", "2"), ("d", "1")),
+            CheckNewAnswer(("a", 1), ("b", 2), ("c", 3)),
+            // Batch 2: More data - max event time for "a" becomes 5
+            AddData(inputData, ("a", 12L)),
+            CheckNewAnswer(("a", 12)),
             StopStream
           )
         },
@@ -184,9 +199,11 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
           testStream(query, OutputMode.Update())(
             StartStream(checkpointLocation = checkpointDir),
             // Batch 3: Resume with new data after repartition
-            AddData(inputData, ("a", 10L), ("e", 11L)),
-            // Simply maintaining a count for each key
-            CheckNewAnswer(("a", "3"), ("e", "1"))
+            // Send event time 18 to advance watermark to (18-10)*1000 = 8000ms
+            // This fires timers for "b" (at 7000ms) and "c" (at 8000ms)
+            // Timer expiry outputs (key, -1)
+            AddData(inputData, ("a", 18L)),
+            CheckNewAnswer(("a", 18), ("b", -1), ("c", -1))
           )
         },
         storeToColumnFamilyToStateSourceOptions = Map(
@@ -242,7 +259,7 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
               triggerClock = clock),
             AddData(inputData, "c", "d"),
             AdvanceManualClock(5 * 1000),
-            // "a" and "c" are expired, and processor fires eventTime with "-1"
+            // "a" and "c" are expired, and processor fires processing time with "-1"
             CheckNewAnswer(("a", "-1"), ("c", "-1"), ("c", "2"), ("d", "1")),
             AddData(inputData, "c"),
             AdvanceManualClock(1000),
@@ -310,9 +327,13 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             // Batch 3: Clock advances to 3000ms
             // Value 1 has TTL from batch 1 (61000ms), value 3 gets TTL = 3000 + 60000 = 63000ms
             AddData(inputData, InputEvent("k1", "append", 3),
-              InputEvent("k1", "get_ttl_value_from_state", 0)),
+              InputEvent("k1", "get_ttl_value_from_state", 0),
+              InputEvent("k1", "get_values_in_min_state", 0)),
             AdvanceManualClock(1 * 1000),
-            CheckNewAnswer(OutputEvent("k1", 1, true, 61000), OutputEvent("k1", 3, true, 63000))
+            CheckNewAnswer(
+              OutputEvent("k1", 1, true, 61000),
+              OutputEvent("k1", 3, true, 63000),
+              OutputEvent("k1", -1, true, 61000))
           )
         },
         useManualClock = true,
@@ -374,10 +395,15 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             // key1 has TTL from batch 1 (61000ms), key3 gets TTL = 3000 + 60000 = 63000ms
             AddData(inputData, MapInputEvent("a", "key3", "put", 3),
               MapInputEvent("a", "key1", "get_ttl_value_from_state", 0),
-              MapInputEvent("a", "key3", "get_ttl_value_from_state", 0)),
+              MapInputEvent("a", "key3", "get_ttl_value_from_state", 0),
+              MapInputEvent("a", "key1", "get_values_in_ttl_state", 0)
+            ),
             AdvanceManualClock(1 * 1000),
             CheckNewAnswer(MapOutputEvent("a", "key1", 1, true, 61000),
-              MapOutputEvent("a", "key3", 3, true, 63000))
+              MapOutputEvent("a", "key3", 3, true, 63000),
+              MapOutputEvent("a", "key1", -1, true, 61000),
+              MapOutputEvent("a", "key3", -1, true, 63000)
+            )
           )
         },
         useManualClock = true,
@@ -435,9 +461,15 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
               trigger = Trigger.ProcessingTime("1 second"),
               triggerClock = clock),
             // k2 is still in the state
-            AddData(inputData, InputEvent("k2", "get_ttl_value_from_state", 0)),
+            AddData(inputData, InputEvent("k2", "get_ttl_value_from_state", 0),
+              InputEvent("k1", "put", 3),
+              InputEvent("k1", "get_ttl_value_from_state", 0)
+            ),
             AdvanceManualClock(1 * 1000),
-            CheckNewAnswer(OutputEvent("k2", 2, true, 62000))
+            CheckNewAnswer(
+              OutputEvent("k2", 2, true, 62000),
+              OutputEvent("k1", 3, true, 63000)
+            )
           )
         },
         useManualClock = true,
