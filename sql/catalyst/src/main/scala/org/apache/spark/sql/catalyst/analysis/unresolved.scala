@@ -1267,7 +1267,8 @@ case class UnresolvedSelectInto(
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSelectInto =
-    copy(query = newChild)
+    copy(query = newChild, isTopLevel = isTopLevel, isInSetOperation = isInSetOperation,
+      isPipeOperator = isPipeOperator)
 }
 
 case class UnresolvedEventTimeWatermark(

@@ -44,8 +44,18 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
     if (!containsUnresolvedSelectInto(plan)) {
       plan
     } else {
+      // Debug: print plan structure
+      if (log.isDebugEnabled) {
+        log.debug(s"ResolveSelectInto processing plan: ${plan.treeString}")
+      }
+
       // Pass 1: Mark UnresolvedSelectInto with context flags
       val markedPlan = markContext(plan, isTopLevel = true, isInSetOperation = false)
+
+      // Debug: print marked plan
+      if (log.isDebugEnabled) {
+        log.debug(s"After markContext: ${markedPlan.treeString}")
+      }
 
       // Pass 2: Validate context requirements and resolve to SelectIntoVariable
       resolveSelectInto(markedPlan)

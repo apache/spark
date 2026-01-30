@@ -5457,6 +5457,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "SELECT_INTO_NO_DATA" : {
+    "message" : [
+      "SELECT INTO returned no rows."
+    ],
+    "sqlState" : "02000"
+  },
   "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
     "message" : [
       "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, pipe operator context, or as part of set operations (UNION, INTERSECT, EXCEPT, MINUS)."
@@ -5468,12 +5474,6 @@
       "When using SELECT INTO with a single struct variable, the number of columns (<numCols>) must match the number of struct fields (<numFields>). Struct type: <structType>."
     ],
     "sqlState" : "21000"
-  },
-  "SELECT_INTO_NO_DATA" : {
-    "message" : [
-      "SELECT INTO returned no rows."
-    ],
-    "sqlState" : "02000"
   },
   "SELECT_INTO_VARIABLE_COUNT_MISMATCH" : {
     "message" : [

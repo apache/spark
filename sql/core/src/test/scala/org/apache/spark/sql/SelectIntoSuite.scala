@@ -934,4 +934,48 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
       parameters = Map.empty,
       sqlState = Some("21000"))
   }
+
+  // =============================================================================
+  // Test 36: SELECT INTO with VALUES clause (inline table)
+  // =============================================================================
+  test("Test 36: SELECT INTO with VALUES clause") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE a INT;
+        |  SELECT 'hello' INTO a FROM VALUES(1);
+        |  SELECT a;
+        |END;
+      """.stripMargin
+
+    // Expect CAST_INVALID_INPUT when trying to cast 'hello' to INT
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        spark.sql(script).collect()
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+        "expression" -> "'hello'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"INT\""),
+      sqlState = Some("22018"))
+  }
+
+  test("Test 36b: SELECT INTO with VALUES clause - valid cast") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE a INT;
+        |  DECLARE b STRING;
+        |  SELECT col1, 'test' INTO a, b FROM VALUES(42);
+        |  SELECT a, b;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).getInt(0) == 42)
+    assert(result(0).getString(1) == "test")
+  }
 }
