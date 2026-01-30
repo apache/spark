@@ -404,7 +404,7 @@ class DenseVector(Vector):
             elif isinstance(other, Vector):
                 return np.dot(self.toArray(), other.toArray())
             else:
-                return np.dot(self.toArray(), other)  # type: ignore[call-overload]
+                return np.dot(self.toArray(), other)
 
     def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
