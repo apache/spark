@@ -26238,7 +26238,10 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+def st_geomfromwkb(
+    wkb: "ColumnOrName",
+    srid: Optional[Union["ColumnOrName", int]] = None
+) -> Column:
     """Parses the input WKB description and returns the corresponding GEOMETRY value.
 
     .. versionadded:: 4.1.0
@@ -26247,6 +26250,8 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     ----------
     wkb : :class:`~pyspark.sql.Column` or str
         A BINARY value in WKB format, representing a GEOMETRY value.
+    srid : :class:`~pyspark.sql.Column` or int, optional
+        The optional SRID value of the geometry. Default is 0.
 
     Examples
     --------
@@ -26255,7 +26260,13 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
     [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
     """
-    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    if srid is None:
+        return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    else:
+        from pyspark.sql.functions import lit
+        srid = _enum_to_value(srid)
+        srid = lit(srid) if isinstance(srid, int) else srid
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 @_try_remote_functions
