@@ -254,15 +254,15 @@ class SeriesDateTimeTestsMixin:
 
     def test_round(self):
         self.check_func(lambda x: x.dt.round(freq="min"))
-        self.check_func(lambda x: x.dt.round(freq="H"))
+        self.check_func(lambda x: x.dt.round(freq="h"))
 
     def test_floor(self):
         self.check_func(lambda x: x.dt.floor(freq="min"))
-        self.check_func(lambda x: x.dt.floor(freq="H"))
+        self.check_func(lambda x: x.dt.floor(freq="h"))
 
     def test_ceil(self):
         self.check_func(lambda x: x.dt.ceil(freq="min"))
-        self.check_func(lambda x: x.dt.ceil(freq="H"))
+        self.check_func(lambda x: x.dt.ceil(freq="h"))
 
     @unittest.skip("Unsupported locale setting")
     def test_month_name(self):
