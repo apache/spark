@@ -97,15 +97,15 @@ class ArrowPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
-    _timeZoneId: String,
+    schema: StructType,
+    timeZoneId: String,
     largeVarTypes: Boolean,
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
   extends RowInputArrowPythonRunner(
-    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes,
+    funcs, evalType, argOffsets, schema, timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
