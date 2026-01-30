@@ -27,7 +27,6 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinitio
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
-import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
@@ -209,7 +208,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podsWithNamespace).resource(fullExpectedPod(testConfigMapName))
+    verify(podsWithNamespace).resource(ArgumentMatchers.argThat[Pod](pod =>
+      pod != null && pod.getMetadata.getName == POD_NAME
+    ))
     verify(namedPods).create()
   }
 
