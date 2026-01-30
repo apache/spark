@@ -32,8 +32,13 @@ object ResolveSetCatalogCommand extends Rule[LogicalPlan] {
     case cmd @ SetCatalogCommand(expr) =>
       val resolvedExpr = expr match {
         case UnresolvedAttribute(nameParts) =>
-          // Convert `SET CATALOG foo` into Literal("foo").
-          Literal(nameParts.mkString("."))
+          // Convert `SET CATALOG foo` into Literal("`foo`").
+          // Wrap each identifier part with backticks to handle special characters.
+          // Escape any existing backticks in the identifier name by doubling them.
+          Literal(nameParts.map { part =>
+            val escaped = part.replace("`", "``")
+            s"`$escaped`"
+          }.mkString("."))
 
         case other =>
           // Other expressions (identifier(), CAST, CONCAT, etc.) are resolved
