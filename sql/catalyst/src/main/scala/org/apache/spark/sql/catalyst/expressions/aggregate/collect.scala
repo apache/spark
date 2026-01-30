@@ -96,8 +96,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 /**
  * Collect a list of elements.
  *
- * @param ignoreNulls when true, null values are skipped (Hive behavior). When false, null values
- *                    are preserved in the result array (ANSI behavior).
+ * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
+ *                    When false (RESPECT NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
@@ -132,18 +132,11 @@ case class CollectList(
       buffer: mutable.ArrayBuffer[Any],
       input: InternalRow): mutable.ArrayBuffer[Any] = {
     val value = child.eval(input)
-    if (ignoreNulls) {
-      // Hive behavior: skip null values
-      if (value != null) {
-        buffer += convertToBufferElement(value)
-      }
-    } else {
-      // ANSI behavior: preserve null values
-      if (value != null) {
-        buffer += convertToBufferElement(value)
-      } else {
-        buffer += null
-      }
+    if (value != null) {
+      buffer += convertToBufferElement(value)
+    } else if (!ignoreNulls) {
+      // RESPECT NULLS: preserve null values in result
+      buffer += null
     }
     buffer
   }
