@@ -150,7 +150,7 @@ case class ST_GeogFromWKB(wkb: Expression)
 
 /**
  * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value. The SRID
- * value of the returned GEOGRAPHY value is the provided SRID. If not SRID value is provided, the
+ * value of the returned GEOMETRY value is the provided SRID. If not SRID value is provided, the
  * SRID value of the returned GEOMETRY value is set to 0.
  * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
  * for more details on the WKB format.
