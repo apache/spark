@@ -324,7 +324,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.resource(fullExpectedPod(testConfigMapName, expectedKeyToPaths)))
       .thenReturn(namedPods)
     when(namedPods.forceConflicts()).thenReturn(namedPods)
-    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(testConfigMapName, expectedKeyToPaths))
+    when(namedPods.serverSideApply())
+      .thenReturn(podWithOwnerReference(testConfigMapName, expectedKeyToPaths))
 
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
