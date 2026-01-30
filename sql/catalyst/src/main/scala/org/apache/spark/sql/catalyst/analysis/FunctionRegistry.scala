@@ -553,6 +553,8 @@ object FunctionRegistry {
     expression[VectorL2Distance]("vector_l2_distance"),
     expression[VectorNorm]("vector_norm"),
     expression[VectorNormalize]("vector_normalize"),
+    expression[VectorAvg]("vector_avg"),
+    expression[VectorSum]("vector_sum"),
 
     // string functions
     expression[Ascii]("ascii"),
