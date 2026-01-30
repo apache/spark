@@ -4318,8 +4318,6 @@ class GetStatusRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class OperationStatusRequest(google.protobuf.message.Message):
-        """Request to get status of operations."""
-
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         OPERATION_IDS_FIELD_NUMBER: builtins.int
@@ -4356,7 +4354,7 @@ class GetStatusRequest(google.protobuf.message.Message):
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     OPERATION_STATUS_FIELD_NUMBER: builtins.int
-    EXTENSION_FIELD_NUMBER: builtins.int
+    EXTENSIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -4385,9 +4383,12 @@ class GetStatusRequest(google.protobuf.message.Message):
     """
     @property
     def operation_status(self) -> global___GetStatusRequest.OperationStatusRequest:
-        """Get status of operations in the session."""
+        """(Optional)
+
+        Get status of operations in the session.
+        """
     @property
-    def extension(
+    def extensions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         google.protobuf.any_pb2.Any
@@ -4401,7 +4402,7 @@ class GetStatusRequest(google.protobuf.message.Message):
         client_type: builtins.str | None = ...,
         client_observed_server_side_session_id: builtins.str | None = ...,
         operation_status: global___GetStatusRequest.OperationStatusRequest | None = ...,
-        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+        extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -4410,6 +4411,8 @@ class GetStatusRequest(google.protobuf.message.Message):
             b"_client_observed_server_side_session_id",
             "_client_type",
             b"_client_type",
+            "_operation_status",
+            b"_operation_status",
             "client_observed_server_side_session_id",
             b"client_observed_server_side_session_id",
             "client_type",
@@ -4427,12 +4430,14 @@ class GetStatusRequest(google.protobuf.message.Message):
             b"_client_observed_server_side_session_id",
             "_client_type",
             b"_client_type",
+            "_operation_status",
+            b"_operation_status",
             "client_observed_server_side_session_id",
             b"client_observed_server_side_session_id",
             "client_type",
             b"client_type",
-            "extension",
-            b"extension",
+            "extensions",
+            b"extensions",
             "operation_status",
             b"operation_status",
             "session_id",
@@ -4452,6 +4457,10 @@ class GetStatusRequest(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_operation_status", b"_operation_status"]
+    ) -> typing_extensions.Literal["operation_status"] | None: ...
 
 global___GetStatusRequest = GetStatusRequest
 
@@ -4494,11 +4503,11 @@ class GetStatusResponse(google.protobuf.message.Message):
         OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 6
 
         OPERATION_ID_FIELD_NUMBER: builtins.int
-        STATUS_FIELD_NUMBER: builtins.int
+        STATE_FIELD_NUMBER: builtins.int
         EXTENSIONS_FIELD_NUMBER: builtins.int
         operation_id: builtins.str
         """The operation_id of the operation."""
-        status: global___GetStatusResponse.OperationStatus.OperationState.ValueType
+        state: global___GetStatusResponse.OperationStatus.OperationState.ValueType
         """The current status of the operation."""
         @property
         def extensions(
@@ -4511,19 +4520,19 @@ class GetStatusResponse(google.protobuf.message.Message):
             self,
             *,
             operation_id: builtins.str = ...,
-            status: global___GetStatusResponse.OperationStatus.OperationState.ValueType = ...,
+            state: global___GetStatusResponse.OperationStatus.OperationState.ValueType = ...,
             extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "extensions", b"extensions", "operation_id", b"operation_id", "status", b"status"
+                "extensions", b"extensions", "operation_id", b"operation_id", "state", b"state"
             ],
         ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
-    OPERATION_STATUS_FIELD_NUMBER: builtins.int
+    OPERATION_STATUSES_FIELD_NUMBER: builtins.int
     EXTENSIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """Session id of the session for which the status was requested."""
@@ -4532,7 +4541,7 @@ class GetStatusResponse(google.protobuf.message.Message):
     session has not changed.
     """
     @property
-    def operation_status(
+    def operation_statuses(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___GetStatusResponse.OperationStatus
@@ -4550,7 +4559,7 @@ class GetStatusResponse(google.protobuf.message.Message):
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        operation_status: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
+        operation_statuses: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
         | None = ...,
         extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
@@ -4559,8 +4568,8 @@ class GetStatusResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "extensions",
             b"extensions",
-            "operation_status",
-            b"operation_status",
+            "operation_statuses",
+            b"operation_statuses",
             "server_side_session_id",
             b"server_side_session_id",
             "session_id",

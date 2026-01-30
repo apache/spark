@@ -1245,13 +1245,14 @@ message GetStatusRequest {
   // can use this to validate that the server side session has not changed.
   optional string client_observed_server_side_session_id = 4;
 
+  // (Optional)
+  //
   // Get status of operations in the session.
-  OperationStatusRequest operation_status = 5;
+  optional OperationStatusRequest operation_status = 5;
 
   // Extension point for custom status request types.
-  repeated google.protobuf.Any extension = 999;
+  repeated google.protobuf.Any extensions = 999;
 
-  // Request to get status of operations.
   message OperationStatusRequest {
     // Get status of operations with these operation_ids.
     // If unset or empty, returns status of all operations in the session.
@@ -1272,7 +1273,7 @@ message GetStatusResponse {
   string server_side_session_id = 2;
 
   // Status information about requested operations.
-  repeated OperationStatus operation_status = 3;
+  repeated OperationStatus operation_statuses = 3;
 
   // Extension point for custom status response types.
   repeated google.protobuf.Any extensions = 999;
@@ -1283,7 +1284,10 @@ message GetStatusResponse {
     string operation_id = 1;
 
     // The current status of the operation.
-    OperationState status = 2;
+    OperationState state = 2;
+
+    // Extension point for custom operation-level status fields.
+    repeated google.protobuf.Any extensions = 999;
 
     enum OperationState {
       OPERATION_STATE_UNSPECIFIED = 0;
@@ -1294,9 +1298,6 @@ message GetStatusResponse {
       OPERATION_STATE_FAILED = 5;
       OPERATION_STATE_CANCELLED = 6;
     }
-
-    // Extension point for custom operation-level status fields.
-    repeated google.protobuf.Any extensions = 999;
   }
 }
 
