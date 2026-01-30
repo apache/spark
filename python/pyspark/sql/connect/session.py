@@ -69,7 +69,7 @@ from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamUDFSerializer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
@@ -630,18 +630,20 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
+            # Convert pandas data to Arrow RecordBatch
+            from pyspark.sql.conversion import PandasBatchTransformer
 
-            _table = pa.Table.from_batches(
-                [
-                    ser._create_batch(
-                        [
-                            (c, at, st)
-                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-                        ]
-                    )
-                ]
+            batch_data = [
+                (c, at, st) for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+            ]
+            record_batch = PandasBatchTransformer.to_arrow(
+                batch_data,
+                timezone=cast(str, timezone),
+                safecheck=safecheck == "true",
+                int_to_decimal_coercion_enabled=False,
             )
+
+            _table = pa.Table.from_batches([record_batch])
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None

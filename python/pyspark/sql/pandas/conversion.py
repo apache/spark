@@ -31,6 +31,7 @@ from warnings import warn
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.util import _load_from_socket
+from pyspark.sql.conversion import PandasBatchTransformer
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
 from pyspark.sql.types import (
@@ -807,7 +808,7 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+        from pyspark.sql.pandas.serializers import ArrowStreamUDFSerializer
         from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
@@ -878,8 +879,8 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
-        arrow_data = [
+        # Create list of Arrow (columns, arrow_type, spark_type) for conversion to RecordBatch
+        pandas_data = [
             [
                 (
                     c,
@@ -893,9 +894,20 @@ class SparkConversionMixin:
             for pdf_slice in pdf_slices
         ]
 
+        # Convert pandas data to Arrow RecordBatches before serialization
+        arrow_data = map(
+            lambda batch_data: PandasBatchTransformer.to_arrow(
+                batch_data,
+                timezone=timezone,
+                safecheck=safecheck,
+                int_to_decimal_coercion_enabled=False,
+            ),
+            pandas_data,
+        )
+
         jsparkSession = self._jsparkSession
 
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
+        ser = ArrowStreamUDFSerializer(timezone, safecheck, False)
 
         @no_type_check
         def reader_func(temp_filename):
