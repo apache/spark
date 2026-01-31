@@ -301,6 +301,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
         """
         Override to handle type coercion for ArrowUDTF outputs.
         ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
+
+        The function performs type coercion on each batch based on arrow_return_type,
+        then wraps the result into a struct column before serialization.
         """
         import pyarrow as pa
 
@@ -310,32 +313,24 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
 
-                # Batch is already wrapped into a struct column by worker (wrap_arrow_udtf)
-                # Unwrap it first to access individual columns
-                if batch.num_columns == 1 and batch.column(0).type == pa.struct(
-                    list(arrow_return_type)
-                ):
-                    # Batch is wrapped, unwrap it
-                    unwrapped_batch = ArrowBatchTransformer.flatten_struct(batch, column_index=0)
-                elif batch.num_columns == 0:
-                    # Empty batch: wrap it back to struct column
+                # Handle empty batch case (no columns)
+                if batch.num_columns == 0:
+                    # Empty batch: no coercion needed, wrap it back to struct column
                     coerced_batch = ArrowBatchTransformer.wrap_struct(batch)
                     yield coerced_batch
                     continue
-                else:
-                    # Batch is not wrapped (shouldn't happen, but handle it)
-                    unwrapped_batch = batch
 
-                # Handle empty struct case specially (no columns to coerce)
+                # Handle empty struct case (no fields expected)
                 if len(arrow_return_type) == 0:
-                    # Empty struct: wrap unwrapped batch (which should also be empty) back to struct column
-                    coerced_batch = ArrowBatchTransformer.wrap_struct(unwrapped_batch)
+                    # Empty struct: wrap batch back to struct column
+                    coerced_batch = ArrowBatchTransformer.wrap_struct(batch)
                     yield coerced_batch
                     continue
 
                 # Check field names match
                 expected_field_names = [field.name for field in arrow_return_type]
-                actual_field_names = unwrapped_batch.schema.names
+                actual_field_names = batch.schema.names
+
                 if expected_field_names != actual_field_names:
                     raise PySparkTypeError(
                         "Target schema's field names are not matching the record batch's "
@@ -343,33 +338,30 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
                         f"Expected: {expected_field_names}, but got: {actual_field_names}."
                     )
 
-                # Use zip_batches for type coercion: create (array, type) tuples
-                arrays_and_types = [
-                    (unwrapped_batch.column(i), field.type)
-                    for i, field in enumerate(arrow_return_type)
-                ]
-                try:
-                    coerced_batch = ArrowBatchTransformer.zip_batches(
-                        arrays_and_types, safecheck=True
-                    )
-                except PySparkTypeError as e:
-                    # Re-raise with UDTF-specific error
-                    # Find the first array that failed type coercion
-                    # arrays_and_types contains (array, field_type) tuples
-                    for array, expected_type in arrays_and_types:
-                        if array.type != expected_type:
+                # Create (array, target_type) tuples for type coercion
+                coerced_arrays = []
+                for i, field in enumerate(arrow_return_type):
+                    original_array = batch.column(i)
+                    if original_array.type == field.type:
+                        coerced_arrays.append(original_array)
+                    else:
+                        try:
+                            coerced_array = original_array.cast(
+                                target_type=field.type, safe=True
+                            )
+                            coerced_arrays.append(coerced_array)
+                        except (pa.ArrowInvalid, pa.ArrowTypeError):
                             raise PySparkRuntimeError(
                                 errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
                                 messageParameters={
-                                    "expected": str(expected_type),
-                                    "actual": str(array.type),
+                                    "expected": str(field.type),
+                                    "actual": str(original_array.type),
                                 },
-                            ) from e
-                    # If no type mismatch found, re-raise original error
-                    raise
+                            )
 
-                # Rename columns to match expected field names
-                coerced_batch = coerced_batch.rename_columns(expected_field_names)
+                coerced_batch = pa.RecordBatch.from_arrays(
+                    coerced_arrays, names=expected_field_names
+                )
                 # Wrap into struct column for JVM
                 coerced_batch = ArrowBatchTransformer.wrap_struct(coerced_batch)
                 yield coerced_batch
