@@ -481,7 +481,7 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
 }
 
 class OfflineStateRepartitionTransformWithStateCkptV2IntegrationSuite
-  extends OfflineStateRepartitionCkptV1IntegrationSuite {
+  extends OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
