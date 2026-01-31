@@ -3234,6 +3234,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "rightDim" -> rightDim.toString))
   }
 
+  def invalidVectorNormDegreeError(
+    function: String,
+    degree: Float): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VECTOR_NORM_DEGREE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "degree" -> degree.toString))
+  }
+
   def tupleInvalidInputSketchBuffer(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",

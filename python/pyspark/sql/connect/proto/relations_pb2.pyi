@@ -1161,6 +1161,7 @@ class Read(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
         PREDICATES_FIELD_NUMBER: builtins.int
+        SOURCE_NAME_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -1192,6 +1193,11 @@ class Read(google.protobuf.message.Message):
 
             This is only supported by the JDBC data source.
             """
+        source_name: builtins.str
+        """(Optional) A user-provided name for the streaming source.
+        This name is used in checkpoint metadata and enables stable checkpoint locations
+        for source evolution.
+        """
         def __init__(
             self,
             *,
@@ -1200,6 +1206,7 @@ class Read(google.protobuf.message.Message):
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
             predicates: collections.abc.Iterable[builtins.str] | None = ...,
+            source_name: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -1208,10 +1215,14 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -1221,6 +1232,8 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "options",
@@ -1231,6 +1244,8 @@ class Read(google.protobuf.message.Message):
                 b"predicates",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> None: ...
         @typing.overload
@@ -1241,6 +1256,10 @@ class Read(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
         ) -> typing_extensions.Literal["schema"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_source_name", b"_source_name"]
+        ) -> typing_extensions.Literal["source_name"] | None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int

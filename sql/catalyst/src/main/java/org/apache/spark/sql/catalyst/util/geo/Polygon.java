@@ -14,10 +14,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.util.geo;
 
-package org.apache.spark.sql.catalyst.plans.logical
+import java.util.List;
 
 /**
- * A [[LogicalPlan]] operator that does not use the cached results stored in CacheManager
+ * Represents a Polygon geometry.
  */
-trait IgnoreCachedData extends LogicalPlan {}
+class Polygon extends GeometryModel {
+  private final List<Ring> rings;
+
+  Polygon(List<Ring> rings, int srid, boolean hasZ, boolean hasM) {
+    super(GeoTypeId.POLYGON, srid, hasZ, hasM);
+    this.rings = rings;
+  }
+
+  List<Ring> getRings() {
+    return rings;
+  }
+
+  Ring getExteriorRing() {
+    return rings.isEmpty() ? null : rings.get(0);
+  }
+
+  int getNumInteriorRings() {
+    return Math.max(0, rings.size() - 1);
+  }
+
+  Ring getInteriorRingN(int n) {
+    return rings.get(n + 1);
+  }
+
+  @Override
+  boolean isEmpty() {
+    return rings.isEmpty() || rings.stream().allMatch(Ring::isEmpty);
+  }
+
+  @Override
+  int getDimensionCount() {
+    return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
+  }
+}
