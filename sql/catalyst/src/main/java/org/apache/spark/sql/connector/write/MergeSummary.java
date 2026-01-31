@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving;
 public interface MergeSummary extends WriteSummary {
 
   /**
-   * Returns the number of source rows.
+   * Returns the number of source rows, or -1 if not found.
    */
   long numSourceRows();
 
