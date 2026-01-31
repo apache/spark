@@ -614,6 +614,24 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-server</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-common</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-gzip</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
