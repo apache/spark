@@ -29,7 +29,7 @@ on:
       python:
         required: false
         type: string
-        default: 3.11
+        default: 3.12
       branch:
         description: Branch to run the build against
         required: false

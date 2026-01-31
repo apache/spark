@@ -148,7 +148,19 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         return spark_type.simpleString()
 
     def repr_value(self, value):
-        return f"{str(value)}({type(value).__name__})"
+        return f"{str(value)}@{type(value).__name__}"
+
+    def test_str_repr(self):
+        self.assertEqual(
+            len(self.test_types),
+            len(set(self.repr_type(t) for t in self.test_types)),
+            "String representations of types should be different!",
+        )
+        self.assertEqual(
+            len(self.test_data),
+            len(set(self.repr_value(d) for d in self.test_data)),
+            "String representations of values should be different!",
+        )
 
     def test_python_return_type_coercion_vanilla(self):
         self._run_udf_return_type_coercion(
@@ -211,11 +223,12 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 result = repr(row[0])
                 # Normalize Java object hash codes to make tests deterministic
                 result = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result)
-                # "\t" is used as the delimiter
-                result = result.replace("\t", "")
-                result = result[:30]
+                result = result[:40]
             except Exception:
                 result = "X"
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
 
             err = None
             if testing:

@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
     from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
@@ -567,13 +568,13 @@ class SparkSession(SparkConversionMixin):
                     module.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-        # Spark Connect-specific API
-        @remote_only
         def create(self) -> "SparkSession":
-            """Creates a new SparkSession. Can only be used in the context of Spark Connect
-            and will throw an exception otherwise.
+            """Creates a new SparkSession.
 
             .. versionadded:: 3.5.0
+
+            .. versionchanged:: 4.2.0
+                Supports creating a SparkSession in Classic mode.
 
             Returns
             -------
@@ -583,7 +584,10 @@ class SparkSession(SparkConversionMixin):
             -----
             This method will update the default and/or active session if they are not set.
             """
+            from pyspark.core.context import SparkContext
+
             opts = dict(self._options)
+            # Connect mode
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
@@ -602,11 +606,20 @@ class SparkSession(SparkConversionMixin):
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
+            # Classic mode
             else:
-                raise PySparkRuntimeError(
-                    errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-                    messageParameters={"feature": "SparkSession.builder.create"},
-                )
+                with self._lock:
+                    # Build SparkConf from options
+                    sparkConf = SparkConf()
+                    for key, value in self._options.items():
+                        sparkConf.set(key, str(value))
+
+                    sc = SparkContext.getOrCreate(sparkConf)
+                    jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
+                    # Create a new SparkSession in the JVM
+                    jSparkSession = jSparkSessionClass.builder().config(self._options).create()
+                    # Wrap the JVM SparkSession in a Python SparkSession
+                    return SparkSession(sc, jsparkSession=jSparkSession, options=self._options)
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
@@ -2014,6 +2027,24 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.streaming import StreamingQueryManager
 
         return StreamingQueryManager(self._jsparkSession.streams())
+
+    @cached_property
+    def _streamingCheckpointManager(self) -> "StreamingCheckpointManager":
+        """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
+
+        .. versionadded:: 4.2.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`StreamingCheckpointManager`
+        """
+        from pyspark.sql.streaming.query import StreamingCheckpointManager
+
+        return StreamingCheckpointManager(self._jsparkSession.streamingCheckpointManager())
 
     @property
     def tvf(self) -> "TableValuedFunction":

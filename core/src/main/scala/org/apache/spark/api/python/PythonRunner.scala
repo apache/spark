@@ -625,6 +625,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val bootTime = stream.readLong()
       val initTime = stream.readLong()
       val finishTime = stream.readLong()
+      val processingTimeMs = stream.readLong()
       val boot = bootTime - startTime
       val init = initTime - bootTime
       val finish = finishTime - initTime
@@ -647,6 +648,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       metrics.get("pythonBootTime").foreach(_.add(boot))
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
+      metrics.get("pythonProcessingTime").foreach(_.add(processingTimeMs))
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
       context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
