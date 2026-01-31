@@ -510,6 +510,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private object SourceAncestor {
+    // Bypass known node types that do not change numOutputRows metric
     def unapply(p: SparkPlan): Option[SparkPlan] = p match {
       case w: WholeStageCodegenExec => Some(w.child)
       case i: InputAdapter => Some(i.child)
