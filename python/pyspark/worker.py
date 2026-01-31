@@ -2924,9 +2924,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # SQL_MAP_PANDAS_ITER_UDF, SQL_MAP_ARROW_ITER_UDF, SQL_SCALAR_ARROW_UDF,
             # SQL_SCALAR_ARROW_ITER_UDF, SQL_ARROW_BATCHED_UDF (legacy mode)
             if is_legacy_arrow_batched_udf:
-                # Read input type from stream (required for protocol), but conversion
-                # is handled in wrap_arrow_batch_udf_legacy
-                _parse_datatype_json_string(utf8_deserializer.loads(infile))
+                # Read input type from stream - needed for proper UDT conversion
+                legacy_input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            else:
+                legacy_input_type = None
             ser = ArrowStreamGroupSerializer()
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
@@ -3458,6 +3459,19 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # Merge all RecordBatches horizontally
             return ArrowBatchTransformer.zip_batches(result_batches)
 
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
+        # Regular batched UDF uses pickle serialization, no pyarrow needed
+        # Input: individual rows (list of column values)
+        # Output: individual results
+        def mapper(row):
+            # row is a list of column values [col0, col1, col2, ...]
+            # Each UDF wrapper takes its columns and returns the result
+            results = [f(*[row[o] for o in arg_offsets]) for arg_offsets, f in udfs]
+            if len(results) == 1:
+                return results[0]
+            else:
+                return tuple(results)
+
     else:
         import pyarrow as pa
 
@@ -3474,10 +3488,21 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             2. Call each wrapper, collect (result, arrow_type) pairs
             3. Output conversion: Pandas/Arrow → Arrow RecordBatch
             """
-            # Step 1: Input conversion (Arrow → Pandas for pandas UDF)
+            # Step 1: Input conversion (Arrow → Pandas for pandas UDF or legacy arrow batched UDF)
             if is_scalar_pandas_udf:
                 data = ArrowBatchTransformer.to_pandas(
                     batch, timezone=runner_conf.timezone, df_for_struct=True
+                )
+            elif is_legacy_arrow_batched_udf:
+                # Legacy mode: convert Arrow to pandas Series for wrap_arrow_batch_udf_legacy
+                # which expects *args: pd.Series input
+                # Use legacy_input_type schema for proper UDT conversion
+                data = ArrowBatchTransformer.to_pandas(
+                    batch,
+                    timezone=runner_conf.timezone,
+                    schema=legacy_input_type,
+                    struct_in_pandas="row",
+                    ndarray_as_list=True,
                 )
             else:
                 data = batch
@@ -3487,12 +3512,24 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             results_with_types = [f(*[data[o] for o in arg_offsets]) for arg_offsets, f in udfs]
 
             # Step 3: Output conversion
-            # For arrow batched UDF, return raw result (serializer handles conversion)
-            if is_arrow_batched_udf:
+            # For arrow batched UDF (non-legacy), return raw result (serializer handles conversion)
+            if is_arrow_batched_udf and not is_legacy_arrow_batched_udf:
                 if len(results_with_types) == 1:
                     return results_with_types[0]
                 else:
                     return results_with_types
+
+            # For legacy arrow batched UDF, convert pandas results to Arrow
+            # Results are (pandas.Series, arrow_type, spark_type) tuples
+            if is_legacy_arrow_batched_udf:
+                return PandasBatchTransformer.to_arrow(
+                    results_with_types,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    arrow_cast=True,
+                    struct_in_pandas="row",
+                )
 
             # For scalar pandas UDF, convert all results to Arrow at once
             if is_scalar_pandas_udf:

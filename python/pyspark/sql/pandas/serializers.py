@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     IntegerType,
 )
 
+
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
@@ -1037,20 +1038,37 @@ class TransformWithStateInPandasSerializer(ArrowStreamUDFSerializer):
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
+        from pyspark.sql.conversion import ArrowBatchTransformer
 
-        def flatten_iterator():
-            # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
+        def create_batches():
+            # iterator: iter[list[(iter[pandas.DataFrame], arrow_return_type)]]
             for packed in iterator:
-                iter_pdf, _ = packed[0]
+                iter_pdf, arrow_return_type = packed[0]
                 for pdf in iter_pdf:
-                    yield PandasBatchTransformer.to_arrow(
-                        pdf,
+                    # Extract columns from DataFrame and pair with Arrow types
+                    # Similar to wrap_grouped_map_pandas_udf pattern
+                    if self._assign_cols_by_name and any(
+                        isinstance(name, str) for name in pdf.columns
+                    ):
+                        series_list = [(pdf[field.name], field.type) for field in arrow_return_type]
+                    else:
+                        series_list = [
+                            (pdf[pdf.columns[i]].rename(field.name), field.type)
+                            for i, field in enumerate(arrow_return_type)
+                        ]
+                    batch = PandasBatchTransformer.to_arrow(
+                        series_list,
                         timezone=self._timezone,
                         safecheck=self._safecheck,
                         int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                        arrow_cast=self._arrow_cast,
                     )
+                    # Wrap columns as struct for JVM compatibility
+                    yield ArrowBatchTransformer.wrap_struct(batch)
 
-        super().dump_stream(flatten_iterator(), stream)
+        # Write START_ARROW_STREAM marker before first batch
+        batches = self._write_stream_start(create_batches(), stream)
+        ArrowStreamSerializer.dump_stream(self, batches, stream)
 
 
 class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):
@@ -1190,7 +1208,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         else EMPTY_DATAFRAME.copy(),
                     )
 
-        _batches = super().load_stream(stream)
+        # Call ArrowStreamSerializer.load_stream directly to get raw Arrow batches
+        # (not the parent's load_stream which returns processed data with mode info)
+        _batches = ArrowStreamSerializer.load_stream(self, stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
