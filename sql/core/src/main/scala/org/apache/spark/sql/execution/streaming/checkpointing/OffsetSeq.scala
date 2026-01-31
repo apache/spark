@@ -373,22 +373,23 @@ object OffsetSeqControlBatchInfo {
  * and to integrate with the query evolution feature.
  *
  * @param activeSourceName The name of the currently active source being processed.
- * @param completedSources Set of source names that have finished processing.
- * @param sourceNames All source names in the order they should be processed.
+ * @param allSourceNames All source names in the order they should be processed.
+ * @param completedSourceNames Set of source names that have finished processing.
  */
 case class SequentialUnionOffset(
     activeSourceName: String,
-    completedSources: Set[String],
-    sourceNames: Seq[String]) extends OffsetV2 {
+    allSourceNames: Seq[String],
+    completedSourceNames: Set[String]) extends OffsetV2 {
 
   // Validate on construction
-  require(sourceNames.nonEmpty, "sourceNames must not be empty")
-  require(sourceNames.contains(activeSourceName),
-    s"activeSourceName '$activeSourceName' must be in sourceNames: ${sourceNames.mkString(", ")}")
-  require(completedSources.subsetOf(sourceNames.toSet),
-    s"completedSources must be a subset of sourceNames")
-  require(!completedSources.contains(activeSourceName),
-    s"activeSourceName '$activeSourceName' cannot be in completedSources")
+  require(allSourceNames.nonEmpty, "allSourceNames must not be empty")
+  require(allSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' must be in allSourceNames: " +
+      s"${allSourceNames.mkString(", ")}")
+  require(completedSourceNames.subsetOf(allSourceNames.toSet),
+    s"completedSourceNames must be a subset of allSourceNames")
+  require(!completedSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' cannot be in completedSourceNames")
 
   override def json(): String = Serialization.write(this)(SequentialUnionOffset.format)
 }
