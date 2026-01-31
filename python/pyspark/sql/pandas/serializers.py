@@ -227,46 +227,18 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     The serializer handles Arrow stream I/O and START signal, while transformation logic
     (flatten/wrap struct, pandas conversion) is handled by worker wrappers.
 
-    Used by
-    -------
-    - SQL_MAP_ARROW_ITER_UDF: DataFrame.mapInArrow()
-    - SQL_GROUPED_MAP_ARROW_UDF: GroupedData.applyInArrow()
-    - SQL_GROUPED_MAP_ARROW_ITER_UDF: GroupedData.applyInArrow() with iter
-    - SQL_GROUPED_MAP_PANDAS_UDF: GroupedData.apply()
-    - SQL_GROUPED_MAP_PANDAS_ITER_UDF: GroupedData.apply() with iter
-    - SQL_COGROUPED_MAP_ARROW_UDF: DataFrame.groupby().cogroup().applyInArrow()
-    - SQL_COGROUPED_MAP_PANDAS_UDF: DataFrame.groupby().cogroup().apply()
-    - SQL_GROUPED_AGG_ARROW_UDF: GroupedData.agg() with arrow UDF
-    - SQL_GROUPED_AGG_ARROW_ITER_UDF: GroupedData.agg() with arrow iter UDF
-    - SQL_GROUPED_AGG_PANDAS_UDF: GroupedData.agg() with pandas UDF
-    - SQL_GROUPED_AGG_PANDAS_ITER_UDF: GroupedData.agg() with pandas iter UDF
-    - SQL_WINDOW_AGG_ARROW_UDF: Window aggregation with arrow UDF
-    - SQL_SCALAR_ARROW_UDF: Scalar arrow UDF
-    - SQL_SCALAR_ARROW_ITER_UDF: Scalar arrow iter UDF
-
     Parameters
     ----------
-    safecheck : bool, optional
-        Safecheck flag for ArrowBatchUDFSerializer subclass
     num_dfs : int, optional
         Number of DataFrames per group:
         - 0: Non-grouped mode (default) - yields all batches as single stream
         - 1: Grouped mode - yields one iterator of batches per group
         - 2: Cogrouped mode - yields tuple of two iterators per group
-    arrow_cast : bool, optional
-        Arrow cast flag for ArrowBatchUDFSerializer subclass (default: False)
     """
 
-    def __init__(
-        self,
-        safecheck=None,
-        num_dfs: int = 0,
-        arrow_cast: bool = False,
-    ):
+    def __init__(self, num_dfs: int = 0):
         super().__init__()
-        self._safecheck = safecheck
         self._num_dfs = num_dfs
-        self._arrow_cast = arrow_cast
 
     def load_stream(self, stream):
         """
@@ -478,12 +450,9 @@ class ArrowBatchUDFSerializer(ArrowStreamGroupSerializer):
         int_to_decimal_coercion_enabled: bool,
         binary_as_bytes: bool,
     ):
-        super().__init__(
-            safecheck=safecheck,
-            arrow_cast=True,
-            num_dfs=0,
-        )
+        super().__init__(num_dfs=0)
         assert isinstance(input_type, StructType)
+        self._safecheck = safecheck
         self._input_type = input_type
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
         self._binary_as_bytes = binary_as_bytes
