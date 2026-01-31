@@ -88,7 +88,7 @@ class ArrowBatchTransformer:
         Used by
         -------
         - ArrowStreamGroupSerializer
-        - ArrowStreamArrowUDTFSerializer
+        - SQL_ARROW_UDTF mapper
         - SQL_MAP_ARROW_ITER_UDF mapper
         - SQL_GROUPED_MAP_ARROW_UDF mapper
         - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
@@ -110,7 +110,7 @@ class ArrowBatchTransformer:
         - wrap_grouped_map_arrow_iter_udf
         - wrap_cogrouped_map_arrow_udf
         - wrap_arrow_batch_iter_udf
-        - ArrowStreamArrowUDTFSerializer.dump_stream
+        - SQL_ARROW_UDTF mapper
         - TransformWithStateInPySparkRowSerializer.dump_stream
         """
         import pyarrow as pa
@@ -122,6 +122,67 @@ class ArrowBatchTransformer:
         else:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
+
+    @classmethod
+    def coerce_types(
+        cls, batch: "pa.RecordBatch", arrow_return_type: "pa.StructType"
+    ) -> "pa.RecordBatch":
+        """
+        Apply type coercion to a RecordBatch based on expected schema.
+
+        This method:
+        1. Handles empty batches (no columns or empty struct) - returns as-is
+        2. Validates field names match expected schema
+        3. Casts arrays to expected types if needed (safe casting)
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch
+            Input RecordBatch to coerce
+        arrow_return_type : pa.StructType
+            Expected Arrow schema for type coercion
+
+        Returns
+        -------
+        pa.RecordBatch
+            RecordBatch with coerced column types
+        """
+        import pyarrow as pa
+
+        # Handle empty batch case (no columns) or empty struct case
+        if batch.num_columns == 0 or len(arrow_return_type) == 0:
+            return batch
+
+        # Check field names match
+        expected_field_names = [field.name for field in arrow_return_type]
+        actual_field_names = batch.schema.names
+
+        if expected_field_names != actual_field_names:
+            raise PySparkTypeError(
+                "Target schema's field names are not matching the record batch's "
+                "field names. "
+                f"Expected: {expected_field_names}, but got: {actual_field_names}."
+            )
+
+        # Apply type coercion if needed
+        coerced_arrays = []
+        for i, field in enumerate(arrow_return_type):
+            original_array = batch.column(i)
+            if original_array.type == field.type:
+                coerced_arrays.append(original_array)
+            else:
+                try:
+                    coerced_arrays.append(original_array.cast(target_type=field.type, safe=True))
+                except (pa.ArrowInvalid, pa.ArrowTypeError):
+                    raise PySparkRuntimeError(
+                        errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                        messageParameters={
+                            "expected": str(field.type),
+                            "actual": str(original_array.type),
+                        },
+                    )
+
+        return pa.RecordBatch.from_arrays(coerced_arrays, names=expected_field_names)
 
     @classmethod
     def concat_batches(cls, batches: List["pa.RecordBatch"]) -> "pa.RecordBatch":
@@ -1047,10 +1108,20 @@ class LocalDataToArrowConversion:
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
         require_minimum_pyarrow_version()
         import pyarrow as pa
+        from pyspark.sql.pandas.types import to_arrow_type
 
-        assert isinstance(data, list) and len(data) > 0
-
+        assert isinstance(data, list)
         assert schema is not None and isinstance(schema, StructType)
+
+        # Handle empty data - return empty table with correct schema
+        if len(data) == 0:
+            arrow_schema = to_arrow_type(
+                schema, timezone="UTC", prefers_large_types=use_large_var_types
+            )
+            pa_schema = pa.schema(list(arrow_schema))
+            # Create empty arrays for each field to ensure proper table structure
+            empty_arrays = [pa.array([], type=f.type) for f in pa_schema]
+            return pa.Table.from_arrays(empty_arrays, schema=pa_schema)
 
         column_names = schema.fieldNames()
         len_column_names = len(column_names)

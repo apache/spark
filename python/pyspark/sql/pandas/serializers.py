@@ -22,7 +22,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 from itertools import groupby
 
 import pyspark
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
     Serializer,
     read_int,
@@ -207,10 +207,10 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     Unified serializer for Arrow stream operations with optional grouping support.
 
     This serializer handles:
-    - Non-grouped operations: SQL_MAP_ARROW_ITER_UDF (num_dfs=0)
-    - Grouped operations: SQL_GROUPED_MAP_ARROW_UDF, SQL_GROUPED_MAP_PANDAS_UDF (num_dfs=1)
-    - Cogrouped operations: SQL_COGROUPED_MAP_ARROW_UDF, SQL_COGROUPED_MAP_PANDAS_UDF (num_dfs=2)
-    - Grouped aggregations: SQL_GROUPED_AGG_ARROW_UDF, SQL_GROUPED_AGG_PANDAS_UDF (num_dfs=1)
+    - Non-grouped (num_dfs=0): SQL_MAP_ARROW_ITER_UDF, SQL_ARROW_TABLE_UDF, SQL_ARROW_UDTF
+    - Grouped (num_dfs=1): SQL_GROUPED_MAP_ARROW_UDF, SQL_GROUPED_MAP_PANDAS_UDF,
+      SQL_GROUPED_AGG_ARROW_UDF, SQL_GROUPED_AGG_PANDAS_UDF
+    - Cogrouped (num_dfs=2): SQL_COGROUPED_MAP_ARROW_UDF, SQL_COGROUPED_MAP_PANDAS_UDF
 
     The serializer handles Arrow stream I/O and START signal, while transformation logic
     (flatten/wrap struct, pandas conversion) is handled by worker wrappers.
@@ -272,101 +272,6 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
         """
         batches = self._write_stream_start(iterator, stream)
         return super().dump_stream(batches, stream)
-
-
-class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
-    """
-    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
-    """
-
-    def __init__(self, table_arg_offsets=None):
-        super().__init__()
-        self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
-
-    def load_stream(self, stream):
-        """
-        Flatten the struct into Arrow's record batches.
-        """
-        for batch in super().load_stream(stream):
-            # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
-            # keep other columns as Array
-            yield [
-                ArrowBatchTransformer.flatten_struct(batch, column_index=i)
-                if i in self.table_arg_offsets
-                else batch.column(i)
-                for i in range(batch.num_columns)
-            ]
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override to handle type coercion for ArrowUDTF outputs.
-        ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
-
-        The function performs type coercion on each batch based on arrow_return_type,
-        then wraps the result into a struct column before serialization.
-        """
-        import pyarrow as pa
-
-        def apply_type_coercion():
-            for batch, arrow_return_type in iterator:
-                assert isinstance(
-                    arrow_return_type, pa.StructType
-                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
-
-                # Handle empty batch case (no columns)
-                if batch.num_columns == 0:
-                    # Empty batch: no coercion needed, wrap it back to struct column
-                    coerced_batch = ArrowBatchTransformer.wrap_struct(batch)
-                    yield coerced_batch
-                    continue
-
-                # Handle empty struct case (no fields expected)
-                if len(arrow_return_type) == 0:
-                    # Empty struct: wrap batch back to struct column
-                    coerced_batch = ArrowBatchTransformer.wrap_struct(batch)
-                    yield coerced_batch
-                    continue
-
-                # Check field names match
-                expected_field_names = [field.name for field in arrow_return_type]
-                actual_field_names = batch.schema.names
-
-                if expected_field_names != actual_field_names:
-                    raise PySparkTypeError(
-                        "Target schema's field names are not matching the record batch's "
-                        "field names. "
-                        f"Expected: {expected_field_names}, but got: {actual_field_names}."
-                    )
-
-                # Create (array, target_type) tuples for type coercion
-                coerced_arrays = []
-                for i, field in enumerate(arrow_return_type):
-                    original_array = batch.column(i)
-                    if original_array.type == field.type:
-                        coerced_arrays.append(original_array)
-                    else:
-                        try:
-                            coerced_array = original_array.cast(
-                                target_type=field.type, safe=True
-                            )
-                            coerced_arrays.append(coerced_array)
-                        except (pa.ArrowInvalid, pa.ArrowTypeError):
-                            raise PySparkRuntimeError(
-                                errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
-                                messageParameters={
-                                    "expected": str(field.type),
-                                    "actual": str(original_array.type),
-                                },
-                            )
-
-                coerced_batch = pa.RecordBatch.from_arrays(
-                    coerced_arrays, names=expected_field_names
-                )
-                # Wrap into struct column for JVM
-                coerced_batch = ArrowBatchTransformer.wrap_struct(coerced_batch)
-                yield coerced_batch
-
-        return super().dump_stream(apply_type_coercion(), stream)
 
 
 class ArrowStreamUDFSerializer(ArrowStreamSerializer):

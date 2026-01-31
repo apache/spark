@@ -62,7 +62,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
     ArrowBatchUDFSerializer,
-    ArrowStreamArrowUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type, TimestampType
 from pyspark.sql.types import (
@@ -1634,11 +1633,10 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
         else:
             ser = ArrowStreamGroupSerializer()
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
-        # Read the table argument offsets
+        # Read the table argument offsets (used by mapper to flatten struct columns)
         num_table_arg_offsets = read_int(infile)
         table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
-        # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
-        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
+        ser = ArrowStreamGroupSerializer()
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -2480,12 +2478,10 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                         yield row
 
             def convert_to_arrow(data: Iterable):
+                """
+                Convert Python data to coerced Arrow batches.
+                """
                 data = list(check_return_value(data))
-                if len(data) == 0:
-                    # Return one empty RecordBatch to match the left side of the lateral join
-                    return [
-                        pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
-                    ]
 
                 def raise_conversion_error(original_exception):
                     raise PySparkRuntimeError(
@@ -2520,30 +2516,24 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 except Exception as e:
                     raise_conversion_error(e)
 
-                return verify_result(table).to_batches()
+                # Coerce types for each batch
+                table = verify_result(table)
+                batches = table.to_batches()
+                if len(batches) == 0:
+                    # Empty table - create empty batch for lateral join semantics
+                    batches = [pa.RecordBatch.from_pylist([], schema=table.schema)]
+                for batch in batches:
+                    yield ArrowBatchTransformer.coerce_types(batch, arrow_return_type)
 
             def evaluate(*args: list, num_rows=1):
                 if len(args) == 0:
                     for _ in range(num_rows):
-                        for batch in convert_to_arrow(func()):
-                            # Handle empty batch: wrap it immediately for JVM
-                            if batch.num_columns == 0:
-                                yield ArrowBatchTransformer.wrap_struct(batch), arrow_return_type
-                            else:
-                                # Yield (batch, arrow_return_type) tuple for serializer
-                                # Serializer will handle type coercion and wrapping
-                                yield batch, arrow_return_type
-
+                        yield from map(ArrowBatchTransformer.wrap_struct, convert_to_arrow(func()))
                 else:
                     for row in zip(*args):
-                        for batch in convert_to_arrow(func(*row)):
-                            # Handle empty batch: wrap it immediately for JVM
-                            if batch.num_columns == 0:
-                                yield ArrowBatchTransformer.wrap_struct(batch), arrow_return_type
-                            else:
-                                # Yield (batch, arrow_return_type) tuple for serializer
-                                # Serializer will handle type coercion and wrapping
-                                yield batch, arrow_return_type
+                        yield from map(
+                            ArrowBatchTransformer.wrap_struct, convert_to_arrow(func(*row))
+                        )
 
             return evaluate
 
@@ -2576,8 +2566,8 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                         else column.to_pylist()
                         for column, conv in zip(a.columns, converters)
                     ]
-                    # The eval function yields an iterator. Each element produced by this
-                    # iterator is a tuple in the form of (pyarrow.RecordBatch, arrow_return_type).
+                    # The eval function yields wrapped RecordBatches ready for serialization.
+                    # Each batch has been type-coerced and wrapped into a struct column.
                     yield from eval(*[pylist[o] for o in args_kwargs_offsets], num_rows=a.num_rows)
                 if terminate is not None:
                     yield from terminate()
@@ -2611,9 +2601,6 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                             "func": f.__name__,
                         },
                     )
-
-                # We verify the type of the result and do type corerion
-                # in the serializer
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -2644,30 +2631,33 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                     return iter([])
 
             def convert_to_arrow(data: Iterable):
-                data_iter = check_return_value(data)
-
-                # Handle PyArrow Tables/RecordBatches directly
+                """
+                Convert PyArrow data to coerced Arrow batches.
+                """
                 is_empty = True
-                for item in data_iter:
+                for item in check_return_value(data):
                     is_empty = False
                     if isinstance(item, pa.Table):
-                        yield from item.to_batches()
+                        batches = item.to_batches() or [
+                            pa.RecordBatch.from_pylist([], schema=item.schema)
+                        ]
                     elif isinstance(item, pa.RecordBatch):
-                        yield item
+                        batches = [item]
                     else:
-                        # Arrow UDTF should only return Arrow types (RecordBatch/Table)
                         raise PySparkRuntimeError(
                             errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
                             messageParameters={},
                         )
+                    yield from (
+                        ArrowBatchTransformer.coerce_types(verify_result(batch), arrow_return_type)
+                        for batch in batches
+                    )
 
                 if is_empty:
                     yield pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
 
             def evaluate(*args: pa.RecordBatch):
-                # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
-                for batch in convert_to_arrow(func(*args)):
-                    yield verify_result(batch), arrow_return_type
+                yield from map(ArrowBatchTransformer.wrap_struct, convert_to_arrow(func(*args)))
 
             return evaluate
 
@@ -2685,9 +2675,16 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
 
         def mapper(_, it):
             try:
-                for a in it:
-                    # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
-                    yield from eval(*[a[o] for o in args_kwargs_offsets])
+                for batch in it:
+                    # Flatten struct columns at table_arg_offsets into RecordBatches,
+                    # keep other columns as Arrays
+                    args = [
+                        ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                        if i in table_arg_offsets
+                        else batch.column(i)
+                        for i in range(batch.num_columns)
+                    ]
+                    yield from eval(*[args[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
             except SkipRestOfInputTableException:
