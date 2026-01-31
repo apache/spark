@@ -76,6 +76,20 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("IF EXISTS with non-existent database") {
+    // DROP TABLE IF EXISTS should not throw when the database doesn't exist
+    sql(s"DROP TABLE IF EXISTS $catalog.non_existent_db.tbl")
+
+    // DROP TABLE without IF EXISTS should throw when the database doesn't exist
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"DROP TABLE $catalog.non_existent_db.tbl")
+      },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> s"`$catalog`.`non_existent_db`.`tbl`")
+    )
+  }
+
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withNamespaceAndTable("ns", "t") { t =>
       withTempView("t") {

@@ -27,10 +27,10 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFil
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
+class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   private val SORT_MERGE_JOIN = "sortMergeJoin"
   private val SHUFFLED_HASH_JOIN = "shuffledHashJoin"
   private val BROADCAST_HASH_JOIN = "broadcastHashJoin"

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import re
 import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
@@ -239,6 +240,52 @@ class DataStreamReader(OptionUtils):
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
+        return self
+
+    def name(self, source_name: str) -> "DataStreamReader":
+        """Specifies a name for the streaming source.
+
+        This name is used to identify the source in checkpoint metadata and enables
+        stable checkpoint locations for source evolution.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        source_name : str
+            the name to assign to this streaming source. Must contain only ASCII letters,
+            digits, and underscores.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
+        <...streaming.readwriter.DataStreamReader object ...>
+        """
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._jreader = self._jreader.name(source_name)
         return self
 
     def load(

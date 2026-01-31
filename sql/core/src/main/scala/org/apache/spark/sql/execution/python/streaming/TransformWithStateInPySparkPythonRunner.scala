@@ -288,7 +288,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   }
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 }
 

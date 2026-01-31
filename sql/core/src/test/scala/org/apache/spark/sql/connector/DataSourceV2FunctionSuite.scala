@@ -197,10 +197,20 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
     assert(e.message.contains("Catalog testcat does not support DROP FUNCTION"))
 
-    val e1 = intercept[AnalysisException] {
-      sql("DROP FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("DROP FUNCTION default.ns1.ns2.fun")
+      },
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`default`.`ns1`.`ns2`")
+    )
+  }
+
+  test("DROP FUNCTION IF EXISTS in non-existing namespace should not fail") {
+    // This should not throw any exception - the namespace doesn't exist but IF EXISTS is specified
+    sql("DROP FUNCTION IF EXISTS non_existing_db.non_existing_func")
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -223,10 +233,15 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
     assert(e.message.contains("Catalog testcat does not support REFRESH FUNCTION"))
 
-    val e1 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION default.ns1.ns2.fun")
+      },
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`default`.`ns1`.`ns2`")
+    )
   }
 
   test("built-in with non-function catalog should still work") {

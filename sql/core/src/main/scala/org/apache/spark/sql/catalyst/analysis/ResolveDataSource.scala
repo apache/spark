@@ -21,9 +21,10 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnresolvedDataSource}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
@@ -60,8 +61,10 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           source, paths: _*)
       }.getOrElse(loadV1BatchSource(source, userSpecifiedSchema, extraOptions, paths: _*))
 
-    case UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, true, paths) =>
-      // Streaming data source created from DataStreamReader
+    // Handle NamedStreamingRelation wrapping UnresolvedDataSource
+    case NamedStreamingRelation(
+        UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, true, paths),
+        sourceIdentifyingName) =>
       if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
         throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
       }
@@ -83,7 +86,8 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         className = source,
         options = optionsWithPath.originalMap)
       val v1Relation = ds match {
-        case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
+        case _: StreamSourceProvider =>
+          Some(StreamingRelation(v1DataSource, sourceIdentifyingName))
         case _ => None
       }
       ds match {
@@ -107,7 +111,69 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
-                  toAttributes(table.columns.asSchema), None, None, v1Relation)
+                  toAttributes(table.columns.asSchema), None, None, v1Relation,
+                  sourceIdentifyingName)
+
+            // fallback to v1
+            // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
+            case _ => StreamingRelation(v1DataSource, sourceIdentifyingName)
+          }
+
+        case _ =>
+          // Code path for data source v1.
+          StreamingRelation(v1DataSource, sourceIdentifyingName)
+      }
+
+    case UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, true, paths) =>
+      // Streaming data source created from DataStreamReader (no explicit name)
+      if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+        throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
+      }
+      val path = paths.headOption
+      val optionsWithPath = if (path.isEmpty) {
+        extraOptions
+      } else {
+        extraOptions + ("path" -> path.get)
+      }
+
+      val ds = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+        .getConstructor().newInstance()
+      // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
+      // We can't be sure at this point whether we'll actually want to use V2, since we don't know
+      // the writer or whether the query is continuous.
+      val v1DataSource = DataSource(
+        sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = optionsWithPath.originalMap)
+      val v1Relation = ds match {
+        case _: StreamSourceProvider =>
+          Some(StreamingRelation(v1DataSource, Unassigned))
+        case _ => None
+      }
+      ds match {
+        // file source v2 does not support streaming yet.
+        case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            source = provider, conf = sparkSession.sessionState.conf)
+          val finalOptions =
+            sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
+            optionsWithPath.originalMap
+          val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+          provider match {
+            case p: PythonDataSourceV2 => p.setShortName(source)
+            case _ =>
+          }
+          val table =
+            DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+          table match {
+            case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+              import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+              StreamingRelationV2(
+                  Some(provider), source, table, dsOptions,
+                  toAttributes(table.columns.asSchema), None, None, v1Relation,
+                  Unassigned)
 
             // fallback to v1
             // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.

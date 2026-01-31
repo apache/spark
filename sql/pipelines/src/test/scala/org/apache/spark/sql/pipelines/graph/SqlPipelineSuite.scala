@@ -736,6 +736,26 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  gridTest("Set catalog throws error if catalog name expression cannot be resolved") (
+    Seq(
+      "CONCAT(foo, '1')",
+      "test.cat"
+    )
+  ) {
+    case catalogNameExpression =>
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      sqlGraphRegistrationContext.processSqlFile(
+        sqlText = s"SET CATALOG $catalogNameExpression",
+        sqlFilePath = "a.sql",
+        spark = spark
+      )
+    }
+    assert(ex.getMessage.contains("Failed to resolve catalog expression"))
+  }
+
   test("Writing/reading datasets from fully and partially qualified names works") {
     spark.catalog.setCurrentCatalog(TestGraphRegistrationContext.DEFAULT_CATALOG)
     spark.catalog.setCurrentDatabase(TestGraphRegistrationContext.DEFAULT_DATABASE)

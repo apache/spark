@@ -19,13 +19,11 @@ package org.apache.spark.sql.pipelines.logging
 
 import java.sql.Timestamp
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
-class ConstructPipelineEventSuite extends SparkFunSuite with BeforeAndAfterEach {
+class ConstructPipelineEventSuite extends SparkFunSuite {
   test("Basic event construction") {
     val ts = new Timestamp(1747338049615L)
     val event = ConstructPipelineEvent(

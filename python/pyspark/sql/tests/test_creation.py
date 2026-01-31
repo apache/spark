@@ -19,8 +19,6 @@ from decimal import Decimal
 import os
 import time
 import unittest
-from typing import cast
-
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
@@ -84,7 +82,7 @@ class DataFrameCreationTestsMixin:
         self.assertIsInstance(df.schema["t"].dataType, TimeType)
         self.assertEqual(df.count(), 3)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_timestamp(self):
         import pandas as pd
         from datetime import datetime
@@ -120,7 +118,7 @@ class DataFrameCreationTestsMixin:
                 self.spark.createDataFrame(pdf)
 
     # Regression test for SPARK-23360
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
         from pandas.testing import assert_frame_equal
@@ -145,7 +143,7 @@ class DataFrameCreationTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
@@ -203,7 +201,7 @@ class DataFrameCreationTestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_schema_inference_from_pandas_with_dict(self):
         # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.

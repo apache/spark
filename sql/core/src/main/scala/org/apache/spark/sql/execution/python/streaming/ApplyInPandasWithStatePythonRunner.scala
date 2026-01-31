@@ -122,7 +122,7 @@ class ApplyInPandasWithStatePythonRunner(
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 
   /**

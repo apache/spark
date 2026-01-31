@@ -93,7 +93,7 @@ class DataFrameCollectionTestsMixin:
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas(self):
         import numpy as np
 
@@ -108,7 +108,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types[6], "datetime64[ns]")
         self.assertEqual(types[7], "timedelta64[ns]")
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_with_duplicated_column_names(self):
         for arrow_enabled in [False, True]:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
@@ -124,7 +124,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types.iloc[0], np.int32)
         self.assertEqual(types.iloc[1], np.int32)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_on_cross_join(self):
         for arrow_enabled in [False, True]:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
@@ -153,7 +153,7 @@ class DataFrameCollectionTestsMixin:
             with self.assertRaisesRegex(ImportError, "Pandas >= .* must be installed"):
                 self._to_pandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_avoid_astype(self):
         import numpy as np
 
@@ -165,7 +165,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types[1], object)
         self.assertEqual(types[2], np.float64)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_empty_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
@@ -195,7 +195,7 @@ class DataFrameCollectionTestsMixin:
         dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
         self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_null_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
@@ -235,7 +235,7 @@ class DataFrameCollectionTestsMixin:
         self.assertTrue(np.can_cast(np.datetime64, types[9]))
         self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_mixed_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:

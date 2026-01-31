@@ -17,11 +17,9 @@
 
 import inspect
 import os
-import sys
 from textwrap import dedent
 from typing import Dict, List, IO, Tuple
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.logger.worker_io import capture_outputs, context_provider as default_context_provider
 from pyspark.serializers import (
@@ -29,25 +27,15 @@ from pyspark.serializers import (
     read_int,
     write_int,
     write_with_length,
-    SpecialLengths,
 )
 from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
-    check_python_version,
     read_command,
     pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
     utf8_deserializer,
 )
 
@@ -104,8 +92,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     return args, kwargs
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.
 
@@ -113,166 +100,141 @@ def main(infile: IO, outfile: IO) -> None:
     in JVM and receive the Python UDTF and its arguments for the `analyze` static method,
     and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
+    udtf_name = utf8_deserializer.loads(infile)
+    handler = read_udtf(infile)
+    args, kwargs = read_arguments(infile)
+
+    error_prefix = f"Failed to evaluate the user-defined table function '{udtf_name}'"
+
+    def format_error(msg: str) -> str:
+        return dedent(msg).replace("\n", " ")
+
+    # Check that the arguments provided to the UDTF call match the expected parameters defined
+    # in the static 'analyze' method signature.
     try:
-        check_python_version(infile)
-
-        start_faulthandler_periodic_traceback()
-
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
-
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
-
-        _accumulatorRegistry.clear()
-
-        udtf_name = utf8_deserializer.loads(infile)
-        handler = read_udtf(infile)
-        args, kwargs = read_arguments(infile)
-
-        error_prefix = f"Failed to evaluate the user-defined table function '{udtf_name}'"
-
-        def format_error(msg: str) -> str:
-            return dedent(msg).replace("\n", " ")
-
-        # Check that the arguments provided to the UDTF call match the expected parameters defined
-        # in the static 'analyze' method signature.
-        try:
-            inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
-        except TypeError as e:
-            # The UDTF call's arguments did not match the expected signature.
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the function arguments did not match the expected
-                    signature of the static 'analyze' method ({e}). Please update the query so that
-                    this table function call provides arguments matching the expected signature, or
-                    else update the table function so that its static 'analyze' method accepts the
-                    provided arguments, and then try the query again."""
-                )
+        inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
+    except TypeError as e:
+        # The UDTF call's arguments did not match the expected signature.
+        raise PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the function arguments did not match the expected
+                signature of the static 'analyze' method ({e}). Please update the query so that
+                this table function call provides arguments matching the expected signature, or
+                else update the table function so that its static 'analyze' method accepts the
+                provided arguments, and then try the query again."""
             )
-
-        # The default context provider can't detect the class name from static methods.
-        def context_provider() -> dict[str, str]:
-            context = default_context_provider()
-            context["class_name"] = handler.__name__
-            return context
-
-        with capture_outputs(context_provider):
-            # Invoke the UDTF's 'analyze' method.
-            result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
-
-        # Check invariants about the 'analyze' method after running it.
-        if not isinstance(result, AnalyzeResult):
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method expects a result of type
-                    pyspark.sql.udtf.AnalyzeResult, but instead this method returned a value of
-                    type: {type(result)}"""
-                )
-            )
-        elif not isinstance(result.schema, StructType):
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method expects a result of type
-                    pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType,
-                    but the 'schema' field had the wrong type: {type(result.schema)}"""
-                )
-            )
-
-        def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
-            return PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the '{field_name}' field set to a value besides a
-                    list or tuple of '{expected_field}' objects. Please update the table function
-                    and then try the query again."""
-                )
-            )
-
-        has_table_arg = any(arg.isTable for arg in args) or any(
-            arg.isTable for arg in kwargs.values()
         )
-        if not has_table_arg and result.withSinglePartition:
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the 'withSinglePartition' field set to 'true', but
-                    the function call did not provide any table argument. Please update the query so
-                    that it provides a table argument, or else update the table function so that its
-                    'analyze' method returns an 'AnalyzeResult' object with the
-                    'withSinglePartition' field set to 'false', and then try the query again."""
-                )
+
+    # The default context provider can't detect the class name from static methods.
+    def context_provider() -> dict[str, str]:
+        context = default_context_provider()
+        context["class_name"] = handler.__name__
+        return context
+
+    with capture_outputs(context_provider):
+        # Invoke the UDTF's 'analyze' method.
+        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
+
+    # Check invariants about the 'analyze' method after running it.
+    if not isinstance(result, AnalyzeResult):
+        raise PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the static 'analyze' method expects a result of type
+                pyspark.sql.udtf.AnalyzeResult, but instead this method returned a value of
+                type: {type(result)}"""
             )
-        elif not has_table_arg and len(result.partitionBy) > 0:
-            raise PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the 'partitionBy' list set to non-empty, but the
-                    function call did not provide any table argument. Please update the query so
-                    that it provides a table argument, or else update the table function so that its
-                    'analyze' method returns an 'AnalyzeResult' object with the 'partitionBy' list
-                    set to empty, and then try the query again."""
-                )
+        )
+    elif not isinstance(result.schema, StructType):
+        raise PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the static 'analyze' method expects a result of type
+                pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType,
+                but the 'schema' field had the wrong type: {type(result.schema)}"""
             )
-        elif not isinstance(result.partitionBy, (list, tuple)) or not all(
-            isinstance(val, PartitioningColumn) for val in result.partitionBy
-        ):
-            raise invalid_analyze_result_field("partitionBy", "PartitioningColumn")
-        elif not isinstance(result.orderBy, (list, tuple)) or not all(
-            isinstance(val, OrderingColumn) for val in result.orderBy
-        ):
-            raise invalid_analyze_result_field("orderBy", "OrderingColumn")
-        elif not isinstance(result.select, (list, tuple)) or not all(
-            isinstance(val, SelectedColumn) for val in result.select
-        ):
-            raise invalid_analyze_result_field("select", "SelectedColumn")
+        )
 
-        # Return the analyzed schema.
-        write_with_length(result.schema.json().encode("utf-8"), outfile)
-        # Return the pickled 'AnalyzeResult' class instance.
-        pickleSer._write_with_length(result, outfile)
-        # Return whether the "with single partition" property is requested.
-        write_int(1 if result.withSinglePartition else 0, outfile)
-        # Return the list of partitioning columns, if any.
-        write_int(len(result.partitionBy), outfile)
-        for partitioning_col in result.partitionBy:
-            write_with_length(partitioning_col.name.encode("utf-8"), outfile)
-        # Return the requested input table ordering, if any.
-        write_int(len(result.orderBy), outfile)
-        for ordering_col in result.orderBy:
-            write_with_length(ordering_col.name.encode("utf-8"), outfile)
-            write_int(1 if ordering_col.ascending else 0, outfile)
-            if ordering_col.overrideNullsFirst is None:
-                write_int(0, outfile)
-            elif ordering_col.overrideNullsFirst:
-                write_int(1, outfile)
-            else:
-                write_int(2, outfile)
-        # Return the requested selected input table columns, if specified.
-        write_int(len(result.select), outfile)
-        for col in result.select:
-            write_with_length(col.name.encode("utf-8"), outfile)
-            write_with_length(col.alias.encode("utf-8"), outfile)
+    def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
+        return PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the static 'analyze' method returned an
+                'AnalyzeResult' object with the '{field_name}' field set to a value besides a
+                list or tuple of '{expected_field}' objects. Please update the table function
+                and then try the query again."""
+            )
+        )
 
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
+    has_table_arg = any(arg.isTable for arg in args) or any(arg.isTable for arg in kwargs.values())
+    if not has_table_arg and result.withSinglePartition:
+        raise PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the static 'analyze' method returned an
+                'AnalyzeResult' object with the 'withSinglePartition' field set to 'true', but
+                the function call did not provide any table argument. Please update the query so
+                that it provides a table argument, or else update the table function so that its
+                'analyze' method returns an 'AnalyzeResult' object with the
+                'withSinglePartition' field set to 'false', and then try the query again."""
+            )
+        )
+    elif not has_table_arg and len(result.partitionBy) > 0:
+        raise PySparkValueError(
+            format_error(
+                f"""
+                {error_prefix} because the static 'analyze' method returned an
+                'AnalyzeResult' object with the 'partitionBy' list set to non-empty, but the
+                function call did not provide any table argument. Please update the query so
+                that it provides a table argument, or else update the table function so that its
+                'analyze' method returns an 'AnalyzeResult' object with the 'partitionBy' list
+                set to empty, and then try the query again."""
+            )
+        )
+    elif not isinstance(result.partitionBy, (list, tuple)) or not all(
+        isinstance(val, PartitioningColumn) for val in result.partitionBy
+    ):
+        raise invalid_analyze_result_field("partitionBy", "PartitioningColumn")
+    elif not isinstance(result.orderBy, (list, tuple)) or not all(
+        isinstance(val, OrderingColumn) for val in result.orderBy
+    ):
+        raise invalid_analyze_result_field("orderBy", "OrderingColumn")
+    elif not isinstance(result.select, (list, tuple)) or not all(
+        isinstance(val, SelectedColumn) for val in result.select
+    ):
+        raise invalid_analyze_result_field("select", "SelectedColumn")
 
-    send_accumulator_updates(outfile)
+    # Return the analyzed schema.
+    write_with_length(result.schema.json().encode("utf-8"), outfile)
+    # Return the pickled 'AnalyzeResult' class instance.
+    pickleSer._write_with_length(result, outfile)
+    # Return whether the "with single partition" property is requested.
+    write_int(1 if result.withSinglePartition else 0, outfile)
+    # Return the list of partitioning columns, if any.
+    write_int(len(result.partitionBy), outfile)
+    for partitioning_col in result.partitionBy:
+        write_with_length(partitioning_col.name.encode("utf-8"), outfile)
+    # Return the requested input table ordering, if any.
+    write_int(len(result.orderBy), outfile)
+    for ordering_col in result.orderBy:
+        write_with_length(ordering_col.name.encode("utf-8"), outfile)
+        write_int(1 if ordering_col.ascending else 0, outfile)
+        if ordering_col.overrideNullsFirst is None:
+            write_int(0, outfile)
+        elif ordering_col.overrideNullsFirst:
+            write_int(1, outfile)
+        else:
+            write_int(2, outfile)
+    # Return the requested selected input table columns, if specified.
+    write_int(len(result.select), outfile)
+    for col in result.select:
+        write_with_length(col.name.encode("utf-8"), outfile)
+        write_with_length(col.alias.encode("utf-8"), outfile)
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":

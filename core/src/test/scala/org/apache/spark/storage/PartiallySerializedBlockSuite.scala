@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeastOnce
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.MemoryMode
@@ -35,7 +35,6 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 
 class PartiallySerializedBlockSuite
     extends SparkFunSuite
-    with BeforeAndAfterEach
     with PrivateMethodTester {
 
   private val blockId = new TestBlockId("test")

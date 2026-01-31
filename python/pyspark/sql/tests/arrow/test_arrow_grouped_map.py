@@ -59,7 +59,7 @@ def function_variations(func):
 
 @unittest.skipIf(
     not have_pyarrow,
-    pyarrow_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message,
 )
 class ApplyInArrowTestsMixin:
     @property
