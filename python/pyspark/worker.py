@@ -591,10 +591,6 @@ def wrap_arrow_array_iter_udf(f, return_type, runner_conf):
 
 
 def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
             raise PySparkTypeError(
@@ -627,13 +623,13 @@ def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
         result = verify_result(f(batch_iter))
         for res in map(verify_element, result):
             yield ArrowBatchTransformer.wrap_struct(res)
-    
+
     return wrapper
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
     import pyarrow as pa
-    
+
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -664,11 +660,11 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     from pyspark.sql.conversion import PandasBatchTransformer
-    
+
     arrow_return_type = to_arrow_type(
         return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
     )
-    
+
     def wrapped(left_key_series, left_value_series, right_key_series, right_value_series):
         import pandas as pd
 
@@ -684,19 +680,19 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         verify_pandas_result(
             result, return_type, runner_conf.assign_cols_by_name, truncate_return_schema=False
         )
-        
+
         # Convert pandas DataFrame to Arrow RecordBatch and yield (consistent with Arrow cogrouped)
         batch = PandasBatchTransformer.to_arrow(
             [(result, arrow_return_type)],
             timezone=runner_conf.timezone,
             safecheck=runner_conf.safecheck,
             int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-            struct_in_pandas='dict',
+            struct_in_pandas="dict",
             assign_cols_by_name=runner_conf.assign_cols_by_name,
             arrow_cast=True,
         )
         yield batch
-    
+
     return wrapped
 
 
@@ -824,7 +820,7 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
 def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
     import pyarrow as pa
-    
+
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -894,10 +890,10 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             # Build list of (Series, arrow_type) tuples
             # If assign_cols_by_name and DataFrame has named columns, match by name
             # Otherwise, match by position
-            if runner_conf.assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-                series_list = [
-                    (df[field.name], field.type) for field in arrow_return_type
-                ]
+            if runner_conf.assign_cols_by_name and any(
+                isinstance(name, str) for name in df.columns
+            ):
+                series_list = [(df[field.name], field.type) for field in arrow_return_type]
             else:
                 series_list = [
                     (df[df.columns[i]].rename(field.name), field.type)
@@ -964,10 +960,10 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
             # Build list of (Series, arrow_type) tuples
             # If assign_cols_by_name and DataFrame has named columns, match by name
             # Otherwise, match by position
-            if runner_conf.assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-                series_list = [
-                    (df[field.name], field.type) for field in arrow_return_type
-                ]
+            if runner_conf.assign_cols_by_name and any(
+                isinstance(name, str) for name in df.columns
+            ):
+                series_list = [(df[field.name], field.type) for field in arrow_return_type]
             else:
                 series_list = [
                     (df[df.columns[i]].rename(field.name), field.type)
@@ -1158,7 +1154,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
 
 def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     from pyspark.sql.conversion import PandasBatchTransformer
-    
+
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
     arrow_return_type = to_arrow_type(
@@ -1170,7 +1166,7 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
 
         result = func(*series)
         result_series = pd.Series([result])
-        
+
         # Convert to Arrow RecordBatch in wrapper
         return PandasBatchTransformer.to_arrow(
             [(result_series, arrow_return_type)],
@@ -1232,7 +1228,7 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
 
 def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     from pyspark.sql.conversion import PandasBatchTransformer
-    
+
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
     arrow_return_type = to_arrow_type(
@@ -1247,7 +1243,7 @@ def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_typ
         # This has already been adapted by the mapper function in read_udfs
         result = func(series_iter)
         result_series = pd.Series([result])
-        
+
         # Convert to Arrow RecordBatch in wrapper
         return PandasBatchTransformer.to_arrow(
             [(result_series, arrow_return_type)],
@@ -1662,13 +1658,8 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if runner_conf.use_legacy_pandas_udtf_conversion:
-            # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
-            # UDTF uses ArrowStreamGroupSerializer with as_struct=True
-            ser = ArrowStreamGroupSerializer(
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-            )
+            # UDTF uses ArrowStreamGroupSerializer
+            ser = ArrowStreamGroupSerializer(safecheck=runner_conf.safecheck)
         else:
             ser = ArrowStreamGroupSerializer()
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
@@ -2895,17 +2886,13 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         ):
-            ser = ArrowStreamGroupSerializer(
-                num_dfs=1, assign_cols_by_name=runner_conf.assign_cols_by_name
-            )
+            ser = ArrowStreamGroupSerializer(num_dfs=1)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
-            ser = ArrowStreamGroupSerializer(
-                safecheck=True, arrow_cast=True, num_dfs=1
-            )
+            ser = ArrowStreamGroupSerializer(safecheck=True, arrow_cast=True, num_dfs=1)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -2914,10 +2901,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # Use ArrowStreamGroupSerializer for agg/window UDFs that still use old pattern
             # load_stream returns raw batches, to_pandas conversion done in worker
             ser = ArrowStreamGroupSerializer(
-                timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
                 num_dfs=1,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
@@ -2925,13 +2910,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         ):
             # Wrapper calls to_arrow directly, so use MapIter serializer in grouped mode
             # dump_stream handles RecordBatch directly from wrapper
-            ser = ArrowStreamGroupSerializer(
-                num_dfs=1, assign_cols_by_name=runner_conf.assign_cols_by_name
-            )
+            ser = ArrowStreamGroupSerializer(num_dfs=1)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            ser = ArrowStreamGroupSerializer(
-                num_dfs=2, assign_cols_by_name=runner_conf.assign_cols_by_name
-            )
+            ser = ArrowStreamGroupSerializer(num_dfs=2)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             # Mapper calls to_arrow directly, so use Arrow serializer
             # load_stream returns raw batches, to_pandas conversion done in worker
@@ -3014,9 +2995,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             )
 
             ser = ArrowStreamGroupSerializer(
-                timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
@@ -3058,7 +3037,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # For MAP_ARROW_ITER, flatten struct before processing
             if is_map_arrow_iter:
                 iterator = map(ArrowBatchTransformer.flatten_struct, iterator)
-            
+
             # Convert Arrow batches to pandas if needed
             if needs_arrow_to_pandas:
                 iterator = map(
@@ -3070,7 +3049,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                         ndarray_as_list=pandas_udf_ndarray_as_list,
                         df_for_struct=pandas_udf_df_for_struct,
                     ),
-                    iterator
+                    iterator,
                 )
 
             num_input_rows = 0
@@ -3092,6 +3071,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                     nonlocal num_input_rows
                     num_input_rows += batch.num_rows
                     return batch
+
                 iterator = map(count_rows, iterator)
                 result_iter = udf(iterator)
             else:
@@ -3182,9 +3162,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         def mapper(batch_iter):
             # Convert Arrow batches to pandas Series lists in worker layer
             series_iter = map(
-                lambda batch: ArrowBatchTransformer.to_pandas(
-                    batch, timezone=runner_conf.timezone
-                ),
+                lambda batch: ArrowBatchTransformer.to_pandas(batch, timezone=runner_conf.timezone),
                 batch_iter,
             )
 
@@ -3403,20 +3381,22 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         def mapper(a):
             # a is tuple[list[pa.RecordBatch], list[pa.RecordBatch]]
             left_batches, right_batches = a[0], a[1]
-            
+
             # Convert batches to tables (batches already have flattened struct columns)
             left_table = pa.Table.from_batches(left_batches) if left_batches else pa.table({})
             right_table = pa.Table.from_batches(right_batches) if right_batches else pa.table({})
-            
+
             # Convert tables to pandas Series lists
             left_series = ArrowBatchTransformer.to_pandas(left_table, timezone=runner_conf.timezone)
-            right_series = ArrowBatchTransformer.to_pandas(right_table, timezone=runner_conf.timezone)
-            
+            right_series = ArrowBatchTransformer.to_pandas(
+                right_table, timezone=runner_conf.timezone
+            )
+
             df1_keys = [left_series[o] for o in parsed_offsets[0][0]]
             df1_vals = [left_series[o] for o in parsed_offsets[0][1]]
             df2_keys = [right_series[o] for o in parsed_offsets[1][0]]
             df2_vals = [right_series[o] for o in parsed_offsets[1][1]]
-            
+
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
@@ -3496,7 +3476,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             result_batches = [
                 f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
             ]
-            
+
             # Merge RecordBatches from all UDFs horizontally
             return ArrowBatchTransformer.zip_batches(result_batches)
 
@@ -3521,7 +3501,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
 
             # Each UDF returns pa.RecordBatch (conversion done in wrapper)
             result_batches = [f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-            
+
             # Merge all RecordBatches horizontally
             return ArrowBatchTransformer.zip_batches(result_batches)
 
@@ -3537,9 +3517,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         is_arrow_batched_udf = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
 
         def mapper(a):
-            result = tuple(
-                f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs
-            )
+            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
             # For arrow batched UDF, return raw result (serializer handles conversion)
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
@@ -3580,7 +3558,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                         ndarray_as_list=pandas_udf_ndarray_as_list,
                         df_for_struct=pandas_udf_df_for_struct,
                     ),
-                    it
+                    it,
                 )
             return map(mapper, it)
 

@@ -217,16 +217,16 @@ class ArrowStreamSerializer(Serializer):
 class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     """
     Unified serializer for Arrow stream operations with optional grouping support.
-    
+
     This serializer handles:
     - Non-grouped operations: SQL_MAP_ARROW_ITER_UDF (num_dfs=0)
     - Grouped operations: SQL_GROUPED_MAP_ARROW_UDF, SQL_GROUPED_MAP_PANDAS_UDF (num_dfs=1)
     - Cogrouped operations: SQL_COGROUPED_MAP_ARROW_UDF, SQL_COGROUPED_MAP_PANDAS_UDF (num_dfs=2)
     - Grouped aggregations: SQL_GROUPED_AGG_ARROW_UDF, SQL_GROUPED_AGG_PANDAS_UDF (num_dfs=1)
-    
+
     The serializer handles Arrow stream I/O and START signal, while transformation logic
     (flatten/wrap struct, pandas conversion) is handled by worker wrappers.
-    
+
     Used by
     -------
     - SQL_MAP_ARROW_ITER_UDF: DataFrame.mapInArrow()
@@ -243,54 +243,41 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     - SQL_WINDOW_AGG_ARROW_UDF: Window aggregation with arrow UDF
     - SQL_SCALAR_ARROW_UDF: Scalar arrow UDF
     - SQL_SCALAR_ARROW_ITER_UDF: Scalar arrow iter UDF
-    
+
     Parameters
     ----------
-    timezone : str, optional
-        Timezone for timestamp conversion (stored for compatibility)
     safecheck : bool, optional
-        Safecheck flag (stored for compatibility)
-    int_to_decimal_coercion_enabled : bool, optional
-        Decimal coercion flag (stored for compatibility)
+        Safecheck flag for ArrowBatchUDFSerializer subclass
     num_dfs : int, optional
         Number of DataFrames per group:
         - 0: Non-grouped mode (default) - yields all batches as single stream
         - 1: Grouped mode - yields one iterator of batches per group
         - 2: Cogrouped mode - yields tuple of two iterators per group
-    assign_cols_by_name : bool, optional
-        If True, assign DataFrame columns by name; otherwise by position (default: True)
     arrow_cast : bool, optional
-        Arrow cast flag (stored for compatibility, default: False)
+        Arrow cast flag for ArrowBatchUDFSerializer subclass (default: False)
     """
 
     def __init__(
         self,
-        timezone=None,
         safecheck=None,
-        int_to_decimal_coercion_enabled: bool = False,
         num_dfs: int = 0,
-        assign_cols_by_name: bool = True,
         arrow_cast: bool = False,
     ):
         super().__init__()
-        # Store parameters for compatibility
-        self._timezone = timezone
         self._safecheck = safecheck
-        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
         self._num_dfs = num_dfs
-        self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
 
     def load_stream(self, stream):
         """
         Deserialize Arrow record batches from stream.
-        
+
         Returns
         -------
         Iterator
             - num_dfs=0: Iterator[pa.RecordBatch] - all batches in a single stream
             - num_dfs=1: Iterator[Iterator[pa.RecordBatch]] - one iterator per group
-            - num_dfs=2: Iterator[Tuple[Iterator[pa.RecordBatch], Iterator[pa.RecordBatch]]] - 
+            - num_dfs=2: Iterator[Tuple[Iterator[pa.RecordBatch], Iterator[pa.RecordBatch]]] -
                          tuple of two iterators per cogrouped group
         """
         if self._num_dfs > 0:
@@ -310,11 +297,11 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     def dump_stream(self, iterator, stream):
         """
         Serialize Arrow record batches to stream with START signal.
-        
+
         The START_ARROW_STREAM marker is sent before the first batch to signal
         the JVM that Arrow data is about to be transmitted. This allows proper
         error handling during batch creation.
-        
+
         Parameters
         ----------
         iterator : Iterator[pa.RecordBatch]
@@ -365,7 +352,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
 
                 # Batch is already wrapped into a struct column by worker (wrap_arrow_udtf)
                 # Unwrap it first to access individual columns
-                if batch.num_columns == 1 and batch.column(0).type == pa.struct(list(arrow_return_type)):
+                if batch.num_columns == 1 and batch.column(0).type == pa.struct(
+                    list(arrow_return_type)
+                ):
                     # Batch is wrapped, unwrap it
                     unwrapped_batch = ArrowBatchTransformer.flatten_struct(batch, column_index=0)
                 elif batch.num_columns == 0:
@@ -431,7 +420,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamGroupSerializer):
 class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     """
     Serializer for UDFs that handles Arrow RecordBatch serialization.
-    
+
     This is a thin wrapper around ArrowStreamSerializer kept for backward compatibility
     and future extensibility. Currently it doesn't override any methods - all conversion
     logic has been moved to wrappers/callers, and this serializer only handles pure
@@ -461,6 +450,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamUDFSerializer"
+
 
 class ArrowBatchUDFSerializer(ArrowStreamGroupSerializer):
     """
@@ -1092,6 +1082,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamUDFSerializer):
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
+
         def flatten_iterator():
             # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
             for packed in iterator:

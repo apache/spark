@@ -62,11 +62,11 @@ class ArrowBatchTransformer:
     """
     Pure functions that transform Arrow data structures (Arrays, RecordBatches).
     They should have no side effects (no I/O, no writing to streams).
-    
+
     This class provides utility methods for Arrow batch transformations used throughout
     PySpark's Arrow UDF implementation. All methods are static and handle common patterns
     like struct wrapping/unwrapping, schema conversions, and creating RecordBatches from Arrays.
-    
+
     """
 
     @staticmethod
@@ -112,29 +112,28 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
-
     @classmethod
     def concat_batches(cls, batches: List["pa.RecordBatch"]) -> "pa.RecordBatch":
         """
         Concatenate multiple RecordBatches into a single RecordBatch.
-        
+
         This method handles both modern and legacy PyArrow versions.
-        
+
         Parameters
         ----------
         batches : List[pa.RecordBatch]
             List of RecordBatches with the same schema
-            
+
         Returns
         -------
         pa.RecordBatch
             Single RecordBatch containing all rows from input batches
-            
+
         Used by
         -------
         - SQL_GROUPED_AGG_ARROW_UDF mapper
         - SQL_WINDOW_AGG_ARROW_UDF mapper
-        
+
         Examples
         --------
         >>> import pyarrow as pa
@@ -145,13 +144,13 @@ class ArrowBatchTransformer:
         {'a': [1, 2, 3, 4]}
         """
         import pyarrow as pa
-        
+
         if not batches:
             raise PySparkValueError(
                 errorClass="INVALID_ARROW_BATCH_CONCAT",
                 messageParameters={"reason": "Cannot concatenate empty list of batches"},
             )
-        
+
         # Assert all batches have the same schema
         first_schema = batches[0].schema
         for i, batch in enumerate(batches[1:], start=1):
@@ -165,7 +164,7 @@ class ArrowBatchTransformer:
                         )
                     },
                 )
-        
+
         if hasattr(pa, "concat_batches"):
             return pa.concat_batches(batches)
         else:
@@ -186,11 +185,11 @@ class ArrowBatchTransformer:
     ) -> "pa.RecordBatch":
         """
         Zip multiple RecordBatches or Arrays horizontally by combining their columns.
-        
+
         This is different from concat_batches which concatenates rows vertically.
         This method combines columns from multiple batches/arrays into a single batch,
         useful when multiple UDFs each produce a RecordBatch or when combining arrays.
-        
+
         Parameters
         ----------
         items : List[pa.RecordBatch], List[pa.Array], or List[Tuple[pa.Array, pa.DataType]]
@@ -199,12 +198,12 @@ class ArrowBatchTransformer:
             - List of (array, type) tuples for type casting (always attempts cast if types don't match)
         safecheck : bool, default True
             If True, use safe casting (fails on overflow/truncation) (only used when items are tuples).
-            
+
         Returns
         -------
         pa.RecordBatch
             Single RecordBatch with all columns from input batches/arrays
-            
+
         Used by
         -------
         - SQL_GROUPED_AGG_ARROW_UDF mapper
@@ -212,7 +211,7 @@ class ArrowBatchTransformer:
         - wrap_scalar_arrow_udf
         - wrap_grouped_agg_arrow_udf
         - ArrowBatchUDFSerializer.dump_stream
-        
+
         Examples
         --------
         >>> import pyarrow as pa
@@ -240,7 +239,7 @@ class ArrowBatchTransformer:
 
         # Check if items are RecordBatches, Arrays, or (array, type) tuples
         first_item = items[0]
-        
+
         if isinstance(first_item, pa.RecordBatch):
             # Handle RecordBatches
             batches = items
@@ -278,9 +277,7 @@ class ArrowBatchTransformer:
             all_columns = list(items)
 
         # Create RecordBatch from columns
-        return pa.RecordBatch.from_arrays(
-            all_columns, ["_%d" % i for i in range(len(all_columns))]
-        )
+        return pa.RecordBatch.from_arrays(all_columns, ["_%d" % i for i in range(len(all_columns))])
 
     @classmethod
     def reorder_columns(
@@ -288,10 +285,10 @@ class ArrowBatchTransformer:
     ) -> "pa.RecordBatch":
         """
         Reorder columns in a RecordBatch to match target schema field order.
-        
+
         This method is useful when columns need to be arranged in a specific order
         for schema compatibility, particularly when assign_cols_by_name is enabled.
-        
+
         Parameters
         ----------
         batch : pa.RecordBatch
@@ -299,18 +296,18 @@ class ArrowBatchTransformer:
         target_schema : pa.StructType or pyspark.sql.types.StructType
             Target schema defining the desired column order.
             Can be either PyArrow StructType or Spark StructType.
-            
+
         Returns
         -------
         pa.RecordBatch
             New RecordBatch with columns reordered to match target schema
-            
+
         Used by
         -------
         - wrap_grouped_map_arrow_udf
         - wrap_grouped_map_arrow_iter_udf
         - wrap_cogrouped_map_arrow_udf
-        
+
         Examples
         --------
         >>> import pyarrow as pa
@@ -328,17 +325,18 @@ class ArrowBatchTransformer:
         ['a', 'b']
         """
         import pyarrow as pa
-        
+
         # Convert Spark StructType to PyArrow StructType if needed
-        if hasattr(target_schema, 'fields') and hasattr(target_schema.fields[0], 'dataType'):
+        if hasattr(target_schema, "fields") and hasattr(target_schema.fields[0], "dataType"):
             # This is Spark StructType - convert to PyArrow
             from pyspark.sql.pandas.types import to_arrow_schema
+
             arrow_schema = to_arrow_schema(target_schema)
             field_names = [field.name for field in arrow_schema]
         else:
             # This is PyArrow StructType
             field_names = [field.name for field in target_schema]
-        
+
         return pa.RecordBatch.from_arrays(
             [batch.column(name) for name in field_names],
             names=field_names,
@@ -433,7 +431,7 @@ class ArrowBatchTransformer:
 
         if arr.type == target_type:
             return arr
-        
+
         try:
             return arr.cast(target_type=target_type, safe=safecheck)
         except (pa.ArrowInvalid, pa.ArrowNotImplementedError) as e:
@@ -444,14 +442,15 @@ class ArrowBatchTransformer:
                     f"Arrow type mismatch. Expected: {target_type}, but got: {arr.type}."
                 ) from e
 
+
 class PandasBatchTransformer:
     """
     Pure functions that transform between pandas DataFrames/Series and Arrow RecordBatches.
     They should have no side effects (no I/O, no writing to streams).
-    
+
     This class provides utility methods for converting between pandas and Arrow formats,
     used primarily by Pandas UDF wrappers and serializers.
-    
+
     """
 
     @classmethod
@@ -460,28 +459,28 @@ class PandasBatchTransformer:
     ) -> List["pd.Series"]:
         """
         Concatenate multiple batches of pandas Series column-wise.
-        
+
         Takes a list of batches where each batch is a list of Series (one per column),
         and concatenates all Series column-by-column to produce a single list of
         concatenated Series.
-        
+
         Parameters
         ----------
         series_batches : List[List[pd.Series]]
             List of batches, each batch is a list of Series (one Series per column)
         arg_offsets : Optional[List[int]]
             If provided and series_batches is empty, determines the number of empty Series to create
-            
+
         Returns
         -------
         List[pd.Series]
             List of concatenated Series, one per column
-            
+
         Used by
         -------
         - SQL_GROUPED_AGG_PANDAS_UDF mapper
         - SQL_WINDOW_AGG_PANDAS_UDF mapper
-        
+
         Examples
         --------
         >>> import pandas as pd
@@ -494,7 +493,7 @@ class PandasBatchTransformer:
         [1, 2, 5, 6]
         """
         import pandas as pd
-        
+
         if not series_batches:
             # Empty batches - create empty Series
             if arg_offsets:
@@ -502,7 +501,7 @@ class PandasBatchTransformer:
             else:
                 num_columns = 0
             return [pd.Series(dtype=object) for _ in range(num_columns)]
-        
+
         # Concatenate Series by column
         num_columns = len(series_batches[0])
         return [
@@ -514,26 +513,26 @@ class PandasBatchTransformer:
     def series_batches_to_dataframe(cls, series_batches) -> "pd.DataFrame":
         """
         Convert an iterator of Series lists to a single DataFrame.
-        
+
         Each batch is a list of Series (one per column). This method concatenates
         Series within each batch horizontally (axis=1), then concatenates all
         resulting DataFrames vertically (axis=0).
-        
+
         Parameters
         ----------
         series_batches : Iterator[List[pd.Series]]
             Iterator where each element is a list of Series representing one batch
-            
+
         Returns
         -------
         pd.DataFrame
             Combined DataFrame with all data, or empty DataFrame if no batches
-            
+
         Used by
         -------
         - wrap_grouped_map_pandas_udf
         - wrap_grouped_map_pandas_iter_udf
-        
+
         Examples
         --------
         >>> import pandas as pd
@@ -546,10 +545,10 @@ class PandasBatchTransformer:
         ['a', 'b']
         """
         import pandas as pd
-        
+
         # Materialize iterator and convert each batch to DataFrame
         dataframes = [pd.concat(series_list, axis=1) for series_list in series_batches]
-        
+
         # Concatenate all DataFrames vertically
         return pd.concat(dataframes, axis=0) if dataframes else pd.DataFrame()
 
@@ -634,7 +633,9 @@ class PandasBatchTransformer:
                         else "Invalid return type. Please make sure that the UDF returns a "
                     )
                     if not as_struct:
-                        error_msg += "pandas.DataFrame when the specified return type is StructType."
+                        error_msg += (
+                            "pandas.DataFrame when the specified return type is StructType."
+                        )
                     else:
                         error_msg += f"a pandas.DataFrame but got: {type(s)}"
                     raise PySparkValueError(error_msg)
@@ -1723,9 +1724,7 @@ class PandasSeriesToArrowConversion:
         if error_class is not None:
             try:
                 try:
-                    return pa.Array.from_pandas(
-                        series, mask=mask, type=arrow_type, safe=safecheck
-                    )
+                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
                 except pa.lib.ArrowException:
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
