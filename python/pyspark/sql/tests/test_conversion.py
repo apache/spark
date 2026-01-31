@@ -24,6 +24,8 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTimestampConversion,
     ArrowBatchTransformer,
+    PandasBatchTransformer,
+    PandasSeriesToArrowConversion,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -142,6 +144,402 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
+
+    def test_concat_batches_basic(self):
+        """Test concatenating multiple batches vertically."""
+        import pyarrow as pa
+
+        batch1 = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["x"])
+        batch2 = pa.RecordBatch.from_arrays([pa.array([3, 4])], ["x"])
+
+        result = ArrowBatchTransformer.concat_batches([batch1, batch2])
+
+        self.assertEqual(result.num_rows, 4)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3, 4])
+
+    def test_concat_batches_single(self):
+        """Test concatenating a single batch returns the same batch."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1, 2, 3])], ["x"])
+
+        result = ArrowBatchTransformer.concat_batches([batch])
+
+        self.assertEqual(result.num_rows, 3)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+
+    def test_concat_batches_empty_batches(self):
+        """Test concatenating empty batches."""
+        import pyarrow as pa
+
+        schema = pa.schema([("x", pa.int64())])
+        batch1 = pa.RecordBatch.from_arrays([pa.array([], type=pa.int64())], schema=schema)
+        batch2 = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["x"])
+
+        result = ArrowBatchTransformer.concat_batches([batch1, batch2])
+
+        self.assertEqual(result.num_rows, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])
+
+    def test_zip_batches_record_batches(self):
+        """Test zipping multiple RecordBatches horizontally."""
+        import pyarrow as pa
+
+        batch1 = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["a"])
+        batch2 = pa.RecordBatch.from_arrays([pa.array(["x", "y"])], ["b"])
+
+        result = ArrowBatchTransformer.zip_batches([batch1, batch2])
+
+        self.assertEqual(result.num_columns, 2)
+        self.assertEqual(result.num_rows, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])
+        self.assertEqual(result.column(1).to_pylist(), ["x", "y"])
+
+    def test_zip_batches_arrays(self):
+        """Test zipping Arrow arrays directly."""
+        import pyarrow as pa
+
+        arr1 = pa.array([1, 2, 3])
+        arr2 = pa.array(["a", "b", "c"])
+
+        result = ArrowBatchTransformer.zip_batches([arr1, arr2])
+
+        self.assertEqual(result.num_columns, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(result.column(1).to_pylist(), ["a", "b", "c"])
+
+    def test_zip_batches_with_type_casting(self):
+        """Test zipping with type casting."""
+        import pyarrow as pa
+
+        arr = pa.array([1, 2, 3], type=pa.int32())
+        result = ArrowBatchTransformer.zip_batches([(arr, pa.int64())])
+
+        self.assertEqual(result.column(0).type, pa.int64())
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+
+    def test_zip_batches_empty_raises(self):
+        """Test that zipping empty list raises error."""
+        with self.assertRaises(PySparkValueError):
+            ArrowBatchTransformer.zip_batches([])
+
+    def test_zip_batches_single_batch(self):
+        """Test zipping single batch returns it unchanged."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["x"])
+        result = ArrowBatchTransformer.zip_batches([batch])
+
+        self.assertIs(result, batch)
+
+    def test_to_pandas_basic(self):
+        """Test basic Arrow to pandas conversion."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
+            names=["x", "y"],
+        )
+
+        result = ArrowBatchTransformer.to_pandas(batch, timezone="UTC")
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].tolist(), [1, 2, 3])
+        self.assertEqual(result[1].tolist(), ["a", "b", "c"])
+
+    def test_to_pandas_empty_table(self):
+        """Test converting empty table returns NoValue series."""
+        import pyarrow as pa
+
+        table = pa.Table.from_arrays([], names=[])
+
+        result = ArrowBatchTransformer.to_pandas(table, timezone="UTC")
+
+        # Empty table with rows should return a series with _NoValue
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 0)
+
+    def test_to_pandas_with_nulls(self):
+        """Test conversion with null values."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, None, 3]), pa.array([None, "b", None])],
+            names=["x", "y"],
+        )
+
+        result = ArrowBatchTransformer.to_pandas(batch, timezone="UTC")
+
+        self.assertEqual(len(result), 2)
+        self.assertTrue(result[0].isna().tolist() == [False, True, False])
+        self.assertTrue(result[1].isna().tolist() == [True, False, True])
+
+    def test_to_pandas_with_schema_and_udt(self):
+        """Test conversion with Spark schema containing UDT."""
+        import pyarrow as pa
+
+        # Create Arrow batch with raw UDT data (list representation)
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([[1.0, 2.0], [3.0, 4.0]], type=pa.list_(pa.float64()))],
+            names=["point"],
+        )
+
+        schema = StructType([StructField("point", ExamplePointUDT())])
+
+        result = ArrowBatchTransformer.to_pandas(batch, timezone="UTC", schema=schema)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0][0], ExamplePoint(1.0, 2.0))
+        self.assertEqual(result[0][1], ExamplePoint(3.0, 4.0))
+
+    def test_flatten_and_wrap_roundtrip(self):
+        """Test that flatten -> wrap produces equivalent result."""
+        import pyarrow as pa
+
+        struct_array = pa.StructArray.from_arrays(
+            [pa.array([1, 2]), pa.array(["a", "b"])],
+            names=["x", "y"],
+        )
+        original = pa.RecordBatch.from_arrays([struct_array], ["_0"])
+
+        flattened = ArrowBatchTransformer.flatten_struct(original)
+        rewrapped = ArrowBatchTransformer.wrap_struct(flattened)
+
+        self.assertEqual(rewrapped.num_columns, 1)
+        self.assertEqual(rewrapped.column(0).to_pylist(), original.column(0).to_pylist())
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PandasBatchTransformerTests(unittest.TestCase):
+    def test_to_arrow_single_series(self):
+        """Test converting a single pandas Series to Arrow."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([1, 2, 3])
+        result = PandasBatchTransformer.to_arrow(
+            (series, pa.int64(), IntegerType()), timezone="UTC"
+        )
+
+        self.assertEqual(result.num_columns, 1)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+
+    def test_to_arrow_empty_series(self):
+        """Test converting empty pandas Series."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([], dtype="int64")
+        result = PandasBatchTransformer.to_arrow(
+            (series, pa.int64(), IntegerType()), timezone="UTC"
+        )
+
+        self.assertEqual(result.num_rows, 0)
+
+    def test_to_arrow_with_nulls(self):
+        """Test converting Series with null values."""
+        import pandas as pd
+        import pyarrow as pa
+        import numpy as np
+        from pyspark.sql.types import DoubleType
+
+        series = pd.Series([1.0, np.nan, 3.0])
+        result = PandasBatchTransformer.to_arrow(
+            (series, pa.float64(), DoubleType()), timezone="UTC"
+        )
+
+        self.assertEqual(result.column(0).to_pylist(), [1.0, None, 3.0])
+
+    def test_to_arrow_multiple_series(self):
+        """Test converting multiple series at once."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series1 = pd.Series([1, 2])
+        series2 = pd.Series(["a", "b"])
+
+        result = PandasBatchTransformer.to_arrow(
+            [(series1, pa.int64(), None), (series2, pa.string(), None)], timezone="UTC"
+        )
+
+        self.assertEqual(result.num_columns, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])
+        self.assertEqual(result.column(1).to_pylist(), ["a", "b"])
+
+    def test_to_arrow_struct_mode(self):
+        """Test converting DataFrame to struct array."""
+        import pandas as pd
+        import pyarrow as pa
+
+        df = pd.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+        arrow_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        spark_type = StructType([StructField("x", IntegerType()), StructField("y", StringType())])
+
+        result = PandasBatchTransformer.to_arrow(
+            (df, arrow_type, spark_type), timezone="UTC", as_struct=True
+        )
+
+        self.assertEqual(result.num_columns, 1)
+        struct_col = result.column(0)
+        self.assertEqual(struct_col.field(0).to_pylist(), [1, 2])
+        self.assertEqual(struct_col.field(1).to_pylist(), ["a", "b"])
+
+    def test_to_arrow_struct_empty_dataframe(self):
+        """Test converting empty DataFrame in struct mode."""
+        import pandas as pd
+        import pyarrow as pa
+
+        df = pd.DataFrame({"x": pd.Series([], dtype="int64"), "y": pd.Series([], dtype="str")})
+        arrow_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        spark_type = StructType([StructField("x", IntegerType()), StructField("y", StringType())])
+
+        result = PandasBatchTransformer.to_arrow(
+            (df, arrow_type, spark_type), timezone="UTC", as_struct=True
+        )
+
+        self.assertEqual(result.num_rows, 0)
+
+    def test_to_arrow_categorical_series(self):
+        """Test converting categorical pandas Series."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Categorical(["a", "b", "a", "c"])
+        result = PandasBatchTransformer.to_arrow(
+            (pd.Series(series), pa.string(), StringType()), timezone="UTC"
+        )
+
+        self.assertEqual(result.column(0).to_pylist(), ["a", "b", "a", "c"])
+
+    def test_to_arrow_requires_dataframe_for_struct(self):
+        """Test that struct mode requires DataFrame input."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([1, 2])
+        arrow_type = pa.struct([("x", pa.int64())])
+
+        with self.assertRaises(PySparkValueError):
+            PandasBatchTransformer.to_arrow(
+                (series, arrow_type, None), timezone="UTC", as_struct=True
+            )
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PandasSeriesToArrowConversionTests(unittest.TestCase):
+    def test_create_array_basic(self):
+        """Test basic array creation from pandas Series."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([1, 2, 3])
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.int64(), "UTC", spark_type=IntegerType()
+        )
+
+        self.assertEqual(result.to_pylist(), [1, 2, 3])
+
+    def test_create_array_empty(self):
+        """Test creating array from empty Series."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([], dtype="int64")
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.int64(), "UTC", spark_type=IntegerType()
+        )
+
+        self.assertEqual(len(result), 0)
+
+    def test_create_array_with_nulls(self):
+        """Test creating array with null values."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([1, None, 3], dtype="Int64")  # nullable integer
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.int64(), "UTC", spark_type=IntegerType()
+        )
+
+        self.assertEqual(result.to_pylist(), [1, None, 3])
+
+    def test_create_array_categorical(self):
+        """Test creating array from categorical Series."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series(pd.Categorical(["x", "y", "x"]))
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.string(), "UTC", spark_type=StringType()
+        )
+
+        self.assertEqual(result.to_pylist(), ["x", "y", "x"])
+
+    def test_create_array_with_udt(self):
+        """Test creating array with UDT."""
+        import pandas as pd
+        import pyarrow as pa
+
+        points = [ExamplePoint(1.0, 2.0), ExamplePoint(3.0, 4.0)]
+        series = pd.Series(points)
+
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.list_(pa.float64()), "UTC", spark_type=ExamplePointUDT()
+        )
+
+        self.assertEqual(result.to_pylist(), [[1.0, 2.0], [3.0, 4.0]])
+
+    def test_create_array_binary(self):
+        """Test creating array with binary data."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([b"hello", b"world"])
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.binary(), "UTC", spark_type=BinaryType()
+        )
+
+        self.assertEqual(result.to_pylist(), [b"hello", b"world"])
+
+    def test_create_array_all_nulls(self):
+        """Test creating array with all null values."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([None, None, None])
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.int64(), "UTC", spark_type=IntegerType()
+        )
+
+        self.assertEqual(result.to_pylist(), [None, None, None])
+
+    def test_create_array_nested_list(self):
+        """Test creating array with nested list type."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([[1, 2], [3, 4, 5], []])
+        result = PandasSeriesToArrowConversion.create_array(
+            series, pa.list_(pa.int64()), "UTC", spark_type=ArrayType(IntegerType())
+        )
+
+        self.assertEqual(result.to_pylist(), [[1, 2], [3, 4, 5], []])
+
+    def test_create_array_map_type(self):
+        """Test creating array with map type."""
+        import pandas as pd
+        import pyarrow as pa
+
+        series = pd.Series([{"a": 1}, {"b": 2, "c": 3}])
+        result = PandasSeriesToArrowConversion.create_array(
+            series,
+            pa.map_(pa.string(), pa.int64()),
+            "UTC",
+            spark_type=MapType(StringType(), IntegerType()),
+        )
+
+        # Maps are returned as list of tuples
+        self.assertEqual(result.to_pylist(), [[("a", 1)], [("b", 2), ("c", 3)]])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

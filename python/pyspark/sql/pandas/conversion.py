@@ -18,6 +18,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -31,7 +32,6 @@ from warnings import warn
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.util import _load_from_socket
-from pyspark.sql.conversion import PandasBatchTransformer
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
 from pyspark.sql.types import (
@@ -808,7 +808,8 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.serializers import ArrowStreamUDFSerializer
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+        from pyspark.sql.conversion import PandasBatchTransformer
         from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
@@ -879,8 +880,8 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, arrow_type, spark_type) for conversion to RecordBatch
-        pandas_data = [
+        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
+        arrow_data = [
             [
                 (
                     c,
@@ -894,20 +895,16 @@ class SparkConversionMixin:
             for pdf_slice in pdf_slices
         ]
 
-        # Convert pandas data to Arrow RecordBatches before serialization
-        arrow_data = map(
-            lambda batch_data: PandasBatchTransformer.to_arrow(
-                batch_data,
-                timezone=timezone,
-                safecheck=safecheck,
-                int_to_decimal_coercion_enabled=False,
-            ),
-            pandas_data,
-        )
-
         jsparkSession = self._jsparkSession
 
-        ser = ArrowStreamUDFSerializer(timezone, safecheck, False)
+        # Convert pandas data to Arrow batches
+        def create_batches() -> Iterator["pa.RecordBatch"]:
+            for batch_data in arrow_data:
+                yield PandasBatchTransformer.to_arrow(
+                    batch_data, timezone=timezone, safecheck=safecheck
+                )
+
+        ser = ArrowStreamSerializer()
 
         @no_type_check
         def reader_func(temp_filename):
@@ -918,7 +915,7 @@ class SparkConversionMixin:
             return self._jvm.ArrowIteratorServer()
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
+        jiter = self._sc._serialize_to_jvm(create_batches(), ser, reader_func, create_iter_server)
         assert self._jvm is not None
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
         df = DataFrame(jdf, self)

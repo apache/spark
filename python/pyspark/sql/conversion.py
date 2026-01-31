@@ -18,7 +18,18 @@
 import array
 import datetime
 import decimal
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Tuple, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+    overload,
+)
 
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 from pyspark.sql.pandas.types import (
@@ -242,7 +253,7 @@ class ArrowBatchTransformer:
 
         if isinstance(first_item, pa.RecordBatch):
             # Handle RecordBatches
-            batches = items
+            batches = cast(List["pa.RecordBatch"], items)
             if len(batches) == 1:
                 return batches[0]
 
@@ -514,9 +525,11 @@ class PandasBatchTransformer:
                 and isinstance(series[2], DataType)
             )
         ):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-        normalized_series = ((s[0], s[1], None) if len(s) == 2 else s for s in series)
+            items: List[Any] = [series]
+        else:
+            items = list(series)
+        tupled = ((s, None) if not isinstance(s, (list, tuple)) else s for s in items)
+        normalized_series = ((s[0], s[1], None) if len(s) == 2 else s for s in tupled)
 
         arrs = []
         for s, arrow_type, spark_type in normalized_series:
@@ -554,19 +567,19 @@ class PandasBatchTransformer:
                     for i, field in enumerate(arrow_type):
                         # Get Series and spark_type based on matching strategy
                         if use_name_matching:
-                            series = s[field.name]
+                            col_series: "pd.Series" = s[field.name]
                             field_spark_type = (
                                 spark_type[field.name].dataType if spark_type is not None else None
                             )
                         else:
-                            series = s[s.columns[i]].rename(field.name)
+                            col_series = s[s.columns[i]].rename(field.name)
                             field_spark_type = (
                                 spark_type[i].dataType if spark_type is not None else None
                             )
 
                         struct_arrs.append(
                             PandasSeriesToArrowConversion.create_array(
-                                series,
+                                col_series,
                                 field.type,
                                 timezone=timezone,
                                 safecheck=safecheck,
@@ -1603,7 +1616,7 @@ class PandasSeriesToArrowConversion:
         import pandas as pd
 
         if isinstance(series.dtype, pd.CategoricalDtype):
-            series = series.astype(series.dtypes.categories.dtype)
+            series = series.astype(series.dtype.categories.dtype)
 
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
@@ -1637,7 +1650,7 @@ class PandasSeriesToArrowConversion:
                 raise PySparkRuntimeError(
                     errorClass=error_class,
                     messageParameters={
-                        "col_name": series.name,
+                        "col_name": str(series.name),
                         "col_type": str(series.dtype),
                         "arrow_type": str(arrow_type),
                     },

@@ -1161,16 +1161,22 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 for batch in batches:
                     self._update_batch_size_stats(batch)
 
-                    data_pandas = to_pandas(flatten_columns(batch, "inputData"))
-                    init_data_pandas = to_pandas(flatten_columns(batch, "initState"))
+                    data_table = flatten_columns(batch, "inputData")
+                    init_table = flatten_columns(batch, "initState")
 
-                    assert not (bool(init_data_pandas) and bool(data_pandas))
+                    # Check column count - empty table has no columns
+                    has_data = data_table.num_columns > 0
+                    has_init = init_table.num_columns > 0
 
-                    if bool(data_pandas):
+                    assert not (has_data and has_init)
+
+                    if has_data:
+                        data_pandas = to_pandas(data_table)
                         for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_data_pandas):
+                    elif has_init:
+                        init_data_pandas = to_pandas(init_table)
                         for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)

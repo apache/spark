@@ -69,6 +69,7 @@ from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
+from pyspark.sql.conversion import PandasBatchTransformer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
@@ -629,20 +630,18 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            # Convert pandas data to Arrow RecordBatch
-            from pyspark.sql.conversion import PandasBatchTransformer
-
-            batch_data = [
-                (c, at, st) for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-            ]
-            record_batch = PandasBatchTransformer.to_arrow(
-                batch_data,
-                timezone=cast(str, timezone),
-                safecheck=safecheck == "true",
-                int_to_decimal_coercion_enabled=False,
+            _table = pa.Table.from_batches(
+                [
+                    PandasBatchTransformer.to_arrow(
+                        [
+                            (c, at, st)
+                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+                        ],
+                        timezone=cast(str, timezone),
+                        safecheck=safecheck == "true",
+                    )
+                ]
             )
-
-            _table = pa.Table.from_batches([record_batch])
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
