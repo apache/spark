@@ -121,7 +121,17 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      // Run Arrow cache with lz4 compression benchmark
+      // NOTE: LZ4 compression benchmarks are commented out because Arrow's LZ4 implementation
+      // requires the optional lz4-java native library dependency. Without it, Arrow falls back
+      // to Apache Commons Compress pure-Java LZ4 implementation which is extremely slow
+      // (~50x slower than zstd). To enable fast LZ4 benchmarks, add this dependency to pom.xml:
+      //   <dependency>
+      //     <groupId>org.lz4</groupId>
+      //     <artifactId>lz4-java</artifactId>
+      //     <version>1.8.0</version>
+      //   </dependency>
+
+      // // Run Arrow cache with lz4 compression benchmark
       // benchmark.addCase("Arrow cache - write + read (lz4)") { _ =>
       //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
       //   try {
@@ -239,7 +249,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      // Arrow cache filter with lz4 compression
+      // // Arrow cache filter with lz4 compression
       // benchmark.addCase("Arrow cache - filter (lz4)") { _ =>
       //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
       //   try {
