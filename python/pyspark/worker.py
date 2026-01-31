@@ -52,7 +52,6 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
     PandasBatchTransformer,
-    ArrowArrayToPandasConversion,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
@@ -607,8 +606,6 @@ def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
-    import pyarrow as pa
-
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -798,8 +795,6 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
-    import pyarrow as pa
-
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -3434,8 +3429,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
     ):
-        import pandas as pd
-
         # For SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF,
         # batch_iter is now Iterator[pa.RecordBatch] (raw batches from serializer)
         # Convert to pandas and concatenate into single Series per column

@@ -20,7 +20,6 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
-from typing import TYPE_CHECKING, Iterator, Optional
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -35,18 +34,11 @@ from pyspark.sql import Row
 from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTableToRowsConversion,
-    ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
     PandasBatchTransformer,
 )
-from pyspark.sql.pandas.types import (
-    from_arrow_type,
-    is_variant,
-    to_arrow_type,
-    _create_converter_from_pandas,
-)
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
-    DataType,
     StringType,
     StructType,
     BinaryType,
@@ -54,11 +46,6 @@ from pyspark.sql.types import (
     LongType,
     IntegerType,
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
-    import pyarrow as pa
-
 
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
@@ -991,7 +978,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamUDFSerializer):
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
         """
-        import pyarrow as pa
         import pandas as pd
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,

@@ -69,7 +69,6 @@ from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.serializers import ArrowStreamUDFSerializer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
