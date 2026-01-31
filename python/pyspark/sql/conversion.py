@@ -275,7 +275,7 @@ class ArrowBatchTransformer:
             ]
         else:
             # Handle Arrays directly
-            all_columns = items
+            all_columns = list(items)
 
         # Create RecordBatch from columns
         return pa.RecordBatch.from_arrays(
@@ -1747,14 +1747,16 @@ class PandasSeriesToArrowConversion:
         try:
             try:
                 return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-            except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
+            except pa.lib.ArrowInvalid:
+                # Only catch ArrowInvalid for arrow_cast, not ArrowTypeError
+                # ArrowTypeError should propagate to the TypeError handler
                 if arrow_cast:
                     return pa.Array.from_pandas(series, mask=mask).cast(
                         target_type=arrow_type, safe=safecheck
                     )
                 else:
                     raise
-        except TypeError as e:
+        except (TypeError, pa.lib.ArrowTypeError) as e:
             error_msg = (
                 "Exception thrown when converting pandas.Series (%s) "
                 "with name '%s' to Arrow Array (%s)."
@@ -1767,7 +1769,9 @@ class PandasSeriesToArrowConversion:
             )
             if safecheck:
                 error_msg += (
-                    " It can be disabled by using SQL config "
+                    " It can be caused by overflows or other "
+                    "unsafe conversions warned by Arrow. Arrow safe type check "
+                    "can be disabled by using SQL config "
                     "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                 )
             raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e

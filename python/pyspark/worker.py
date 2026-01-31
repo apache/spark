@@ -258,6 +258,8 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
             timezone=runner_conf.timezone,
             safecheck=runner_conf.safecheck,
             int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+            arrow_cast=True,
+            struct_in_pandas="dict",
         ),
     )
 
@@ -483,6 +485,8 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
             timezone=runner_conf.timezone,
             safecheck=runner_conf.safecheck,
             int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+            arrow_cast=True,
+            struct_in_pandas="dict",
         )
 
     return lambda *iterator: map(to_batch, map(verify_element, verify_result(f(*iterator))))
@@ -871,16 +875,40 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
     def flatten_wrapper(k, v):
         # Convert pandas DataFrame to Arrow RecordBatch and wrap as struct for JVM
+        import pyarrow as pa
         from pyspark.sql.conversion import PandasBatchTransformer, ArrowBatchTransformer
 
         for df in wrapped(k, v):
-            # Split DataFrame into list of (Series, arrow_type) tuples
-            series_list = [(df[col], arrow_return_type[i].type) for i, col in enumerate(df.columns)]
+            # Handle empty DataFrame (no columns)
+            if len(df.columns) == 0:
+                # Create empty struct array with correct schema
+                # Use generic field names (_0, _1, ...) to match wrap_struct behavior
+                struct_fields = [
+                    pa.field(f"_{i}", field.type) for i, field in enumerate(arrow_return_type)
+                ]
+                struct_arr = pa.array([{}] * len(df), pa.struct(struct_fields))
+                batch = pa.RecordBatch.from_arrays([struct_arr], ["_0"])
+                yield batch
+                continue
+
+            # Build list of (Series, arrow_type) tuples
+            # If assign_cols_by_name and DataFrame has named columns, match by name
+            # Otherwise, match by position
+            if runner_conf.assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
+                series_list = [
+                    (df[field.name], field.type) for field in arrow_return_type
+                ]
+            else:
+                series_list = [
+                    (df[df.columns[i]].rename(field.name), field.type)
+                    for i, field in enumerate(arrow_return_type)
+                ]
             batch = PandasBatchTransformer.to_arrow(
                 series_list,
                 timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                arrow_cast=True,
             )
             # Wrap columns as struct for JVM compatibility
             yield ArrowBatchTransformer.wrap_struct(batch)
@@ -917,16 +945,40 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
 
     def flatten_wrapper(k, v):
         # Convert pandas DataFrames to Arrow RecordBatches and wrap as struct for JVM
+        import pyarrow as pa
         from pyspark.sql.conversion import PandasBatchTransformer, ArrowBatchTransformer
 
         for df in wrapped(k, v):
-            # Split DataFrame into list of (Series, arrow_type) tuples
-            series_list = [(df[col], arrow_return_type[i].type) for i, col in enumerate(df.columns)]
+            # Handle empty DataFrame (no columns)
+            if len(df.columns) == 0:
+                # Create empty struct array with correct schema
+                # Use generic field names (_0, _1, ...) to match wrap_struct behavior
+                struct_fields = [
+                    pa.field(f"_{i}", field.type) for i, field in enumerate(arrow_return_type)
+                ]
+                struct_arr = pa.array([{}] * len(df), pa.struct(struct_fields))
+                batch = pa.RecordBatch.from_arrays([struct_arr], ["_0"])
+                yield batch
+                continue
+
+            # Build list of (Series, arrow_type) tuples
+            # If assign_cols_by_name and DataFrame has named columns, match by name
+            # Otherwise, match by position
+            if runner_conf.assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
+                series_list = [
+                    (df[field.name], field.type) for field in arrow_return_type
+                ]
+            else:
+                series_list = [
+                    (df[df.columns[i]].rename(field.name), field.type)
+                    for i, field in enumerate(arrow_return_type)
+                ]
             batch = PandasBatchTransformer.to_arrow(
                 series_list,
                 timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                arrow_cast=True,
             )
             # Wrap columns as struct for JVM compatibility
             yield ArrowBatchTransformer.wrap_struct(batch)
@@ -2791,6 +2843,13 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
 def read_udfs(pickleSer, infile, eval_type, runner_conf):
     state_server_port = None
     key_schema = None
+
+    # Initialize transformer parameters (will be set if needed for specific UDF types)
+    pandas_udf_input_type = None
+    pandas_udf_struct_in_pandas = "dict"
+    pandas_udf_ndarray_as_list = False
+    pandas_udf_df_for_struct = False
+
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -2962,12 +3021,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
-
-    # Initialize transformer parameters (will be set if needed)
-    pandas_udf_input_type = None
-    pandas_udf_struct_in_pandas = "dict"
-    pandas_udf_ndarray_as_list = False
-    pandas_udf_df_for_struct = False
 
     # Read all UDFs
     num_udfs = read_int(infile)
@@ -3478,13 +3531,25 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         # Check if we need to convert Arrow batches to pandas (for scalar pandas UDF)
         needs_arrow_to_pandas = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
+        # For SQL_ARROW_BATCHED_UDF, the wrapper returns (result, arrow_return_type, return_type)
+        # tuple that the serializer handles. For SQL_SCALAR_PANDAS_UDF and SQL_SCALAR_ARROW_UDF,
+        # the wrappers return RecordBatches that need to be zipped.
+        is_arrow_batched_udf = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+
         def mapper(a):
-            # Each UDF returns a RecordBatch (single column)
-            result_batches = tuple(
+            result = tuple(
                 f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs
             )
-            # Merge all RecordBatches into a single RecordBatch with multiple columns
-            return ArrowBatchTransformer.zip_batches(result_batches)
+            # For arrow batched UDF, return raw result (serializer handles conversion)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if is_arrow_batched_udf:
+                if len(result) == 1:
+                    return result[0]
+                else:
+                    return result
+            # For pandas/arrow scalar UDFs, each returns a RecordBatch - merge them
+            return ArrowBatchTransformer.zip_batches(result)
 
     # For grouped/cogrouped map UDFs:
     # All wrappers yield batches, so mapper returns generator → need flatten
