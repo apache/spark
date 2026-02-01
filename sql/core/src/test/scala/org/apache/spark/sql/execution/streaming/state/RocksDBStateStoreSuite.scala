@@ -1730,7 +1730,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("validate rocksdb values iterator correctness") {
+  private def testMergeWithOperatorVersions(testName: String)(testFn: Int => Unit): Unit = {
+    RocksDBConf.MERGE_OPERATOR_VALID_VERSIONS.foreach { version =>
+      test(testName + s" - merge operator version $version") {
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> version.toString) {
+          testFn(version)
+        }
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - put then merge") { _ =>
+
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
         useMultipleValuesPerKey = true)) { provider =>
@@ -1761,6 +1773,39 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+        store.abort()
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - blind merge") { _ =>
+
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        // Verify state after updating
+        merge(store, "a", 0, 1)
+
+        val iterator0 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        assert(iterator0.hasNext)
+        assert(valueRowToData(iterator0.next()) === 1)
+        assert(!iterator0.hasNext)
+
+        merge(store, "a", 0, 2)
+        merge(store, "a", 0, 3)
+
+        val iterator1 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        (1 to 3).map { i =>
+          assert(iterator1.hasNext)
+          assert(valueRowToData(iterator1.next()) === i)
+        }
+
+        assert(!iterator1.hasNext)
+
         store.abort()
       }
     }
