@@ -2521,6 +2521,8 @@ object RocksDBConf {
   val MERGE_OPERATOR_VERSION_CONF_KEY = "mergeOperatorVersion"
   private val MERGE_OPERATOR_VERSION_CONF = SQLConfEntry(MERGE_OPERATOR_VERSION_CONF_KEY, "2")
 
+  val MERGE_OPERATOR_VALID_VERSIONS: Seq[Int] = Seq(1, 2)
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
