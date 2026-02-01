@@ -393,6 +393,13 @@ jobs:
         path: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@v2
+      with:
+        paths: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v4
@@ -675,6 +682,13 @@ jobs:
         path: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@v2
+      with:
+        paths: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
@@ -757,6 +771,13 @@ jobs:
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@v2
+      with:
+        paths: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
 
@@ -1247,6 +1268,13 @@ jobs:
         path: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@v2
+      with:
+        paths: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v4
@@ -1314,6 +1342,13 @@ jobs:
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
+    - name: Test Summary
+      if: always()
+      uses: test-summary/action@v2
+      with:
+        paths: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
