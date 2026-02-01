@@ -26239,8 +26239,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def st_geomfromwkb(
-    wkb: "ColumnOrName",
-    srid: Optional[Union["ColumnOrName", int]] = None
+    wkb: "ColumnOrName", srid: Optional[Union["ColumnOrName", int]] = None
 ) -> Column:
     """Parses the input WKB description and returns the corresponding GEOMETRY value.
 
@@ -26264,6 +26263,7 @@ def st_geomfromwkb(
         return _invoke_function_over_columns("st_geomfromwkb", wkb)
     else:
         from pyspark.sql.functions import lit
+
         srid = _enum_to_value(srid)
         srid = lit(srid) if isinstance(srid, int) else srid
         return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)

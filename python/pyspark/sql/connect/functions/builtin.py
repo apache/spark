@@ -5057,8 +5057,7 @@ st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
 
 
 def st_geomfromwkb(
-    wkb: "ColumnOrName",
-    srid: Optional[Union["ColumnOrName", int]] = None
+    wkb: "ColumnOrName", srid: Optional[Union["ColumnOrName", int]] = None
 ) -> Column:
     if srid is None:
         return _invoke_function_over_columns("st_geomfromwkb", wkb)
