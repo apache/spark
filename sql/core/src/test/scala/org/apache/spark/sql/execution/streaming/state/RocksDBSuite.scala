@@ -2207,18 +2207,22 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
+        db.merge("a", "3")
+        db.commit()
+
+        db.load(2)
+        db.remove("a")
+        db.commit()
+
+        db.load(1)
         val expectedValue = expectedResultForMerge(Seq("1", "2"), version)
         assert(new String(db.get("a")) === expectedValue)
         assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
-        db.merge("a", "3")
-        db.commit()
 
         db.load(2)
         val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3"), version)
         assert(new String(db.get("a")) === expectedValue2)
         assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
-        db.remove("a")
-        db.commit()
 
         db.load(3)
         assert(db.get("a") === null)
@@ -2245,9 +2249,27 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
 
           db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.merge("a", "3")
+          db.merge("a", "4")
+          db.commit()
+
+          db.load(1)
           val expectedValue = "12"
           assert(new String(db.get("a")) === expectedValue)
           assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "34"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
         }
       }
     }
@@ -2265,21 +2287,44 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         db.load(1)
-        val expectedValue = expectedResultForMerge(Seq("1", "2", "3", "4"), version)
-        assert(new String(db.get("a")) === expectedValue)
-        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
         db.mergeList("a", Seq("5", "6").map(_.getBytes).toList)
         db.commit()
 
         db.load(2)
-        assert(new String(db.get("a")) === "1,2,3,4,5,6")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
         db.remove("a")
         db.commit()
 
         db.load(3)
+        db.putList("a", Seq("7", "8", "9").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(4)
+        db.putList("a", Seq("10", "11").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(1)
+        val expectedValue = expectedResultForMerge(Seq("1", "2", "3", "4"), version)
+        assert(new String(db.get("a")) === expectedValue)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+        db.load(2)
+        val expectedValue2 = expectedResultForMerge(Seq("1", "2", "3", "4", "5", "6"), version)
+        assert(new String(db.get("a")) === expectedValue2)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
+
+        db.load(3)
         assert(db.get("a") === null)
         assert(db.iterator().isEmpty)
+
+        db.load(4)
+        val expectedValue3 = expectedResultForMerge(Seq("7", "8", "9"), version)
+        assert(new String(db.get("a")) === expectedValue3)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue3)))
+
+        db.load(5)
+        val expectedValue4 = expectedResultForMerge(Seq("10", "11"), version)
+        assert(new String(db.get("a")) === expectedValue4)
+        assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue4)))
       }
     }
   }
@@ -2300,9 +2345,27 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
 
           db.load(1)
+          db.remove("a")
+          db.commit()
+
+          db.load(2)
+          db.mergeList("a", Seq("5").map(_.getBytes).toList)
+          db.mergeList("a", Seq("6", "7", "8").map(_.getBytes).toList)
+          db.commit()
+
+          db.load(1)
           val expectedValue = "1234"
           assert(new String(db.get("a")) === expectedValue)
           assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue)))
+
+          db.load(2)
+          assert(db.get("a") === null)
+          assert(db.iterator().isEmpty)
+
+          db.load(3)
+          val expectedValue2 = "5678"
+          assert(new String(db.get("a")) === expectedValue2)
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2))
         }
       }
     }
