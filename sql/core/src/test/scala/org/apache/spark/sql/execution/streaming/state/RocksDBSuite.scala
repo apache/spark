@@ -2365,7 +2365,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.load(3)
           val expectedValue2 = "5678"
           assert(new String(db.get("a")) === expectedValue2)
-          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2))
+          assert(db.iterator().map(toStr).toSet === Set(("a", expectedValue2)))
         }
       }
     }
