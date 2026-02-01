@@ -16,13 +16,9 @@
 #
 
 import array
-import concurrent.futures
 import datetime
 from decimal import Decimal
 import itertools
-import os
-import re
-import time
 import unittest
 
 from pyspark.sql import Row
@@ -55,11 +51,10 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_numpy:
     import numpy as np
-if have_pandas:
-    import pandas as pd
 
 # If you need to re-generate the golden files, you need to set the
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
@@ -77,27 +72,15 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFReturnTypeTests(ReusedSQLTestCase):
+class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.setup_timezone()
 
     @classmethod
     def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-
+        cls.teardown_timezone()
         super().tearDownClass()
 
     @property
@@ -144,11 +127,8 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    def repr_type(self, spark_type):
-        return spark_type.simpleString()
-
-    def repr_value(self, value):
-        return f"{str(value)}@{type(value).__name__}"
+    def repr_type(self, spark_type) -> str:
+        return self.repr_spark_type(spark_type)
 
     def test_str_repr(self):
         self.assertEqual(
@@ -163,122 +143,44 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         )
 
     def test_python_return_type_coercion_vanilla(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=False,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_vanilla",
-            test_name="Vanilla Python UDF",
-        )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
+            self._run_tests("vanilla")
 
     def test_python_return_type_coercion_with_arrow(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=True,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_with_arrow",
-            test_name="Arrow Optimized Python UDF",
-        )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
+            self._run_tests("with_arrow")
 
     def test_python_return_type_coercion_with_arrow_and_pandas(self):
-        self._run_udf_return_type_coercion(
-            use_arrow=True,
-            legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
-            test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
-        )
-
-    def _run_udf_return_type_coercion(self, use_arrow, legacy_pandas, golden_file, test_name):
         with self.sql_conf(
             {
-                "spark.sql.execution.pythonUDF.arrow.enabled": use_arrow,
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": legacy_pandas,
+                "spark.sql.execution.pythonUDF.arrow.enabled": True,
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": True,
             }
         ):
-            self._compare_or_generate_golden(golden_file, test_name)
+            self._run_tests("with_arrow_and_pandas")
 
-    def _compare_or_generate_golden(self, golden_file, test_name):
-        testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
-
-        golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
-        golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
-
-        golden = None
-        if testing:
-            golden = pd.read_csv(
-                golden_csv,
-                sep="\t",
-                index_col=0,
-                dtype="str",
-                na_filter=False,
-                engine="python",
-            )
-
-        def work(arg):
+    def _run_tests(self, golden_name):
+        def run_test(arg):
             spark_type, value = arg
-            str_t = self.repr_type(spark_type)
-            str_v = self.repr_value(value)
+            target_type = self.repr_type(spark_type)
+            source_value = self.repr_value(value)
 
             try:
                 test_udf = udf(lambda _: value, spark_type)
                 row = self.spark.range(1).select(test_udf("id")).first()
-                result = repr(row[0])
-                # Normalize Java object hash codes to make tests deterministic
-                result = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result)
-                result = result[:40]
+                return_value = self.repr_value(row[0])
             except Exception:
-                result = "X"
+                return_value = "X"
 
-            # Clean up exception message to remove newlines and extra whitespace
-            result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+            return (source_value, [(target_type, return_value)])
 
-            err = None
-            if testing:
-                expected = golden.loc[str_t, str_v]
-                if expected != result:
-                    err = f"{str_v} => {spark_type} expects {expected} but got {result}"
-
-            return (str_t, str_v, result, err)
-
-        results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            results = list(
-                executor.map(
-                    work,
-                    itertools.product(self.test_types, self.test_data),
-                )
-            )
-
-        if testing:
-            errs = []
-            for _, _, _, err in results:
-                if err is not None:
-                    errs.append(err)
-            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
-
-        else:
-            index = pd.Index(
-                [self.repr_type(t) for t in self.test_types],
-                name="SQL Type \\ Pandas Value(Type)",
-            )
-            new_golden = pd.DataFrame({}, index=index)
-            for v in self.test_data:
-                str_v = self.repr_value(v)
-                new_golden[str_v] = "?"
-
-            for str_t, str_v, res, _ in results:
-                new_golden.loc[str_t, str_v] = res
-
-            # generating the CSV file as the golden file
-            new_golden.to_csv(golden_csv, sep="\t", header=True, index=True)
-
-            try:
-                # generating the GitHub flavored Markdown file
-                # package tabulate is required
-                new_golden.to_markdown(golden_md, index=True, tablefmt="github")
-            except Exception as e:
-                print(
-                    f"{test_name} return type coercion: "
-                    f"fail to write the markdown file due to {e}!"
-                )
+        self._run_golden_tests(
+            golden_name=golden_name,
+            test_items=itertools.product(self.test_types, self.test_data),
+            run_test=run_test,
+            column_names=[self.repr_type(t) for t in self.test_types],
+            parallel=True,
+        )
 
 
 if __name__ == "__main__":

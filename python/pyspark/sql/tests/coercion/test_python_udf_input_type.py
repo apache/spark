@@ -17,8 +17,6 @@
 
 from decimal import Decimal
 import datetime
-import os
-import time
 import unittest
 
 from pyspark.sql.functions import udf
@@ -51,11 +49,10 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_numpy:
     import numpy as np
-if have_pandas:
-    import pandas as pd
 
 # If you need to re-generate the golden files, you need to set the
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
@@ -73,27 +70,15 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFInputTypeTests(ReusedSQLTestCase):
+class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.setup_timezone()
 
     @classmethod
     def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-
+        cls.teardown_timezone()
         super().tearDownClass()
 
     @property
@@ -256,133 +241,63 @@ class UDFInputTypeTests(ReusedSQLTestCase):
         ]
 
     def test_python_input_type_coercion_vanilla(self):
-        self._run_udf_input_type_coercion(
-            use_arrow=False,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_vanilla",
-            test_name="Vanilla Python UDF",
-        )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
+            self._run_tests("vanilla")
 
     def test_python_input_type_coercion_with_arrow(self):
-        self._run_udf_input_type_coercion(
-            use_arrow=True,
-            legacy_pandas=False,
-            golden_file=f"{self.prefix}_with_arrow",
-            test_name="Arrow Optimized Python UDF",
-        )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
+            self._run_tests("with_arrow")
 
     def test_python_input_type_coercion_with_arrow_and_pandas(self):
-        self._run_udf_input_type_coercion(
-            use_arrow=True,
-            legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
-            test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
-        )
-
-    def _run_udf_input_type_coercion(self, use_arrow, legacy_pandas, golden_file, test_name):
         with self.sql_conf(
             {
-                "spark.sql.execution.pythonUDF.arrow.enabled": use_arrow,
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": legacy_pandas,
+                "spark.sql.execution.pythonUDF.arrow.enabled": True,
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": True,
             }
         ):
-            self._compare_or_generate_golden(golden_file, test_name)
+            self._run_tests("with_arrow_and_pandas")
 
-    def _compare_or_generate_golden(self, golden_file, test_name):
-        testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
-
-        golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
-        golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
-
-        golden = None
-        if testing:
-            golden = pd.read_csv(
-                golden_csv,
-                sep="\t",
-                index_col=0,
-                dtype="str",
-                na_filter=False,
-                engine="python",
-            )
-
-        results = []
-        for idx, (test_name, spark_type, data_func) in enumerate(self.test_cases):
+    def _run_tests(self, golden_name):
+        def run_test(test_case):
+            case_name, spark_type, data_func = test_case
             input_df = data_func(spark_type).repartition(1)
             input_data = [row["value"] for row in input_df.collect()]
-            result = [test_name, spark_type.simpleString(), str(input_data)]
+
+            spark_type_str = self.repr_spark_type(spark_type)
+            source_value = f"{case_name}: {self.repr_value(input_data)}"
 
             try:
 
                 def type_udf(x):
-                    if x is None:
-                        return "NoneType"
-                    else:
-                        return type(x).__name__
+                    return "NoneType" if x is None else type(x).__name__
 
                 def value_udf(x):
                     return x
 
-                def value_str(x):
-                    return str(x)
-
                 type_test_udf = udf(type_udf, returnType=StringType())
                 value_test_udf = udf(value_udf, returnType=spark_type)
-                value_str_udf = udf(value_str, returnType=StringType())
 
                 result_df = input_df.select(
                     value_test_udf("value").alias("python_value"),
                     type_test_udf("value").alias("python_type"),
-                    value_str_udf("value").alias("python_value_str"),
                 )
                 results_data = result_df.collect()
                 values = [row["python_value"] for row in results_data]
-                types = [row["python_type"] for row in results_data]
-                values_str = [row["python_value_str"] for row in results_data]
-
-                # Assert that the UDF output values match the input values
-                assert values == input_data, f"Input {values} != output {input_data}"
-
-                result.append(str(types))
-                result.append(str(values_str))
-
+                python_value = self.repr_value(values)
             except Exception as e:
                 print("Exception", e)
-                result.append(f"✗ {str(e)}")
+                python_value = f"X: {str(e)}"
 
-            # Clean up exception message to remove newlines and extra whitespace
-            result = [r.replace("\n", " ").replace("\r", " ").replace("\t", " ") for r in result]
+            spark_value = self.repr_value(input_data, type_override=spark_type_str)
+            return (source_value, [("Spark Type", spark_value), ("Python Type", python_value)])
 
-            error_msg = None
-            if testing and result != list(golden.iloc[idx]):
-                error_msg = f"line mismatch: expects {list(golden.iloc[idx])} but got {result}"
-
-            results.append((result, error_msg))
-
-        if testing:
-            errs = []
-            for _, err in results:
-                if err is not None:
-                    errs.append(err)
-            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
-
-        else:
-            new_golden = pd.DataFrame(
-                [res for res, _ in results],
-                columns=["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
-            )
-
-            # generating the CSV file as the golden file
-            new_golden.to_csv(golden_csv, sep="\t", header=True, index=True)
-
-            try:
-                # generating the GitHub flavored Markdown file
-                # package tabulate is required
-                new_golden.to_markdown(golden_md, index=True, tablefmt="github")
-            except Exception as e:
-                print(
-                    f"{test_name} return type coercion: "
-                    f"fail to write the markdown file due to {e}!"
-                )
+        self._run_golden_tests(
+            golden_name=golden_name,
+            test_items=self.test_cases,
+            run_test=run_test,
+            column_names=["Spark Type", "Python Type"],
+            parallel=False,
+        )
 
 
 if __name__ == "__main__":
