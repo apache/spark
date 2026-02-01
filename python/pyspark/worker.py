@@ -50,6 +50,7 @@ from pyspark.serializers import (
 from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTableToRowsConversion,
+    ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
     PandasBatchTransformer,
 )
@@ -59,8 +60,6 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
-    TransformWithStateInPySparkRowSerializer,
-    TransformWithStateInPySparkRowInitStateSerializer,
     ArrowBatchUDFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type, TimestampType
@@ -2380,16 +2379,46 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
         cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
 
         def mapper(_, it):
+            def convert_output(output_iter):
+                """Convert (pandas.DataFrame, arrow_type, spark_type) to Arrow RecordBatch."""
+                for df, arrow_type, spark_type in output_iter:
+                    yield PandasBatchTransformer.to_arrow(
+                        (df, arrow_type, spark_type),
+                        timezone=runner_conf.timezone,
+                        safecheck=runner_conf.safecheck,
+                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                        as_struct=True,
+                        assign_cols_by_name=False,
+                        arrow_cast=True,
+                        ignore_unexpected_complex_type_values=True,
+                        error_class="UDTF_ARROW_TYPE_CAST_ERROR",
+                    )
+
             try:
                 for a in it:
+                    # Convert Arrow columns to pandas Series for legacy UDTF
+                    # Use struct_in_pandas="row" to match master's behavior for table arguments
+                    series = [
+                        ArrowArrayToPandasConversion.convert_legacy(
+                            a.column(i),
+                            f.dataType,
+                            timezone=runner_conf.timezone,
+                            struct_in_pandas="row",
+                            ndarray_as_list=True,
+                        )
+                        for i, f in enumerate(input_type)
+                    ]
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    yield from eval(*[a[o] for o in args_kwargs_offsets], num_rows=len(a[0]))
+                    num_rows = a.num_rows if not series else len(series[0])
+                    yield from convert_output(
+                        eval(*[series[o] for o in args_kwargs_offsets], num_rows=num_rows)
+                    )
                 if terminate is not None:
-                    yield from terminate()
+                    yield from convert_output(terminate())
             except SkipRestOfInputTableException:
                 if terminate is not None:
-                    yield from terminate()
+                    yield from convert_output(terminate())
             finally:
                 if cleanup is not None:
                     cleanup()
@@ -2897,12 +2926,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
-            ser = TransformWithStateInPySparkRowSerializer(runner_conf.arrow_max_records_per_batch)
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
-            ser = TransformWithStateInPySparkRowInitStateSerializer(
-                runner_conf.arrow_max_records_per_batch
-            )
+        elif eval_type in (
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+        ):
+            ser = ArrowStreamGroupSerializer()
         # SQL_ARROW_BATCHED_UDF with new conversion uses ArrowBatchUDFSerializer
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -3192,30 +3220,70 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         # support combining multiple UDFs.
         assert num_udfs == 1
 
+        import pyarrow as pa
+
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        ser.key_offsets = parsed_offsets[0][0]
+        key_offsets = parsed_offsets[0][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
-        def mapper(a):
-            mode = a[0]
+        def func(_, batches):
+            """
+            Convert raw Arrow batches to (mode, key, rows) tuples, call mapper,
+            and convert output back to Arrow batches.
+            """
 
-            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
-                key = a[1]
-                values = a[2]
+            def generate_data_batches():
+                """Convert Arrow batches to (key, row) pairs."""
+                for batch in batches:
+                    DataRow = Row(*batch.schema.names)
+                    num_cols = batch.num_columns
+                    for row_idx in range(batch.num_rows):
+                        row_key = tuple(batch[o][row_idx].as_py() for o in key_offsets)
+                        row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
+                        yield row_key, row
 
-                # This must be generator comprehension - do not materialize.
-                return f(stateful_processor_api_client, mode, key, values)
-            else:
-                # mode == PROCESS_TIMER or mode == COMPLETE
-                return f(stateful_processor_api_client, mode, None, iter([]))
+            def generate_tuples():
+                """Group by key and yield (mode, key, rows) tuples."""
+                data_batches = generate_data_batches()
+                for k, g in itertools.groupby(data_batches, key=lambda x: x[0]):
+                    chained = itertools.chain(g)
+                    chained_values = map(lambda x: x[1], chained)
+                    yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, chained_values)
+                yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+                yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+
+            def mapper(a):
+                mode = a[0]
+                if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                    key = a[1]
+                    values = a[2]
+                    return f(stateful_processor_api_client, mode, key, values)
+                else:
+                    return f(stateful_processor_api_client, mode, None, iter([]))
+
+            def convert_output(results):
+                """Convert UDF output [(iter[Row], pdf_type)] to Arrow batches."""
+                for [(iter_row, pdf_type)] in results:
+                    rows_as_dict = [row.asDict(True) for row in iter_row]
+                    record_batch = pa.RecordBatch.from_pylist(
+                        rows_as_dict, schema=pa.schema(list(pdf_type))
+                    )
+                    yield ArrowBatchTransformer.wrap_struct(record_batch)
+
+            return convert_output(map(mapper, generate_tuples()))
+
+        # Return early since func is already defined
+        return func, None, ser, ser
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
+
+        import pyarrow as pa
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
@@ -3226,22 +3294,116 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        ser.key_offsets = parsed_offsets[0][0]
-        ser.init_key_offsets = parsed_offsets[1][0]
+        key_offsets = parsed_offsets[0][0]
+        init_key_offsets = parsed_offsets[1][0]
+        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
-        def mapper(a):
-            mode = a[0]
+        def func(_, batches):
+            """
+            Convert raw Arrow batches to (mode, key, (input_rows, init_rows)) tuples,
+            call mapper, and convert output back to Arrow batches.
+            """
 
-            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
-                key = a[1]
-                values = a[2]
+            def extract_rows(cur_batch, col_name, offsets):
+                """Extract rows from a struct column in the batch."""
+                data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
 
-                # This must be generator comprehension - do not materialize.
-                return f(stateful_processor_api_client, mode, key, values)
-            else:
-                # mode == PROCESS_TIMER or mode == COMPLETE
-                return f(stateful_processor_api_client, mode, None, iter([]))
+                # Check if the entire column is null
+                if data_column.null_count == len(data_column):
+                    return None
+
+                # Flatten struct column to RecordBatch
+                flattened = pa.RecordBatch.from_arrays(
+                    data_column.flatten(), schema=pa.schema(data_column.type)
+                )
+
+                if flattened.num_rows == 0:
+                    return None
+
+                DataRow = Row(*flattened.schema.names)
+
+                def row_iterator():
+                    for row_idx in range(flattened.num_rows):
+                        key = tuple(flattened[o][row_idx].as_py() for o in offsets)
+                        row = DataRow(
+                            *(
+                                flattened.column(i)[row_idx].as_py()
+                                for i in range(flattened.num_columns)
+                            )
+                        )
+                        yield (key, row)
+
+                return row_iterator()
+
+            def generate_data_batches():
+                """
+                Convert Arrow batches to (key, input_row, init_row) triples.
+                Each batch contains either inputData or initState, not both.
+                """
+                for batch in batches:
+                    input_result = extract_rows(batch, "inputData", key_offsets)
+                    init_result = extract_rows(batch, "initState", init_key_offsets)
+
+                    assert not (input_result is not None and init_result is not None)
+
+                    if input_result is not None:
+                        for key, input_data_row in input_result:
+                            yield (key, input_data_row, None)
+                    elif init_result is not None:
+                        for key, init_state_row in init_result:
+                            yield (key, None, init_state_row)
+
+            def generate_tuples():
+                """Group by key and yield (mode, key, (input_rows, init_rows)) tuples."""
+                data_batches = generate_data_batches()
+
+                for k, g in itertools.groupby(data_batches, key=lambda x: x[0]):
+                    input_rows = []
+                    init_rows = []
+
+                    for batch_key, input_row, init_row in g:
+                        if input_row is not None:
+                            input_rows.append(input_row)
+                        if init_row is not None:
+                            init_rows.append(init_row)
+
+                        total_len = len(input_rows) + len(init_rows)
+                        if total_len >= arrow_max_records_per_batch:
+                            ret_tuple = (iter(input_rows), iter(init_rows))
+                            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+                            input_rows = []
+                            init_rows = []
+
+                    if input_rows or init_rows:
+                        ret_tuple = (iter(input_rows), iter(init_rows))
+                        yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+
+                yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+                yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+
+            def mapper(a):
+                mode = a[0]
+                if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                    key = a[1]
+                    values = a[2]
+                    return f(stateful_processor_api_client, mode, key, values)
+                else:
+                    return f(stateful_processor_api_client, mode, None, iter([]))
+
+            def convert_output(results):
+                """Convert UDF output [(iter[Row], pdf_type)] to Arrow batches."""
+                for [(iter_row, pdf_type)] in results:
+                    rows_as_dict = [row.asDict(True) for row in iter_row]
+                    record_batch = pa.RecordBatch.from_pylist(
+                        rows_as_dict, schema=pa.schema(list(pdf_type))
+                    )
+                    yield ArrowBatchTransformer.wrap_struct(record_batch)
+
+            return convert_output(map(mapper, generate_tuples()))
+
+        # Return early since func is already defined
+        return func, None, ser, ser
 
     elif (
         eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
