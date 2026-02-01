@@ -37,7 +37,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
-    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "3")
   }
 
   /**
@@ -216,7 +216,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
    */
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
-    Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
+    Seq(("increase", 5), ("decrease", 2)).foreach { case (direction, newPartitions) =>
       testWithChangelogConfig(s"$testNamePrefix - $direction partitions") {
         testFun(newPartitions)
       }
