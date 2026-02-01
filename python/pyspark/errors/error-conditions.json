@@ -380,6 +380,11 @@
       "<arg_name> index out of range, got '<index>'."
     ]
   },
+  "INVALID_ARROW_BATCH_ZIP": {
+    "message": [
+      "Cannot zip Arrow batches/arrays: <reason>."
+    ]
+  },
   "INVALID_ARROW_UDTF_RETURN_TYPE": {
     "message": [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
