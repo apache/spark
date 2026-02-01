@@ -1778,14 +1778,16 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  testMergeWithOperatorVersions(
-    "validate rocksdb values iterator correctness - blind merge") { _ =>
+  test("validate rocksdb values iterator correctness - blind merge with operator version 2") {
+    withSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
 
-    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
         useMultipleValuesPerKey = true)) { provider =>
         val store = provider.getStore(0)
-        // Verify state after updating
+        // We do blind merge than put against non-existing key.
+        // Note that this is only safe with merge operator version 2.
         merge(store, "a", 0, 1)
 
         val iterator0 = store.valuesIterator(dataToKeyRow("a", 0))
