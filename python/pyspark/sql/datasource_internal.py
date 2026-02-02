@@ -92,10 +92,10 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         # We do not consider providing different read limit on simple stream reader.
         return ReadAllAvailable()
 
-    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:  # type: ignore[override]
+    def latestOffset(self, start: dict, limit: ReadLimit) -> dict:  # type: ignore[override]
         assert start is not None, "start offset should not be None"
         assert isinstance(
-            readLimit, ReadAllAvailable
+            limit, ReadAllAvailable
         ), "simple stream reader does not support read limit"
 
         (iter, end) = self.simple_reader.read(start)

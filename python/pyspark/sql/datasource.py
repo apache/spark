@@ -715,7 +715,7 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(self, start: dict, readLimit: ReadLimit) -> dict:
+    def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
         """
         Returns the most recent offset available given a read limit. The start offset can be used
         to figure out how much new data should be read given the limit.
@@ -744,7 +744,7 @@ class DataSourceStreamReader(ABC):
         ----------
         start : dict
             The start offset of the microbatch to continue reading from.
-        readLimit : :class:`ReadLimit`
+        limit : :class:`ReadLimit`
             The limit on the amount of data to be returned by this call.
 
         Returns
@@ -756,12 +756,12 @@ class DataSourceStreamReader(ABC):
         Examples
         --------
         >>> from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadMaxRows
-        >>> def latestOffset(self, start, readLimit):
+        >>> def latestOffset(self, start, limit):
         ...     # Assume the source has 10 new records between start and latest offset
-        ...     if isinstance(readLimit, ReadAllAvailable):
+        ...     if isinstance(limit, ReadAllAvailable):
         ...        return {"index": start["index"] + 10}
-        ...     else:  # e.g., readLimit is ReadMaxRows(5)
-        ...        return {"index": start["index"] + min(10, readLimit.maxRows)}
+        ...     else:  # e.g., limit is ReadMaxRows(5)
+        ...        return {"index": start["index"] + min(10, limit.maxRows)}
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",

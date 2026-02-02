@@ -694,15 +694,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |        return {"partition-1": 0}
        |    def getDefaultReadLimit(self):
        |        return ReadMaxRows(2)
-       |    def latestOffset(self, start: dict, readLimit: ReadLimit):
+       |    def latestOffset(self, start: dict, limit: ReadLimit):
        |        start_idx = start["partition-1"]
-       |        if isinstance(readLimit, ReadAllAvailable):
+       |        if isinstance(limit, ReadAllAvailable):
        |            end_offset = start_idx + 10
        |        else:
-       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read "
-       |                                                        "limit but got "
-       |                                                        + str(type(readLimit)))
-       |            end_offset = start_idx + readLimit.max_rows
+       |            assert isinstance(limit, ReadMaxRows), ("Expected ReadMaxRows read "
+       |                                                    "limit but got "
+       |                                                    + str(type(limit)))
+       |            end_offset = start_idx + limit.max_rows
        |        return {"partition-1": end_offset}
        |    def reportLatestOffset(self):
        |        return {"partition-1": 1000000}
@@ -742,15 +742,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
        |        return {"partition-1": 0}
        |    def getDefaultReadLimit(self):
        |        return ReadMaxRows(2)
-       |    def latestOffset(self, start: dict, readLimit: ReadLimit):
+       |    def latestOffset(self, start: dict, limit: ReadLimit):
        |        start_idx = start["partition-1"]
-       |        if isinstance(readLimit, ReadAllAvailable):
+       |        if isinstance(limit, ReadAllAvailable):
        |            end_offset = start_idx + 5
        |        else:
-       |            assert isinstance(readLimit, ReadMaxRows), ("Expected ReadMaxRows read "
-       |                                                        "limit but got "
-       |                                                        + str(type(readLimit)))
-       |            end_offset = start_idx + readLimit.max_rows
+       |            assert isinstance(limit, ReadMaxRows), ("Expected ReadMaxRows read "
+       |                                                    "limit but got "
+       |                                                    + str(type(limit)))
+       |            end_offset = start_idx + limit.max_rows
        |        end_offset = min(end_offset, self.desired_end_offset)
        |        return {"partition-1": end_offset}
        |    def reportLatestOffset(self):

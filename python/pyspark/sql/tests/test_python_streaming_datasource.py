@@ -190,15 +190,15 @@ class BasePythonStreamingDataSourceTestsMixin:
             def getDefaultReadLimit(self):
                 return ReadMaxRows(2)
 
-            def latestOffset(self, start: dict, readLimit: ReadLimit):
+            def latestOffset(self, start: dict, limit: ReadLimit):
                 start_idx = start["partition-1"]
-                if isinstance(readLimit, ReadAllAvailable):
+                if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
                     assert isinstance(
-                        readLimit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(readLimit))
-                    end_offset = start_idx + readLimit.max_rows
+                        limit, ReadMaxRows
+                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    end_offset = start_idx + limit.max_rows
                 return {"partition-1": end_offset}
 
             def reportLatestOffset(self):
@@ -229,16 +229,16 @@ class BasePythonStreamingDataSourceTestsMixin:
             def getDefaultReadLimit(self):
                 return ReadMaxRows(2)
 
-            def latestOffset(self, start: dict, readLimit: ReadLimit):
+            def latestOffset(self, start: dict, limit: ReadLimit):
                 start_idx = start["partition-1"]
-                if isinstance(readLimit, ReadAllAvailable):
+                if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
                     assert isinstance(
-                        readLimit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(readLimit))
+                        limit, ReadMaxRows
+                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
                     end_offset = min(
-                        start_idx + readLimit.max_rows, self.desired_end_offset["partition-1"]
+                        start_idx + limit.max_rows, self.desired_end_offset["partition-1"]
                     )
                 return {"partition-1": end_offset}
 
