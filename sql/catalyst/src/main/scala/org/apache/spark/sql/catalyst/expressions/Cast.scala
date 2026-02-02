@@ -635,7 +635,8 @@ case class Cast(
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
       // In TRY mode with validation enabled, BinaryType to StringType cast can return null
-      case (BinaryType, _: StringType) => validateUtf8 || child.nullable
+      case (BinaryType, _: StringType) =>
+        validateUtf8 || child.nullable || !Cast.canUpCast(child.dataType, dataType)
       // TODO: Implement a more accurate method for checking whether a decimal value can be cast
       //       as integral types without overflow. Currently, the cast can overflow even if
       //       "Cast.canUpCast" method returns true.
@@ -715,6 +716,27 @@ case class Cast(
       null
     }
   })
+
+  // Helper to apply length constraint after UTF-8 validation
+  private[this] def castBinaryToStringWithConstraint(
+      constraintCheck: (UTF8String, Int) => UTF8String,
+      length: Int): Any => Any = {
+    buildCast[Array[Byte]](_, bytes => {
+      val utf8Str = castBinaryToString.apply(bytes)
+      if (utf8Str == null) null
+      else if (isTryCast) {
+        // TRY mode: catch exceptions and return null
+        try {
+          constraintCheck(utf8Str.asInstanceOf[UTF8String], length)
+        } catch {
+          case _: Throwable => null
+        }
+      } else {
+        // ANSI and LEGACY: let exceptions propagate
+        constraintCheck(utf8Str.asInstanceOf[UTF8String], length)
+      }
+    })
+  }
 
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
@@ -1302,7 +1324,17 @@ case class Cast(
         case s: StringType =>
           // Special handling for BinaryType to StringType cast with UTF-8 validation
           from match {
-            case BinaryType => castBinaryToString
+            case BinaryType =>
+              // Apply constraint wrapper around UTF-8 validation
+              s.constraint match {
+                case FixedLength(length) =>
+                  castBinaryToStringWithConstraint(
+                    CharVarcharCodegenUtils.charTypeWriteSideCheck, length)
+                case MaxLength(length) =>
+                  castBinaryToStringWithConstraint(
+                    CharVarcharCodegenUtils.varcharTypeWriteSideCheck, length)
+                case NoConstraint => castBinaryToString
+              }
             case _ => castToString(from, s.constraint)
           }
         case BinaryType => castToBinary(from)
@@ -1418,34 +1450,69 @@ case class Cast(
       from match {
         case BinaryType =>
           val tmp = ctx.freshVariable("tmp", classOf[UTF8String])
+          val tmpResult = ctx.freshVariable("tmpResult", classOf[UTF8String])
 
-          if (!validateUtf8) {
-            // Old behavior: no validation
-            (c, evPrim, evNull) =>
-              code"$evPrim = UTF8String.fromBytes($c);"
-          } else if (ansiEnabled) {
-            // ANSI mode: throw on invalid UTF-8
-            val errorContext = getContextOrNullCode(ctx)
-            (c, evPrim, evNull) =>
+          (c, evPrim, evNull) => {
+            // Generate UTF-8 validation code
+            val utf8ValidationCode = if (!validateUtf8) {
+              code"$tmpResult = UTF8String.fromBytes($c);"
+            } else if (ansiEnabled) {
+              val errorContext = getContextOrNullCode(ctx)
               code"""
                 UTF8String $tmp = UTF8String.fromBytes($c);
                 if (!$tmp.isValid()) {
                   throw QueryExecutionErrors.invalidUtf8InBinaryCastError($c, $errorContext);
                 }
-                $evPrim = $tmp;
+                $tmpResult = $tmp;
               """
-          } else {
-            // LEGACY mode: return null on invalid UTF-8
-            (c, evPrim, evNull) =>
+            } else {
               code"""
                 UTF8String $tmp = UTF8String.fromBytes($c);
                 if ($tmp.isValid()) {
-                  $evPrim = $tmp;
+                  $tmpResult = $tmp;
                 } else {
                   $evNull = true;
                 }
               """
+            }
+
+            // Helper to generate constraint check code
+            def constraintCheckCode(checkMethod: String, length: Int): Block = {
+              if (isTryCast) {
+                // TRY mode: catch exceptions and return null
+                code"""
+                  try {
+                    $evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                          .$checkMethod($tmpResult, $length);
+                  } catch (Exception e) {
+                    $evNull = true;
+                  }
+                """
+              } else {
+                // ANSI and LEGACY: let exceptions propagate
+                code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                      .$checkMethod($tmpResult, $length);"""
+              }
+            }
+
+            // Apply length constraints
+            val maintainConstraint = s.constraint match {
+              case FixedLength(length) =>
+                constraintCheckCode("charTypeWriteSideCheck", length)
+              case MaxLength(length) =>
+                constraintCheckCode("varcharTypeWriteSideCheck", length)
+              case NoConstraint => code"$evPrim = $tmpResult;"
+            }
+
+            code"""
+              UTF8String $tmpResult = null;
+              $utf8ValidationCode
+              if (!$evNull) {
+                $maintainConstraint
+              }
+            """
           }
+
         case _ =>
           (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
       }
