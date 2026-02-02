@@ -594,8 +594,8 @@ class SparkSession:
 
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
-            spark_types: List[Optional[DataType]]
-            arrow_types: List[Optional[pa.DataType]]
+            spark_types: List[DataType]
+            arrow_types: List[pa.DataType]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
@@ -612,19 +612,19 @@ class SparkSession:
                     messageParameters={"data_type": str(schema)},
                 )
             else:
-                # Any timestamps must be coerced to be compatible with Spark
+                # When no schema is provided, infer Spark types from Arrow types.
+                # Timestamps and timedeltas are handled specially to ensure compatibility.
+                pa_schema = pa.Schema.from_pandas(data, preserve_index=False)
                 spark_types = [
                     TimestampType()
                     if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
                     else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
-                    else None
-                    for t in data.dtypes
+                    else from_arrow_type(field.type, prefer_timestamp_ntz)
+                    for t, field in zip(data.dtypes, pa_schema)
                 ]
                 arrow_types = [
                     to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
-                    if dt is not None
-                    else None
                     for dt in spark_types
                 ]
 

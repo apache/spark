@@ -865,12 +865,14 @@ class SparkConversionMixin:
                 messageParameters={"data_type": str(schema)},
             )
         else:
-            # Any timestamps must be coerced to be compatible with Spark
+            # When no schema is provided, infer Spark types from Arrow types.
+            # Timestamps are handled specially to ensure compatibility with Spark.
+            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             spark_types = [
                 TimestampType()
                 if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                else None
-                for t in pdf.dtypes
+                else from_arrow_type(field.type, prefer_timestamp_ntz)
+                for t, field in zip(pdf.dtypes, arrow_schema)
             ]
 
         # Slice the DataFrame to be batched
