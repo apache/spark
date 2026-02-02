@@ -40,6 +40,8 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    ExecuteOutput execute_output = 9;
+
     // Reserved field for protocol extensions.
     // Used to support forward-compatibility by carrying additional command types
     // that are not yet defined in this version of the proto. During planning, the
@@ -165,6 +167,33 @@ message PipelineCommand {
     }
   }
 
+  // Request to execute all flows for a single table remotely.
+  message ExecuteOutput {
+
+    // The output (table or materialized view) definition.
+    optional DefineOutput define_output = 1;
+
+    // The flows to execute for this table.
+    repeated DefineFlow define_flows = 2;
+
+    // Whether to perform a full refresh instead of an incremental update.
+    optional bool full_refresh = 3;
+
+    // The catalog to use for execution.
+    optional string catalog = 4;
+
+    // The database to use for execution.
+    optional string database = 5;
+
+    // SQL configurations for this execution.
+    map<string, string> sql_conf = 7;
+
+    // Storage location for pipeline checkpoints and metadata.
+    optional string storage = 8;
+
+    google.protobuf.Any extension = 999;
+  }
+
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
   // graph elements are registered.
   message StartRun {
@@ -223,6 +252,7 @@ message PipelineCommand {
     optional spark.connect.Relation relation = 3;
   }
 }
+
 
 // Dispatch object for pipelines command results.
 message PipelineCommandResult {
