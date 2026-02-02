@@ -261,7 +261,7 @@ class IndexingAdvMixin:
     def test_getitem_timestamp_str(self):
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="H", periods=100),
+            index=pd.date_range("2011-01-01", freq="h", periods=100),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -286,7 +286,7 @@ class IndexingAdvMixin:
     def test_getitem_period_str(self):
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.period_range("2011-01-01", freq="H", periods=100),
+            index=pd.period_range("2011-01-01", freq="h", periods=100),
         )
         psdf = ps.from_pandas(pdf)
 

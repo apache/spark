@@ -543,6 +543,10 @@ abstract class InMemoryBaseTable(
       }
       new BufferedRowsReaderFactory(metadataColumns.toSeq, nonMetadataColumns, tableSchema)
     }
+
+    override def supportedCustomMetrics(): Array[CustomMetric] = {
+      Array(new RowsReadCustomMetric)
+    }
   }
 
   case class InMemoryBatchScan(
@@ -830,10 +834,13 @@ private class BufferedRowsReader(
   }
 
   private var index: Int = -1
+  private var rowsRead: Long = 0
 
   override def next(): Boolean = {
     index += 1
-    index < partition.rows.length
+    val hasNext = index < partition.rows.length
+    if (hasNext) rowsRead += 1
+    hasNext
   }
 
   override def get(): InternalRow = {
@@ -976,6 +983,22 @@ private class BufferedRowsReader(
 
   private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
     Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
+
+  override def initMetricsValues(metrics: Array[CustomTaskMetric]): Unit = {
+    metrics.foreach { m =>
+      m.name match {
+        case "rows_read" => rowsRead = m.value()
+      }
+    }
+  }
+
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val metric = new CustomTaskMetric {
+      override def name(): String = "rows_read"
+      override def value(): Long = rowsRead
+    }
+    Array(metric)
+  }
 }
 
 private class BufferedRowsWriterFactory(schema: StructType)
@@ -1042,6 +1065,11 @@ class InMemoryCustomDriverMetric extends CustomSumMetric {
 class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def name(): String = "number_of_rows_from_driver"
   override def value(): Long = value
+}
+
+class RowsReadCustomMetric extends CustomSumMetric {
+  override def name(): String = "rows_read"
+  override def description(): String = "number of rows read"
 }
 
 case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)

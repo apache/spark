@@ -693,7 +693,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='h', periods=3)  # doctest: +SKIP
         >>> idx.normalize()  # doctest: +SKIP
         DatetimeIndex(['2014-08-01', '2014-08-01', '2014-08-01'], dtype='datetime64[ns]', freq=None)
         """
@@ -761,7 +761,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="min")
         >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
@@ -815,7 +815,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="min")  # doctest: +SKIP
         >>> psidx  # doctest: +SKIP
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],

@@ -548,17 +548,24 @@ private[spark] class Executor(
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val taskId = taskDescription.taskId
-    val tr = createTaskRunner(context, taskDescription)
-    runningTasks.put(taskId, tr)
-    val killMark = killMarks.get(taskId)
-    if (killMark != null) {
-      tr.kill(killMark._1, killMark._2)
-      killMarks.remove(taskId)
-    }
+    var taskRunnerOpt: Option[TaskRunner] = None
     try {
+      val tr = createTaskRunner(context, taskDescription)
+      taskRunnerOpt = Some(tr)
+      runningTasks.put(taskId, tr)
+      val killMark = killMarks.get(taskId)
+      if (killMark != null) {
+        tr.kill(killMark._1, killMark._2)
+        killMarks.remove(taskId)
+      }
       threadPool.execute(tr)
     } catch {
       case t: Throwable =>
+        // Clean up if task was added to runningTasks before the failure.
+        // If TaskRunner construction failed, taskRunnerOpt will be None and nothing to clean up.
+        taskRunnerOpt.foreach { tr =>
+          runningTasks.remove(tr.taskId)
+        }
         try {
           logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
             log" reason: ${MDC(REASON, t.getMessage)}")
@@ -567,9 +574,22 @@ private[spark] class Executor(
             TaskState.FAILED,
             env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
         } catch {
+          case NonFatal(e) if env.isStopped =>
+            logError(
+              log"Executor update launching task " +
+                log"${MDC(TASK_NAME, taskDescription.name)} " +
+                log"failed status failed, reason: ${MDC(REASON, t.getMessage)}" +
+                log", spark env is stopped"
+            )
+          // No need to exit the executor as the executor is already stopped.
+          // Leave it live to clean up the rest tasks and log info (similar to SPARK-19147).
           case t: Throwable =>
-            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
-              log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
+            logError(
+              log"Executor update launching task " +
+                log"${MDC(TASK_NAME, taskDescription.name)} " +
+                log"failed status failed, reason: ${MDC(REASON, t.getMessage)}" +
+                log", shutting down the executor"
+            )
             System.exit(-1)
         }
     }
