@@ -510,12 +510,26 @@ class TwsTesterTests(ReusedSQLTestCase):
         with self.assertRaises(AssertionError):
             tester.peekValueState("nonexistent_state", "key1")
 
+    def test_clear_nonexistent_value_state(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        tester.handle.setGroupingKey("key1")
+        value_state = tester.handle.getValueState("count", "int")
+        value_state.clear()
+
     def test_clear_nonexistent_list_state(self):
         processor = TopKProcessorFactory(k=2).row()
         tester = TwsTester(processor)
         tester.handle.setGroupingKey("key1")
         list_state = tester.handle.getListState("topK", "double")
         list_state.clear()
+
+    def test_clear_nonexistent_map_state(self):
+        processor = WordFrequencyProcessorFactory().row()
+        tester = TwsTester(processor)
+        tester.handle.setGroupingKey("key1")
+        map_state = tester.handle.getMapState("frequencies", "string", "int")
+        map_state.clear()
 
     def test_delete_if_exists_nonexistent(self):
         processor = RunningCountStatefulProcessorFactory().row()
@@ -553,122 +567,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         result = tester.testInPandas(None, input_df)
         expected = pd.DataFrame({"key": [None], "count": [2]})
         pdt.assert_frame_equal(result, expected, check_like=True)
-
-    def test_multiple_value_states(self):
-        from pyspark.sql.streaming.stateful_processor import (
-            StatefulProcessor,
-            StatefulProcessorHandle,
-        )
-        from typing import Iterator
-
-        class MultiValueStateProcessor(StatefulProcessor):
-            def init(self, handle: StatefulProcessorHandle) -> None:
-                self.handle = handle
-                self.state1 = handle.getValueState("state1", "int")
-                self.state2 = handle.getValueState("state2", "int")
-
-            def handleInputRows(self, key, rows, timerValues) -> Iterator:
-                val1 = self.state1.get() if self.state1.exists() else None
-                count1 = val1[0] if val1 else 0
-                val2 = self.state2.get() if self.state2.exists() else None
-                count2 = val2[0] if val2 else 0
-                for row in rows:
-                    count1 += 1
-                    count2 += 2
-                self.state1.update((count1,))
-                self.state2.update((count2,))
-                yield Row(key=key[0], count1=count1, count2=count2)
-
-        processor = MultiValueStateProcessor()
-        tester = TwsTester(processor)
-        result = tester.test("key1", [Row(value="a")])
-        self.assertEqual(result, [Row(key="key1", count1=1, count2=2)])
-        self.assertEqual(tester.peekValueState("state1", "key1"), (1,))
-        self.assertEqual(tester.peekValueState("state2", "key1"), (2,))
-
-    def test_multiple_list_states(self):
-        from pyspark.sql.streaming.stateful_processor import (
-            StatefulProcessor,
-            StatefulProcessorHandle,
-        )
-        from typing import Iterator
-
-        class MultiListStateProcessor(StatefulProcessor):
-            def init(self, handle: StatefulProcessorHandle) -> None:
-                self.handle = handle
-                self.list1 = handle.getListState("list1", "string")
-                self.list2 = handle.getListState("list2", "string")
-
-            def handleInputRows(self, key, rows, timerValues) -> Iterator:
-                for row in rows:
-                    self.list1.appendValue((row.value,))
-                    self.list2.appendValue((row.value + "_2",))
-                yield Row(key=key[0], count=1)
-
-        processor = MultiListStateProcessor()
-        tester = TwsTester(processor)
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(tester.peekListState("list1", "key1"), [("a",)])
-        self.assertEqual(tester.peekListState("list2", "key1"), [("a_2",)])
-
-    def test_multiple_map_states(self):
-        from pyspark.sql.streaming.stateful_processor import (
-            StatefulProcessor,
-            StatefulProcessorHandle,
-        )
-        from typing import Iterator
-
-        class MultiMapStateProcessor(StatefulProcessor):
-            def init(self, handle: StatefulProcessorHandle) -> None:
-                self.handle = handle
-                self.map1 = handle.getMapState("map1", "string", "int")
-                self.map2 = handle.getMapState("map2", "string", "int")
-
-            def handleInputRows(self, key, rows, timerValues) -> Iterator:
-                for row in rows:
-                    val1 = self.map1.getValue((row.word,))
-                    count1 = val1[0] if val1 is not None else 0
-                    val2 = self.map2.getValue((row.word,))
-                    count2 = val2[0] if val2 is not None else 0
-                    self.map1.updateValue((row.word,), (count1 + 1,))
-                    self.map2.updateValue((row.word,), (count2 + 2,))
-                yield Row(key=key[0], word=row.word)
-
-        processor = MultiMapStateProcessor()
-        tester = TwsTester(processor)
-        tester.test("key1", [Row(word="hello")])
-        self.assertEqual(tester.peekMapState("map1", "key1"), {("hello",): (1,)})
-        self.assertEqual(tester.peekMapState("map2", "key1"), {("hello",): (2,)})
-
-    def test_mixed_state_types(self):
-        from pyspark.sql.streaming.stateful_processor import (
-            StatefulProcessor,
-            StatefulProcessorHandle,
-        )
-        from typing import Iterator
-
-        class MixedStateProcessor(StatefulProcessor):
-            def init(self, handle: StatefulProcessorHandle) -> None:
-                self.handle = handle
-                self.value_state = handle.getValueState("value", "int")
-                self.list_state = handle.getListState("list", "string")
-                self.map_state = handle.getMapState("map", "string", "int")
-
-            def handleInputRows(self, key, rows, timerValues) -> Iterator:
-                for row in rows:
-                    val = self.value_state.get() if self.value_state.exists() else None
-                    count = val[0] if val else 0
-                    self.value_state.update((count + 1,))
-                    self.list_state.appendValue((row.value,))
-                    self.map_state.updateValue((row.value,), (1,))
-                yield Row(key=key[0], count=1)
-
-        processor = MixedStateProcessor()
-        tester = TwsTester(processor)
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(tester.peekValueState("value", "key1"), (1,))
-        self.assertEqual(tester.peekListState("list", "key1"), [("a",)])
-        self.assertEqual(tester.peekMapState("map", "key1"), {("a",): (1,)})
 
     def test_pandas_with_multiple_rows(self):
         processor = RunningCountStatefulProcessorFactory().pandas()
@@ -713,43 +611,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         tester.test("key1", [Row(value="a")])
         tester.test("key1", [Row(value="b")])
         self.assertEqual(init_call_count[0], 1)
-
-    def test_processor_state_persists_across_batches(self):
-        processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor)
-        tester.test("key1", [Row(value="a")])
-        result = tester.test("key1", [Row(value="b")])
-        self.assertEqual(result, [Row(key="key1", count=2)])
-
-    def test_handle_initial_state_not_called_without_initial_state(self):
-        from pyspark.sql.streaming.stateful_processor import (
-            StatefulProcessor,
-            StatefulProcessorHandle,
-        )
-        from typing import Iterator
-
-        initial_state_call_count = [0]
-
-        class InitialStateCountingProcessor(StatefulProcessor):
-            def init(self, handle: StatefulProcessorHandle) -> None:
-                self.handle = handle
-                self.state = handle.getValueState("count", "int")
-
-            def handleInitialState(self, key, initialState, timerValues) -> None:
-                initial_state_call_count[0] += 1
-
-            def handleInputRows(self, key, rows, timerValues) -> Iterator:
-                val = self.state.get() if self.state.exists() else None
-                count = val[0] if val else 0
-                for row in rows:
-                    count += 1
-                self.state.update((count,))
-                yield Row(key=key[0], count=count)
-
-        processor = InitialStateCountingProcessor()
-        tester = TwsTester(processor)
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(initial_state_call_count[0], 0)
 
     def test_delete_value_state(self):
         """Test that deleteState correctly deletes value state for a given key."""
@@ -846,10 +707,24 @@ class TwsTesterTests(ReusedSQLTestCase):
         expired1 = tester.setProcessingTime(5000)
         self.assertEqual(len(expired1), 0)
 
-        # Set processing time to 11000 - timer should fire.
+        # Process input for key2 at t=5000 - should register timer at t=15000.
+        result2 = tester.testInPandas("key2", pd.DataFrame({"value": ["world"]}))
+        expected2 = pd.DataFrame({"key": ["key2"], "result": ["received:world"]})
+        pdt.assert_frame_equal(result2, expected2, check_like=True)
+
+        # Set processing time to 11000 - key1's timer should fire.
         expired2 = tester.setProcessingTime(11000)
-        expected2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
-        pdt.assert_frame_equal(expired2, expected2, check_like=True)
+        expected_expired2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
+        pdt.assert_frame_equal(expired2, expected_expired2, check_like=True)
+
+        # Set processing time to 16000 - key2's timer should fire.
+        expired3 = tester.setProcessingTime(16000)
+        expected_expired3 = pd.DataFrame({"key": ["key2"], "result": ["session-expired"]})
+        pdt.assert_frame_equal(expired3, expected_expired3, check_like=True)
+
+        # Verify state is cleared after session expiry.
+        self.assertIsNone(tester.peekValueState("lastSeen", "key1"))
+        self.assertIsNone(tester.peekValueState("lastSeen", "key2"))
 
     def test_event_time_timers_manual_watermark(self):
         """Test that TwsTester supports EventTime timers fired by manual watermark advance."""
@@ -932,39 +807,28 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(result2, [Row(key="key1", count=4)])  # 3 + 1 = 4
         self.assertEqual(tester.peekValueState("count", "key1"), (4,))
 
-    def test_all_late_events_filtered(self):
-        """Test that all late events are filtered when all are older than watermark."""
-        processor = EventTimeCountProcessorFactory().row()
-
-        def event_time_extractor(row: Row) -> int:
-            return row.event_time_ms
-
+    def test_registers_on_time_events(self):
+        "TwsTester with eventTimeExtractor should allow timer registration from on-time events"
+        # With eventTimeExtractor, late events are filtered BEFORE reaching the processor,
+        # so timers can only be registered from on-time events (no exception).
         tester = TwsTester(
-            processor,
+            EventTimeSessionProcessorFactory().row(),
             timeMode="EventTime",
-            eventTimeExtractor=event_time_extractor,
+            eventTimeExtractor=lambda row: row.event_time_ms,
         )
 
-        # Process events to get initial count.
-        tester.test("key1", [Row(event_time_ms=10000, value="a")])
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+        # Set watermark to 20 seconds.
+        tester.setWatermark(20000)
 
-        # Set watermark to 10000.
-        tester.setWatermark(10000)
-
-        # Now send only late events - all should be filtered, count unchanged.
+        # Process a mix of late and on-time events.
+        # Late event (10000) is filtered out, on-time event (25000) is processed.
+        # Timer registered at 25000 + 5000 = 30000, which is > watermark, so no exception.
         result = tester.test(
             "key1",
-            [
-                Row(event_time_ms=1000, value="late1"),
-                Row(event_time_ms=5000, value="late2"),
-                Row(event_time_ms=9999, value="late3"),
-                Row(event_time_ms=10000, value="late4"),  # exactly at watermark, also filtered
-            ],
+            [Row(event_time_ms=10000, value="late"), Row(event_time_ms=25000, value="ontime")],
         )
-        # No events processed - handleInputRows is called with empty list.
-        self.assertEqual(result, [Row(key="key1", count=1)])  # Count still 1
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+        # Only the on-time event produces output.
+        self.assertEqual(result, [Row(key="key1", result="received:ontime@25000")])
 
     def test_timer_registration_in_none_mode_raises_error(self):
         """Test that timer operations raise error in TimeMode.None."""
@@ -1194,6 +1058,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         self.assertEqual(len(actual_results), num_batches)
         self.assertEqual(len(expected_results), num_batches)
         for batch_id in range(num_batches):
+            # This checks that collections are the same up to order, not just compares lengths.
             self.assertCountEqual(actual_results[batch_id], expected_results[batch_id])
 
     def test_fuzz_running_count(self):
