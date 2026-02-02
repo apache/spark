@@ -223,7 +223,9 @@ class OpsTestBase:
     def assert_eq(self, left, right, **kwargs):
         """
         SPARK-55321:
-        Ignore null values when comparing numeric values.
+        Ignore null values when comparing dataframe or series. pyspark.pandas generates
+        a different null value than pandas and pandas 3 has a more strict testing
+        utility.
         """
         try:
             if left.isnull().to_numpy().any() or right.isnull().to_numpy().any():
