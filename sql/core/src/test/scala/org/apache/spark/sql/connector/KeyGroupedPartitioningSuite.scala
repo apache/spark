@@ -2824,7 +2824,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SSPARK-55302: Custom metrics of grouped partitions") {
+  test("SPARK-55302: Custom metrics of grouped partitions") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
 

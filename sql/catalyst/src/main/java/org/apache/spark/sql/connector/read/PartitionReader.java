@@ -64,7 +64,7 @@ public interface PartitionReader<T> extends Closeable {
    * when multiple {@link PartitionReader}s are grouped into one partition in case of
    * {@link org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning} and the reader
    * is initialized with the metrics returned by the previous reader that belongs to the same
-   * partition.
+   * partition. By default, this method does nothing.
    */
   default void initMetricsValues(CustomTaskMetric[] metrics) {}
 }
