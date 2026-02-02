@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional, Tuple
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -35,7 +35,6 @@ from pyspark.sql import Row
 from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTableToRowsConversion,
-    ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
@@ -1673,7 +1672,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
         """
-        import pyarrow as pa
         import pandas as pd
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
@@ -1836,17 +1834,21 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 for batch in batches:
                     self._update_batch_size_stats(batch)
 
-                    data_pandas = to_pandas(flatten_columns(batch, "inputData"))
-                    init_data_pandas = to_pandas(flatten_columns(batch, "initState"))
+                    data_table = flatten_columns(batch, "inputData")
+                    init_table = flatten_columns(batch, "initState")
 
-                    assert not (bool(init_data_pandas) and bool(data_pandas))
+                    # Check column count - empty table has no columns
+                    has_data = data_table.num_columns > 0
+                    has_init = init_table.num_columns > 0
 
-                    if bool(data_pandas):
-                        for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    assert not (has_data and has_init)
+
+                    if has_data:
+                        for row in pd.concat(to_pandas(data_table), axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_data_pandas):
-                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                    elif has_init:
+                        for row in pd.concat(to_pandas(init_table), axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 
@@ -2003,7 +2005,6 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
-        from typing import Iterator, Any, Optional, Tuple
 
         def generate_data_batches(batches) -> Iterator[Tuple[Any, Optional[Any], Optional[Any]]]:
             """
