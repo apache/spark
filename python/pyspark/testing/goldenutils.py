@@ -133,8 +133,9 @@ class GoldenFileTestMixin:
         """Convert Spark type to string representation."""
         return spark_type.simpleString()
 
-    @staticmethod
+    @classmethod
     def repr_value(
+        cls,
         value: Any,
         max_len: int = 32,
         type_override: Optional[str] = None,
@@ -165,33 +166,16 @@ class GoldenFileTestMixin:
         str
             String representation in format "value@type".
         """
-        if type_override is not None:
-            v_str = str(value)
-            type_str = type_override
-        elif have_pandas and isinstance(value, pd.DataFrame):
+        # Get value string representation
+        if have_pandas and isinstance(value, pd.DataFrame):
             v_str = value.to_json()
-            schema = ", ".join([f"{col} {dtype.name}" for col, dtype in value.dtypes.items()])
-            type_str = f"DataFrame[{schema}]"
-        elif have_numpy and isinstance(value, np.ndarray):
-            v_str = str(value)
-            type_str = f"ndarray[{value.dtype.name}]"
         elif have_pandas and isinstance(value, pd.Series):
             v_str = str(value.tolist())
-            type_str = f"Series[{value.dtype.name}]"
-        elif isinstance(value, list):
-            v_str = str(value)
-            # Format as List[element_types]
-            if len(value) == 0:
-                type_str = "List"
-            else:
-                elem_types = sorted(set(type(x).__name__ for x in value))
-                if len(elem_types) == 1:
-                    type_str = f"List[{elem_types[0]}]"
-                else:
-                    type_str = f"List[{' | '.join(elem_types)}]"
         else:
             v_str = str(value)
-            type_str = type(value).__name__
+
+        # Get type string
+        type_str = type_override if type_override is not None else cls.repr_type(value)
 
         # Clean up: replace newlines, normalize Java hash codes, then truncate
         v_str = v_str.replace("\n", " ")
@@ -199,8 +183,38 @@ class GoldenFileTestMixin:
         v_str = v_str[:max_len]
         return f"{v_str}@{type_str}"
 
+    @classmethod
+    def repr_type(cls, value: Any) -> str:
+        """
+        Get the type representation string for a value.
+
+        Parameters
+        ----------
+        value : Any
+            The value to get type representation for.
+
+        Returns
+        -------
+        str
+            Type string, e.g., "int", "List[int | NoneType]", "DataFrame[col1 int64]".
+        """
+        if have_pandas and isinstance(value, pd.DataFrame):
+            schema = ", ".join([f"{col} {dtype.name}" for col, dtype in value.dtypes.items()])
+            return f"DataFrame[{schema}]"
+        elif have_numpy and isinstance(value, np.ndarray):
+            return f"ndarray[{value.dtype.name}]"
+        elif have_pandas and isinstance(value, pd.Series):
+            return f"Series[{value.dtype.name}]"
+        elif isinstance(value, list):
+            if len(value) == 0:
+                return "List"
+            elem_types = [type(x).__name__ for x in value]
+            return cls._repr_container(elem_types, container="List")
+        else:
+            return type(value).__name__
+
     @staticmethod
-    def format_container(types: list, container: str = "List") -> str:
+    def _repr_container(types: list, container: str = "List") -> str:
         """
         Format a list of type strings into a container type.
 
@@ -215,39 +229,25 @@ class GoldenFileTestMixin:
         -------
         str
             Formatted type string, e.g., "List[int]" or "Series[int64 | object]".
+            NoneType is always placed at the end if present.
         """
-        unique_types = sorted(set(types))
-        if len(unique_types) == 0:
+        unique_types = set(types)
+        # Sort with NoneType at the end
+        has_none = "NoneType" in unique_types
+        other_types = sorted(t for t in unique_types if t != "NoneType")
+        if has_none:
+            other_types.append("NoneType")
+        if len(other_types) == 0:
             return container
-        elif len(unique_types) == 1:
-            return f"{container}[{unique_types[0]}]"
+        elif len(other_types) == 1:
+            return f"{container}[{other_types[0]}]"
         else:
-            return f"{container}[{' | '.join(unique_types)}]"
+            return f"{container}[{' | '.join(other_types)}]"
 
     @staticmethod
     def clean_result(result: str) -> str:
         """Clean result string by removing newlines and extra whitespace."""
         return result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-
-    def _golden_path(self, name: str) -> str:
-        """
-        Get the full path for a golden file.
-
-        Uses the test class's file location and prefix property to construct
-        the path: {test_file_dir}/{prefix}_{name}
-
-        Parameters
-        ----------
-        name : str
-            The suffix for the golden file name (e.g., "vanilla", "base").
-
-        Returns
-        -------
-        str
-            Full path without extension (e.g., "/path/to/golden_test_vanilla").
-        """
-        test_file = inspect.getfile(self.__class__)
-        return os.path.join(os.path.dirname(test_file), f"{self.prefix}_{name}")
 
     def _compare_or_generate_golden(
         self,
@@ -304,7 +304,42 @@ class GoldenFileTestMixin:
 
             self.save_golden(new_golden, golden_csv, golden_md)
 
-    # ==================== Golden Test Framework ====================
+    @property
+    def column_names(self) -> list[str]:
+        """Column names for the golden file. Override in subclass."""
+        raise NotImplementedError("Subclass must define column_names property")
+
+    def run_single_test(self, test_item: Any) -> tuple[str, list[tuple[str, str]]]:
+        """
+        Run a single test item and return results.
+
+        Override in subclass to implement test logic.
+
+        Returns
+        -------
+        tuple[str, list[tuple[str, str]]]
+            (row_key, [(column_name, cell_value), ...])
+        """
+        raise NotImplementedError("Subclass must implement run_single_test method")
+
+    @property
+    def test_cases(self) -> Iterable[Any]:
+        """Test cases to iterate over. Override in subclass."""
+        raise NotImplementedError("Subclass must define test_cases property")
+
+    def run_tests(self, golden_name: str) -> None:
+        """
+        Run golden file tests using class properties.
+
+        Uses self.test_cases, self.column_names, and self.run_single_test.
+        """
+        self._run_golden_tests(
+            golden_name=golden_name,
+            test_items=self.test_cases,
+            run_test=self.run_single_test,
+            column_names=self.column_names,
+            parallel=True,
+        )
 
     def _run_golden_tests(
         self,
@@ -362,12 +397,13 @@ class GoldenFileTestMixin:
             if result is None:
                 continue
             row_key, col_values = result
-            if row_key not in row_key_set:
-                row_keys.append(row_key)
-                row_key_set.add(row_key)
+            assert row_key not in row_key_set, f"Duplicate test case name: {row_key}"
+            row_keys.append(row_key)
+            row_key_set.add(row_key)
             for col_name, value in col_values:
                 all_results.append((row_key, col_name, self.clean_result(value), None))
 
         # Compare or generate golden file
-        golden_file = self._golden_path(golden_name)
+        test_file = inspect.getfile(self.__class__)
+        golden_file = os.path.join(os.path.dirname(test_file), f"{self.prefix}_{golden_name}")
         self._compare_or_generate_golden(golden_file, row_keys, column_names, all_results)

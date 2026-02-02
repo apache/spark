@@ -242,56 +242,55 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             ),
         ]
 
-    def test_pandas_input_type_coercion_vanilla(self):
-        self._run_tests("base")
+    @property
+    def column_names(self):
+        return ["Spark Type", "Spark Value", "Python Type", "Python Value"]
 
-    def _run_tests(self, golden_name):
-        def run_test(test_case):
-            case_name, spark_type, data_func = test_case
-            input_df = data_func(spark_type).repartition(1)
-            input_data = [row["value"] for row in input_df.collect()]
+    def run_single_test(self, test_case):
+        case_name, spark_type, data_func = test_case
+        input_df = data_func(spark_type).repartition(1)
+        input_data = [row["value"] for row in input_df.collect()]
 
-            spark_type_str = self.repr_spark_type(spark_type)
-            source_value = f"{case_name}: {self.repr_value(input_data)}"
+        spark_type_str = self.repr_spark_type(spark_type)
+        spark_value_str = self.clean_result(str(input_data))
 
-            try:
+        def type_pandas_udf(data):
+            if hasattr(data, "dtype"):
+                return pd.Series([str(data.dtype)] * len(data))
+            else:
+                return pd.Series([str(type(data).__name__)] * len(data))
 
-                def type_pandas_udf(data):
-                    if hasattr(data, "dtype"):
-                        return pd.Series([str(data.dtype)] * len(data))
-                    else:
-                        return pd.Series([str(type(data).__name__)] * len(data))
+        type_udf = pandas_udf(type_pandas_udf, returnType=StringType())
+        value_udf = pandas_udf(lambda s: s, returnType=spark_type)
 
-                def value_pandas_udf(series):
-                    return series
+        try:
+            result_df = input_df.select(
+                value_udf("value").alias("python_value"),
+                type_udf("value").alias("python_type"),
+            )
+            results_data = result_df.collect()
+            values = [row["python_value"] for row in results_data]
+            types = [row["python_type"] for row in results_data]
 
-                type_test_pandas_udf = pandas_udf(type_pandas_udf, returnType=StringType())
-                value_test_pandas_udf = pandas_udf(value_pandas_udf, returnType=spark_type)
+            python_type_str = self._repr_container(types, container="Series")
+            python_value_str = self.clean_result(str(values))
+        except Exception as e:
+            print("Exception", e)
+            python_type_str = "X"
+            python_value_str = "X"
 
-                result_df = input_df.select(
-                    value_test_pandas_udf("value").alias("python_value"),
-                    type_test_pandas_udf("value").alias("python_type"),
-                )
-                results_data = result_df.collect()
-                values = [row["python_value"] for row in results_data]
-                types = [row["python_type"] for row in results_data]
-
-                type_str = self.format_container(types, container="Series")
-                python_value = self.repr_value(values, type_override=type_str)
-            except Exception as e:
-                print("Exception", e)
-                python_value = f"X: {str(e)}"
-
-            spark_value = self.repr_value(input_data, type_override=spark_type_str)
-            return (source_value, [("Spark Type", spark_value), ("Python Type", python_value)])
-
-        self._run_golden_tests(
-            golden_name=golden_name,
-            test_items=self.test_cases,
-            run_test=run_test,
-            column_names=["Spark Type", "Python Type"],
-            parallel=True,
+        return (
+            case_name,
+            [
+                ("Spark Type", spark_type_str),
+                ("Spark Value", spark_value_str),
+                ("Python Type", python_type_str),
+                ("Python Value", python_value_str),
+            ],
         )
+
+    def test_pandas_input_type_coercion_vanilla(self):
+        self.run_tests("base")
 
 
 if __name__ == "__main__":

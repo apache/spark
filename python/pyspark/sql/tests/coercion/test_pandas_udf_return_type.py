@@ -16,7 +16,6 @@
 #
 
 from decimal import Decimal
-import itertools
 import unittest
 
 from pyspark.sql.functions import pandas_udf
@@ -88,7 +87,7 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
 
     @property
     def test_data(self):
-        data = [
+        return [
             [None, None],
             [True, False],
             list("ab"),
@@ -117,7 +116,6 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             pd.Categorical(["A", "B"]),
             pd.DataFrame({"_1": [1, 2]}),
         ]
-        return data
 
     @property
     def test_types(self):
@@ -139,30 +137,20 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    def repr_type(self, spark_type) -> str:
-        return self.repr_spark_type(spark_type)
+    @property
+    def test_cases(self):
+        return self.test_data
 
-    def test_str_repr(self):
-        self.assertEqual(
-            len(self.test_types),
-            len(set(self.repr_type(t) for t in self.test_types)),
-            "String representations of types should be different!",
-        )
-        self.assertEqual(
-            len(self.test_data),
-            len(set(self.repr_value(d) for d in self.test_data)),
-            "String representations of values should be different!",
-        )
+    @property
+    def column_names(self):
+        return [self.repr_spark_type(t) for t in self.test_types]
 
-    def test_pandas_return_type_coercion_vanilla(self):
-        self._run_tests("base")
+    def run_single_test(self, value):
+        source_value = self.repr_value(value)
+        results = []
 
-    def _run_tests(self, golden_name):
-        def run_test(arg):
-            spark_type, value = arg
-            target_type = self.repr_type(spark_type)
-            source_value = self.repr_value(value)
-
+        for spark_type in self.test_types:
+            target_type = self.repr_spark_type(spark_type)
             try:
 
                 @pandas_udf(returnType=spark_type)
@@ -181,16 +169,24 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
                 return_value = self.repr_value([row[0] for row in rows])
             except Exception:
                 return_value = "X"
+            results.append((target_type, return_value))
 
-            return (source_value, [(target_type, return_value)])
+        return (source_value, results)
 
-        self._run_golden_tests(
-            golden_name=golden_name,
-            test_items=itertools.product(self.test_types, self.test_data),
-            run_test=run_test,
-            column_names=[self.repr_type(t) for t in self.test_types],
-            parallel=True,
+    def test_str_repr(self):
+        self.assertEqual(
+            len(self.test_types),
+            len(set(self.repr_spark_type(t) for t in self.test_types)),
+            "String representations of types should be different!",
         )
+        self.assertEqual(
+            len(self.test_data),
+            len(set(self.repr_value(d) for d in self.test_data)),
+            "String representations of values should be different!",
+        )
+
+    def test_pandas_return_type_coercion_vanilla(self):
+        self.run_tests("base")
 
 
 if __name__ == "__main__":

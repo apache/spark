@@ -240,13 +240,54 @@ class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             ),
         ]
 
+    @property
+    def column_names(self):
+        return ["Spark Type", "Spark Value", "Python Type", "Python Value"]
+
+    def run_single_test(self, test_case):
+        case_name, spark_type, data_func = test_case
+        input_df = data_func(spark_type).repartition(1)
+        input_data = [row["value"] for row in input_df.collect()]
+
+        spark_type_str = self.repr_spark_type(spark_type)
+        spark_value_str = self.clean_result(str(input_data))
+
+        type_udf = udf(lambda x: "NoneType" if x is None else type(x).__name__, StringType())
+        value_udf = udf(lambda x: x, spark_type)
+
+        try:
+            result_df = input_df.select(
+                value_udf("value").alias("python_value"),
+                type_udf("value").alias("python_type"),
+            )
+            results_data = result_df.collect()
+            values = [row["python_value"] for row in results_data]
+            types = [row["python_type"] for row in results_data]
+
+            python_type_str = self._repr_container(types, container="List")
+            python_value_str = self.clean_result(str(values))
+        except Exception as e:
+            print("Exception", e)
+            python_type_str = "X"
+            python_value_str = "X"
+
+        return (
+            case_name,
+            [
+                ("Spark Type", spark_type_str),
+                ("Spark Value", spark_value_str),
+                ("Python Type", python_type_str),
+                ("Python Value", python_value_str),
+            ],
+        )
+
     def test_python_input_type_coercion_vanilla(self):
         with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
-            self._run_tests("vanilla")
+            self.run_tests("vanilla")
 
     def test_python_input_type_coercion_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
-            self._run_tests("with_arrow")
+            self.run_tests("with_arrow")
 
     def test_python_input_type_coercion_with_arrow_and_pandas(self):
         with self.sql_conf(
@@ -255,49 +296,7 @@ class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
                 "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": True,
             }
         ):
-            self._run_tests("with_arrow_and_pandas")
-
-    def _run_tests(self, golden_name):
-        def run_test(test_case):
-            case_name, spark_type, data_func = test_case
-            input_df = data_func(spark_type).repartition(1)
-            input_data = [row["value"] for row in input_df.collect()]
-
-            spark_type_str = self.repr_spark_type(spark_type)
-            source_value = f"{case_name}: {self.repr_value(input_data)}"
-
-            try:
-
-                def type_udf(x):
-                    return "NoneType" if x is None else type(x).__name__
-
-                def value_udf(x):
-                    return x
-
-                type_test_udf = udf(type_udf, returnType=StringType())
-                value_test_udf = udf(value_udf, returnType=spark_type)
-
-                result_df = input_df.select(
-                    value_test_udf("value").alias("python_value"),
-                    type_test_udf("value").alias("python_type"),
-                )
-                results_data = result_df.collect()
-                values = [row["python_value"] for row in results_data]
-                python_value = self.repr_value(values)
-            except Exception as e:
-                print("Exception", e)
-                python_value = f"X: {str(e)}"
-
-            spark_value = self.repr_value(input_data, type_override=spark_type_str)
-            return (source_value, [("Spark Type", spark_value), ("Python Type", python_value)])
-
-        self._run_golden_tests(
-            golden_name=golden_name,
-            test_items=self.test_cases,
-            run_test=run_test,
-            column_names=["Spark Type", "Python Type"],
-            parallel=True,
-        )
+            self.run_tests("with_arrow_and_pandas")
 
 
 if __name__ == "__main__":

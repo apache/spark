@@ -18,7 +18,6 @@
 import array
 import datetime
 from decimal import Decimal
-import itertools
 import unittest
 
 from pyspark.sql import Row
@@ -127,13 +126,34 @@ class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    def repr_type(self, spark_type) -> str:
-        return self.repr_spark_type(spark_type)
+    @property
+    def test_cases(self):
+        return self.test_data
+
+    @property
+    def column_names(self):
+        return [self.repr_spark_type(t) for t in self.test_types]
+
+    def run_single_test(self, value):
+        source_value = self.repr_value(value)
+        results = []
+
+        for spark_type in self.test_types:
+            target_type = self.repr_spark_type(spark_type)
+            try:
+                test_udf = udf(lambda _: value, spark_type)
+                row = self.spark.range(1).select(test_udf("id")).first()
+                return_value = self.repr_value(row[0])
+            except Exception:
+                return_value = "X"
+            results.append((target_type, return_value))
+
+        return (source_value, results)
 
     def test_str_repr(self):
         self.assertEqual(
             len(self.test_types),
-            len(set(self.repr_type(t) for t in self.test_types)),
+            len(set(self.repr_spark_type(t) for t in self.test_types)),
             "String representations of types should be different!",
         )
         self.assertEqual(
@@ -144,11 +164,11 @@ class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
 
     def test_python_return_type_coercion_vanilla(self):
         with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
-            self._run_tests("vanilla")
+            self.run_tests("vanilla")
 
     def test_python_return_type_coercion_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
-            self._run_tests("with_arrow")
+            self.run_tests("with_arrow")
 
     def test_python_return_type_coercion_with_arrow_and_pandas(self):
         with self.sql_conf(
@@ -157,30 +177,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
                 "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": True,
             }
         ):
-            self._run_tests("with_arrow_and_pandas")
-
-    def _run_tests(self, golden_name):
-        def run_test(arg):
-            spark_type, value = arg
-            target_type = self.repr_type(spark_type)
-            source_value = self.repr_value(value)
-
-            try:
-                test_udf = udf(lambda _: value, spark_type)
-                row = self.spark.range(1).select(test_udf("id")).first()
-                return_value = self.repr_value(row[0])
-            except Exception:
-                return_value = "X"
-
-            return (source_value, [(target_type, return_value)])
-
-        self._run_golden_tests(
-            golden_name=golden_name,
-            test_items=itertools.product(self.test_types, self.test_data),
-            run_test=run_test,
-            column_names=[self.repr_type(t) for t in self.test_types],
-            parallel=True,
-        )
+            self.run_tests("with_arrow_and_pandas")
 
 
 if __name__ == "__main__":
