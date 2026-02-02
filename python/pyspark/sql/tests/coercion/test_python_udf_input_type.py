@@ -296,7 +296,7 @@ class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             test_items=self.test_cases,
             run_test=run_test,
             column_names=["Spark Type", "Python Type"],
-            parallel=False,
+            parallel=True,
         )
 
 

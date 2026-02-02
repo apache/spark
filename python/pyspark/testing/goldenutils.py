@@ -19,6 +19,7 @@ from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
 import concurrent.futures
 import inspect
 import os
+import re
 import time
 
 from pyspark.testing.utils import have_pandas, have_numpy
@@ -147,6 +148,9 @@ class GoldenFileTestMixin:
         - For list: includes element types, e.g., "[1, 2]@List[int]"
         - For other types: uses type name, e.g., "True@bool"
 
+        Java object hash codes are normalized (e.g., @69420149 -> @<hash>)
+        for deterministic test results.
+
         Parameters
         ----------
         value : Any
@@ -189,8 +193,10 @@ class GoldenFileTestMixin:
             v_str = str(value)
             type_str = type(value).__name__
 
-        # Clean up: replace newlines and truncate
-        v_str = v_str.replace("\n", " ")[:max_len]
+        # Clean up: replace newlines, normalize Java hash codes, then truncate
+        v_str = v_str.replace("\n", " ")
+        v_str = re.sub(r"@[a-fA-F0-9]+", "@<hash>", v_str)
+        v_str = v_str[:max_len]
         return f"{v_str}@{type_str}"
 
     @staticmethod
@@ -287,9 +293,7 @@ class GoldenFileTestMixin:
                 else:
                     expected = golden.loc[row_key, col_name]
                     if expected != value:
-                        errs.append(
-                            f"{row_key} => {col_name}: expects {expected} but got {value}"
-                        )
+                        errs.append(f"{row_key} => {col_name}: expects {expected} but got {value}")
             self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
         else:
             index = pd.Index(row_keys, name=index_name)
