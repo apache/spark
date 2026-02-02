@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250618
+ENV FULL_REFRESH_DATE=20260129
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -67,19 +67,20 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown',
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-# Install Python 3.11
+# Install Python 3.12
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.11 \
+    python3.12 \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install \
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+RUN python3.12 -m pip install \
     'black==23.12.1' \
     'flake8==3.9.0' \
+    'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
     'grpcio-status==1.76.0' \
@@ -90,14 +91,16 @@ RUN python3.11 -m pip install \
     'jinja2' \
     'matplotlib' \
     'mypy==1.8.0' \
-    'numpy==2.0.2' \
+    'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \
-    'pandas-stubs==1.2.0.53' \
+    'pandas-stubs' \
     'plotly>=4.8' \
     'pyarrow>=22.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
-    && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && python3.11 -m pip install torcheval \
-    && python3.11 -m pip cache purge
+    'scipy>=1.8.0' \
+    'scipy-stubs' \
+    && python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && python3.12 -m pip install torcheval \
+    && python3.12 -m pip cache purge

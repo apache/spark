@@ -117,7 +117,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     sql_formatter._CAPTURE_SCOPES = 4
     modules.append(sql_formatter)
 
-    missings = [
+    missings: list[tuple[Union[type, ModuleType], type]] = [
         (pd, MissingPandasLikeGeneralFunctions),
         (pd.DataFrame, MissingPandasLikeDataFrame),
         (pd.Series, MissingPandasLikeSeries),
@@ -132,7 +132,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
         (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
         (
-            pd.core.window.ExponentialMovingWindowGroupby,  # type: ignore[attr-defined]
+            pd.core.window.ExponentialMovingWindowGroupby,
             MissingPandasLikeExponentialMovingGroupby,
         ),
     ]

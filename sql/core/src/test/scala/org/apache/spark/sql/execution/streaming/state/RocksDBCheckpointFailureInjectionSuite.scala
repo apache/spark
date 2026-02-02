@@ -70,6 +70,10 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
   implicit def toArray(str: String): Array[Byte] = if (str != null) str.getBytes else null
 
+  implicit def toStr(bytes: Array[Byte]): String = if (bytes != null) new String(bytes) else null
+
+  def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
+
   case class FailureConf(ifEnableStateStoreCheckpointIds: Boolean, fileType: String) {
     override def toString: String = {
       s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds, " +
@@ -820,6 +824,62 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           assert(verifyChangelogFileChecksumExists(4))
           assert((new File(checkpointDir, "commits/3")).exists())
         }
+      }
+    }
+  }
+
+  /**
+   * Test that verifies that when a task is interrupted, the store's rollback() method does not
+   * throw an exception and the store can still be used after the rollback.
+   */
+  test("SPARK-54585: Interrupted task calling rollback does not throw an exception") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      fileManagerClassName
+    )
+    withTempDirAllowFailureInjection { (remoteDir, _) =>
+      val sqlConf = new SQLConf()
+      sqlConf.setConfString("spark.sql.streaming.checkpoint.fileChecksum.enabled", "true")
+      val rocksdbChangelogCheckpointingConfKey =
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
+      sqlConf.setConfString(rocksdbChangelogCheckpointingConfKey, "true")
+      val conf = RocksDBConf(StateStoreConf(sqlConf))
+
+      withDB(
+        remoteDir.getAbsolutePath,
+        version = 0,
+        conf = conf,
+        hadoopConf = hadoopConf
+      ) { db =>
+        db.put("key0", "value0")
+        val checkpointId1 = commitAndGetCheckpointId(db)
+
+        db.load(1, checkpointId1)
+        db.put("key1", "value1")
+        val checkpointId2 = commitAndGetCheckpointId(db)
+
+        db.load(2, checkpointId2)
+        db.put("key2", "value2")
+
+        // Simulate what happens when a task is killed, the thread's interrupt flag is set.
+        // This replicates the scenario where TaskContext.markTaskFailed() is called and
+        // the task failure listener invokes RocksDBStateStore.abort() -> rollback().
+        Thread.currentThread().interrupt()
+
+        // rollback() should not throw an exception
+        db.rollback()
+
+        // Clear the interrupt flag for subsequent operations
+        Thread.interrupted()
+
+        // Reload the store and insert a new value
+        db.load(2, checkpointId2)
+        db.put("key3", "value3")
+
+        // Verify the store has the correct values
+        assert(db.iterator().map(toStr).toSet ===
+          Set(("key0", "value0"), ("key1", "value1"), ("key3", "value3")))
       }
     }
   }

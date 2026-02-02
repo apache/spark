@@ -259,6 +259,18 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
+    override def multiGet(
+        keys: Array[UnsafeRow],
+        colFamilyName: String): Iterator[UnsafeRow] = {
+      validateAndTransitionState(UPDATE)
+      verify(keys != null && keys.forall(_ != null), "Keys cannot be null")
+      verifyColFamilyOperations("multiGet", colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val encodedKeys = keys.map(kvEncoder._1.encodeKey)
+      val encodedValues = rocksDB.multiGet(encodedKeys, colFamilyName)
+      encodedValues.map(kvEncoder._2.decodeValue)
+    }
+
     override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
       validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
@@ -291,8 +303,9 @@ private[sql] class RocksDBStateStoreProvider
       "that supports multiple values for a single key.")
 
       if (storeConf.rowChecksumEnabled) {
-        // multiGet provides better perf for row checksum, since it avoids copying values
-        val encodedValuesIterator = rocksDB.multiGet(keyEncoder.encodeKey(key), colFamilyName)
+        // getMergedValues provides better perf for row checksum, since it avoids copying values
+        val encodedValuesIterator =
+          rocksDB.getMergedValues(keyEncoder.encodeKey(key), colFamilyName)
         valueEncoder.decodeValues(encodedValuesIterator)
       } else {
         val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
@@ -383,6 +396,24 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
+    }
+
+    override def deleteRange(
+        beginKey: UnsafeRow,
+        endKey: UnsafeRow,
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot deleteRange after already committed or aborted")
+      verify(beginKey != null, "Begin key cannot be null")
+      verify(endKey != null, "End key cannot be null")
+      verifyColFamilyOperations("deleteRange", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._1.supportsDeleteRange,
+        "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
+      val encodedBeginKey = kvEncoder._1.encodeKey(beginKey)
+      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+      rocksDB.deleteRange(encodedBeginKey, encodedEndKey, colFamilyName)
     }
 
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
@@ -610,6 +641,10 @@ private[sql] class RocksDBStateStoreProvider
 
     override def hasCommitted: Boolean = state == COMMITTED
 
+    override def allColumnFamilyNames: Set[String] = {
+      rocksDB.allColumnFamilyNames
+    }
+
     override def toString: String = {
       s"RocksDBStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
@@ -726,6 +761,7 @@ private[sql] class RocksDBStateStoreProvider
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
    * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
+   * @param loadEmpty If true, creates an empty store at this version without loading previous data
    * @return The loaded state store
    */
   private def loadStateStore(
@@ -733,7 +769,8 @@ private[sql] class RocksDBStateStoreProvider
       uniqueId: Option[String] = None,
       readOnly: Boolean,
       existingStore: Option[RocksDBStateStore] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -765,7 +802,8 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.load(
         version,
         stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = readOnly)
+        readOnly = readOnly,
+        loadEmpty = loadEmpty)
 
       // Create or reuse store instance
       val store = existingStore match {
@@ -806,12 +844,14 @@ private[sql] class RocksDBStateStoreProvider
   override def getStore(
       version: Long,
       uniqueId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     loadStateStore(
       version,
       uniqueId,
       readOnly = false,
-      forceSnapshotOnCommit = forceSnapshotOnCommit
+      forceSnapshotOnCommit = forceSnapshotOnCommit,
+      loadEmpty = loadEmpty
     )
   }
 

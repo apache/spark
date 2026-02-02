@@ -291,6 +291,11 @@ object StateStoreErrors {
   def stateStoreCheckpointIdsNotSupported(msg: String): StateStoreCheckpointIdsNotSupported = {
     new StateStoreCheckpointIdsNotSupported(msg)
   }
+
+  def unknownInternalColumnFamily(colFamilyName: String):
+      StateStoreUnknownInternalColumnFamily = {
+    new StateStoreUnknownInternalColumnFamily(colFamilyName)
+  }
 }
 
 trait ConvertableToCannotLoadStoreError {
@@ -637,3 +642,8 @@ class StateStoreAutoSnapshotRepairFailed(
       "selectedSnapshots" -> selectedSnapshots.mkString(","),
       "eligibleSnapshots" -> eligibleSnapshots.mkString(",")),
     cause)
+
+class StateStoreUnknownInternalColumnFamily(colFamilyName: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY",
+    messageParameters = Map("colFamilyName" -> colFamilyName))

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 import datetime
 
 import numpy as np
@@ -55,19 +54,19 @@ class ResampleErrorMixin:
             psdf.A.resample("0D").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("0Y").sum()
+            psdf.A.resample("0YE").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid closed: 'middle'"):
             psdf.A.resample("3D", closed="middle").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("3Y", closed="middle").sum()
+            psdf.A.resample("3YE", closed="middle").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid label: 'both'"):
             psdf.A.resample("3D", label="both").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("3Y", label="both").sum()
+            psdf.A.resample("3YE", label="both").sum()
 
         with self.assertRaisesRegex(
             NotImplementedError, "`on` currently works only for TimestampType"
@@ -92,12 +91,6 @@ class ResampleErrorTests(ResampleErrorMixin, PandasOnSparkTestCase, TestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.resample.test_error import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

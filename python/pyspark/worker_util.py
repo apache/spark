@@ -50,11 +50,13 @@ pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
-def add_path(path: str) -> None:
+def add_path(path: str) -> bool:
     # worker can be used, so do not add path multiple times
     if path not in sys.path:
         # overwrite system packages
         sys.path.insert(1, path)
+        return True
+    return False
 
 
 def read_command(serializer: FramedSerializer, file: IO) -> Any:
@@ -135,13 +137,14 @@ def setup_spark_files(infile: IO) -> None:
         SparkFiles._is_running_on_worker = True
 
     # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-    add_path(spark_files_dir)  # *.py files that were added will be copied here
+    path_changed = add_path(spark_files_dir)  # *.py files that were added will be copied here
     num_python_includes = read_int(infile)
     for _ in range(num_python_includes):
         filename = utf8_deserializer.loads(infile)
-        add_path(os.path.join(spark_files_dir, filename))
+        path_changed = add_path(os.path.join(spark_files_dir, filename)) or path_changed
 
-    importlib.invalidate_caches()
+    if path_changed:
+        importlib.invalidate_caches()
 
 
 def setup_broadcasts(infile: IO) -> None:

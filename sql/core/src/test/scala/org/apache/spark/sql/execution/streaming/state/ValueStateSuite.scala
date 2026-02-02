@@ -29,6 +29,9 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException, Tas
 import org.apache.spark.TaskContext.withTaskContext
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatePartitionKeyExtractorFactory
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateVariableInfo, TransformWithStateVariableUtils}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ValueStateImplWithTTL
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
@@ -421,6 +424,30 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ttlStateValueIterator.isDefined)
     }
   }
+
+  test("Partition key extraction - ValueState without TTL") {
+    testValueStatePartitionKeyExtraction(ttlEnabled = false)
+  }
+
+  test("Partition key extraction - ValueState with TTL") {
+    testValueStatePartitionKeyExtraction(ttlEnabled = true)
+  }
+
+  private def testValueStatePartitionKeyExtraction(ttlEnabled: Boolean): Unit = {
+    testPartitionKeyExtraction(
+      addStateFunc = { (handle, ttlConfig, _) =>
+        val testState: ValueState[Long] = handle.getValueState[Long]("testState", ttlConfig)
+        ImplicitGroupingKeyTracker.setImplicitKey("key1")
+        testState.update(100L)
+        ImplicitGroupingKeyTracker.setImplicitKey("key2")
+        testState.update(200L)
+      },
+      stateVariableInfo = TransformWithStateVariableUtils.getValueState("testState", ttlEnabled),
+      ttlEnabled = ttlEnabled,
+      expectedNumColFamilies = if (ttlEnabled) 2 else 1,
+      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1)
+    )
+  }
 }
 
 /**
@@ -454,10 +481,17 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   protected def useMultipleValuesPerKey = false
 
   protected def newStoreProviderWithStateVariable(
-      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+      useColumnFamilies: Boolean,
+      schemaProvider: Option[StateSchemaProvider]): RocksDBStateStoreProvider = {
     newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
       NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-      useColumnFamilies = useColumnFamilies)
+      useColumnFamilies = useColumnFamilies,
+      schemaProvider = schemaProvider)
+  }
+
+  protected def newStoreProviderWithStateVariable(
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProviderWithStateVariable(useColumnFamilies, schemaProvider = None)
   }
 
   protected def newStoreProviderWithStateVariable(
@@ -465,14 +499,15 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
       keyStateEncoderSpec: KeyStateEncoderSpec,
       sqlConf: SQLConf = SQLConf.get,
       conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+      useColumnFamilies: Boolean = false,
+      schemaProvider: Option[StateSchemaProvider] = None): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
       new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey,
-      Some(new TestStateSchemaProvider))
+      schemaProvider.orElse(Some(new TestStateSchemaProvider)))
     provider
   }
 
@@ -489,6 +524,70 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
       }
     } finally {
       provider.close()
+    }
+  }
+
+  protected def testPartitionKeyExtraction(
+      addStateFunc: (StatefulProcessorHandleImpl, TTLConfig, StateStore) => Unit,
+      stateVariableInfo: TransformWithStateVariableInfo,
+      ttlEnabled: Boolean,
+      expectedNumColFamilies: Int,
+      groupingKeyToExpectedCount: Map[String, Int],
+      timeMode: TimeMode = TimeMode.ProcessingTime()): Unit = {
+    val schemaProvider = new TestStateSchemaProvider
+    tryWithProviderResource(
+      newStoreProviderWithStateVariable(true, Some(schemaProvider))) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        stringEncoder, timeMode, batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = if (ttlEnabled) {
+        TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      } else {
+        TTLConfig.NONE
+      }
+
+      // call the passed in func to create the state variable and add state
+      addStateFunc(handle, ttlConfig, store)
+
+      // Get all the column families and their key schemas
+      val colFamilyNameAndKeySchema = schemaProvider.schemas.filter(_._1.isKey)
+        .map(kv => (kv._1.colFamilyName, kv._2.sqlSchema))
+        // don't include default CF
+        .filterNot(_._1 == StateStore.DEFAULT_COL_FAMILY_NAME)
+
+      assert(colFamilyNameAndKeySchema.size === expectedNumColFamilies,
+        s"Should have $expectedNumColFamilies column families, " +
+          s"found ${colFamilyNameAndKeySchema.size}")
+
+      // Verify partition key extraction for each column family
+      val expectedStateKeyCount = groupingKeyToExpectedCount.values.sum
+      colFamilyNameAndKeySchema.foreach { case (colFamilyName, keySchema) =>
+        val extractor = StatePartitionKeyExtractorFactory.create(
+          StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME,
+          keySchema,
+          storeName = StateStoreId.DEFAULT_STORE_NAME,
+          colFamilyName = colFamilyName,
+          stateVariableInfo = Some(stateVariableInfo)
+        )
+
+        assert(extractor.partitionKeySchema === stringEncoder.schema,
+          "Partition key schema should match the grouping key schema")
+
+        // Get all state keys and extract partition keys
+        val stateKeys = store.iterator(colFamilyName).map(_.key.copy()).toList
+        assert(stateKeys.length == expectedStateKeyCount,
+          s"Should have $expectedStateKeyCount state keys, found ${stateKeys.length}")
+
+        val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
+
+        groupingKeyToExpectedCount.foreach { case (keyStr, expectedCount) =>
+          val keyRow = stringEncoder.createSerializer().apply(keyStr).copy()
+          assert(partitionKeys.count(_ === keyRow) == expectedCount,
+            s"Should have $expectedCount partition keys for $keyStr")
+        }
+      }
     }
   }
 }

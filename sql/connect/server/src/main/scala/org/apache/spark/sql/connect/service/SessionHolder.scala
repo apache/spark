@@ -378,7 +378,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // remove all executions and no new executions will be added in the meanwhile.
     SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
 
-    mlCache.clear()
+    // Clean up ML cache (only if ML models were created)
+    mlCache.close()
 
     session.cleanupPythonWorkerLogs()
 

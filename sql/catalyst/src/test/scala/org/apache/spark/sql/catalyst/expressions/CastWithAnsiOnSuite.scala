@@ -211,6 +211,30 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-49635: suggest try_cast for complex type casts") {
+    // Array[Int] to Array[Binary]: canTryCast=true (uses canCast), canAnsiCast=false
+    // Should suggest try_cast, not config
+    val arrayIntType = ArrayType(IntegerType, containsNull = false)
+    val arrayBinaryType = ArrayType(BinaryType, containsNull = false)
+    val arrayIntLiteral = Literal.create(Seq(1, 2, 3), arrayIntType)
+
+    val arrayResult = cast(arrayIntLiteral, arrayBinaryType).checkInputDataTypes()
+    evalMode match {
+      case EvalMode.ANSI =>
+        assert(arrayResult ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> toSQLType(arrayIntType),
+              "targetType" -> toSQLType(arrayBinaryType),
+              "functionNames" -> "`try_cast`"
+            )
+          )
+        )
+      case _ =>
+    }
+  }
+
   test("ANSI mode: disallow variant cast to non-nullable types") {
     // Array
     val variantVal = new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0))

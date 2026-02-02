@@ -23,6 +23,7 @@ import java.util.UUID
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ListStateImplWithTTL
 import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueState}
@@ -423,6 +424,31 @@ class ListStateSuite extends StateVariableSuiteBase {
       val ttlStateValue = testState.getValueInTTLState()
       assert(ttlStateValue.isDefined)
     }
+  }
+
+  test("Partition key extraction - ListState without TTL") {
+    testListStatePartitionKeyExtraction(ttlEnabled = false)
+  }
+
+  test("Partition key extraction - ListState with TTL") {
+    testListStatePartitionKeyExtraction(ttlEnabled = true)
+  }
+
+  private def testListStatePartitionKeyExtraction(ttlEnabled: Boolean): Unit = {
+    testPartitionKeyExtraction(
+      addStateFunc = { (handle, ttlConfig, _) =>
+        val testState: ListState[Long] = handle.getListState[Long]("testState", ttlConfig)
+        ImplicitGroupingKeyTracker.setImplicitKey("key1")
+        testState.appendValue(100L)
+        testState.appendValue(101L)
+        ImplicitGroupingKeyTracker.setImplicitKey("key2")
+        testState.appendValue(200L)
+      },
+      stateVariableInfo = TransformWithStateVariableUtils.getListState("testState", ttlEnabled),
+      ttlEnabled = ttlEnabled,
+      expectedNumColFamilies = if (ttlEnabled) 4 else 2,
+      groupingKeyToExpectedCount = Map("key1" -> 1, "key2" -> 1)
+    )
   }
 }
 

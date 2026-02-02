@@ -28,6 +28,7 @@ from pyspark.sql.pandas._typing import (
     GroupedMapPandasUserDefinedFunction,
     PandasGroupedAggFunction,
     PandasGroupedAggUDFType,
+    PandasGroupedAggIterUDFType,
     PandasGroupedMapFunction,
     PandasGroupedMapIterUDFType,
     PandasGroupedMapUDFType,
@@ -53,6 +54,7 @@ class PandasUDFType:
     SCALAR_ITER: PandasScalarIterUDFType
     GROUPED_MAP: PandasGroupedMapUDFType
     GROUPED_AGG: PandasGroupedAggUDFType
+    GROUPED_AGG_ITER: PandasGroupedAggIterUDFType
 
 class ArrowUDFType:
     SCALAR: ArrowScalarUDFType

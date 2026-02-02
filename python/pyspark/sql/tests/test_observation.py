@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 
-import time
-import unittest
-
 from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
@@ -26,7 +23,7 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, eventually
 
 
 class DataFrameObservationTestsMixin:
@@ -144,17 +141,21 @@ class DataFrameObservationTestsMixin:
         )
         q = df.writeStream.format("noop").queryName("test").start()
         self.assertTrue(q.isActive)
-        time.sleep(10)
-        q.stop()
 
-        self.assertTrue(isinstance(observed_metrics, dict))
-        self.assertTrue("metric" in observed_metrics)
-        row = observed_metrics["metric"]
-        self.assertTrue(isinstance(row, Row))
-        self.assertTrue(hasattr(row, "cnt"))
-        self.assertTrue(hasattr(row, "sum"))
-        self.assertGreaterEqual(row.cnt, 0)
-        self.assertGreaterEqual(row.sum, 0)
+        @eventually(timeout=10, catch_assertions=True)
+        def check_observed_metrics():
+            self.assertTrue(isinstance(observed_metrics, dict))
+            self.assertTrue("metric" in observed_metrics)
+            row = observed_metrics["metric"]
+            self.assertIsInstance(row.cnt, int)
+            self.assertIsInstance(row.sum, int)
+            self.assertGreaterEqual(row.cnt, 0)
+            self.assertGreaterEqual(row.sum, 0)
+            return True
+
+        check_observed_metrics()
+
+        q.stop()
 
     def test_observe_with_same_name_on_different_dataframe(self):
         # SPARK-45656: named observations with the same name on different datasets
@@ -246,12 +247,6 @@ class DataFrameObservationTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_observation import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

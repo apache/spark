@@ -168,6 +168,10 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
+  protected def sessionCatalog: Catalog = {
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[Catalog]
+  }
+
   protected val v2Format: String = classOf[FakeV2ProviderWithCustomSchema].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
@@ -178,7 +182,9 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
 
   override def afterEach(): Unit = {
     super.afterEach()
-    catalog(SESSION_CATALOG_NAME).asInstanceOf[Catalog].clearTables()
+    sessionCatalog.checkUsage()
+    sessionCatalog.clearTables()
+    sessionCatalog.clearFunctions()
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
   }
 

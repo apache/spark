@@ -36,7 +36,7 @@ class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
       //   df.drop(col("non-existing-column"))
       val dropped = d.dropList.flatMap {
         case u: UnresolvedAttribute =>
-          if (u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) {
+          if (u.containsTag(LogicalPlan.PLAN_ID_TAG)) {
             // Plan Id comes from Spark Connect,
             // Here we ignore the `UnresolvedAttribute` if its Plan Id can be found
             // but column not found.

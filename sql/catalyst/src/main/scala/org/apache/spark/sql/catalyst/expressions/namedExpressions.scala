@@ -417,7 +417,7 @@ case class PrettyAttribute(
 
   override def toString: String = name
   override def sql: String = {
-    if (getTagValue(ResolverTag.SINGLE_PASS_IS_LCA).nonEmpty) {
+    if (containsTag(ResolverTag.SINGLE_PASS_IS_LCA)) {
       // For a query like:
       //
       // {{{ select 1 as a, a + 1 }}}

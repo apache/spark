@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.execution.datasources.orc.{OrcCompressionCodec, OrcOptions}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetOptions, ParquetTest}
@@ -33,7 +32,7 @@ import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
-class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with BeforeAndAfterAll {
+class CompressionCodecSuite extends TestHiveSingleton with ParquetTest {
   import spark.implicits._
 
   override def beforeAll(): Unit = {

@@ -26,7 +26,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
@@ -1745,7 +1745,6 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    spark.conf.set("spark.sql.execution.pandas.structHandlingMode", "row")
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,

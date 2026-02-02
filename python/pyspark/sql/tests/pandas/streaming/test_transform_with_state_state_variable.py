@@ -17,8 +17,6 @@
 
 import os
 import unittest
-from typing import cast
-
 from pyspark import SparkConf
 from pyspark.testing.sqlutils import (
     have_pyarrow,
@@ -33,7 +31,7 @@ from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_v
 
 @unittest.skipIf(
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
-    cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
+    pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TransformWithStateInPySparkStateVariableTestsMixin(TransformWithStateStateVariableTestsMixin):
     @classmethod
@@ -62,12 +60,6 @@ class TransformWithStateInPySparkStateVariableTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable import *  # noqa: F401,E501
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

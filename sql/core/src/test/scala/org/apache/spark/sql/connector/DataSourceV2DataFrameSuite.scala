@@ -1071,7 +1071,7 @@ class DataSourceV2DataFrameSuite
            c1 timestamp,
            current_timestamp TIMESTAMP DEFAULT c1)""")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",
@@ -1254,7 +1254,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-54157: cached temp view detects schema changes after analysis") {
+  test("SPARK-54157: cached temp view allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
@@ -1268,15 +1268,9 @@ class DataSourceV2DataFrameSuite
       // change table schema after the view has been analyzed and cached
       sql(s"ALTER TABLE $t ADD COLUMN extra INT")
 
-      // execution should fail with column mismatch even though the view is cached
-      checkError(
-        exception = intercept[AnalysisException] { spark.table("v").collect() },
-        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-        parameters = Map(
-          "viewName" -> "`v`",
-          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "colType" -> "data",
-          "errors" -> "- `extra` INT has been added"))
+      // execution should succeed as top-level column additions are allowed
+      // the temp view captures the original columns just like SQL views
+      checkAnswer(spark.table("v"), Seq(Row(1, "a")))
     }
   }
 
@@ -1512,7 +1506,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view on DSv2 table detects added columns") {
+  test("SPARK-53924: temp view on DSv2 table allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
@@ -1521,10 +1515,32 @@ class DataSourceV2DataFrameSuite
       spark.table(t).createOrReplaceTempView("v")
       checkAnswer(spark.table("v"), Seq.empty)
 
-      // add column to underlying table
+      // add top-level column to underlying table
       sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-      // accessing temp view should detect schema change
+      // accessing temp view should succeed as top-level column additions are allowed
+      // view captures original columns
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert data to verify view still works correctly
+      sql(s"INSERT INTO $t VALUES (1, 'a', 25)")
+      checkAnswer(spark.table("v"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects nested column additions") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, address STRUCT<street: STRING, city: STRING>) USING foo")
+
+      // create temp view using DataFrame API
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // add nested column to underlying table
+      sql(s"ALTER TABLE $t ADD COLUMN address.zipCode string")
+
+      // accessing temp view should detect schema change for nested additions
       checkError(
         exception = intercept[AnalysisException] { spark.table("v").collect() },
         condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
@@ -1532,7 +1548,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "- `age` INT has been added"))
+          "errors" -> "- `address`.`zipCode` STRING has been added"))
     }
   }
 
@@ -1620,13 +1636,13 @@ class DataSourceV2DataFrameSuite
   test("SPARK-53924: createOrReplaceTempView works after schema change") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint) USING foo")
+      sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
-      sql(s"ALTER TABLE $t ADD COLUMN data string")
+      sql(s"ALTER TABLE $t DROP COLUMN extra")
 
       // old view fails
       intercept[AnalysisException] { spark.table("v").collect() }
@@ -1658,22 +1674,16 @@ class DataSourceV2DataFrameSuite
       }.get
       assert(options.get("fakeOption") == "testValue")
 
-      // schema changes should still be detected
+      // add top-level column to underlying table
       sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-      // accessing temp view should detect schema change
-      checkError(
-        exception = intercept[AnalysisException] { spark.table("v").collect() },
-        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-        parameters = Map(
-          "viewName" -> "`v`",
-          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "colType" -> "data",
-          "errors" -> "- `age` INT has been added"))
+      // accessing temp view should succeed as top-level column additions are allowed
+
+      checkAnswer(spark.table("v"), Seq.empty)
     }
   }
 
-  test("SPARK-53924: temp view on DSv2 table created using SQL with plan detects changes") {
+  test("SPARK-53924: temp view on DSv2 table created using SQL with plan and top-level additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
@@ -1687,18 +1697,15 @@ class DataSourceV2DataFrameSuite
         val Some(view) = spark.sessionState.catalog.getRawTempView("v")
         assert(view.plan.isDefined)
 
-        // add column to underlying table
+        // add top-level column to underlying table
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-        // accessing temp view should detect schema change
-        checkError(
-          exception = intercept[AnalysisException] { spark.table("v").collect() },
-          condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-          parameters = Map(
-            "viewName" -> "`v`",
-            "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-            "colType" -> "data",
-            "errors" -> "- `age` INT has been added"))
+        // accessing temp view should succeed as top-level column additions are allowed
+        checkAnswer(spark.table("v"), Seq.empty)
+
+        // insert data to verify view still works correctly
+        sql(s"INSERT INTO $t VALUES (1, 'a', 25)")
+        checkAnswer(spark.table("v"), Seq(Row(1, "a")))
       }
     }
   }
@@ -2040,10 +2047,133 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-54812: caching dataframe created from CREATE shouldn't re-execute the command") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      val df = sql(s"CREATE TABLE $t USING foo AS SELECT 1 AS c1, 'a' AS c2")
+
+      // Verify the table was created with the correct data
+      checkAnswer(spark.table(t), Row(1, "a"))
+
+      // Caching the DataFrame created from CREATE TABLE AS SELECT should not re-execute
+      // the command. If it did, it would fail with TableAlreadyExistsException.
+      df.cache()
+
+      // The cached result should be empty (CTAS returns no rows)
+      checkAnswer(df, Seq.empty)
+    }
+  }
+
+  test("SPARK-54812: caching dataframe created from ALTER TABLE shouldn't re-execute the command") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (c1 int) USING foo")
+      sql(s"INSERT INTO $t VALUES (1), (2)")
+
+      // Add a column via ALTER TABLE
+      val alterDf = sql(s"ALTER TABLE $t ADD COLUMN c2 string")
+
+      // Verify the column was added
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("c1", "c2"))
+
+      // Caching the DataFrame created from ALTER TABLE should not re-execute the command.
+      // If it did, it would fail because the column already exists.
+      alterDf.cache()
+
+      // Schema should still have the same columns (not duplicated)
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("c1", "c2"))
+
+      // The cached result should be empty (ALTER TABLE returns no rows)
+      checkAnswer(alterDf, Seq.empty)
+    }
+  }
+
+  test("SPARK-54812: caching dataframe created from DROP TABLE shouldn't re-execute the command") {
+    val t = "testcat.ns1.ns2.tbl"
+    sql(s"CREATE TABLE $t (c1 int, c2 string) USING foo")
+    sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+    // Drop the table
+    val dropDf = sql(s"DROP TABLE $t")
+
+    // Verify the table no longer exists
+    assert(!spark.catalog.tableExists(t))
+
+    // Caching the DataFrame created from DROP TABLE should not re-execute the command.
+    // If it did, it would fail with NoSuchTableException.
+    dropDf.cache()
+
+    // The cached result should be empty (DROP TABLE returns no rows)
+    checkAnswer(dropDf, Seq.empty)
+  }
+
+  test("SPARK-54812: DESCRIBE TABLE v2 cache should be a no-op") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (c1 int, c2 string) USING foo")
+
+      // Create describe DataFrame but don't cache yet
+      val describeDf = sql(s"DESCRIBE TABLE $t")
+
+      // add column c3
+      sql(s"ALTER TABLE $t ADD COLUMN c3 double")
+
+      describeDf.cache()
+
+      // Verify describe shows schema at the initialization of describeDf
+      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(cachedColumns.contains("c1"))
+      assert(cachedColumns.contains("c2"))
+      assert(!cachedColumns.contains("c3"), "Cached DESCRIBE should reflect c3 added before cache")
+
+      // A fresh DESCRIBE TABLE call should show the latest schema (with c3)
+      val freshDescribeDf = sql(s"DESCRIBE TABLE $t")
+      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(freshColumns.contains("c1"))
+      assert(freshColumns.contains("c2"))
+      assert(freshColumns.contains("c3"))
+    }
+  }
+
   private def pinTable(catalogName: String, ident: Identifier, version: String): Unit = {
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
       case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  test("CTAS/RTAS should trigger two query executions") {
+    // CTAS/RTAS triggers 2 query executions:
+    // 1. The outer CTAS/RTAS command execution
+    // 2. The inner AppendData/OverwriteByExpression execution
+    var executionCount = 0
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        executionCount += 1
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    try {
+      spark.listenerManager.register(listener)
+      val t = "testcat.ns1.ns2.tbl"
+      withTable(t) {
+        // Test CTAS (CreateTableAsSelect)
+        executionCount = 0
+        sql(s"CREATE TABLE $t USING foo AS SELECT 1 as id, 'a' as data")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(executionCount == 2,
+          s"CTAS should trigger 2 executions, got $executionCount")
+
+        // Test RTAS (ReplaceTableAsSelect)
+        executionCount = 0
+        sql(s"CREATE OR REPLACE TABLE $t USING foo AS SELECT 2 as id, 'b' as data")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(executionCount == 2,
+          s"RTAS should trigger 2 executions, got $executionCount")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
   }
 }

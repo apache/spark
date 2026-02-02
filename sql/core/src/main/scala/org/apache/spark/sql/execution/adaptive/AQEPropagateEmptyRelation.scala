@@ -43,7 +43,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def empty(plan: LogicalPlan): LogicalPlan = EmptyRelation(plan)
 
   private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
-    case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true
+    case l: LogicalQueryStage if l.containsTag(ROOT_REPARTITION) => true
     case _ => false
   }
 

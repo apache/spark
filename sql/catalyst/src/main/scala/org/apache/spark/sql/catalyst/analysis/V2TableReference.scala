@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.catalog.V2TableUtil
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_TOP_LEVEL_FIELDS
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -120,7 +121,10 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
       ctx: TemporaryViewContext): Unit = {
     val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
 
-    val dataErrors = V2TableUtil.validateCapturedColumns(table, ref.info.columns)
+    val dataErrors = V2TableUtil.validateCapturedColumns(
+      table,
+      ref.info.columns,
+      mode = ALLOW_NEW_TOP_LEVEL_FIELDS)
     if (dataErrors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterViewWithPlanCreation(
         ctx.viewName,

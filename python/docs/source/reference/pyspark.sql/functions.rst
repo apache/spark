@@ -461,6 +461,9 @@ Aggregate Functions
     kll_sketch_agg_bigint
     kll_sketch_agg_double
     kll_sketch_agg_float
+    kll_merge_agg_bigint
+    kll_merge_agg_float
+    kll_merge_agg_double
     kurtosis
     last
     last_value
@@ -711,6 +714,7 @@ Table-Valued Functions
     TableValuedFunction.json_tuple
     TableValuedFunction.posexplode
     TableValuedFunction.posexplode_outer
+    TableValuedFunction.python_worker_logs
     TableValuedFunction.range
     TableValuedFunction.sql_keywords
     TableValuedFunction.stack

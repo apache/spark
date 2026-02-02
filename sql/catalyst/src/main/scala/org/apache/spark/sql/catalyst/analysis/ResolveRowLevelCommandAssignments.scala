@@ -53,7 +53,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && m.rewritable && !m.aligned &&
       !m.needSchemaEvolution =>
       validateStoreAssignmentPolicy()
-      val coerceNestedTypes = SQLConf.get.coerceMergeNestedTypes
+      val coerceNestedTypes = SQLConf.get.coerceMergeNestedTypes && m.withSchemaEvolution
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
         matchedActions = alignActions(m.targetTable.output, m.matchedActions,

@@ -116,6 +116,19 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Get the values for multiple keys in a single batch operation.
+   * Default implementation throws UnsupportedOperationException.
+   * Providers that support batch retrieval should override this method.
+   *
+   * @param keys          Array of keys to look up
+   * @param colFamilyName The column family name
+   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
+  }
+
+  /**
    * Check if a key exists in the store, with 100% guarantee of a correct result.
    *
    * Default implementation calls get() and checks if the result is null.
@@ -184,6 +197,13 @@ trait ReadStateStore {
    * This method is idempotent and safe to call multiple times.
    */
   def release(): Unit
+
+  /**
+   * Returns all column family names in this state store.
+   *
+   * @return Set of all column family names
+   */
+  def allColumnFamilyNames: Set[String]
 }
 
 /**
@@ -241,6 +261,22 @@ trait StateStore extends ReadStateStore {
   def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @note This operation is NOT recorded in the changelog.
+   * @param beginKey      The start key of the range (inclusive)
+   * @param endKey        The end key of the range (exclusive)
+   * @param colFamilyName The column family name
+   */
+  def deleteRange(
+      beginKey: UnsafeRow,
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("deleteRange is not supported by this StateStore")
+  }
 
   /**
    * Merges the provided value with existing values of a non-null key. If a existing
@@ -322,6 +358,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
 
+  override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    store.multiGet(keys, colFamilyName)
+  }
+
   override def keyExists(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
@@ -342,6 +382,8 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
   }
+
+  override def allColumnFamilyNames: Set[String] = store.allColumnFamilyNames
 }
 
 /**
@@ -665,11 +707,13 @@ trait StateStoreProvider {
   /**
    * Return an instance of [[StateStore]] representing state data of the given version.
    * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * If `loadEmpty` is true, creates an empty store at this version without loading previous data.
    * */
   def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -1128,7 +1172,8 @@ object StateStore extends Logging {
    */
   class MaintenanceThreadPool(
       numThreads: Int,
-      shutdownTimeout: Long) {
+      shutdownTimeout: Long,
+      forceShutdownTimeout: Long) {
     private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
       numThreads, "state-store-maintenance-thread")
 
@@ -1149,7 +1194,7 @@ object StateStore extends Logging {
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
-        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+        if (!threadPool.awaitTermination(forceShutdownTimeout, TimeUnit.SECONDS)) {
           logError("MaintenanceThreadPool did not terminate")
         }
       }
@@ -1414,6 +1459,7 @@ object StateStore extends Logging {
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
+    val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
@@ -1421,7 +1467,7 @@ object StateStore extends Logging {
           task = { doMaintenance(storeConf) }
         )
         maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
-          maintenanceShutdownTimeout)
+          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }

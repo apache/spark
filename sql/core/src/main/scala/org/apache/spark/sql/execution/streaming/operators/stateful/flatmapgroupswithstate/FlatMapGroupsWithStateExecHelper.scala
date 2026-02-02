@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.ObjectOperator
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.NO_TIMESTAMP
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{NoopStatePartitionKeyExtractor, StateStore}
 import org.apache.spark.sql.types._
 
 
@@ -246,3 +246,10 @@ object FlatMapGroupsWithStateExecHelper {
     }
   }
 }
+
+/**
+ * For FlatMapGroupsWithStateExec and FlatMapGroupsInPandasWithStateExec (v1 & v2),
+ * the state key is the partition key i.e. the grouping key
+ */
+class FlatMapGroupsWithStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)

@@ -30,6 +30,7 @@ from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.errors import PySparkRuntimeError
 
 
 def compute_real_exit_code(exit_code):
@@ -163,14 +164,31 @@ def manager():
 
     # Initialization complete
     try:
+        poller = None
+        if os.name == "posix":
+            # select.select has a known limit on the number of file descriptors
+            # it can handle. We use select.poll instead to avoid this limit.
+            poller = select.poll()
+            fd_reverse_map = {0: 0, listen_sock.fileno(): listen_sock}
+            poller.register(0, select.POLLIN)
+            poller.register(listen_sock, select.POLLIN)
+
         while True:
-            try:
+            if poller is not None:
+                ready_fds = []
+                # Unlike select, poll timeout is in millis.
+                for fd, event in poller.poll(1000):
+                    if event & (select.POLLIN | select.POLLHUP):
+                        # Data can be read (for POLLHUP peer hang up, so reads will return
+                        # 0 bytes, in which case we want to break out - this is consistent
+                        # with how select behaves).
+                        ready_fds.append(fd_reverse_map[fd])
+                    else:
+                        # Could be POLLERR or POLLNVAL (select would raise in this case).
+                        raise PySparkRuntimeError(f"Polling error - event {event} on fd {fd}")
+            else:
+                # If poll is not available, use select.
                 ready_fds = select.select([0, listen_sock], [], [], 1)[0]
-            except select.error as ex:
-                if ex[0] == EINTR:
-                    continue
-                else:
-                    raise
 
             if 0 in ready_fds:
                 try:
@@ -208,6 +226,9 @@ def manager():
 
                 if pid == 0:
                     # in child process
+                    if poller is not None:
+                        poller.unregister(0)
+                        poller.unregister(listen_sock)
                     listen_sock.close()
 
                     # It should close the standard input in the child process so that
@@ -256,6 +277,9 @@ def manager():
                     sock.close()
 
     finally:
+        if poller is not None:
+            poller.unregister(0)
+            poller.unregister(listen_sock)
         shutdown(1)
 
 

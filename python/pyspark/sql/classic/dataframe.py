@@ -168,11 +168,20 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def stat(self) -> ParentDataFrameStatFunctions:
         return DataFrameStatFunctions(self)
 
-    def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+    def toJSON(self, use_unicode: bool = True) -> Union["RDD[str]", "DataFrame"]:
         from pyspark.core.rdd import RDD
 
-        rdd = self._jdf.toJSON()
-        return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
+        returnDataFrame = self.sparkSession._jconf.pysparkToJSONReturnDataFrame()
+        if returnDataFrame:
+            jdf = self._jdf.toJSON()
+            return DataFrame(jdf, self.sparkSession)
+        else:
+            warnings.warn(
+                "The return type of DataFrame.toJSON will be changed from RDD to DataFrame "
+                "in future releases."
+            )
+            rdd = self._jdf.toJSON()
+            return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
@@ -1841,7 +1850,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        return PandasConversionMixin.toPandas(self)
+        return PandasConversionMixin._to_pandas(self)
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
+        return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         if indexColumn is not None:
@@ -2008,7 +2020,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (

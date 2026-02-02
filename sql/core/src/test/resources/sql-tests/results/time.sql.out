@@ -2414,25 +2414,46 @@ struct<time_from_seconds(86399.999999):time(6)>
 -- !query
 SELECT time_from_seconds(-1)
 -- !query schema
-struct<time_from_seconds(-1):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got -1000000000 nanoseconds"
+  }
+}
 
 
 -- !query
 SELECT time_from_seconds(86400)
 -- !query schema
-struct<time_from_seconds(86400):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got 86400000000000 nanoseconds"
+  }
+}
 
 
 -- !query
 SELECT time_from_seconds(90000)
 -- !query schema
-struct<time_from_seconds(90000):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got 90000000000000 nanoseconds"
+  }
+}
 
 
 -- !query
@@ -2486,17 +2507,31 @@ struct<time_from_millis(86399999):time(6)>
 -- !query
 SELECT time_from_millis(-1)
 -- !query schema
-struct<time_from_millis(-1):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got -1000000 nanoseconds"
+  }
+}
 
 
 -- !query
 SELECT time_from_millis(86400000)
 -- !query schema
-struct<time_from_millis(86400000):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got 86400000000000 nanoseconds"
+  }
+}
 
 
 -- !query
@@ -2550,17 +2585,31 @@ struct<time_from_micros(86399999999):time(6)>
 -- !query
 SELECT time_from_micros(-1)
 -- !query schema
-struct<time_from_micros(-1):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got -1000 nanoseconds"
+  }
+}
 
 
 -- !query
 SELECT time_from_micros(86400000000)
 -- !query schema
-struct<time_from_micros(86400000000):time(6)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got 86400000000000 nanoseconds"
+  }
+}
 
 
 -- !query

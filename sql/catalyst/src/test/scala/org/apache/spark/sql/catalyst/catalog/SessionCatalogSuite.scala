@@ -197,16 +197,6 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           "expectedType" -> "\"BOOLEAN\"",
           "defaultValue" -> "41 + 1",
           "actualType" -> "\"INT\""))
-
-      // Make sure that constant-folding default values does not take place when the feature is
-      // disabled.
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-        val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          db1tbl3.schema, "CREATE TABLE")
-        val columnEWithFeatureDisabled: StructField = findField("e", result)
-        // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
-        assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
-      }
     }
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,json,orc,parquet") {
       test
@@ -419,15 +409,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      // Should always throw exception when the database does not exist
-      intercept[NoSuchNamespaceException] {
+      // Should throw exception when the database does not exist and ignoreIfNotExists is false
+      intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchNamespaceException] {
-        catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
-          purge = false)
-      }
+      // Should succeed (no-op) when the database does not exist and ignoreIfNotExists is true
+      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
+        purge = false)
       intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false,
           purge = false)

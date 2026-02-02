@@ -527,7 +527,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         df = self.spark.range(0, 100)
 
-        with self.tempView("table"), self.temp_func("max_udf"):
+        with self.temp_view("table"), self.temp_func("max_udf"):
             df.createTempView("table")
             self.spark.udf.register("max_udf", max_udf)
 
@@ -556,7 +556,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -585,7 +585,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -625,7 +625,7 @@ class GroupedAggArrowUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -670,7 +670,7 @@ class GroupedAggArrowUDFTestsMixin:
         def biased_sum(v, w=None):
             return pa.compute.sum(v).as_py() + (pa.compute.sum(w).as_py() if w is not None else 100)
 
-        with self.tempView("v"), self.temp_func("biased_sum"):
+        with self.temp_view("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
@@ -1212,18 +1212,84 @@ class GroupedAggArrowUDFTestsMixin:
                 group2_result["result"]["sum"], 2.0, places=5, msg="Group 2 should sum to 2.0"
             )
 
+    def test_iterator_grouped_agg_sql_single_column(self):
+        """
+        Test iterator API for grouped aggregation with single column in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_mean_iter(it: Iterator[pa.Array]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                sum_val += pa.compute.sum(v).as_py()
+                cnt += len(v)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.temp_view("test_table"), self.temp_func("arrow_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_mean_iter", arrow_mean_iter)
+
+            # Test SQL query with GROUP BY
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_mean_iter(v) as mean FROM test_table GROUP BY id ORDER BY id"
+            )
+            expected = df.groupby("id").agg(sf.mean(df["v"]).alias("mean")).sort("id").collect()
+
+            self.assertEqual(expected, result_sql.collect())
+
+    def test_iterator_grouped_agg_sql_multiple_columns(self):
+        """
+        Test iterator API for grouped aggregation with multiple columns in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_weighted_mean_iter(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+            weighted_sum = 0.0
+            weight = 0.0
+            for v, w in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(w, pa.Array)
+                weighted_sum += pa.compute.sum(pa.compute.multiply(v, w)).as_py()
+                weight += pa.compute.sum(w).as_py()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        with self.temp_view("test_table"), self.temp_func("arrow_weighted_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_weighted_mean_iter", arrow_weighted_mean_iter)
+
+            # Test SQL query with GROUP BY and multiple columns
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_weighted_mean_iter(v, w) as wm "
+                "FROM test_table GROUP BY id ORDER BY id"
+            )
+
+            # Expected weighted means:
+            # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+            # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+            expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+
+            actual_results = result_sql.collect()
+            self.assertEqual(actual_results, expected)
+
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

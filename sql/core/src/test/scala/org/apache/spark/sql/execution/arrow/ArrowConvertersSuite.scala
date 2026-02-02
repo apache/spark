@@ -1626,7 +1626,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
       writer.end()
     }
 
-    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    val (outputRowIter, outputSchema) = ArrowConverters.
+      fromIPCStreamWithIterator(out.toByteArray, ctx)
     assert(outputSchema == schema)
     val res = outputRowIter.zipWithIndex.map { case (row, i) =>
       assert(row.getInt(0) == i)
@@ -1663,7 +1664,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
       writer.end()
     }
 
-    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    val (outputRowIter, outputSchema) = ArrowConverters
+      .fromIPCStreamWithIterator(out.toByteArray, ctx)
     assert(outputSchema == schema)
     val outputRows = outputRowIter.zipWithIndex.map { case (row, i) =>
       assert(row.getInt(0) == i)
@@ -1760,7 +1762,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val invalidData = Array[Byte](1, 2, 3, 4, 5)
 
     intercept[Exception] {
-      ArrowConverters.fromIPCStream(invalidData, ctx)
+      ArrowConverters.fromIPCStreamWithIterator(invalidData, ctx)
     }
   }
 
@@ -1769,7 +1771,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val emptyData = Array.empty[Byte]
 
     intercept[Exception] {
-      ArrowConverters.fromIPCStream(emptyData, ctx)
+      ArrowConverters.fromIPCStreamWithIterator(emptyData, ctx)
     }
   }
 
@@ -1790,9 +1792,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Test with null context - should still work but won't have cleanup registration
     val proj = UnsafeProjection.create(schema)
-    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, null)
+    val (outputRowIter, outputSchema) = ArrowConverters.
+      fromIPCStreamWithIterator(out.toByteArray, null)
     assert(outputSchema == schema)
+    assert(outputRowIter.peakMemoryAllocation == 0)
     val outputRows = outputRowIter.map(proj(_).copy()).toList
+    assert(outputRowIter.peakMemoryAllocation > 0)
+    assert(outputRowIter.allocatedMemory == 0)
     assert(outputRows.length == inputRows.length)
     outputRows.zipWithIndex.foreach { case (row, i) =>
       assert(row.getInt(0) == i)
@@ -1817,6 +1823,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
     assert(outputSchema == schema)
+    assert(iterator.peakMemoryAllocation == 0)
 
     // Initially no batches loaded
     assert(iterator.batchesLoaded == 0)
@@ -1834,6 +1841,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // Consume all rows
     val proj = UnsafeProjection.create(schema)
     val outputRows = iterator.map(proj(_).copy()).toList
+    assert(iterator.peakMemoryAllocation > 0)
+    assert(iterator.allocatedMemory == 0)
     assert(outputRows.length == inputRows.length)
     outputRows.zipWithIndex.foreach { case (row, i) =>
       assert(row.getInt(0) == i)
@@ -1884,10 +1893,14 @@ class ArrowConvertersSuite extends SharedSparkSession {
       writer.end()
     }
 
-    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    val (outputRowIter, outputSchema) = ArrowConverters.
+      fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputRowIter.peakMemoryAllocation == 0)
     val proj = UnsafeProjection.create(schema)
     assert(outputSchema == schema)
     val outputRows = outputRowIter.map(proj(_).copy()).toList
+    assert(outputRowIter.peakMemoryAllocation > 0)
+    assert(outputRowIter.allocatedMemory == 0)
     assert(outputRows.length == inputRows.length)
 
     outputRows.zipWithIndex.foreach { case (row, i) =>
@@ -1922,6 +1935,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
     assert(outputSchema == schema)
+    assert(iterator.peakMemoryAllocation == 0)
 
     // Initially no batches loaded
     assert(iterator.batchesLoaded == 0)
@@ -1941,6 +1955,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val remainingRows = iterator.toList
     val totalConsumed = firstBatch.length + remainingRows.length
     assert(totalConsumed == inputRows.length)
+    assert(iterator.peakMemoryAllocation > 0)
+    assert(iterator.allocatedMemory == 0)
 
     // Final metrics should show all batches loaded
     val expectedBatches = Math.ceil(inputRows.length.toDouble / batchSize).toInt

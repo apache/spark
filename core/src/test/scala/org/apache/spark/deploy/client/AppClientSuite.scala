@@ -22,7 +22,6 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.concurrent.duration._
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
@@ -43,7 +42,6 @@ import org.apache.spark.util.Utils
 class AppClientSuite
     extends SparkFunSuite
     with LocalSparkContext
-    with BeforeAndAfterAll
     with Eventually
     with ScalaFutures {
   private val numWorkers = 2

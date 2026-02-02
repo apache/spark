@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.util.Clock
 
 /**
@@ -44,7 +44,7 @@ abstract class StreamExecutionContext(
 
   /** Metadata associated with the offset seq of a batch in the query. */
   @volatile
-  var offsetSeqMetadata: OffsetSeqMetadata = OffsetSeqMetadata(
+  var offsetSeqMetadata: OffsetSeqMetadataBase = OffsetSeqMetadata(
     batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   /** Holds the most recent input data for each source. */
@@ -127,6 +127,7 @@ class MicroBatchExecutionContext(
     progressReporter: ProgressReporter,
     var _batchId: Long,
     sparkSession: SparkSession,
+    val offsetLogFormatVersionOpt: Option[Int],
     var previousContext: Option[MicroBatchExecutionContext])
   extends StreamExecutionContext(
     id,
@@ -190,6 +191,7 @@ class MicroBatchExecutionContext(
       progressReporter,
       batchId + 1,
       sparkSession,
+      offsetLogFormatVersionOpt,
       Some(this))
   }
 

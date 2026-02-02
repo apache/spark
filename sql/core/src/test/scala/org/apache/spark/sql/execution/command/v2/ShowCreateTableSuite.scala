@@ -184,13 +184,13 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
 
   test("show table constraints") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      withTable("other_table") {
+      withNamespaceAndTable("ns", "other_table", nonPartitionCatalog) { otherTable =>
         sql(
           s"""
-             |CREATE TABLE other_table (
+             |CREATE TABLE $otherTable (
              |  id STRING PRIMARY KEY
              |)
-             |USING parquet
+             |$defaultUsing
         """.stripMargin)
         sql(
           s"""
@@ -200,7 +200,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
              |  c STRING,
              |  PRIMARY KEY (a),
              |  CONSTRAINT uk_b UNIQUE (b),
-             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id) RELY,
+             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable(id) RELY,
              |  CONSTRAINT c1 CHECK (c IS NOT NULL),
              |  CONSTRAINT c2 CHECK (a > 0)
              |)
@@ -214,7 +214,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
           "c STRING,",
           "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
           "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
-          "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table (id) NOT ENFORCED RELY,",
+          s"CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",
           "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
         )
         assert(showDDL === expectedDDLPrefix ++ Array(

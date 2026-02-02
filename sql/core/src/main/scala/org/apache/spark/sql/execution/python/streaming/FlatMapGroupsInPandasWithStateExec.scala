@@ -120,7 +120,8 @@ case class FlatMapGroupsInPandasWithStateExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
 
-  override def shortName: String = "applyInPandasWithState"
+  override def shortName: String =
+    StatefulOperatorsUtils.FLAT_MAP_GROUPS_IN_PANDAS_WITH_STATE_EXEC_OP_NAME
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): FlatMapGroupsInPandasWithStateExec = copy(child = newChild)

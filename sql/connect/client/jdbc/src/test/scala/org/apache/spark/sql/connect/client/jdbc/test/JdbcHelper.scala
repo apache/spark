@@ -39,8 +39,10 @@ trait JdbcHelper {
   }
 
   def withExecuteQuery(query: String)(f: ResultSet => Unit): Unit = {
-    withStatement { stmt =>
-      Using.resource { stmt.executeQuery(query) } { rs => f(rs) }
-    }
+    withStatement { stmt => withExecuteQuery(stmt, query)(f) }
+  }
+
+  def withExecuteQuery(stmt: Statement, query: String)(f: ResultSet => Unit): Unit = {
+    Using.resource { stmt.executeQuery(query) } { rs => f(rs) }
   }
 }

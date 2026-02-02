@@ -111,17 +111,14 @@ case class InsertAdaptiveSparkPlan(
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
-        case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
+        case p if p.requiredChildDistribution.exists(_ != UnspecifiedDistribution) => true
         // AQE framework has a different way to update the query plan in the UI: it updates the plan
         // at the end of execution, while non-AQE updates the plan before execution. If the cached
         // plan is already AQEed, the current plan must be AQEed as well so that the UI can get plan
         // update correctly.
         case i: InMemoryTableScanExec
             if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
-        case p => p.expressions.exists(_.exists {
-          case _: SubqueryExpression => true
-          case _ => false
-        })
+        case p => p.expressions.exists(_.exists(_.isInstanceOf[SubqueryExpression]))
       }
     }
   }

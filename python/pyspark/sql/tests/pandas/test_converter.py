@@ -16,8 +16,6 @@
 #
 
 import unittest
-from typing import cast
-
 from pyspark.sql.types import (
     ArrayType,
     IntegerType,
@@ -46,7 +44,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ConverterTests(unittest.TestCase):
     def test_converter_to_pandas_array(self):
@@ -584,12 +582,6 @@ class ConverterTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_converter import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

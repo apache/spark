@@ -72,7 +72,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an TPC-DS dataset with SF=1"
-    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
     runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
@@ -177,7 +177,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
-      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
       id: cache-tpcds-sf-1
       uses: actions/cache@v4
       with:

@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 import io.grpc.ManagedChannel
 
 import org.apache.spark.connect.proto._
+import org.apache.spark.sql.util.CloseableIterator
 
 private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,

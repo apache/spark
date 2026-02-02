@@ -229,15 +229,6 @@ private[connect] object MLHandler extends Logging {
           } catch {
             case _: UnsupportedOperationException => ()
           }
-          if (estimator.getClass.getName == "org.apache.spark.ml.clustering.LDA"
-            && estimator
-              .asInstanceOf[org.apache.spark.ml.clustering.LDA]
-              .getOptimizer
-              .toLowerCase() == "em") {
-            throw MlUnsupportedException(
-              "LDA algorithm with 'em' optimizer is not supported " +
-                "if Spark Connect model cache offloading is enabled.")
-          }
         }
 
         EstimatorUtils.warningMessagesBuffer.set(new mutable.ArrayBuffer[String]())

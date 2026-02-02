@@ -743,6 +743,42 @@ struct<(NOT (NULL IN (1, 2, NULL))):boolean>
 -- !query output
 NULL
 
+-- !query
+select 1 in ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 14,
+    "fragment" : "in ()"
+  } ]
+}
+
+
+-- !query
+select 1 not in ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 18,
+    "fragment" : "not in ()"
+  } ]
+}
 
 -- !query
 select 1 between 0 and 2

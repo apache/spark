@@ -2166,7 +2166,7 @@ Project [time_to_seconds(23:59:59.999999) AS time_to_seconds(TIME '23:59:59.9999
 -- !query
 SELECT time_to_seconds(NULL)
 -- !query analysis
-Project [time_to_seconds(cast(null as time(6))) AS time_to_seconds(NULL)#x]
+Project [time_to_seconds(null) AS time_to_seconds(NULL)#x]
 +- OneRowRelation
 
 

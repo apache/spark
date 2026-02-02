@@ -36,14 +36,14 @@ class AlterTableDropPartitionSuite
           sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
           sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
           sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
-          checkHiveClientCalls(expected = if (statsOn) 26 else 18) {
+          checkHiveClientCalls(expected = if (statsOn) 16 else 10) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
           }
-          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
+          checkHiveClientCalls(expected = if (statsOn) 21 else 10) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
           }
           sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
+          checkHiveClientCalls(expected = if (statsOn) 21 else 10) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
           }
         }
@@ -61,14 +61,14 @@ class AlterTableDropPartitionSuite
           sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
           sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
           sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
-          checkHiveClientCalls(expected = if (statsOn) 25 else 17) {
+          checkHiveClientCalls(expected = if (statsOn) 15 else 9) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
           }
-          checkHiveClientCalls(expected = if (statsOn) 30 else 17) {
+          checkHiveClientCalls(expected = if (statsOn) 20 else 9) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
           }
           sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = if (statsOn) 30 else 17) {
+          checkHiveClientCalls(expected = if (statsOn) 20 else 9) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
           }
         }

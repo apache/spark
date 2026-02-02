@@ -1712,6 +1712,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("SPARK-54718: CTERelationRef.newInstance preserves attribute metadata") {
+    val baseAttr = AttributeReference("COLNAME", StringType)()
+    val attr1 = baseAttr
+    val attr2 = baseAttr.withName("colname")
+    val cteDef = CTERelationDef(testRelation.select($"a".as("COLNAME")))
+    val cteRef = CTERelationRef(cteDef.id, true, Seq(attr1, attr2), false)
+
+    val newInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+    assert(newInstance.output(0).name == "COLNAME")
+    assert(newInstance.output(1).name == "colname")
+    assert(newInstance.output(0).exprId != attr1.exprId)
+    assert(newInstance.output(0).exprId == newInstance.output(1).exprId)
+
+    withSQLConf(SQLConf.LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES.key -> "true") {
+      val legacyInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+      assert(legacyInstance.output(0).name == "colname")
+      assert(legacyInstance.output(1).name == "colname")
+      assert(legacyInstance.output(0).exprId != attr1.exprId)
+      assert(legacyInstance.output(0).exprId == legacyInstance.output(1).exprId)
+    }
+  }
+
   test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
     val listQuery1 = ListQuery(testRelation2.select($"a"))
     val listQuery2 = ListQuery(testRelation2.select($"b"))

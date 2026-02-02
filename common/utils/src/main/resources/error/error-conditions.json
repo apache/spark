@@ -912,6 +912,12 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
+    "message" : [
+      "Unidentified Error: <message>"
+    ],
+    "sqlState" : "XXKCM"
+  },
   "CONNECT_INVALID_PLAN" : {
     "message" : [
       "The Spark Connect plan is invalid."
@@ -1036,6 +1042,48 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "CURSOR_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot declare cursor <cursorName> because it already exists in the current scope."
+    ],
+    "sqlState" : "42723"
+  },
+  "CURSOR_ALREADY_OPEN" : {
+    "message" : [
+      "Cannot open cursor <cursorName> because it is already open."
+    ],
+    "sqlState" : "24502"
+  },
+  "CURSOR_NOT_FOUND" : {
+    "message" : [
+      "Cursor <cursorName> not found in the current scope."
+    ],
+    "sqlState" : "42883"
+  },
+  "CURSOR_NOT_OPEN" : {
+    "message" : [
+      "Cannot fetch from or close cursor <cursorName> because it is not open."
+    ],
+    "sqlState" : "24501"
+  },
+  "CURSOR_NO_MORE_ROWS" : {
+    "message" : [
+      "No more rows available to fetch from cursor <cursorName>."
+    ],
+    "sqlState" : "02000"
+  },
+  "CURSOR_OUTSIDE_SCRIPT" : {
+    "message" : [
+      "Cursor operations can only be used within SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
+  "CURSOR_REFERENCE_INVALID_QUALIFIER" : {
+    "message" : [
+      "Cursor reference <cursorName> is invalid. Cursor references can only have at most one qualifier (e.g., label.cursor)."
+    ],
+    "sqlState" : "42601"
   },
   "CYCLIC_FUNCTION_REFERENCE" : {
     "message" : [
@@ -1575,6 +1623,12 @@
     ],
     "sqlState" : "42734"
   },
+  "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ],
+    "sqlState" : "54054"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1766,6 +1820,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "DROP_TABLE" : {
+        "message" : [
+          "Drop the table <tableName>."
         ]
       },
       "GET_TABLES" : {
@@ -2779,6 +2838,12 @@
     },
     "sqlState" : "HY109"
   },
+  "INVALID_CURSOR_DECLARATION" : {
+    "message" : [
+      "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
       "Unrecognized datetime pattern: <pattern>."
@@ -3138,7 +3203,7 @@
       },
       "WRONG_PLACE_OF_DECLARATION" : {
         "message" : [
-          "Handlers must be declared after variable/condition declaration, and before other statements."
+          "Handlers must be declared after variable/condition/cursor declarations, and before other statements."
         ]
       }
     },
@@ -3909,6 +3974,11 @@
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
         ]
       },
+      "EMPTY_IN_PREDICATE" : {
+        "message" : [
+          "IN predicate requires at least one value. Empty IN clauses like 'IN ()' are not allowed. Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -4180,6 +4250,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VECTOR_NORM_DEGREE" : {
+    "message" : [
+      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -4274,21 +4350,15 @@
     ],
     "sqlState" : "42K0E"
   },
-  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
+  "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
-      "For function <functionName>, cannot merge KLL sketches: <reason>"
-    ],
-    "sqlState" : "22000"
-  },
-  "KLL_SKETCH_INVALID_INPUT" : {
-    "message" : [
-      "For function <functionName>, invalid KLL sketch binary data: <reason>"
+      "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
     ],
     "sqlState" : "22000"
   },
   "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
     "message" : [
-      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive)."
     ],
     "sqlState" : "22003"
   },
@@ -4346,6 +4416,12 @@
       "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
     ],
     "sqlState" : "42601"
+  },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState" : "54000"
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -4425,6 +4501,12 @@
       "Variant binary is malformed. Please check the data source is valid."
     ],
     "sqlState" : "22023"
+  },
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
   },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
@@ -5069,6 +5151,12 @@
     },
     "sqlState" : "42710"
   },
+  "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
+    "message" : [
+      "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
       "<message>",
@@ -5363,6 +5451,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22003"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -5526,6 +5620,17 @@
         "message" : [
           "<provider> is not supported"
         ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transformWithState variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
+        ]
       }
     },
     "sqlState" : "55019"
@@ -5552,6 +5657,39 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STATE_REWRITER_INVALID_CHECKPOINT" : {
+    "message" : [
+      "The state rewrite checkpoint location '<checkpointLocation>' is in an invalid state."
+    ],
+    "subClass" : {
+      "MISSING_KEY_ENCODER_SPEC" : {
+        "message" : [
+          "Key state encoder spec is expected for column family '<colFamilyName>' but was not found.",
+          "This is likely a bug, please report it."
+        ]
+      },
+      "MISSING_OPERATOR_METADATA" : {
+        "message" : [
+          "No stateful operator metadata was found for batch <batchId>.",
+          "Ensure that the checkpoint is for a stateful streaming query and the query ran on a Spark version that supports operator metadata (Spark 4.0+)."
+        ]
+      },
+      "STATE_CHECKPOINT_FORMAT_VERSION_MISMATCH" : {
+        "message" : [
+          "The checkpoint format version in SQLConf does not match the checkpoint version in the commit log.",
+          "Expected version <expectedVersion>, but found <actualVersion>.",
+          "Please set '<sqlConfKey>' to <expectedVersion> in your SQLConf before retrying."
+        ]
+      },
+      "UNSUPPORTED_STATE_STORE_METADATA_VERSION" : {
+        "message" : [
+          "Unsupported state store metadata version encountered.",
+          "Only StateStoreMetadataV1 and StateStoreMetadataV2 are supported."
+        ]
+      }
+    },
+    "sqlState" : "55019"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -5712,6 +5850,13 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY" : {
+    "message" : [
+      "Unknown internal column family: <colFamilyName>.",
+      "This internal column family is not recognized by the StateStoreColumnFamilySchemaUtils."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -5863,6 +6008,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -5903,6 +6054,34 @@
       "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STREAMING_QUERY_EVOLUTION_ERROR" : {
+    "message" : [
+      "Streaming query evolution error:"
+    ],
+    "subClass" : {
+      "DUPLICATE_SOURCE_NAMES" : {
+        "message" : [
+          "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
+        ]
+      },
+      "INVALID_SOURCE_NAME" : {
+        "message" : [
+          "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
+        ]
+      },
+      "SOURCE_NAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+        ]
+      },
+      "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
+        "message" : [
+          "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
   },
   "STREAMING_REAL_TIME_MODE" : {
     "message" : [
@@ -5957,6 +6136,13 @@
       "Stateful operators in the metadata: [<OpsInMetadataSeq>]; Stateful operators in current batch: [<OpsInCurBatchSeq>]."
     ],
     "sqlState" : "42K03"
+  },
+  "STREAMING_UNFINISHED_REPARTITION_DETECTED" : {
+    "message" : [
+      "The latest batch <batchId> is for an unfinished state repartitioning i.e. last committed batch is: <lastCommittedBatchId>).",
+      "Please retry the repartitioning operation and let it finish successfully before starting the streaming query."
+    ],
+    "sqlState" : "55019"
   },
   "STREAM_FAILED" : {
     "message" : [
@@ -6079,13 +6265,7 @@
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
-  },
-  "THETA_INVALID_LG_NOM_ENTRIES" : {
-    "message" : [
-      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
-    ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
@@ -6130,6 +6310,18 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_SKETCH_MODE" : {
+    "message" : [
+      "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
+    ],
+    "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
@@ -6736,6 +6928,11 @@
           "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       },
+      "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
+        "message" : [
+          "Lambda function with SQL UDF <funcName> in a higher order function."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
@@ -6903,6 +7100,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SQL_CURSOR" : {
+        "message" : [
+          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
+        ]
+      },
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
@@ -7052,6 +7254,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_JOIN_TYPE" : {
     "message" : [
@@ -7298,6 +7506,12 @@
     ],
     "sqlState" : "0A001"
   },
+  "UNSUPPORTED_TIME_TYPE" : {
+    "message" : [
+      "The data type TIME is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -7443,6 +7657,12 @@
     ],
     "sqlState" : "22023"
   },
+  "VECTOR_DIMENSION_MISMATCH" : {
+    "message" : [
+      "Vectors passed to <functionName> must have the same dimension, but got <leftDim> and <rightDim>."
+    ],
+    "sqlState" : "22000"
+  },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create view <relationName> because it already exists.",
@@ -7464,6 +7684,12 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into view <name>, please write into a table instead."
+    ],
+    "sqlState" : "42809"
   },
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
@@ -7689,19 +7915,9 @@
       "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1007" : {
-    "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {
@@ -7711,7 +7927,7 @@
   },
   "_LEGACY_ERROR_TEMP_1017" : {
     "message" : [
-      "<name> is a built-in/temporary function. '<cmd>' expects a persistent function.<hintStr>."
+      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1018" : {
@@ -9389,11 +9605,6 @@
   "_LEGACY_ERROR_TEMP_2273" : {
     "message" : [
       "<message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2277" : {
-    "message" : [
-      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {
