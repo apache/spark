@@ -3828,6 +3828,14 @@ object SQLConf {
     .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = tz => Map.empty)
     .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
+  val SESSION_ENFORCE_TIMEZONE_MATCH =
+    buildConf(SqlApiConfHelper.SESSION_ENFORCE_TIMEZONE_MATCH_KEY)
+    .doc("When true, only timezone aware timestamps can be converted to/from TimestampType " +
+      "and only naive timestamps can be converted to/from TimestampNTZType. ")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")
       .internal()
@@ -7603,6 +7611,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+  def sessionEnforceTimeZoneMatch: Boolean = getConf(SQLConf.SESSION_ENFORCE_TIMEZONE_MATCH)
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
