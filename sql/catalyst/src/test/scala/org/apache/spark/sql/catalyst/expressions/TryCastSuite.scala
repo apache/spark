@@ -118,7 +118,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     assert(!c4.resolved)
   }
 
-  test("TRY mode: try_cast invalid UTF-8 binary to string should return null") {
+  test("SPARK-54586: try_cast invalid UTF-8 binary to string should return null") {
     // In TRY mode, invalid UTF-8 returns null instead of throwing
     checkEvaluation(cast(invalidUtf8Literal, StringType), null)
 
@@ -129,7 +129,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
   }
 
-  test("TRY mode: try_cast invalid UTF-8 with validation disabled (old behavior)") {
+  test("SPARK-54586: try_cast invalid UTF-8 with validation disabled (old behavior)") {
     withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
       // With validation disabled, invalid UTF-8 passes through (old behavior)
       val result = cast(invalidUtf8Literal, StringType).eval()
@@ -145,7 +145,32 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     }
   }
 
-  test("TRY mode: try_cast array with invalid UTF-8 returns array with nulls") {
+  test("SPARK-54586: try_cast binary to CHAR/VARCHAR with length constraints") {
+    // Valid UTF-8 within length limit
+    val shortBinary = Literal.create(Array[Byte](72, 105), BinaryType)  // "Hi"
+    // CHAR pads with spaces to fixed length, VARCHAR doesn't
+    checkEvaluation(cast(shortBinary, CharType(10)), "Hi".padTo(10, ' '))
+    checkEvaluation(cast(shortBinary, VarcharType(10)), "Hi")
+
+    // Valid UTF-8 exceeding length limit - try_cast returns NULL (can't truncate safely)
+    val longBinary = Literal.create("Hello World".getBytes("UTF-8"), BinaryType)
+    checkEvaluation(cast(longBinary, CharType(5)), null)
+    checkEvaluation(cast(longBinary, VarcharType(5)), null)
+
+    // Verify nullable for try_cast with length constraints
+    assert(cast(longBinary, CharType(5)).nullable,
+      "try_cast to CHAR with insufficient length should be nullable")
+    assert(cast(longBinary, VarcharType(5)).nullable,
+      "try_cast to VARCHAR with insufficient length should be nullable")
+
+    // Verify nullable for plain StringType with validation
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "true") {
+      assert(cast(invalidUtf8Literal, StringType).nullable,
+        "try_cast binary to string should be nullable when validation enabled")
+    }
+  }
+
+  test("SPARK-54586: try_cast array with invalid UTF-8 returns array with nulls") {
     val arrayLiteral = Literal.create(
       Seq(validUtf8Bytes, invalidUtf8Bytes),
       ArrayType(BinaryType, containsNull = false))
@@ -157,7 +182,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     assert(resultArray.isNullAt(1)) // Invalid UTF-8 becomes null
   }
 
-  test("TRY mode: try_cast map with invalid UTF-8 value returns map with null value") {
+  test("SPARK-54586: try_cast map with invalid UTF-8 value returns map with null value") {
     val mapLiteral = Literal.create(
       Map("key" -> invalidUtf8Bytes),
       MapType(StringType, BinaryType, valueContainsNull = false))
@@ -171,7 +196,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     assert(values.isNullAt(0))
   }
 
-  test("TRY mode: try_cast struct with invalid UTF-8 field returns struct with null field") {
+  test("SPARK-54586: try_cast struct with invalid UTF-8 field returns struct with null field") {
     val structLiteral = Literal.create(
       InternalRow(invalidUtf8Bytes),
       StructType(Seq(StructField("field", BinaryType, nullable = false))))
