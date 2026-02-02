@@ -1502,7 +1502,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Verify merge operation worked
         db.load(0)
         db.load(5)
-        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+        // SPARK-55131: new merge operation concatenates the strings without any separator
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "baseappended")
       }
     }
   }
