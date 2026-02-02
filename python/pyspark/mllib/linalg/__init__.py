@@ -457,7 +457,7 @@ class DenseVector(Vector):
             elif isinstance(other, Vector):
                 return np.dot(self.toArray(), other.toArray())
             else:
-                return np.dot(self.toArray(), cast("ArrayLike", other))
+                return np.dot(self.toArray(), cast("ArrayLike", other))  # type: ignore[valid-type]
 
     def squared_distance(self, other: "VectorLike") -> np.float64:
         """

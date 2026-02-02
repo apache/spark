@@ -22,7 +22,6 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CapturesConfig, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -30,7 +29,7 @@ import org.apache.spark.sql.types.StructType
  * The base class for CreateUserDefinedFunctionCommand
  */
 abstract class CreateUserDefinedFunctionCommand
-  extends LeafRunnableCommand with IgnoreCachedData with CapturesConfig
+  extends LeafRunnableCommand with CapturesConfig
 
 
 object CreateUserDefinedFunctionCommand {

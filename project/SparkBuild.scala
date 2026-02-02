@@ -1202,7 +1202,8 @@ object DependencyOverrides {
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
-        "org.slf4j" % "slf4j-api" % slf4jVersion
+        "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
   )
@@ -1322,10 +1323,6 @@ object SqlApi {
 object SQL {
   import BuildCommons.protoVersion
   lazy val settings = Seq(
-    // SPARK-54830: avoid AdaptiveQueryExecSuite OOM, since computing order independent shuffle checksum needs more
-    // memory for test case introduced by SPARK-48037 which set shuffle partition to 16777216
-    // It needs to be consistent with the configuration of the `scalatest-maven-plugin` in `sql/core/pom.xml`.
-    (Test / javaOptions) += "-Xmx6g",
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,

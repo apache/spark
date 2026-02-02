@@ -21,7 +21,12 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.types import (
+    _dedup_names,
+    _deduplicate_field_names,
+    _create_converter_to_pandas,
+    to_arrow_schema,
+)
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
@@ -48,6 +53,46 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     import pyarrow as pa
+    import pandas as pd
+
+
+class ArrowBatchTransformer:
+    """
+    Pure functions that transform RecordBatch -> RecordBatch.
+    They should have no side effects (no I/O, no writing to streams).
+    """
+
+    @staticmethod
+    def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
+        """
+        Flatten a struct column at given index into a RecordBatch.
+
+        Used by:
+            - ArrowStreamUDFSerializer.load_stream
+            - SQL_GROUPED_MAP_ARROW_UDF mapper
+            - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
+        """
+        import pyarrow as pa
+
+        struct = batch.column(column_index)
+        return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+
+    @staticmethod
+    def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
+        """
+        Wrap a RecordBatch's columns into a single struct column.
+
+        Used by: ArrowStreamUDFSerializer.dump_stream
+        """
+        import pyarrow as pa
+
+        if batch.num_columns == 0:
+            # When batch has no column, it should still create
+            # an empty batch with the number of rows set.
+            struct = pa.array([{}] * batch.num_rows)
+        else:
+            struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
+        return pa.RecordBatch.from_arrays([struct], ["_0"])
 
 
 class LocalDataToArrowConversion:
@@ -954,3 +999,160 @@ class ArrowTimestampConversion:
             )
         else:  # pragma: no cover
             assert False, f"Need converter for {pa_type} but failed to find one."
+
+
+class ArrowArrayToPandasConversion:
+    """
+    Conversion utilities for converting PyArrow Arrays and ChunkedArrays to pandas.
+
+    This class provides methods to convert PyArrow columnar data structures to pandas
+    Series or DataFrames, with support for Spark-specific type handling and conversions.
+
+    The class is primarily used by PySpark's Arrow-based serializers for UDF execution,
+    where Arrow data needs to be converted to pandas for Python UDF processing.
+    """
+
+    @classmethod
+    def convert_legacy(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: Optional[str] = None,
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
+
+        This is the lower-level conversion method that requires explicit Spark type
+        specification. For a more convenient API, see :meth:`convert`.
+
+        Parameters
+        ----------
+        arr : pa.Array or pa.ChunkedArray
+            The arrow column to convert.
+        spark_type : DataType
+            Target Spark type. Must be specified and should match the Arrow array type.
+        timezone : str, optional
+            The timezone to use for timestamp conversion. Required if the data contains
+            timestamp types.
+        struct_in_pandas : str, optional
+            How to handle struct types in pandas. Valid values are "dict", "row", or "legacy".
+            Required if the data contains struct types.
+        ndarray_as_list : bool, optional
+            Whether to convert numpy ndarrays to Python lists. Default is False.
+        df_for_struct : bool, optional
+            If True and spark_type is a StructType, return a DataFrame with columns
+            corresponding to struct fields instead of a Series. Default is False.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            Converted pandas Series. If df_for_struct is True and spark_type is StructType,
+            returns a DataFrame with columns corresponding to struct fields.
+
+        Notes
+        -----
+        This method handles date type columns specially to avoid overflow issues with
+        datetime64[ns] intermediate representations.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if df_for_struct and isinstance(spark_type, StructType):
+            import pyarrow.types as types
+
+            assert types.is_struct(arr.type)
+            assert len(spark_type.names) == len(arr.type.names), (
+                f"Schema mismatch: spark_type has {len(spark_type.names)} fields, "
+                f"but arrow type has {len(arr.type.names)} fields. "
+                f"spark_type={spark_type}, arrow_type={arr.type}"
+            )
+
+            series = [
+                cls.convert_legacy(
+                    field_arr,
+                    spark_type=field.dataType,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    ndarray_as_list=ndarray_as_list,
+                    df_for_struct=False,  # always False for child fields
+                )
+                for field_arr, field in zip(arr.flatten(), spark_type)
+            ]
+            pdf = pd.concat(series, axis=1)
+            pdf.columns = spark_type.names  # type: ignore[assignment]
+            return pdf
+
+        # Convert Arrow array to pandas Series with specific options:
+        # - date_as_object: Convert date types to Python datetime.date objects directly
+        #   instead of datetime64[ns] to avoid overflow issues
+        # - coerce_temporal_nanoseconds: Handle nanosecond precision timestamps correctly
+        # - integer_object_nulls: Use object dtype for integer arrays with nulls
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
+        }
+        ser = arr.to_pandas(**pandas_options)
+
+        converter = _create_converter_to_pandas(
+            data_type=spark_type,
+            nullable=True,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
+        )
+        return converter(ser)
+
+    @classmethod
+    def convert(
+        cls,
+        arrow_column: Union["pa.Array", "pa.ChunkedArray"],
+        target_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> Union["pd.Series", "pd.DataFrame"]:
+        """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
+
+        Parameters
+        ----------
+        arrow_column : pa.Array or pa.ChunkedArray
+            The Arrow column to convert.
+        target_type : DataType
+            The target Spark type for the column to be converted to.
+        timezone : str, optional
+            Timezone for timestamp conversion. Required if the data contains timestamp types.
+        struct_in_pandas : str, optional
+            How to represent struct types in pandas. Valid values are "dict", "row", or "legacy".
+            Default is "dict".
+        ndarray_as_list : bool, optional
+            Whether to convert numpy ndarrays to Python lists. Default is False.
+        df_for_struct : bool, optional
+            If True, convert struct columns to a DataFrame with columns corresponding
+            to struct fields instead of a Series. Default is False.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            Converted pandas Series. If df_for_struct is True and the type is StructType,
+            returns a DataFrame with columns corresponding to struct fields.
+        """
+        return cls.convert_legacy(
+            arrow_column,
+            target_type,
+            timezone=timezone,
+            struct_in_pandas=struct_in_pandas,
+            ndarray_as_list=ndarray_as_list,
+            df_for_struct=df_for_struct,
+        )

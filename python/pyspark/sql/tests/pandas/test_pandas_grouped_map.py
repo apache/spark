@@ -24,6 +24,7 @@ from collections import OrderedDict
 from decimal import Decimal
 from typing import Iterator, Tuple, Any
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
@@ -346,8 +347,9 @@ class ApplyInPandasTestsMixin:
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        rf"ValueError: Exception thrown when converting pandas.Series \({pandas_type_name}\) "
                         r"with name 'mean' to Arrow Array \(double\)."
                     )
                     if safely:

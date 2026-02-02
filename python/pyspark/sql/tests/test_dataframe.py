@@ -1199,6 +1199,21 @@ class DataFrameTestsMixin:
             messageParameters={"member": "queryExecution"},
         )
 
+    def test_to_json(self):
+        df = self.spark.range(10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": False}):
+            from pyspark import RDD
+
+            rdd = df.toJSON()
+            self.assertIsInstance(rdd, RDD)
+            self.assertEqual(rdd.count(), 10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": True}):
+            df = df.toJSON()
+            self.assertIsInstance(df, DataFrame)
+            self.assertEqual(df.select("value").count(), 10)
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     pass

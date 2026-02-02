@@ -610,6 +610,31 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-55256: array_agg and collect_list skip nulls by default") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(4))).toDF("a", "b")
+
+    // Both functions skip nulls by default
+    checkAnswer(df.selectExpr("array_agg(b)"), Seq(Row(Seq(2, 4))))
+    checkAnswer(df.select(array_agg($"b")), Seq(Row(Seq(2, 4))))
+    checkAnswer(df.selectExpr("collect_list(b)"), Seq(Row(Seq(2, 4))))
+    checkAnswer(df.select(collect_list($"b")), Seq(Row(Seq(2, 4))))
+  }
+
+  test("SPARK-55256: array_agg with IGNORE NULLS explicitly skips nulls") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(4))).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("array_agg(b) IGNORE NULLS"), Seq(Row(Seq(2, 4))))
+    checkAnswer(df.selectExpr("collect_list(b) IGNORE NULLS"), Seq(Row(Seq(2, 4))))
+  }
+
+  test("SPARK-55256: array_agg with RESPECT NULLS preserves nulls") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(4))).toDF("a", "b")
+
+    // RESPECT NULLS preserves null values in the result
+    checkAnswer(df.selectExpr("array_agg(b) RESPECT NULLS"), Seq(Row(Seq(2, null, 4))))
+    checkAnswer(df.selectExpr("collect_list(b) RESPECT NULLS"), Seq(Row(Seq(2, null, 4))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -2396,7 +2421,7 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(theta_sketch_agg("value", 1).as("thetasketch"))
           .collect()
       },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
       parameters = Map(
         "function" -> "`theta_sketch_agg`",
         "min" -> "4",
@@ -2412,7 +2437,7 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(theta_sketch_agg("value", 28).as("thetasketch"))
           .collect()
       },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
       parameters = Map(
         "function" -> "`theta_sketch_agg`",
         "min" -> "4",

@@ -54,19 +54,19 @@ class ResampleErrorMixin:
             psdf.A.resample("0D").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("0Y").sum()
+            psdf.A.resample("0YE").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid closed: 'middle'"):
             psdf.A.resample("3D", closed="middle").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("3Y", closed="middle").sum()
+            psdf.A.resample("3YE", closed="middle").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid label: 'both'"):
             psdf.A.resample("3D", label="both").sum()
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            psdf.A.resample("3Y", label="both").sum()
+            psdf.A.resample("3YE", label="both").sum()
 
         with self.assertRaisesRegex(
             NotImplementedError, "`on` currently works only for TimestampType"

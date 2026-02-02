@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.api.extensions import no_default
 from pandas.api.types import (
     is_list_like,
     is_hashable,
@@ -56,6 +57,7 @@ from pandas.api.types import (
 )
 from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import (
     functions as F,
     Column as PySparkColumn,
@@ -415,7 +417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     """
 
     def __init__(  # type: ignore[no-untyped-def]
-        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=no_default
     ):
         assert data is not None
 
@@ -425,14 +427,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert dtype is None
             assert name is None
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             self._anchor = data
             self._col_label = index
 
         elif isinstance(data, Series):
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             if name:
                 data = data.rename(name)
@@ -453,7 +455,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 assert dtype is None
                 assert name is None
                 assert not copy
-                assert not fastpath
+                assert fastpath is no_default
                 s = data
             else:
                 from pyspark.pandas.indexes.base import Index
@@ -464,9 +466,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         "Try pandas index or array-like."
                     )
 
-                s = pd.Series(
-                    data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
-                )
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0"):
+                    s = pd.Series(
+                        data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
+                    )
+                else:
+                    # fastpath is removed since pandas 3.0.0
+                    s = pd.Series(data=data, index=index, dtype=dtype, name=name, copy=copy)
             internal = InternalFrame.from_pandas(pd.DataFrame(s))
             if s.name is None:
                 internal = internal.copy(column_labels=[None])
@@ -1076,9 +1082,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
+        if not np.issubdtype(self.dtype, np.number):
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
+        if not np.issubdtype(other.dtype, np.number):
             raise TypeError("unsupported dtype: %s" % other.dtype)
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
@@ -1205,10 +1211,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 else:
                     current = current.when(self.spark.column == F.lit(to_replace), value)
 
-            if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
+            if isinstance(arg, dict) and hasattr(arg, "__missing__"):
+                tmp_val = arg[np._NoValue]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore[attr-defined]
+                del arg[np._NoValue]
                 current = current.otherwise(F.lit(tmp_val))
             else:
                 current = current.otherwise(F.lit(None).cast(self.spark.data_type))
@@ -6940,7 +6946,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psser = ps.Series([1, 2, 3, 4], index=idx)
         >>> psser
         2018-04-09 00:00:00    1
@@ -7200,7 +7206,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Start by creating a series with 9 one minute timestamps.
 
-        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='min')
         >>> series = ps.Series(range(9), index=index, name='V')
         >>> series
         2000-01-01 00:00:00    0

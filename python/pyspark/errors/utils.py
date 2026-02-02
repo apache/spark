@@ -271,7 +271,7 @@ def _capture_call_site(depth: int) -> str:
         import IPython
 
         # ipykernel is required for IPython
-        import ipykernel  # type: ignore[import-not-found]
+        import ipykernel
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames

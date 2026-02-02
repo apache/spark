@@ -362,6 +362,47 @@ object OffsetSeqControlBatchInfo {
 }
 
 /**
+ * An offset type for Sequential Union operations, stored directly in the offset log.
+ * Sequential Union enables seamless backfill-to-live streaming scenarios by processing multiple
+ * sources sequentially rather than concurrently.
+ *
+ * This is stored as an entry in the offset map (just like source offsets), allowing multiple
+ * sequential unions per query to each track their own state.
+ *
+ * All source tracking is name-based (not index-based) to ensure stability across query restarts
+ * and to integrate with the query evolution feature.
+ *
+ * @param activeSourceName The name of the currently active source being processed.
+ * @param allSourceNames All source names in the order they should be processed.
+ * @param completedSourceNames Set of source names that have finished processing.
+ */
+case class SequentialUnionOffset(
+    activeSourceName: String,
+    allSourceNames: Seq[String],
+    completedSourceNames: Set[String]) extends OffsetV2 {
+
+  // Validate on construction
+  require(allSourceNames.nonEmpty, "allSourceNames must not be empty")
+  require(allSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' must be in allSourceNames: " +
+      s"${allSourceNames.mkString(", ")}")
+  require(completedSourceNames.subsetOf(allSourceNames.toSet),
+    s"completedSourceNames must be a subset of allSourceNames")
+  require(!completedSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' cannot be in completedSourceNames")
+
+  override def json(): String = Serialization.write(this)(SequentialUnionOffset.format)
+}
+
+object SequentialUnionOffset {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): SequentialUnionOffset = {
+    Serialization.read[SequentialUnionOffset](json)
+  }
+}
+
+/**
  * Contains metadata associated with a [[OffsetMap]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetMap]] metadata field.
  *

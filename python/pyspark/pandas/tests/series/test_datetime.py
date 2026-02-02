@@ -29,7 +29,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 class SeriesDateTimeTestsMixin:
     @property
     def pdf1(self):
-        date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="M"))
+        date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="ME"))
         date2 = pd.Series(pd.date_range("2013-3-11 21:45:00", periods=3, freq="W"))
         return pd.DataFrame(dict(start_date=date1, end_date=date2))
 
@@ -254,15 +254,15 @@ class SeriesDateTimeTestsMixin:
 
     def test_round(self):
         self.check_func(lambda x: x.dt.round(freq="min"))
-        self.check_func(lambda x: x.dt.round(freq="H"))
+        self.check_func(lambda x: x.dt.round(freq="h"))
 
     def test_floor(self):
         self.check_func(lambda x: x.dt.floor(freq="min"))
-        self.check_func(lambda x: x.dt.floor(freq="H"))
+        self.check_func(lambda x: x.dt.floor(freq="h"))
 
     def test_ceil(self):
         self.check_func(lambda x: x.dt.ceil(freq="min"))
-        self.check_func(lambda x: x.dt.ceil(freq="H"))
+        self.check_func(lambda x: x.dt.ceil(freq="h"))
 
     @unittest.skip("Unsupported locale setting")
     def test_month_name(self):
