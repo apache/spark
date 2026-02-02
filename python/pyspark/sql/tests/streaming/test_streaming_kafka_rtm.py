@@ -36,7 +36,8 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, search_jar, read_classpa
 kafka_sql_jar = search_jar(
     "connector/kafka-0-10-sql",
     "spark-sql-kafka-0-10_",
-    "dfadfa",
+    "spark-sql-kafka-0-10_",
+    return_first=True,
 )
 
 if kafka_sql_jar is None:
@@ -49,7 +50,12 @@ if kafka_sql_jar is None:
 
 # Read the full classpath including all dependencies
 # This works for both Maven builds (reads classpath.txt) and SBT builds (queries SBT)
-kafka_classpath = read_classpath("connector/kafka-0-10-sql")
+# Define the project name mapping for SBT builds
+kafka_project_name_map = {
+    "connector/kafka-0-10-sql": "sql-kafka-0-10",
+    "connector/kafka-0-10": "kafka-0-10",
+}
+kafka_classpath = read_classpath("connector/kafka-0-10-sql", kafka_project_name_map)
 all_jars = f"{kafka_sql_jar},{kafka_classpath}"
 
 # Add Kafka JAR to PYSPARK_SUBMIT_ARGS before SparkSession is created
@@ -58,7 +64,6 @@ jars_args = "--jars %s" % all_jars
 
 os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
-from pyspark.sql.functions import col
 from pyspark.sql.tests.streaming.kafka_utils import KafkaUtils
 
 
@@ -85,7 +90,6 @@ class StreamingKafkaTestsMixin:
         # Start Kafka container - this may take 10-30 seconds on first run
         cls.kafka_utils = KafkaUtils()
         cls.kafka_utils.setup()
-
 
     @classmethod
     def tearDownClass(cls):

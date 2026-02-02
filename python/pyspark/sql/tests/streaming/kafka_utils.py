@@ -42,7 +42,7 @@ Example usage:
 """
 
 import time
-from typing import List, Dict, Optional, Callable, Any
+from typing import List, Dict, Callable, Any
 
 
 class KafkaUtils:
