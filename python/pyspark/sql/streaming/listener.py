@@ -921,7 +921,7 @@ class SourceProgress(dict):
                 return value
             else:
                 return json.dumps(value)
-        
+
         return cls(
             jdict=j,
             description=j["description"],

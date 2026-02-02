@@ -359,8 +359,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.assertEqual(q.lastProgress.numInputRows, 10)
         self.assertEqual(q.lastProgress.sources[0].numInputRows, 10)
         self.assertEqual(
-            json.loads(q.lastProgress.sources[0].latestOffset),
-            {"partition-1": 1000000}
+            json.loads(q.lastProgress.sources[0].latestOffset), {"partition-1": 1000000}
         )
 
     def test_stream_reader_admission_control_processing_time_trigger(self):
@@ -393,8 +392,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             self.assertEqual(progress.numInputRows, 2)
             self.assertEqual(q.lastProgress.sources[0].numInputRows, 2)
             self.assertEqual(
-                json.loads(q.lastProgress.sources[0].latestOffset),
-                {"partition-1": 1000000}
+                json.loads(q.lastProgress.sources[0].latestOffset), {"partition-1": 1000000}
             )
 
     def test_simple_stream_reader(self):
