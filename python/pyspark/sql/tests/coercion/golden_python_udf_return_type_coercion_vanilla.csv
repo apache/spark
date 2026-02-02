@@ -6,11 +6,11 @@ a@str	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	a@st
 1970-01-01@date	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	java.util.GregorianCalendar[time@str	1970-01-01@date	X	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	X
 1970-01-01 00:00:00@datetime	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	java.util.GregorianCalendar[time@str	1970-01-01@date	1970-01-01 00:00:00@datetime	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	X
 1.0@float	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	1.0@str	X	X	1.0@float	1.0@float	None@NoneType	None@NoneType	None@NoneType	None@NoneType	X
-array('i', [1])@array	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[I@<hash>@str	X	X	None@NoneType	None@NoneType	[1]@List[int]	None@NoneType	None@NoneType	None@NoneType	X
-[1]@List[int]	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[1]@str	X	X	None@NoneType	None@NoneType	[1]@List[int]	None@NoneType	None@NoneType	None@NoneType	Row(_1=1)@Row
-(1,)@tuple	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[Ljava.lang.Object;@<hash>@str	X	X	None@NoneType	None@NoneType	[1]@List[int]	None@NoneType	None@NoneType	None@NoneType	Row(_1=1)@Row
-bytearray(b'ABC')@bytearray	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[B@<hash>@str	X	X	None@NoneType	None@NoneType	[65, 66, 67]@List[int]	b'ABC'@bytes	None@NoneType	None@NoneType	X
+array('i', [1])@array	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[I@<hash>@str	X	X	None@NoneType	None@NoneType	[1]@list[int]	None@NoneType	None@NoneType	None@NoneType	X
+[1]@list[int]	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[1]@str	X	X	None@NoneType	None@NoneType	[1]@list[int]	None@NoneType	None@NoneType	None@NoneType	Row(_1=1)@tuple[int]
+(1,)@tuple[int]	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[Ljava.lang.Object;@<hash>@str	X	X	None@NoneType	None@NoneType	[1]@list[int]	None@NoneType	None@NoneType	None@NoneType	Row(_1=1)@tuple[int]
+bytearray(b'ABC')@bytearray	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	[B@<hash>@str	X	X	None@NoneType	None@NoneType	[65, 66, 67]@list[int]	b'ABC'@bytes	None@NoneType	None@NoneType	X
 1@Decimal	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	1@str	X	X	None@NoneType	None@NoneType	None@NoneType	None@NoneType	1@Decimal	None@NoneType	X
-{'a': 1}@dict	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	{a=1}@str	X	X	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	{'a': 1}@dict	Row(_1=None)@Row
-Row(kwargs=1)@Row	X	X	X	X	X	X	X	X	X	X	X	X	X	X	Row(_1=1)@Row
-Row(namedtuple=1)@Row	X	X	X	X	X	X	X	X	X	X	X	X	X	X	Row(_1=1)@Row
+{'a': 1}@dict[str, int]	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	{a=1}@str	X	X	None@NoneType	None@NoneType	None@NoneType	None@NoneType	None@NoneType	{'a': 1}@dict[str, int]	Row(_1=None)@tuple[NoneType]
+Row(kwargs=1)@tuple[int]	X	X	X	X	X	X	X	X	X	X	X	X	X	X	Row(_1=1)@tuple[int]
+Row(namedtuple=1)@tuple[int]	X	X	X	X	X	X	X	X	X	X	X	X	X	X	Row(_1=1)@tuple[int]

@@ -73,16 +73,6 @@ if have_pandas:
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
 class PandasUDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.setup_timezone()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.teardown_timezone()
-        super().tearDownClass()
-
     @property
     def prefix(self):
         return "golden_pandas_udf_input_type_coercion"
@@ -254,11 +244,10 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
         spark_type_str = self.repr_spark_type(spark_type)
         spark_value_str = self.clean_result(str(input_data))
 
+        repr_pandas_type = self.repr_pandas_type
+
         def type_pandas_udf(data):
-            if hasattr(data, "dtype"):
-                return pd.Series([str(data.dtype)] * len(data))
-            else:
-                return pd.Series([str(type(data).__name__)] * len(data))
+            return pd.Series([repr_pandas_type(data)] * len(data))
 
         type_udf = pandas_udf(type_pandas_udf, returnType=StringType())
         value_udf = pandas_udf(lambda s: s, returnType=spark_type)
@@ -272,7 +261,7 @@ class PandasUDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
             values = [row["python_value"] for row in results_data]
             types = [row["python_type"] for row in results_data]
 
-            python_type_str = self._repr_container(types, container="Series")
+            python_type_str = self._join_type_strings(types)
             python_value_str = self.clean_result(str(values))
         except Exception as e:
             print("Exception", e)

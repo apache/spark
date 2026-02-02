@@ -48,6 +48,18 @@ class GoldenFileTestMixin:
     _tz_prev: Optional[str] = None
 
     @classmethod
+    def setUpClass(cls) -> None:
+        """Setup test class with timezone configuration."""
+        super().setUpClass()
+        cls.setup_timezone()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Teardown test class and restore timezone."""
+        cls.teardown_timezone()
+        super().tearDownClass()
+
+    @classmethod
     def setup_timezone(cls, tz: str = "America/Los_Angeles") -> None:
         """
         Setup timezone for deterministic test results.
@@ -186,7 +198,7 @@ class GoldenFileTestMixin:
     @classmethod
     def repr_type(cls, value: Any) -> str:
         """
-        Get the type representation string for a value.
+        Get the type representation string for a value (recursively for containers).
 
         Parameters
         ----------
@@ -196,53 +208,129 @@ class GoldenFileTestMixin:
         Returns
         -------
         str
-            Type string, e.g., "int", "List[int | NoneType]", "DataFrame[col1 int64]".
+            Type string, e.g., "int", "list[int | NoneType]", "DataFrame[col1 int64]".
         """
-        if have_pandas and isinstance(value, pd.DataFrame):
-            schema = ", ".join([f"{col} {dtype.name}" for col, dtype in value.dtypes.items()])
-            return f"DataFrame[{schema}]"
-        elif have_numpy and isinstance(value, np.ndarray):
-            return f"ndarray[{value.dtype.name}]"
-        elif have_pandas and isinstance(value, pd.Series):
-            return f"Series[{value.dtype.name}]"
-        elif isinstance(value, list):
-            if len(value) == 0:
-                return "List"
-            elem_types = [type(x).__name__ for x in value]
-            return cls._repr_container(elem_types, container="List")
-        else:
-            return type(value).__name__
+        return cls._repr_element_type(value)
 
-    @staticmethod
-    def _repr_container(types: list, container: str = "List") -> str:
+    @classmethod
+    def _repr_element_type(cls, elem: Any) -> str:
         """
-        Format a list of type strings into a container type.
+        Recursively get the type representation for an element.
+
+        For containers (list, dict, tuple, DataFrame), inspects nested element types.
+        """
+        if elem is None:
+            return "NoneType"
+        elif have_pandas and isinstance(elem, pd.DataFrame):
+            schema = ", ".join([f"{col} {dtype.name}" for col, dtype in elem.dtypes.items()])
+            return f"DataFrame[{schema}]"
+        elif have_pandas and isinstance(elem, pd.Series):
+            return f"Series[{elem.dtype.name}]"
+        elif have_numpy and isinstance(elem, np.ndarray):
+            return f"ndarray[{elem.dtype.name}]"
+        elif isinstance(elem, list):
+            if len(elem) == 0:
+                return "list"
+            inner = cls._repr_container(elem, container=None)
+            return f"list[{inner}]"
+        elif isinstance(elem, dict):
+            if len(elem) == 0:
+                return "dict"
+            key_str = cls._repr_container(list(elem.keys()), container=None)
+            val_str = cls._repr_container(list(elem.values()), container=None)
+            return f"dict[{key_str}, {val_str}]"
+        elif isinstance(elem, tuple):
+            if len(elem) == 0:
+                return "tuple"
+            inner = cls._repr_container(list(elem), container=None)
+            return f"tuple[{inner}]"
+        else:
+            return type(elem).__name__
+
+    @classmethod
+    def repr_pandas_type(cls, data: "pd.Series") -> str:
+        """
+        Get the type representation for a pandas Series, with element type inspection.
+
+        For object dtype, inspects actual element types recursively.
 
         Parameters
         ----------
-        types : list
-            List of type name strings (e.g., ['int', 'int'] or ['int64', 'object']).
-        container : str, default "List"
-            Container type name (e.g., "List", "Series").
+        data : pd.Series
+            The pandas Series to get type representation for.
 
         Returns
         -------
         str
-            Formatted type string, e.g., "List[int]" or "Series[int64 | object]".
-            NoneType is always placed at the end if present.
+            Type string, e.g., "int64", "list[int | NoneType]", "dict[str, int]".
         """
-        unique_types = set(types)
+        if not hasattr(data, "dtype"):
+            return type(data).__name__
+
+        dtype_str = str(data.dtype)
+        # For object dtype, inspect actual element types recursively
+        if dtype_str == "object" and len(data) > 0:
+            return cls._repr_container(list(data), container=None)
+        return dtype_str
+
+    @staticmethod
+    def _join_type_strings(type_strs: list, container: str = None) -> str:
+        """
+        Join a list of type strings into a formatted type string.
+
+        Parameters
+        ----------
+        type_strs : list
+            List of type name strings (e.g., ['int', 'str', 'NoneType']).
+        container : str, optional
+            Container type name (e.g., "list", "Series"). If None, returns just the type string.
+
+        Returns
+        -------
+        str
+            Formatted type string with NoneType at the end, e.g., "int | str | NoneType".
+        """
+        unique_types = set(type_strs)
         # Sort with NoneType at the end
         has_none = "NoneType" in unique_types
         other_types = sorted(t for t in unique_types if t != "NoneType")
         if has_none:
             other_types.append("NoneType")
+
         if len(other_types) == 0:
-            return container
+            type_str = ""
         elif len(other_types) == 1:
-            return f"{container}[{other_types[0]}]"
+            type_str = other_types[0]
         else:
-            return f"{container}[{' | '.join(other_types)}]"
+            type_str = " | ".join(other_types)
+
+        if container is None:
+            return type_str or "object"
+        elif type_str:
+            return f"{container}[{type_str}]"
+        else:
+            return container
+
+    @classmethod
+    def _repr_container(cls, values: list, container: str = None) -> str:
+        """
+        Format a list of values into a container type string.
+
+        Parameters
+        ----------
+        values : list
+            List of values to get type representations for.
+        container : str, optional
+            Container type name (e.g., "list", "Series"). If None, returns just the type string.
+
+        Returns
+        -------
+        str
+            Formatted type string, e.g., "list[int]" or "Series[int64 | object]".
+            NoneType is always placed at the end if present.
+        """
+        type_strs = [cls._repr_element_type(v) for v in values]
+        return cls._join_type_strings(type_strs, container)
 
     @staticmethod
     def clean_result(result: str) -> str:

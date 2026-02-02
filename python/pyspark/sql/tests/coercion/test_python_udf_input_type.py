@@ -71,16 +71,6 @@ if have_numpy:
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
 class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.setup_timezone()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.teardown_timezone()
-        super().tearDownClass()
-
     @property
     def prefix(self):
         return "golden_python_udf_input_type_coercion"
@@ -252,19 +242,17 @@ class UDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
         spark_type_str = self.repr_spark_type(spark_type)
         spark_value_str = self.clean_result(str(input_data))
 
-        type_udf = udf(lambda x: "NoneType" if x is None else type(x).__name__, StringType())
         value_udf = udf(lambda x: x, spark_type)
 
         try:
             result_df = input_df.select(
                 value_udf("value").alias("python_value"),
-                type_udf("value").alias("python_type"),
             )
             results_data = result_df.collect()
             values = [row["python_value"] for row in results_data]
-            types = [row["python_type"] for row in results_data]
 
-            python_type_str = self._repr_container(types, container="List")
+            # Use repr_type on driver side for recursive type representation
+            python_type_str = self._repr_container(values)
             python_value_str = self.clean_result(str(values))
         except Exception as e:
             print("Exception", e)

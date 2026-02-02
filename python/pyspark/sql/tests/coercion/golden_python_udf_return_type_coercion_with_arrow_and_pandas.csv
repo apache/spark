@@ -6,11 +6,11 @@ a@str	X	X	X	X	X	a@str	X	X	X	X	X	X	X	X	X
 1970-01-01@date	X	X	X	0@int	X	1970-01-01@str	1970-01-01@date	X	X	X	X	X	X	X	X
 1970-01-01 00:00:00@datetime	X	X	X	X	0@int	1970-01-01 00:00:00@str	1970-01-01@date	1970-01-01 00:00:00@datetime	X	X	X	X	X	X	X
 1.0@float	True@bool	1@int	1@int	1@int	1@int	1.0@str	X	X	1.0@float	1.0@float	X	X	1@Decimal	X	X
-array('i', [1])@array	X	X	X	X	X	array('i', [1])@str	X	X	X	X	[1]@List[int]	b'\x01\x00\x00\x00'@bytes	X	X	Row(_1=1)@Row
-[1]@List[int]	X	X	X	X	X	[1]@str	X	X	X	X	[1]@List[int]	b'\x01'@bytes	X	X	Row(_1=1)@Row
-(1,)@tuple	X	X	X	X	X	(1,)@str	X	X	X	X	[1]@List[int]	b'\x01'@bytes	X	X	Row(_1=1)@Row
-bytearray(b'ABC')@bytearray	X	X	X	X	X	bytearray(b'ABC')@str	X	X	X	X	[65, 66, 67]@List[int]	b'ABC'@bytes	X	X	Row(_1=65)@Row
+array('i', [1])@array	X	X	X	X	X	array('i', [1])@str	X	X	X	X	[1]@list[int]	b'\x01\x00\x00\x00'@bytes	X	X	Row(_1=1)@tuple[int]
+[1]@list[int]	X	X	X	X	X	[1]@str	X	X	X	X	[1]@list[int]	b'\x01'@bytes	X	X	Row(_1=1)@tuple[int]
+(1,)@tuple[int]	X	X	X	X	X	(1,)@str	X	X	X	X	[1]@list[int]	b'\x01'@bytes	X	X	Row(_1=1)@tuple[int]
+bytearray(b'ABC')@bytearray	X	X	X	X	X	bytearray(b'ABC')@str	X	X	X	X	[65, 66, 67]@list[int]	b'ABC'@bytes	X	X	Row(_1=65)@tuple[int]
 1@Decimal	X	1@int	1@int	1@int	1@int	1@str	1970-01-02@date	1969-12-31 16:00:00.000001@datetime	1.0@float	1.0@float	X	X	1@Decimal	X	X
-{'a': 1}@dict	X	X	X	X	X	{'a': 1}@str	X	X	X	X	X	X	X	{'a': 1}@dict	Row(_1=None)@Row
-Row(kwargs=1)@Row	X	X	X	X	X	Row(kwargs=1)@str	X	X	X	X	[1]@List[int]	b'\x01'@bytes	X	X	Row(_1=1)@Row
-Row(namedtuple=1)@Row	X	X	X	X	X	Row(namedtuple=1)@str	X	X	X	X	[1]@List[int]	b'\x01'@bytes	X	X	Row(_1=1)@Row
+{'a': 1}@dict[str, int]	X	X	X	X	X	{'a': 1}@str	X	X	X	X	X	X	X	{'a': 1}@dict[str, int]	Row(_1=None)@tuple[NoneType]
+Row(kwargs=1)@tuple[int]	X	X	X	X	X	Row(kwargs=1)@str	X	X	X	X	[1]@list[int]	b'\x01'@bytes	X	X	Row(_1=1)@tuple[int]
+Row(namedtuple=1)@tuple[int]	X	X	X	X	X	Row(namedtuple=1)@str	X	X	X	X	[1]@list[int]	b'\x01'@bytes	X	X	Row(_1=1)@tuple[int]

@@ -72,16 +72,6 @@ if have_numpy:
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
 class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.setup_timezone()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.teardown_timezone()
-        super().tearDownClass()
-
     @property
     def prefix(self):
         return "golden_python_udf_return_type_coercion"

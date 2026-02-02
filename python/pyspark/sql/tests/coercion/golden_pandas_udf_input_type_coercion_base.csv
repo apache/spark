@@ -1,40 +1,40 @@
 Source Value \ Target Type	Spark Type	Spark Value	Python Type	Python Value
-byte_values	tinyint	[-128, 127, 0]	Series[int8]	[-128, 127, 0]
-byte_null	tinyint	[None, 42]	Series[Int8]	[None, 42]
-short_values	smallint	[-32768, 32767, 0]	Series[int16]	[-32768, 32767, 0]
-short_null	smallint	[None, 123]	Series[Int16]	[None, 123]
-int_values	int	[-2147483648, 2147483647, 0]	Series[int32]	[-2147483648, 2147483647, 0]
-int_null	int	[None, 456]	Series[Int32]	[None, 456]
-long_values	bigint	[-9223372036854775808, 9223372036854775807, 0]	Series[int64]	[-9223372036854775808, 9223372036854775807, 0]
-long_null	bigint	[None, 789]	Series[Int64]	[None, 789]
-float_values	float	[0.0, 1.0, 3.140000104904175]	Series[float32]	[0.0, 1.0, 3.140000104904175]
-float_null	float	[None, 3.140000104904175]	Series[float32]	[None, 3.140000104904175]
-double_values	double	[0.0, 1.0, 0.3333333333333333]	Series[float64]	[0.0, 1.0, 0.3333333333333333]
-double_null	double	[None, 2.71]	Series[float64]	[None, 2.71]
-decimal_values	decimal(3,2)	[Decimal('5.35'), Decimal('1.23')]	Series[object]	[Decimal('5.35'), Decimal('1.23')]
-decimal_null	decimal(3,2)	[None, Decimal('9.99')]	Series[object]	[None, Decimal('9.99')]
-string_values	string	['abc', '', 'hello']	Series[object]	['abc', '', 'hello']
-string_null	string	[None, 'test']	Series[object]	[None, 'test']
-binary_values	binary	[b'abc', b'', b'ABC']	Series[object]	[b'abc', b'', b'ABC']
-binary_null	binary	[None, b'test']	Series[object]	[None, b'test']
-boolean_values	boolean	[True, False]	Series[bool]	[True, False]
-boolean_null	boolean	[None, True]	Series[object]	[None, True]
-date_values	date	[datetime.date(2020, 2, 2), datetime.date(1970, 1, 1)]	Series[object]	[datetime.date(2020, 2, 2), datetime.date(1970, 1, 1)]
-date_null	date	[None, datetime.date(2023, 1, 1)]	Series[object]	[None, datetime.date(2023, 1, 1)]
-timestamp_values	timestamp	[datetime.datetime(2020, 2, 2, 12, 15, 16, 123000)]	Series[datetime64[ns]]	[datetime.datetime(2020, 2, 2, 12, 15, 16, 123000)]
-timestamp_null	timestamp	[None, datetime.datetime(2023, 1, 1, 12, 0)]	Series[datetime64[ns]]	[None, datetime.datetime(2023, 1, 1, 12, 0)]
-array_int_values	array<int>	[[1, 2, 3], [], [1, None, 3]]	Series[object]	[[1, 2, 3], [], [1, None, 3]]
-array_int_null	array<int>	[None, [4, 5, 6]]	Series[object]	[None, [4, 5, 6]]
-map_str_int_values	map<string,int>	[{'world': 2, 'hello': 1}, {}]	Series[object]	[{'world': 2, 'hello': 1}, {}]
-map_str_int_null	map<string,int>	[None, {'test': 123}]	Series[object]	[None, {'test': 123}]
-struct_int_str_values	struct<a1:int,a2:string>	[Row(a1=1, a2='hello'), Row(a1=2, a2='world')]	Series[DataFrame]	[Row(a1=1, a2='hello'), Row(a1=2, a2='world')]
-struct_int_str_null	struct<a1:int,a2:string>	[None, Row(a1=99, a2='test')]	Series[DataFrame]	[Row(a1=None, a2=None), Row(a1=99, a2='test')]
-array_array_int	array<array<int>>	[[[1, 2, 3]], [[1], [2, 3]]]	Series[object]	[[[1, 2, 3]], [[1], [2, 3]]]
-array_map_str_int	array<map<string,int>>	[[{'world': 2, 'hello': 1}], [{'a': 1}, {'b': 2}]]	Series[object]	[[{'world': 2, 'hello': 1}], [{'a': 1}, {'b': 2}]]
-array_struct_int_str	array<struct<a1:int,a2:string>>	[[Row(a1=1, a2='hello')], [Row(a1=1, a2='hello'), Row(a1=2, a2='world')]]	Series[object]	[[Row(a1=1, a2='hello')], [Row(a1=1, a2='hello'), Row(a1=2, a2='world')]]
-map_int_array_int	map<int,array<int>>	[{1: [1, 2, 3]}, {1: [1], 2: [2, 3]}]	Series[object]	[{1: [1, 2, 3]}, {1: [1], 2: [2, 3]}]
-map_int_map_str_int	map<int,map<string,int>>	[{1: {'world': 2, 'hello': 1}}]	Series[object]	[{1: {'world': 2, 'hello': 1}}]
-map_int_struct_int_str	map<int,struct<a1:int,a2:string>>	[{1: Row(a1=1, a2='hello')}]	Series[object]	[{1: Row(a1=1, a2='hello')}]
-struct_int_array_int	struct<a:int,b:array<int>>	[Row(a=1, b=[1, 2, 3])]	Series[DataFrame]	[Row(a=1, b=[1, 2, 3])]
-struct_int_map_str_int	struct<a:int,b:map<string,int>>	[Row(a=1, b={'world': 2, 'hello': 1})]	Series[DataFrame]	[Row(a=1, b={'world': 2, 'hello': 1})]
-struct_int_struct_int_str	struct<a:int,b:struct<a1:int,a2:string>>	[Row(a=1, b=Row(a1=1, a2='hello'))]	Series[DataFrame]	[Row(a=1, b=Row(a1=1, a2='hello'))]
+byte_values	tinyint	[-128, 127, 0]	int8	[-128, 127, 0]
+byte_null	tinyint	[None, 42]	Int8	[None, 42]
+short_values	smallint	[-32768, 32767, 0]	int16	[-32768, 32767, 0]
+short_null	smallint	[None, 123]	Int16	[None, 123]
+int_values	int	[-2147483648, 2147483647, 0]	int32	[-2147483648, 2147483647, 0]
+int_null	int	[None, 456]	Int32	[None, 456]
+long_values	bigint	[-9223372036854775808, 9223372036854775807, 0]	int64	[-9223372036854775808, 9223372036854775807, 0]
+long_null	bigint	[None, 789]	Int64	[None, 789]
+float_values	float	[0.0, 1.0, 3.140000104904175]	float32	[0.0, 1.0, 3.140000104904175]
+float_null	float	[None, 3.140000104904175]	float32	[None, 3.140000104904175]
+double_values	double	[0.0, 1.0, 0.3333333333333333]	float64	[0.0, 1.0, 0.3333333333333333]
+double_null	double	[None, 2.71]	float64	[None, 2.71]
+decimal_values	decimal(3,2)	[Decimal('5.35'), Decimal('1.23')]	X	X
+decimal_null	decimal(3,2)	[None, Decimal('9.99')]	X	X
+string_values	string	['abc', '', 'hello']	X	X
+string_null	string	[None, 'test']	X	X
+binary_values	binary	[b'abc', b'', b'ABC']	X	X
+binary_null	binary	[None, b'test']	X	X
+boolean_values	boolean	[True, False]	bool	[True, False]
+boolean_null	boolean	[None, True]	X	X
+date_values	date	[datetime.date(2020, 2, 2), datetime.date(1970, 1, 1)]	X	X
+date_null	date	[None, datetime.date(2023, 1, 1)]	X	X
+timestamp_values	timestamp	[datetime.datetime(2020, 2, 2, 12, 15, 16, 123000)]	datetime64[ns]	[datetime.datetime(2020, 2, 2, 12, 15, 16, 123000)]
+timestamp_null	timestamp	[None, datetime.datetime(2023, 1, 1, 12, 0)]	datetime64[ns]	[None, datetime.datetime(2023, 1, 1, 12, 0)]
+array_int_values	array<int>	[[1, 2, 3], [], [1, None, 3]]	X	X
+array_int_null	array<int>	[None, [4, 5, 6]]	X	X
+map_str_int_values	map<string,int>	[{'world': 2, 'hello': 1}, {}]	X	X
+map_str_int_null	map<string,int>	[None, {'test': 123}]	X	X
+struct_int_str_values	struct<a1:int,a2:string>	[Row(a1=1, a2='hello'), Row(a1=2, a2='world')]	DataFrame	[Row(a1=1, a2='hello'), Row(a1=2, a2='world')]
+struct_int_str_null	struct<a1:int,a2:string>	[None, Row(a1=99, a2='test')]	DataFrame	[Row(a1=None, a2=None), Row(a1=99, a2='test')]
+array_array_int	array<array<int>>	[[[1, 2, 3]], [[1], [2, 3]]]	X	X
+array_map_str_int	array<map<string,int>>	[[{'world': 2, 'hello': 1}], [{'a': 1}, {'b': 2}]]	X	X
+array_struct_int_str	array<struct<a1:int,a2:string>>	[[Row(a1=1, a2='hello')], [Row(a1=1, a2='hello'), Row(a1=2, a2='world')]]	X	X
+map_int_array_int	map<int,array<int>>	[{1: [1, 2, 3]}, {1: [1], 2: [2, 3]}]	X	X
+map_int_map_str_int	map<int,map<string,int>>	[{1: {'world': 2, 'hello': 1}}]	X	X
+map_int_struct_int_str	map<int,struct<a1:int,a2:string>>	[{1: Row(a1=1, a2='hello')}]	X	X
+struct_int_array_int	struct<a:int,b:array<int>>	[Row(a=1, b=[1, 2, 3])]	DataFrame	[Row(a=1, b=[1, 2, 3])]
+struct_int_map_str_int	struct<a:int,b:map<string,int>>	[Row(a=1, b={'world': 2, 'hello': 1})]	DataFrame	[Row(a=1, b={'world': 2, 'hello': 1})]
+struct_int_struct_int_str	struct<a:int,b:struct<a1:int,a2:string>>	[Row(a=1, b=Row(a1=1, a2='hello'))]	DataFrame	[Row(a=1, b=Row(a1=1, a2='hello'))]
