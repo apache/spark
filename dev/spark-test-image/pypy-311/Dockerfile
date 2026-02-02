@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
     git \
     gnupg \
     libgit2-dev \
+    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
     libssl-dev \
