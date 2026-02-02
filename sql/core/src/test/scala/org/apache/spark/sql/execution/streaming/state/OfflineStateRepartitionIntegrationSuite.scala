@@ -25,17 +25,13 @@ import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 /**
- * Integration test suite for OfflineStateRepartitionRunner with stateful operators.
+ * Integration test suite helper class for OfflineStateRepartitionRunner with stateful operators.
  * Tests state repartitioning (increase and decrease partitions) and validates:
  * 1. State data remains identical after repartitioning
  * 2. Offset and commit logs are updated correctly
  * 3. Query can resume successfully and compute correctly with repartitioned state
  */
-class OfflineStateRepartitionIntegrationSuite
-  extends StateDataSourceTestBase {
-
-  import testImplicits._
-  import OfflineStateRepartitionTestUtils._
+abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSourceTestBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -45,51 +41,56 @@ class OfflineStateRepartitionIntegrationSuite
   }
 
   /**
-   * Reads state data from checkpoint directory using StateStore data source.
-   * Returns sorted rows for deterministic comparison.
+   * Reads state data for a specific store and column family
    */
-  private def readStateData(checkpointDir: String, batchId: Long): Dataset[Row] = {
-    spark.read
+  private def readStateData(
+      checkpointDir: String,
+      batchId: Long,
+      storeName: String,
+      additionalOptions: Map[String, String]): Dataset[Row] = {
+    var reader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
       .option(StateSourceOptions.BATCH_ID, batchId)
-      .load()
+      .option(StateSourceOptions.STORE_NAME, storeName)
+
+    // Apply additional options dynamically
+    additionalOptions.foreach { case (k, v) =>
+      reader = reader.option(k, v)
+    }
+
+    reader.load()
       .selectExpr("key", "value", "partition_id")
       .orderBy("key")
   }
 
   /**
-   * Validates that state data after repartition matches state data before repartition.
+   * Read states for all specified stores and column families.
+   * @param storeToColumnFamilyToStateSourceOptions: Map[store -> Map [colFamily -> sourceOptions]]
+   * Returns Map[store -> Map[columnFamily -> state rows]]
    */
-  private def validateStateDataAfterRepartition(
+  private def readStateDataByStoreName(
       checkpointDir: String,
-      stateBeforeRepartition: Array[Row],
-      repartitionBatchId: Long): Unit = {
-
-    val stateAfterRepartition = readStateData(checkpointDir, repartitionBatchId).collect()
-
-    // Validate row count
-    assert(stateBeforeRepartition.length == stateAfterRepartition.length,
-      s"State row count mismatch: before=${stateBeforeRepartition.length}, " +
-        s"after=${stateAfterRepartition.length}")
-
-    // Extract (key, value) pairs, ignoring partition_id (which changes)
-    val beforeByKey = stateBeforeRepartition
-      .map(row => (row.get(0).toString, row.get(1).toString))
-      .sortBy(_._1)
-
-    val afterByKey = stateAfterRepartition
-      .map(row => (row.get(0).toString, row.get(1).toString))
-      .sortBy(_._1)
-
-    // Compare each (key, value) pair
-    beforeByKey.zip(afterByKey).zipWithIndex.foreach {
-      case (((keyBefore, valueBefore), (keyAfter, valueAfter)), idx) =>
-        assert(keyBefore == keyAfter,
-          s"Key mismatch at index $idx: $keyBefore vs $keyAfter")
-        assert(valueBefore == valueAfter,
-          s"Value mismatch at index $idx for key $keyBefore")
+      batchId: Long,
+      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]]
+  ): Map[String, Map[String, Array[Row]]] = {
+    storeToColumnFamilyToStateSourceOptions.map { case (storeName, columnFamilyToOptions) =>
+      val columnFamilyData = columnFamilyToOptions.map { case (cfName, options) =>
+        val stateData = readStateData(
+          checkpointDir, batchId, storeName, options).collect()
+        cfName -> stateData
+      }
+      storeName -> columnFamilyData
     }
+  }
+
+  /**
+   * Extracts (key, value) pairs from Row array and sorts by key.
+   */
+  private def extractKeyValuePairs(rows: Array[Row]): Array[(String, String)] = {
+    rows
+      .map(row => (row.get(0).toString, row.get(1).toString))
+      .sortBy(_._1)
   }
 
   /**
@@ -106,13 +107,18 @@ class OfflineStateRepartitionIntegrationSuite
    * @param verifyResumedQuery Callback to verify resumed query
    *                           (receives inputStream, checkpointDir, clock)
    * @param useManualClock Whether this test requires a manual clock (for processing time)
+   * @param storeToColumnFamilyToStateSourceOptions Map of store name -> column family
+   *                                                 name -> options
    * @tparam T The type of data in the input stream (requires implicit Encoder)
    */
   def testRepartitionWorkflow[T : Encoder](
       newPartitions: Int,
       setupInitialState: (MemoryStream[T], String, Option[StreamManualClock]) => Unit,
       verifyResumedQuery: (MemoryStream[T], String, Option[StreamManualClock]) => Unit,
-      useManualClock: Boolean = false): Unit = {
+      useManualClock: Boolean = false,
+      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]] =
+        Map(StateStoreId.DEFAULT_STORE_NAME ->
+          Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty))): Unit = {
     withTempDir { checkpointDir =>
       val clock = if (useManualClock) Some(new StreamManualClock) else None
       val inputData = MemoryStream[T]
@@ -124,8 +130,20 @@ class OfflineStateRepartitionIntegrationSuite
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(
         spark, checkpointDir.getAbsolutePath)
       val lastBatchId = checkpointMetadata.commitLog.getLatestBatchId().get
-      val stateBeforeRepartition =
-        readStateData(checkpointDir.getAbsolutePath, lastBatchId)
+
+      val stateBeforeRepartition = readStateDataByStoreName(
+        checkpointDir.getAbsolutePath, lastBatchId, storeToColumnFamilyToStateSourceOptions)
+
+      // Verify all stores and column families have data before repartition
+      storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
+        columnFamilies.keys.foreach { cfName =>
+          val data = stateBeforeRepartition(storeName)(cfName)
+          assert(data.length > 0,
+            s"Store '$storeName', CF '$cfName' has no state data before repartition." +
+            s"Please make sure it has data so that we can test data correctness post-repartition"
+          )
+        }
+      }
 
       // Step 3: Run repartition
       spark.streamingCheckpointManager.repartition(
@@ -134,15 +152,39 @@ class OfflineStateRepartitionIntegrationSuite
       val repartitionBatchId = lastBatchId + 1
       val hadoopConf = spark.sessionState.newHadoopConf()
 
-      // Step 4: Verify offset and commit logs are updated correctly
-      verifyRepartitionBatch(
+      // Step 4: Verify offset and commit logs
+      OfflineStateRepartitionTestUtils.verifyRepartitionBatch(
         repartitionBatchId, checkpointMetadata, hadoopConf,
         checkpointDir.getAbsolutePath, newPartitions, spark)
 
-      // Step 5: Validate state data matches after repartition
-      validateStateDataAfterRepartition(
-        checkpointDir.getAbsolutePath, stateBeforeRepartition.collect(),
-        repartitionBatchId)
+      // Step 5: Validate state for each store and column family after repartition
+      val stateAfterRepartition = readStateDataByStoreName(
+        checkpointDir.getAbsolutePath, repartitionBatchId, storeToColumnFamilyToStateSourceOptions)
+
+      storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
+        columnFamilies.keys.foreach { cfName =>
+          val beforeState = stateBeforeRepartition(storeName)(cfName)
+          val afterState = stateAfterRepartition(storeName)(cfName)
+
+          // Validate row count
+          assert(beforeState.length == afterState.length,
+            s"Store '$storeName', CF '$cfName': State row count mismatch: " +
+              s"before=${beforeState.length}, after=${afterState.length}")
+
+          // Extract (key, value) pairs and compare
+          val beforeByKey = extractKeyValuePairs(beforeState)
+          val afterByKey = extractKeyValuePairs(afterState)
+
+          // Compare each (key, value) pair
+          beforeByKey.zip(afterByKey).zipWithIndex.foreach {
+            case (((keyBefore, valueBefore), (keyAfter, valueAfter)), idx) =>
+              assert(keyBefore == keyAfter,
+                s"Store '$storeName', CF '$cfName': Key mismatch at index $idx")
+              assert(valueBefore == valueAfter,
+                s"Store '$storeName', CF '$cfName': Value mismatch for key $keyBefore")
+          }
+        }
+      }
 
       // Step 6: Resume query with new input and verify
       verifyResumedQuery(inputData, checkpointDir.getAbsolutePath, clock)
@@ -150,23 +192,15 @@ class OfflineStateRepartitionIntegrationSuite
   }
 
   def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
-    Seq(true, false).foreach { changelogCheckpointingEnabled =>
+    // TODO[SPARK-55301]: add test with changelog checkpointing disabled after SPARK increases
+    // its test timeout because CI signal "sql - other tests" is timing out after adding the
+    // integration tests
+    Seq(true).foreach { changelogCheckpointingEnabled =>
       test(s"$testName - enableChangelogCheckpointing=$changelogCheckpointingEnabled") {
         withSQLConf(
           "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
             changelogCheckpointingEnabled.toString) {
           testFun
-        }
-      }
-    }
-  }
-
-  def testWithStateStoreCheckpointIds(testName: String)(testBody: => Unit): Unit = {
-    Seq(1, 2).foreach { ckptVersion =>
-      val newTestName = s"$testName - enableStateStoreCheckpointIds = ${ckptVersion >= 2}"
-      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
-        testWithChangelogConfig(newTestName) {
-          testBody
         }
       }
     }
@@ -182,10 +216,24 @@ class OfflineStateRepartitionIntegrationSuite
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
     Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
-      testWithStateStoreCheckpointIds(s"$testNamePrefix - $direction partitions") {
+      testWithChangelogConfig(s"$testNamePrefix - $direction partitions") {
         testFun(newPartitions)
       }
     }
+  }
+}
+
+/**
+ * Integration test suite for OfflineStateRepartitionRunner with single-column family operators.
+ */
+class OfflineStateRepartitionCkptV1IntegrationSuite
+  extends OfflineStateRepartitionIntegrationSuiteBase {
+
+  import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "1")
   }
 
   // Test aggregation operator repartitioning
@@ -478,5 +526,13 @@ class OfflineStateRepartitionIntegrationSuite
         )
       }
     )
+  }
+}
+
+class OfflineStateRepartitionCkptV2IntegrationSuite
+  extends OfflineStateRepartitionCkptV1IntegrationSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
   }
 }

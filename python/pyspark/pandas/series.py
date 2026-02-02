@@ -6946,7 +6946,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psser = ps.Series([1, 2, 3, 4], index=idx)
         >>> psser
         2018-04-09 00:00:00    1
@@ -7206,7 +7206,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Start by creating a series with 9 one minute timestamps.
 
-        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='min')
         >>> series = ps.Series(range(9), index=index, name='V')
         >>> series
         2000-01-01 00:00:00    0

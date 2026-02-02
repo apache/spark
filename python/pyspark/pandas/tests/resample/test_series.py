@@ -76,19 +76,19 @@ class ResampleSeriesMixin:
     @property
     def pdf4(self):
         np.random.seed(33)
-        index = pd.date_range(start="2020-12-12", end="2022-05-01", freq="1H")
+        index = pd.date_range(start="2020-12-12", end="2022-05-01", freq="1h")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf5(self):
         np.random.seed(44)
-        index = pd.date_range(start="2021-12-30 03:04:05", end="2022-01-02 06:07:08", freq="1T")
+        index = pd.date_range(start="2021-12-30 03:04:05", end="2022-01-02 06:07:08", freq="1min")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf6(self):
         np.random.seed(55)
-        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="1S")
+        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="1s")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
@@ -126,11 +126,11 @@ class ResampleSeriesMixin:
             )
 
     def test_series_resample(self):
-        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"], "right", "left", "max")
-        self._test_resample(self.pdf3.A, self.psdf3.A, ["1001H"], "right", "right", "sum")
+        self._test_resample(self.pdf2.A, self.psdf2.A, ["13ME"], "right", "left", "max")
+        self._test_resample(self.pdf3.A, self.psdf3.A, ["1001h"], "right", "right", "sum")
         self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], None, None, "mean")
-        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], "left", "left", "var")
-        self._test_resample(self.pdf6.A, self.psdf6.A, ["111S"], "right", "right", "std")
+        self._test_resample(self.pdf5.A, self.psdf5.A, ["47min"], "left", "left", "var")
+        self._test_resample(self.pdf6.A, self.psdf6.A, ["111s"], "right", "right", "std")
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
             self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], "right", None, "min")

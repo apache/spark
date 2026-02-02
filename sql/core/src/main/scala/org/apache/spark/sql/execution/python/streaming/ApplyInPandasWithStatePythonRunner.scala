@@ -57,7 +57,7 @@ class ApplyInPandasWithStatePythonRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
-    _timeZoneId: String,
+    override protected val timeZoneId: String,
     initialRunnerConf: Map[String, String],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
@@ -84,10 +84,7 @@ class ApplyInPandasWithStatePythonRunner(
 
   private val sqlConf = SQLConf.get
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
-  override protected lazy val timeZoneId: String = _timeZoneId
+  override val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
   override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
