@@ -204,7 +204,9 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             // Send event time 18 to advance watermark to (18-10)*1000 = 8000ms
             // This fires timers for "b" (at 7000ms) and "c" (at 8000ms)
             // Timer expiry outputs (key, -1)
-            AddData(inputData, ("a", 18L)),
+            // Add new data for b and c with lower values than previous (b had 2, c had 3)
+            // to confirm maxEventTime is correctly updated after expiry
+            AddData(inputData, ("a", 18L), ("b", 1L), ("c", 2L)),
             CheckNewAnswer(("a", 18), ("b", -1), ("c", -1))
           )
         },
@@ -398,13 +400,13 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
             AddData(inputData, MapInputEvent("a", "key3", "put", 3),
               MapInputEvent("a", "key1", "get_ttl_value_from_state", 0),
               MapInputEvent("a", "key3", "get_ttl_value_from_state", 0),
-              MapInputEvent("a", "key1", "get_values_in_ttl_state", 0)
+              MapInputEvent("a", "key1", "iterator", 0)
             ),
             AdvanceManualClock(1 * 1000),
             CheckNewAnswer(MapOutputEvent("a", "key1", 1, true, 61000),
               MapOutputEvent("a", "key3", 3, true, 63000),
-              MapOutputEvent("a", "key1", -1, true, 61000),
-              MapOutputEvent("a", "key3", -1, true, 63000)
+              MapOutputEvent("a", "key1", 1, false, -1),
+              MapOutputEvent("a", "key3", 3, false, -1)
             )
           )
         },
