@@ -50,7 +50,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class EnsureRequirements(
     optimizeOutRepartition: Boolean = true,
-    requiredDistribution: Option[Distribution] = None)
+    requiredDistribution: Option[Distribution] = None,
+    subquery: Boolean = false)
   extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(
@@ -66,19 +67,18 @@ case class EnsureRequirements(
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         ensureOrdering(child, distribution)
       case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
+        val newChild = disableKeyGroupingIfNotNeeded(child)
+        BroadcastExchangeExec(mode, newChild)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
         distribution match {
           case _: StatefulOpClusteredDistribution =>
-            ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child,
+            createShuffleExchangeExec(child, distribution.createPartitioning(numPartitions),
               REQUIRED_BY_STATEFUL_OPERATOR)
-
           case _ =>
-            ShuffleExchangeExec(
-              distribution.createPartitioning(numPartitions), child, shuffleOrigin)
+            createShuffleExchangeExec(child, distribution.createPartitioning(numPartitions),
+              shuffleOrigin)
         }
     }
 
@@ -225,7 +225,8 @@ case class EnsureRequirements(
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
                 ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case _ => ShuffleExchangeExec(newPartitioning, child)
+              case _ =>
+                createShuffleExchangeExec(child, newPartitioning)
             }
           }
       }
@@ -242,6 +243,14 @@ case class EnsureRequirements(
     }
 
     children
+  }
+
+  private def createShuffleExchangeExec(
+      plan: SparkPlan,
+      partitioning: Partitioning,
+      shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS) = {
+    val newPlan = disableKeyGroupingIfNotNeeded(plan)
+    ShuffleExchangeExec(partitioning, newPlan, shuffleOrigin)
   }
 
   private def reorder(
@@ -390,17 +399,16 @@ case class EnsureRequirements(
   }
 
   /**
-   * Whether partial clustering can be applied to a given child query plan. This is true if the plan
+   * Whether partial clustering can be applied to a given query plan. This is true if the plan
    * consists only of a sequence of unary nodes where each node does not use the scan's key-grouped
    * partitioning to satisfy its required distribution. Otherwise, partially clustering could be
-   * applied to a key-grouped partitioning unrelated to this join.
+   * applied to a key-grouped partitioning of the scan in the plan.
    */
   private def canApplyPartialClusteredDistribution(plan: SparkPlan): Boolean = {
     !plan.exists {
       // Unary nodes are safe as long as they don't have a required distribution (for example, a
-      // project or filter). If they have a required distribution, then we should assume that this
-      // plan can't be partially clustered (since the key-grouped partitioning may be needed to
-      // satisfy this distribution unrelated to this JOIN).
+      // project or filter). If they have a required distribution, then we should assume that the
+      // scan in this plan can't be partially clustered.
       case u if u.children.length == 1 =>
         u.requiredChildDistribution.head != UnspecifiedDistribution
       // Only allow a non-unary node if it's a leaf node - key-grouped partitionings other binary
@@ -677,39 +685,45 @@ case class EnsureRequirements(
       joinKeyPositions: Option[Seq[Int]],
       reducers: Option[Seq[Option[Reducer[_, _]]]],
       applyPartialClustering: Boolean,
-      replicatePartitions: Boolean): SparkPlan = plan match {
-    case scan: BatchScanExec =>
-      val newScan = scan.copy(
-        spjParams = scan.spjParams.copy(
-          commonPartitionValues = Some(values),
-          joinKeyPositions = joinKeyPositions,
-          reducers = reducers,
-          applyPartialClustering = applyPartialClustering,
-          replicatePartitions = replicatePartitions
+      replicatePartitions: Boolean) = {
+    plan transform {
+      case scan: BatchScanExec =>
+        scan.copy(
+          spjParams = scan.spjParams.copy(
+            commonPartitionValues = Some(values),
+            joinKeyPositions = joinKeyPositions,
+            reducers = reducers,
+            applyPartialClustering = applyPartialClustering,
+            replicatePartitions = replicatePartitions
+          )
         )
-      )
-      newScan.copyTagsFrom(scan)
-      newScan
-    case node =>
-      node.mapChildren(child => populateCommonPartitionInfo(
-        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+    }
   }
 
+  /**
+   * Applies partial clustering (disabled partition grouping) if it can be applied to a given query
+   * plan. If the nodes of the plan don't use the key-grouped partitioning of the scan in the plan
+   * then unnecessary grouping can decrease parallelization.
+   */
+  private def disableKeyGroupingIfNotNeeded(plan: SparkPlan) = {
+    if (canApplyPartialClusteredDistribution(plan)) {
+      populateNoGroupingPartitionInfo(plan)
+    } else {
+      plan
+    }
+  }
 
-  private def populateJoinKeyPositions(
-      plan: SparkPlan,
-      joinKeyPositions: Option[Seq[Int]]): SparkPlan = plan match {
-    case scan: BatchScanExec =>
-      val newScan = scan.copy(
-        spjParams = scan.spjParams.copy(
-          joinKeyPositions = joinKeyPositions
-        )
-      )
-      newScan.copyTagsFrom(scan)
-      newScan
-    case node =>
-      node.mapChildren(child => populateJoinKeyPositions(
-        child, joinKeyPositions))
+  private def populateNoGroupingPartitionInfo(plan: SparkPlan) = {
+    plan.transform {
+      case scan: BatchScanExec => scan.copy(spjParams = scan.spjParams.copy(disableGrouping = true))
+    }
+  }
+
+  private def populateJoinKeyPositions(plan: SparkPlan, joinKeyPositions: Option[Seq[Int]]) = {
+    plan.transform {
+      case scan: BatchScanExec =>
+        scan.copy(spjParams = scan.spjParams.copy(joinKeyPositions = joinKeyPositions))
+    }
   }
 
   private def reducePartValues(
@@ -837,6 +851,18 @@ case class EnsureRequirements(
         reordered.withNewChildren(newChildren)
     }
 
+    // We can't disable partition grouping of a scan in a main query if it contributes the ouput
+    // partitioning of the query result because we don't know whether the query is
+    // cached/checkpointed and how the output of the query will be used later. The output must keep
+    // `KeyGroupedPartitioning` semantics in this case.
+    // But we can disable partition grouping in subqueries when grouping is not needed for anything
+    // in the subquery plan.
+    val groupingDisabledPlan = if (subquery) {
+      disableKeyGroupingIfNotNeeded(newPlan)
+    } else {
+      newPlan
+    }
+
     if (requiredDistribution.isDefined) {
       val shuffleOrigin = if (requiredDistribution.get.requiredNumPartitions.isDefined) {
         REPARTITION_BY_NUM
@@ -845,14 +871,14 @@ case class EnsureRequirements(
       }
       val finalPlan = ensureDistributionAndOrdering(
         None,
-        newPlan :: Nil,
+        groupingDisabledPlan :: Nil,
         requiredDistribution.get :: Nil,
         Seq(Nil),
         shuffleOrigin)
       assert(finalPlan.size == 1)
       finalPlan.head
     } else {
-      newPlan
+      groupingDisabledPlan
     }
   }
 }
