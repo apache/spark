@@ -17,9 +17,11 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.io.Source
 import scala.util.Try
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
@@ -33,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.ShuffleIndexBlockId
@@ -516,6 +519,66 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
     withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
       assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+    }
+  }
+
+  test("SPARK-55064: Jobs are tracked in DAGScheduler before query finished") {
+    val jobs = new mutable.HashSet[Int]()
+
+    var sqlExecutionEndVerified: Boolean = false
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobs += jobStart.jobId
+      }
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case e: SparkListenerSQLExecutionEnd =>
+            val jobsTracked = e.jobIds
+            assert(jobsTracked == jobs)
+            jobs.clear()
+            sqlExecutionEndVerified = true
+          case _ =>
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    try {
+      withTable("t1", "t2") {
+        spark.range(10).selectExpr("id as A", "id as D")
+          .write.partitionBy("A").mode("overwrite").saveAsTable("t1")
+        spark.range(2).selectExpr("id as B", "id as C")
+          .write.mode("overwrite").saveAsTable("t2")
+
+        Seq(true, false).foreach { adaptiveEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptiveEnabled.toString) {
+            sqlExecutionEndVerified = false
+            val df = sql(
+              """
+                |SELECT avg(A) FROM t1
+                |WHERE A = (
+                |  SELECT B from t2 where C = 1
+                |)
+              """.stripMargin)
+
+            df.collect()
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(sqlExecutionEndVerified)
+            // The jobs tracked by DAGScheduler should be cleared after the query is done.
+            eventually(timeout(10.seconds)) {
+              assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+              assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+            }
+          }
+        }
+      }
+      eventually(timeout(10.seconds)) {
+        assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+        assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
     }
   }
 

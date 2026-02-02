@@ -3493,6 +3493,307 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-55064: abort stage if checksum mismatch detected with succeeding " +
+    "result stage in completed jobs") {
+    val executionId = 55064L
+    val properties = new Properties()
+    properties.setProperty(SparkContext.SQL_EXECUTION_ID_KEY, executionId.toString)
+    try {
+      val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+      val shuffleDep1 = new ShuffleDependency(
+        shuffleMapRdd1,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val shuffleId1 = shuffleDep1.shuffleId
+
+      // Submit and complete the 1st job depending on shuffleDep1
+      val finalRdd1 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      submit(finalRdd1, Array(0, 1), properties = properties)
+      // Finish the first shuffle map stage.
+      completeShuffleMapStageSuccessfully(
+        0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+      assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+      // Finish the result stage.
+      completeNextResultStageWithSuccess(1, 0)
+      assertDataStructuresEmpty()
+
+      // Submit the 2nd job depending on shuffleDep1, and fail it by checksum mismatch
+      val finalRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      submit(finalRdd2, Array(0, 1), properties = properties)
+      // The first task failed with FetchFailed.
+      runEvent(makeCompletionEvent(
+        taskSets(2).tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+        null))
+
+      // Check status for all failedStages.
+      val failedStages = scheduler.failedStages.toSeq
+      assert(failedStages.map(_.id) == Seq(2, 3))
+      scheduler.resubmitFailedStages()
+
+      // Complete the re-attempt of shuffle map stage 2(shuffleId1) with a different checksum.
+      completeShuffleMapStageSuccessfully(2, 1, 2, checksumVal = 101)
+      assert(failure != null && failure.getMessage.contains(
+        "cannot rollback completed result stages"))
+    } finally {
+      scheduler.cleanupQueryJobs(executionId)
+    }
+  }
+
+  test("SPARK-55064: clean up shuffle data for the succeeding available shuffle map stages " +
+    "in completed jobs if checksum mismatch detected") {
+    val executionId = 55064L
+    val properties = new Properties()
+    properties.setProperty(SparkContext.SQL_EXECUTION_ID_KEY, executionId.toString)
+    try {
+      val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+      val shuffleDep1 = new ShuffleDependency(
+        shuffleMapRdd1,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val shuffleId1 = shuffleDep1.shuffleId
+
+      // Submit and complete the 1st shuffle map stage job depending on shuffleDep2
+      val shuffleMapRdd2 = new MyRDD(
+        sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      val shuffleDep2 = new ShuffleDependency(
+        shuffleMapRdd2,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val shuffleId2 = shuffleDep2.shuffleId
+      val mapStageJobId = submitMapStage(shuffleDep2)
+      scheduler.activeQueryToJobs
+        .computeIfAbsent(executionId, _ => java.util.concurrent.ConcurrentHashMap.newKeySet())
+        .add(scheduler.jobIdToActiveJob(mapStageJobId))
+      scheduler.jobIdToQueryExecutionId.put(mapStageJobId, executionId)
+
+      // Finish the stages.
+      completeShuffleMapStageSuccessfully(
+        0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+      completeShuffleMapStageSuccessfully(
+        1, 0, 2, Seq("hostB", "hostC"), checksumVal = 200)
+
+      assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+      assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+      // Submit the 2nd job depending on shuffleDep1, and fail it by checksum mismatch
+      val finalRdd1 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      submit(finalRdd1, Array(0, 1), properties = properties)
+      // The first task failed with FetchFailed.
+      val resultTaskSet = taskSets.last
+      runEvent(makeCompletionEvent(
+        resultTaskSet.tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+        null))
+
+      // Check status for all failedStages.
+      val failedStages = scheduler.failedStages.toSeq
+      assert(failedStages.exists {
+        case stage: ShuffleMapStage => stage.shuffleDep.shuffleId == shuffleId1
+        case _ => false
+      })
+      assert(failedStages.exists(_.isInstanceOf[ResultStage]))
+      scheduler.resubmitFailedStages()
+
+      assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) === 2)
+      // Complete the re-attempt of shuffle map stage (shuffleId1) with a different checksum.
+      val retryShuffleTaskSet = taskSets.last
+      assert(retryShuffleTaskSet.shuffleId.contains(shuffleId1))
+      completeShuffleMapStageSuccessfully(
+        retryShuffleTaskSet.stageId,
+        retryShuffleTaskSet.stageAttemptId,
+        2,
+        checksumVal = 101)
+      // Output of shuffleId2 should be cleaned up and job on finalRdd1 will be resubmitted.
+      assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) === 0)
+      val expectedResults = Seq((Success, 11), (Success, 12))
+      val expectedResultsMap: Map[Int, Any] = Map(0 -> 11, 1 -> 12)
+      completeAndCheckAnswer(taskSets.last, expectedResults, expectedResultsMap)
+
+      // Retry all tasks of shuffleId2 for the new jobs
+      val finalRdd2 = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+      submit(finalRdd2, Array(0, 1), properties = properties)
+      val shuffleRetryTaskSet = taskSets.last
+      assert(shuffleRetryTaskSet.shuffleId.contains(shuffleId2))
+      completeShuffleMapStageSuccessfully(
+        shuffleRetryTaskSet.stageId,
+        shuffleRetryTaskSet.stageAttemptId,
+        2,
+        checksumVal = 200)
+      completeAndCheckAnswer(taskSets.last, expectedResults, expectedResultsMap)
+    } finally {
+      scheduler.cleanupQueryJobs(executionId)
+    }
+  }
+
+  test("SPARK-55064: clean up shuffle data for the succeeding available shuffle map stages " +
+    "in active jobs if checksum mismatch detected") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+    val shuffleId1 = shuffleDep1.shuffleId
+
+    val shuffleMapRdd2 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val shuffleMapRdd3 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+    val shuffleDep3 = new ShuffleDependency(
+      shuffleMapRdd3,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2, shuffleDep3), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0, 1))
+
+    // Finish shuffle map stage 0 and 1.
+    completeShuffleMapStageSuccessfully(
+      0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+    completeShuffleMapStageSuccessfully(
+      1, 0, 2, Seq("hostB", "hostC"), checksumVal = 200)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+    val shuffleId2 = taskSets(1).shuffleId.get
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    val shuffleId3 = taskSets(2).shuffleId.get
+    // The first task of shuffle map stage 2 failed with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    // Check status for all failedStages.
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.map(_.id) == Seq(0, 2))
+    scheduler.resubmitFailedStages()
+
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) === 2)
+    // Complete the re-attempt of shuffle map stage 0(shuffleId1) with a different checksum.
+    checkAndCompleteRetryStage(3, 0, shuffleId1, 1, checksumVal = 101)
+    // Output of shuffleId2 should be cleaned up and will be resubmitted.
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) === 0)
+    checkAndCompleteRetryStage(4, 2, shuffleId3, 2, checksumVal = 300)
+    checkAndCompleteRetryStage(5, 1, shuffleId2, 2, checksumVal = 200)
+    completeAndCheckAnswer(taskSets(6), Seq((Success, 11), (Success, 12)), Map(0 -> 11, 1 -> 12))
+  }
+
+  test("SPARK-55064: cancel and resubmit running succeeding shuffle map stages " +
+    "if checksum mismatch detected") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+    val shuffleId1 = shuffleDep1.shuffleId
+
+    val shuffleMapRdd2 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val shuffleMapRdd3 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+    val shuffleDep3 = new ShuffleDependency(
+      shuffleMapRdd3,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = true)
+
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2, shuffleDep3), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0, 1))
+
+    // Finish shuffle map stage 0
+    completeShuffleMapStageSuccessfully(
+      0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    val shuffleId2 = taskSets(1).shuffleId.get
+    val shuffleId3 = taskSets(2).shuffleId.get
+
+    // The first task of shuffle map stage 2 failed with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    // Check status for all failedStages.
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.map(_.id) == Seq(0, 2))
+    scheduler.resubmitFailedStages()
+
+    // Complete the re-attempt of shuffle map stage 0(shuffleId1) with a different checksum.
+    checkAndCompleteRetryStage(3, 0, shuffleId1, 1, checksumVal = 101)
+    // Shuffle map stage 1 should be cancelled and resubmitted.
+    assert(scheduler.failedStages.map(_.id).toSeq == Seq(1))
+    scheduler.resubmitFailedStages()
+
+    checkAndCompleteRetryStage(4, 2, shuffleId3, 2, checksumVal = 200)
+    checkAndCompleteRetryStage(5, 1, shuffleId2, 2, checksumVal = 300)
+    completeAndCheckAnswer(taskSets(6), Seq((Success, 11), (Success, 12)), Map(0 -> 11, 1 -> 12))
+  }
+
+  test("SPARK-55064: abort stage if checksum mismatch detected with succeeding " +
+    "running result stage in active jobs") {
+    val executionId = 55064L
+    val properties = new Properties()
+    properties.setProperty(SparkContext.SQL_EXECUTION_ID_KEY, executionId.toString)
+    try {
+      val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+      val shuffleDep1 = new ShuffleDependency(
+        shuffleMapRdd1,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val shuffleId1 = shuffleDep1.shuffleId
+
+      // Submit 2 jobs depending on shuffleDep1
+      val finalRdd1 = new MyRDD(
+        sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      submit(finalRdd1, Array(0, 1), properties = properties)
+      val finalRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+      submit(finalRdd2, Array(0, 1), properties = properties)
+
+      // Finish the stages.
+      completeShuffleMapStageSuccessfully(
+        0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+      assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+      // The first task of result stage 2 failed with FetchFailed.
+      runEvent(makeCompletionEvent(
+        taskSets(2).tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+        null))
+
+      // Check status for all failedStages.
+      val failedStages = scheduler.failedStages.toSeq
+      assert(failedStages.map(_.id) == Seq(0, 2))
+      scheduler.resubmitFailedStages()
+
+      // Complete the re-attempt of shuffle map stage 0(shuffleId1) with a different checksum.
+      completeShuffleMapStageSuccessfully(0, 1, 2, checksumVal = 101)
+      assert(failure != null && failure.getMessage.contains(
+        "cannot rollback a running result stage"))
+    } finally {
+      scheduler.cleanupQueryJobs(executionId)
+    }
+  }
+
   private def checkAndCompleteRetryStage(
       taskSetIndex: Int,
       stageId: Int,
@@ -3502,6 +3803,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       stageAttemptId: Int = 1): Unit = {
     assert(taskSets(taskSetIndex).stageId == stageId)
     assert(taskSets(taskSetIndex).stageAttemptId == stageAttemptId)
+    assert(taskSets(taskSetIndex).shuffleId.contains(shuffleId))
     assert(taskSets(taskSetIndex).tasks.length == numTasks)
     completeShuffleMapStageSuccessfully(stageId, stageAttemptId, 2, checksumVal = checksumVal)
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))

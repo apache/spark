@@ -29,7 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
@@ -52,6 +52,19 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       "query-tests",
       "test-data",
       "streaming")
+
+  /**
+   * Helper method to run tests with source evolution configs enabled.
+   */
+  private def testWithSourceEvolution(testName: String)(testFun: => Unit): Unit = {
+    test(testName) {
+      withSQLConf(
+        "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
+        "spark.sql.streaming.offsetLog.formatVersion" -> "2") {
+        testFun
+      }
+    }
+  }
 
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
@@ -751,6 +764,86 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
 
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
       terminate = terminate :+ event.json
+    }
+  }
+
+  // Tests for DataStreamReader.name() method
+  testWithSourceEvolution("stream reader name() with valid source names") {
+    Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
+      .foreach { name =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.parquet(path)
+
+          val df = spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name(name)
+            .load(path)
+
+          assert(df.isStreaming, s"DataFrame should be streaming for name: $name")
+        }
+      }
+  }
+
+  testWithSourceEvolution("stream reader name() method chaining") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(10).write.parquet(path)
+
+      val df = spark.readStream
+        .format("parquet")
+        .schema("id LONG")
+        .name("my_source")
+        .option("maxFilesPerTrigger", "1")
+        .load(path)
+
+      assert(df.isStreaming, "DataFrame should be streaming")
+    }
+  }
+
+  // Seq of (sourceName, expectedExceptionClass, expectedConditionOpt)
+  val invalidSourceNames = Seq(
+    (
+      "my-source",
+      classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    (
+      "my space",
+      classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    (
+      "my.source",
+      classOf[AnalysisException],
+      Some("STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME")),
+    ("", classOf[IllegalArgumentException], None) // empty string case
+  )
+
+  invalidSourceNames.foreach { case (sourceName, exceptionClass, conditionOpt) =>
+    test(s"stream reader invalid source name - '$sourceName'") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).write.parquet(path)
+
+        val thrown = intercept[Exception] {
+          spark.readStream
+            .format("parquet")
+            .schema("id LONG")
+            .name(sourceName)
+            .load(path)
+        }
+
+        // Verify exception type
+        assert(exceptionClass.isInstance(thrown))
+
+        // Verify error condition only for AnalysisException cases
+        conditionOpt.foreach { condition =>
+          checkError(
+            exception = thrown.asInstanceOf[AnalysisException],
+            condition = condition,
+            parameters = Map("sourceName" -> sourceName))
+        }
+      }
     }
   }
 }

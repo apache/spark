@@ -3482,4 +3482,29 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       checkAnswer(readDf, df)
     }
   }
+
+  test("Geospatial types are not supported in Avro") {
+    withTempDir { dir =>
+      // Temporary directory for writing the test data.
+      val tempDir = new File(dir, "files").getCanonicalPath
+      // Test data: WKB representation of POINT(1 2).
+      val wkb = "0101000000000000000000F03F0000000000000040"
+      // Test GEOMETRY and GEOGRAPHY data types.
+      val geoTestCases = Seq(
+        (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+        (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
+      )
+      geoTestCases.foreach { case (expr, expectedType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"select $expr as g").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`g`",
+            "columnType" -> expectedType,
+            "format" -> "Avro"))
+      }
+    }
+  }
 }
