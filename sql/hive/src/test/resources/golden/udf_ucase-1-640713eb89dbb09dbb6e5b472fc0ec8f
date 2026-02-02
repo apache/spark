@@ -1,0 +1,5 @@
+ucase(str) - Returns str with all characters changed to uppercase
+Synonyms: upper
+Example:
+  > SELECT ucase('Facebook') FROM src LIMIT 1;
+  'FACEBOOK'

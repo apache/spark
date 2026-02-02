@@ -1,0 +1,2 @@
+Project [date_diff(d#0, make_date(2020, 10, 10, false)) AS date_diff(d, make_date(2020, 10, 10))#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

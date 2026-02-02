@@ -1,0 +1,661 @@
+[ {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 675,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "0",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr",
+    "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 1,
+  "launchTime" : "2016-11-15T23:20:44.052GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 181,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 1,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 494,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 30,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 725,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 3,
+  "launchTime" : "2016-11-15T23:20:44.053GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 269,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 3,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 456,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 32,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 665,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "0",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr",
+    "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 5,
+  "launchTime" : "2016-11-15T23:20:44.055GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 170,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 5,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 495,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 30,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 685,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 7,
+  "launchTime" : "2016-11-15T23:20:44.056GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 237,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 7,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 448,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 32,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 732,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "0",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr",
+    "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 9,
+  "launchTime" : "2016-11-15T23:20:44.057GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 229,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 9,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 503,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 30,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 678,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 11,
+  "launchTime" : "2016-11-15T23:20:44.058GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 227,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 11,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 451,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 32,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 669,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "0",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr",
+    "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 13,
+  "launchTime" : "2016-11-15T23:20:44.060GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 175,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 13,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 494,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 30,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 0,
+  "duration" : 672,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 15,
+  "launchTime" : "2016-11-15T23:20:44.065GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 226,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 15,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 446,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 32,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 1,
+  "duration" : 13,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 11,
+  "launchTime" : "2016-11-15T23:20:44.736GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 11,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 19,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 2,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+}, {
+  "accumulatorUpdates" : [ ],
+  "attempt" : 1,
+  "duration" : 19,
+  "errorMessage" : "java.lang.RuntimeException: bad exec\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply$mcII$sp(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat $line16.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$1.apply(<console>:26)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.Utils$.getIteratorSize(Utils.scala:1757)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.rdd.RDD$$anonfun$count$1.apply(RDD.scala:1135)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:1927)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:99)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:282)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)\n\tat java.lang.Thread.run(Thread.java:745)\n",
+  "executorId" : "2",
+  "executorLogs" : {
+    "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr",
+    "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout"
+  },
+  "gettingResultTime" : 0,
+  "host" : "172.22.0.111",
+  "index" : 15,
+  "launchTime" : "2016-11-15T23:20:44.737GMT",
+  "partitionId" : -1,
+  "schedulerDelay" : 9,
+  "speculative" : false,
+  "status" : "FAILED",
+  "taskId" : 20,
+  "taskLocality" : "PROCESS_LOCAL",
+  "taskMetrics" : {
+    "diskBytesSpilled" : 0,
+    "executorCpuTime" : 0,
+    "executorDeserializeCpuTime" : 0,
+    "executorDeserializeTime" : 0,
+    "executorRunTime" : 10,
+    "inputMetrics" : {
+      "bytesRead" : 0,
+      "recordsRead" : 0
+    },
+    "jvmGcTime" : 0,
+    "memoryBytesSpilled" : 0,
+    "outputMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0
+    },
+    "peakExecutionMemory" : 0,
+    "resultSerializationTime" : 0,
+    "resultSize" : 0,
+    "shuffleReadMetrics" : {
+      "fetchWaitTime" : 0,
+      "localBlocksFetched" : 0,
+      "localBytesRead" : 0,
+      "recordsRead" : 0,
+      "remoteBlocksFetched" : 0,
+      "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
+      "remoteReqsDuration" : 0,
+      "shufflePushReadMetrics" : {
+        "corruptMergedBlockChunks" : 0,
+        "localMergedBlocksFetched" : 0,
+        "localMergedBytesRead" : 0,
+        "localMergedChunksFetched" : 0,
+        "mergedFetchFallbackCount" : 0,
+        "remoteMergedBlocksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "remoteMergedReqsDuration" : 0
+      }
+    },
+    "shuffleWriteMetrics" : {
+      "bytesWritten" : 0,
+      "recordsWritten" : 0,
+      "writeTime" : 0
+    }
+  }
+} ]

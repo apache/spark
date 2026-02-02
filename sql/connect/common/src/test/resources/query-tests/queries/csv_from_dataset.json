@@ -1,0 +1,39 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "parse": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "{\"type\":\"struct\",\"fields\":[{\"name\":\"value\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}"
+      }
+    },
+    "format": "PARSE_FORMAT_CSV",
+    "schema": {
+      "struct": {
+        "fields": [{
+          "name": "c1",
+          "dataType": {
+            "string": {
+              "collation": "UTF8_BINARY"
+            }
+          },
+          "nullable": true
+        }, {
+          "name": "c2",
+          "dataType": {
+            "integer": {
+            }
+          },
+          "nullable": true
+        }]
+      }
+    },
+    "options": {
+      "header": "true"
+    }
+  }
+}

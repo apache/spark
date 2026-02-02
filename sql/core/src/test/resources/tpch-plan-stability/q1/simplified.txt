@@ -1,0 +1,15 @@
+WholeStageCodegen (3)
+  Sort [l_returnflag,l_linestatus]
+    InputAdapter
+      Exchange [l_returnflag,l_linestatus] #1
+        WholeStageCodegen (2)
+          HashAggregate [l_returnflag,l_linestatus,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count] [sum(l_quantity),sum(l_extendedprice),sum((l_extendedprice * (1 - l_discount))),sum(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))),avg(UnscaledValue(l_quantity)),avg(UnscaledValue(l_extendedprice)),avg(UnscaledValue(l_discount)),count(1),sum_qty,sum_base_price,sum_disc_price,sum_charge,avg_qty,avg_price,avg_disc,count_order,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count]
+            InputAdapter
+              Exchange [l_returnflag,l_linestatus] #2
+                WholeStageCodegen (1)
+                  HashAggregate [l_returnflag,l_linestatus,l_quantity,l_extendedprice,l_discount,l_tax] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count]
+                    Project [l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus]
+                      Filter [l_shipdate]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.lineitem [l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus,l_shipdate]

@@ -1,0 +1,382 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.jdbc
+
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
+
+import scala.util.Using
+import scala.util.control.NonFatal
+
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.SQL_TEXT
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.types._
+import org.apache.spark.util.CompletionIterator
+
+/**
+ * Data corresponding to one partition of a JDBCRDD.
+ */
+case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+  override def index: Int = idx
+}
+
+object JDBCRDD extends Logging {
+
+  /**
+   * Takes a (schema, table) specification and returns the table's Catalyst
+   * schema.
+   *
+   * @param options - JDBC options that contains url, table and other information.
+   * @param conn - JDBC connection to use for fetching the schema.
+   * @param ident - Optional table identifier used for error reporting.
+   * @param catalogName - Optional catalog name used for error reporting.
+   *
+   * @return A StructType giving the table's Catalyst schema.
+   * @throws java.sql.SQLException if the table specification is garbage.
+   * @throws java.sql.SQLException if the table contains an unsupported type.
+   */
+  def resolveTable(
+      options: JDBCOptions,
+      conn: Connection,
+      ident: Option[Identifier] = None,
+      catalogName: Option[String] = None): StructType = {
+    val url = options.url
+    val prepareQuery = options.prepareQuery
+    val table = options.tableOrQuery
+    val dialect = JdbcDialects.get(url)
+    val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
+
+    try {
+      getQueryOutputSchema(fullQuery, options, dialect, conn)
+    } catch {
+      // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
+      // distinguish between the case where the table does not exist and other SQL syntax errors.
+      // This order is important because when a table does not exist, the exception raised can
+      // also match the criteria for isSyntaxErrorBestEffort.
+      case e: SQLException if ident.isDefined &&
+        dialect.isObjectNotFoundException(e) =>
+        throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
+      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+        throw new SparkException(
+          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          messageParameters = Map(
+            "jdbcQuery" -> fullQuery,
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+          ),
+          cause = e)
+    }
+  }
+
+  def resolveTable(options: JDBCOptions): StructType = {
+    JdbcUtils.withConnection(options) {
+      resolveTable(options, _)
+    }
+  }
+
+  def getQueryOutputSchema(
+      query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
+    logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
+    Using.resource(conn.prepareStatement(query)) { statement =>
+      statement.setQueryTimeout(options.queryTimeout)
+      Using.resource(statement.executeQuery()) { rs =>
+        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
+          isTimestampNTZ = options.preferTimestampNTZ)
+      }
+    }
+  }
+
+  def getQueryOutputSchema(
+      query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
+    JdbcUtils.withConnection(options) {
+      getQueryOutputSchema(query, options, dialect, _)
+    }
+  }
+
+  /**
+   * Prune all but the specified columns from the specified Catalyst schema.
+   *
+   * @param schema - The Catalyst schema of the master table
+   * @param columns - The list of desired columns
+   *
+   * @return A Catalyst schema corresponding to columns in the given order.
+   */
+  private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
+    val fieldMap = schema.fields.map(x => x.name -> x).toMap
+    new StructType(columns.map(name => fieldMap(name)))
+  }
+
+  /**
+   * Build and return JDBCRDD from the given information.
+   *
+   * @param sc - Your SparkContext.
+   * @param schema - The Catalyst schema of the underlying database table.
+   * @param requiredColumns - The names of the columns or aggregate columns to SELECT.
+   * @param predicates - The predicates to include in all WHERE clauses.
+   * @param parts - An array of JDBCPartitions specifying partition ids and
+   *    per-partition WHERE clauses.
+   * @param options - JDBC options that contains url, table and other information.
+   * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
+   * @param groupByColumns - The pushed down group by columns.
+   * @param sample - The pushed down tableSample.
+   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
+   *                is not pushed down.
+   * @param sortOrders - The sort orders cooperates with limit to realize top N.
+   *
+   * @return An RDD representing "SELECT requiredColumns FROM fqTable".
+   */
+  // scalastyle:off argcount
+  def scanTable(
+      sc: SparkContext,
+      schema: StructType,
+      requiredColumns: Array[String],
+      predicates: Array[Predicate],
+      parts: Array[Partition],
+      options: JDBCOptions,
+      outputSchema: Option[StructType] = None,
+      groupByColumns: Option[Array[String]] = None,
+      sample: Option[TableSampleInfo] = None,
+      limit: Int = 0,
+      sortOrders: Array[String] = Array.empty[String],
+      offset: Int = 0,
+      additionalMetrics: Map[String, SQLMetric] = Map()): RDD[InternalRow] = {
+    val url = options.url
+    val dialect = JdbcDialects.get(url)
+    val quotedColumns = if (groupByColumns.isEmpty) {
+      requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    } else {
+      // these are already quoted in JDBCScanBuilder
+      requiredColumns
+    }
+    val connectionFactory = dialect.createConnectionFactory(options)
+
+    new JDBCRDD(
+      sc,
+      connectionFactory,
+      outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
+      quotedColumns,
+      predicates,
+      parts,
+      url,
+      options,
+      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
+      groupByColumns,
+      sample,
+      limit,
+      sortOrders,
+      offset,
+      additionalMetrics)
+  }
+  // scalastyle:on argcount
+}
+
+/**
+ * An RDD representing a query is related to a table in a database accessed via JDBC.
+ * Both the driver code and the workers must be able to access the database; the driver
+ * needs to fetch the schema while the workers need to fetch the data.
+ */
+class JDBCRDD(
+    sc: SparkContext,
+    getConnection: Int => Connection,
+    schema: StructType,
+    columns: Array[String],
+    predicates: Array[Predicate],
+    partitions: Array[Partition],
+    url: String,
+    options: JDBCOptions,
+    databaseMetadata: JDBCDatabaseMetadata,
+    groupByColumns: Option[Array[String]],
+    sample: Option[TableSampleInfo],
+    limit: Int,
+    sortOrders: Array[String],
+    offset: Int,
+    additionalMetrics: Map[String, SQLMetric])
+  extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
+
+  /**
+   * Execution time of the query issued to JDBC connection
+   */
+  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    name = "JDBC query execution time")
+
+  /**
+   * Time needed to fetch the data and transform it into Spark's InternalRow format.
+   *
+   * Usually this is spent in network transfer time, but it can be spent in transformation time
+   * as well if we are transforming some more complex datatype such as structs.
+   */
+  val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    // Message that user sees does not have to leak details about conversion
+    name = "JDBC remote data fetch and translation time")
+
+  private lazy val dialect = JdbcDialects.get(url)
+
+  def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
+    // H2's JDBC driver does not support the setSchema() method.  We pass a
+    // fully-qualified table name in the SELECT statement.  I don't know how to
+    // talk about a table in a completely portable way.
+    var builder = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+      .withColumns(columns)
+      .withSortOrders(sortOrders)
+      .withLimit(limit)
+      .withOffset(offset)
+
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
+    }
+
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
+
+    builder.build()
+  }
+
+  /**
+   * Retrieve the list of partitions corresponding to this RDD.
+   */
+  override def getPartitions: Array[Partition] = partitions
+
+  override def getExternalEngineQuery: String = {
+    generateJdbcQuery(partition = None)
+  }
+
+  /**
+   * Get the external engine database metadata.
+   */
+  def getDatabaseMetadata: JDBCDatabaseMetadata = databaseMetadata
+
+  /**
+   * Runs the SQL query against the JDBC driver.
+   */
+  override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] = {
+    var closed = false
+    var rs: ResultSet = null
+    var stmt: PreparedStatement = null
+    var conn: Connection = null
+
+    def close(): Unit = {
+      if (closed) return
+      try {
+        if (null != rs) {
+          rs.close()
+        }
+      } catch {
+        case e: Exception => logWarning("Exception closing resultset", e)
+      }
+      try {
+        if (null != stmt) {
+          stmt.close()
+        }
+      } catch {
+        case e: Exception => logWarning("Exception closing statement", e)
+      }
+      try {
+        if (null != conn) {
+          if (!conn.isClosed && !conn.getAutoCommit) {
+            try {
+              conn.commit()
+            } catch {
+              case NonFatal(e) => logWarning("Exception committing transaction", e)
+            }
+          }
+          conn.close()
+        }
+        logInfo("closed connection")
+      } catch {
+        case e: Exception => logWarning("Exception closing connection", e)
+      }
+      closed = true
+    }
+
+    context.addTaskCompletionListener[Unit]{ context => close() }
+
+    val inputMetrics = context.taskMetrics().inputMetrics
+    val part = thePart.asInstanceOf[JDBCPartition]
+    conn = getConnection(part.idx)
+    dialect.beforeFetch(conn, options)
+
+    // This executes a generic SQL statement (or PL/SQL block) before reading
+    // the table/query via JDBC. Use this feature to initialize the database
+    // session environment, e.g. for optimizations and/or troubleshooting.
+    options.sessionInitStatement match {
+      case Some(sql) =>
+        val statement = conn.prepareStatement(sql)
+        logInfo(log"Executing sessionInitStatement: ${MDC(SQL_TEXT, sql)}")
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          statement.execute()
+        } finally {
+          statement.close()
+        }
+      case None =>
+    }
+
+    val sqlText = generateJdbcQuery(Some(part))
+    logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
+    stmt = conn.prepareStatement(sqlText,
+        ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    stmt.setFetchSize(options.fetchSize)
+    stmt.setQueryTimeout(options.queryTimeout)
+
+    rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
+      try {
+        stmt.executeQuery()
+      } catch {
+        case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+          throw new SparkException(
+            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+            messageParameters = Map(
+              "jdbcQuery" -> sqlText,
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            ),
+            cause = e)
+      }
+    }
+
+    val rowsIterator =
+      JdbcUtils.resultSetToSparkInternalRows(
+        rs,
+        dialect,
+        schema,
+        inputMetrics,
+        Some(fetchAndTransformToInternalRowsMetric))
+
+    CompletionIterator[InternalRow, Iterator[InternalRow]](
+      new InterruptibleIterator(context, rowsIterator), close())
+  }
+
+  override def getMetrics: Seq[(String, SQLMetric)] = {
+    Seq(
+      "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
+      "queryExecutionTime" -> queryExecutionTimeMetric
+    ) ++ additionalMetrics
+  }
+}

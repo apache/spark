@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.2.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-hadoop-cloud_2.13</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project Hadoop Cloud Integration</name>
+  <description>
+    Contains Hadoop JARs and transitive dependencies needed to interact with cloud infrastructures.
+  </description>
+  <properties>
+    <sbt.project.name>hadoop-cloud</sbt.project.name>
+    <okhttp.version>3.12.12</okhttp.version>
+    <okio.version>1.17.6</okio.version>
+    <wildfly-openssl.version>2.2.5.Final</wildfly-openssl.version>
+  </properties>
+
+  <dependencies>
+    <!--used during compilation but not exported as transitive dependencies-->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-api</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <!--
+      the AWS module pulls in jackson; its transitive dependencies can create
+      intra-jackson-module version problems.
+      -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.wildfly.openssl</groupId>
+          <artifactId>wildfly-openssl</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl</artifactId>
+      <version>${wildfly-openssl.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.s3.analyticsaccelerator</groupId>
+      <artifactId>analyticsaccelerator-s3</artifactId>
+      <version>${analyticsaccelerator-s3.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud.bigdataoss</groupId>
+      <artifactId>gcs-connector</artifactId>
+      <version>${gcs-connector.version}</version>
+      <classifier>shaded</classifier>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--
+    Add joda time to ensure that anything downstream which doesn't pull in spark-hive
+    gets the correct joda time artifact, so doesn't have auth failures on later Java 8 JVMs
+    -->
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!-- explicitly declare the jackson artifacts desired -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-cbor</artifactId>
+      <version>${fasterxml.jackson.version}</version>
+    </dependency>
+    <!--Explicit declaration to force in Spark version into transitive dependencies -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!--Explicit declaration to force in Spark version into transitive dependencies -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-azure</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-huaweicloud</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
+    </dependency>
+    <!--
+    There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
+    but it still needs some selective exclusion across versions, especially 3.0.x.
+    -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-cloud-storage</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!--
+          This is a code coverage library introduced by aliyun-java-sdk-core, only for testing
+          -->
+          <groupId>org.jacoco</groupId>
+          <artifactId>org.jacoco.agent</artifactId>
+        </exclusion>
+        <!--
+          SPARK-42913: `hadoop-cos`is not a dependency of `hadoop-cloud-storage` 3.3.4,
+          manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
+        -->
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-cos</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-huaweicloud</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!--
+    The jetty declarations are made
+    (a) to keep that jetty-util-ajax version in sync with the rest of Spark.
+    (b) to minimise the effects which Spark's jetty shading has on the
+        availability of the jetty JARs on for hadoop-azure, which depends
+        on them.
+     -->
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util-ajax</artifactId>
+      <version>${jetty.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>okhttp</artifactId>
+      <version>${okhttp.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.squareup.okio</groupId>
+      <artifactId>okio</artifactId>
+      <version>${okio.version}</version>
+      <scope>${huaweicloud.deps.scope}</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+
+    <plugins>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test</id>
+            <phase>test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <tagsToExclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToExclude>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>huaweicloud-provided</id>
+      <properties>
+        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>integration-test</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <tagsToExclude>None</tagsToExclude>
+                  <tagsToInclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToInclude>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
+</project>

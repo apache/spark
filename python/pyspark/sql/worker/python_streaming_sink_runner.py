@@ -1,0 +1,124 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import os
+from typing import IO
+
+from pyspark.errors import PySparkAssertionError
+from pyspark.logger.worker_io import capture_outputs
+from pyspark.serializers import (
+    read_bool,
+    read_int,
+    read_long,
+    write_int,
+)
+from pyspark.sql.datasource import DataSource, WriterCommitMessage
+from pyspark.sql.types import (
+    _parse_datatype_json_string,
+    StructType,
+)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
+from pyspark.worker_util import (
+    read_command,
+    pickleSer,
+    utf8_deserializer,
+)
+
+
+def _main(infile: IO, outfile: IO) -> None:
+    """
+    Main method for committing or aborting a data source streaming write operation.
+
+    This process is invoked from the `PythonStreamingSinkCommitRunner.runInPython`
+    method in the StreamingWrite implementation of the PythonDataSourceV2. It is
+    responsible for invoking either the `commit` or the `abort` method on a data source
+    writer instance, given a list of commit messages.
+    """
+    # Receive the data source instance.
+    data_source = read_command(pickleSer, infile)
+
+    if not isinstance(data_source, DataSource):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "a Python data source instance of type 'DataSource'",
+                "actual": f"'{type(data_source).__name__}'",
+            },
+        )
+    # Receive the data source output schema.
+    schema_json = utf8_deserializer.loads(infile)
+    schema = _parse_datatype_json_string(schema_json)
+    if not isinstance(schema, StructType):
+        raise PySparkAssertionError(
+            errorClass="DATA_SOURCE_TYPE_MISMATCH",
+            messageParameters={
+                "expected": "an output schema of type 'StructType'",
+                "actual": f"'{type(schema).__name__}'",
+            },
+        )
+    # Receive the `overwrite` flag.
+    overwrite = read_bool(infile)
+
+    with capture_outputs():
+        # Create the data source writer instance.
+        writer = data_source.streamWriter(schema=schema, overwrite=overwrite)
+        # Receive the commit messages.
+        num_messages = read_int(infile)
+
+        commit_messages = []
+        for _ in range(num_messages):
+            message = pickleSer._read_with_length(infile)
+            if message is not None and not isinstance(message, WriterCommitMessage):
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "an instance of WriterCommitMessage",
+                        "actual": f"'{type(message).__name__}'",
+                    },
+                )
+            commit_messages.append(message)
+
+        batch_id = read_long(infile)
+        abort = read_bool(infile)
+
+        # Commit or abort the Python data source write.
+        # Note the commit messages can be None if there are failed tasks.
+        if abort:
+            writer.abort(commit_messages, batch_id)
+        else:
+            writer.commit(commit_messages, batch_id)
+
+    # Send a status code back to JVM.
+    write_int(0, outfile)
+    outfile.flush()
+
+
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
+
+
+if __name__ == "__main__":
+    # Read information about how to connect back to the JVM from the environment.
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
+    main(sock_file, sock_file)

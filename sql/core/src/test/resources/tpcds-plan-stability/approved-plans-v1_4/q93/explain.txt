@@ -1,0 +1,138 @@
+== Physical Plan ==
+TakeOrderedAndProject (24)
++- * HashAggregate (23)
+   +- Exchange (22)
+      +- * HashAggregate (21)
+         +- * Project (20)
+            +- * BroadcastHashJoin Inner BuildRight (19)
+               :- * Project (13)
+               :  +- * SortMergeJoin Inner (12)
+               :     :- * Sort (5)
+               :     :  +- Exchange (4)
+               :     :     +- * Project (3)
+               :     :        +- * ColumnarToRow (2)
+               :     :           +- Scan parquet spark_catalog.default.store_sales (1)
+               :     +- * Sort (11)
+               :        +- Exchange (10)
+               :           +- * Project (9)
+               :              +- * Filter (8)
+               :                 +- * ColumnarToRow (7)
+               :                    +- Scan parquet spark_catalog.default.store_returns (6)
+               +- BroadcastExchange (18)
+                  +- * Project (17)
+                     +- * Filter (16)
+                        +- * ColumnarToRow (15)
+                           +- Scan parquet spark_catalog.default.reason (14)
+
+
+(1) Scan parquet spark_catalog.default.store_sales
+Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
+
+(3) Project [codegen id : 1]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, ss_sold_date_sk#6]
+
+(4) Exchange
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) Sort [codegen id : 2]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false, 0
+
+(6) Scan parquet spark_catalog.default.store_returns
+Output [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
+
+(7) ColumnarToRow [codegen id : 3]
+Input [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
+
+(8) Filter [codegen id : 3]
+Input [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
+Condition : ((isnotnull(sr_item_sk#7) AND isnotnull(sr_ticket_number#9)) AND isnotnull(sr_reason_sk#8))
+
+(9) Project [codegen id : 3]
+Output [4]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10]
+Input [5]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10, sr_returned_date_sk#11]
+
+(10) Exchange
+Input [4]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10]
+Arguments: hashpartitioning(sr_item_sk#7, sr_ticket_number#9, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(11) Sort [codegen id : 4]
+Input [4]: [sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10]
+Arguments: [sr_item_sk#7 ASC NULLS FIRST, sr_ticket_number#9 ASC NULLS FIRST], false, 0
+
+(12) SortMergeJoin [codegen id : 6]
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
+Right keys [2]: [sr_item_sk#7, sr_ticket_number#9]
+Join type: Inner
+Join condition: None
+
+(13) Project [codegen id : 6]
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#8, sr_return_quantity#10]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, sr_item_sk#7, sr_reason_sk#8, sr_ticket_number#9, sr_return_quantity#10]
+
+(14) Scan parquet spark_catalog.default.reason
+Output [2]: [r_reason_sk#12, r_reason_desc#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/reason]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(15) ColumnarToRow [codegen id : 5]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+
+(16) Filter [codegen id : 5]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+Condition : ((isnotnull(r_reason_desc#13) AND (r_reason_desc#13 = reason 28                                                                                           )) AND isnotnull(r_reason_sk#12))
+
+(17) Project [codegen id : 5]
+Output [1]: [r_reason_sk#12]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+
+(18) BroadcastExchange
+Input [1]: [r_reason_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(19) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [sr_reason_sk#8]
+Right keys [1]: [r_reason_sk#12]
+Join type: Inner
+Join condition: None
+
+(20) Project [codegen id : 6]
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#10) THEN (cast((ss_quantity#4 - sr_return_quantity#10) as decimal(10,0)) * ss_sales_price#5) ELSE (cast(ss_quantity#4 as decimal(10,0)) * ss_sales_price#5) END AS act_sales#14]
+Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#8, sr_return_quantity#10, r_reason_sk#12]
+
+(21) HashAggregate [codegen id : 6]
+Input [2]: [ss_customer_sk#2, act_sales#14]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [partial_sum(act_sales#14)]
+Aggregate Attributes [2]: [sum#15, isEmpty#16]
+Results [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+
+(22) Exchange
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(23) HashAggregate [codegen id : 7]
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [sum(act_sales#14)]
+Aggregate Attributes [1]: [sum(act_sales#14)#19]
+Results [2]: [ss_customer_sk#2, sum(act_sales#14)#19 AS sumsales#20]
+
+(24) TakeOrderedAndProject
+Input [2]: [ss_customer_sk#2, sumsales#20]
+Arguments: 100, [sumsales#20 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#20]
+

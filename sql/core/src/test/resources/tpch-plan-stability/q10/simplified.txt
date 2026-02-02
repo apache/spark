@@ -1,0 +1,40 @@
+TakeOrderedAndProject [revenue,c_custkey,c_name,c_acctbal,n_name,c_address,c_phone,c_comment]
+  WholeStageCodegen (5)
+    HashAggregate [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),revenue,sum,isEmpty]
+      InputAdapter
+        Exchange [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment] #1
+          WholeStageCodegen (4)
+            HashAggregate [c_custkey,c_name,c_acctbal,c_phone,n_name,c_address,c_comment,l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+              Project [c_custkey,c_name,c_address,c_phone,c_acctbal,c_comment,l_extendedprice,l_discount,n_name]
+                BroadcastHashJoin [c_nationkey,n_nationkey]
+                  Project [c_custkey,c_name,c_address,c_nationkey,c_phone,c_acctbal,c_comment,l_extendedprice,l_discount]
+                    BroadcastHashJoin [o_orderkey,l_orderkey]
+                      Project [c_custkey,c_name,c_address,c_nationkey,c_phone,c_acctbal,c_comment,o_orderkey]
+                        BroadcastHashJoin [c_custkey,o_custkey]
+                          Filter [c_custkey,c_nationkey]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet spark_catalog.default.customer [c_custkey,c_name,c_address,c_nationkey,c_phone,c_acctbal,c_comment]
+                          InputAdapter
+                            BroadcastExchange #2
+                              WholeStageCodegen (1)
+                                Project [o_orderkey,o_custkey]
+                                  Filter [o_orderdate,o_custkey,o_orderkey]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.orders [o_orderkey,o_custkey,o_orderdate]
+                      InputAdapter
+                        BroadcastExchange #3
+                          WholeStageCodegen (2)
+                            Project [l_orderkey,l_extendedprice,l_discount]
+                              Filter [l_returnflag,l_orderkey]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.lineitem [l_orderkey,l_extendedprice,l_discount,l_returnflag]
+                  InputAdapter
+                    BroadcastExchange #4
+                      WholeStageCodegen (3)
+                        Filter [n_nationkey]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet spark_catalog.default.nation [n_nationkey,n_name]

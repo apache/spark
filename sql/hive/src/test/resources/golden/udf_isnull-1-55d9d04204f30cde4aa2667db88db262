@@ -1,0 +1,1 @@
+isnull a - Returns true if a is NULL and false otherwise

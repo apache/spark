@@ -1,0 +1,24 @@
+WholeStageCodegen (4)
+  Sort [l_shipmode]
+    InputAdapter
+      Exchange [l_shipmode] #1
+        WholeStageCodegen (3)
+          HashAggregate [l_shipmode,sum,sum] [sum(CASE WHEN ((o_orderpriority = 1-URGENT) OR (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),sum(CASE WHEN (NOT (o_orderpriority = 1-URGENT) AND NOT (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),high_line_count,low_line_count,sum,sum]
+            InputAdapter
+              Exchange [l_shipmode] #2
+                WholeStageCodegen (2)
+                  HashAggregate [l_shipmode,o_orderpriority] [sum,sum,sum,sum]
+                    Project [o_orderpriority,l_shipmode]
+                      BroadcastHashJoin [o_orderkey,l_orderkey]
+                        Filter [o_orderkey]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet spark_catalog.default.orders [o_orderkey,o_orderpriority]
+                        InputAdapter
+                          BroadcastExchange #3
+                            WholeStageCodegen (1)
+                              Project [l_orderkey,l_shipmode]
+                                Filter [l_commitdate,l_receiptdate,l_shipdate,l_shipmode,l_orderkey]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.lineitem [l_orderkey,l_shipdate,l_commitdate,l_receiptdate,l_shipmode]

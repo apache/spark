@@ -1,0 +1,4 @@
+'Project [id#0L, a#0, b#0]
++- 'Join LeftSemi, (id#0L = id#0L)
+   :- LocalRelation <empty>, [id#0L, a#0, b#0]
+   +- LocalRelation <empty>, [a#0, id#0L, payload#0]

@@ -1,0 +1,278 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+div#application-timeline, div#job-timeline {
+  margin-bottom: 30px;
+}
+
+#application-timeline div.legend-area,
+#job-timeline div.legend-area {
+  margin-top: 5px;
+}
+
+#task-assignment-timeline div.legend-area {
+  width: 574px;
+}
+
+#task-assignment-timeline .legend-area > svg {
+  width: 100%;
+  height: 55px;
+}
+
+#task-assignment-timeline div.vis-item.vis-range {
+  height: 26px;
+  border-width: 0;
+}
+
+#task-assignment-timeline .vis-item-content {
+  padding: 0px;
+}
+
+.task-assignment-timeline-content {
+  width: 100%;
+}
+
+.task-assignment-timeline-duration-bar {
+  width: 100%;
+  height: 26px;
+}
+
+rect.scheduler-delay-proportion {
+  fill: #80B1D3;
+  stroke: #6B94B0;
+}
+
+rect.deserialization-time-proportion {
+  fill: #FB8072;
+  stroke: #D26B5F;
+}
+
+rect.shuffle-read-time-proportion {
+  fill: #FDB462;
+  stroke: #D39651;
+}
+
+rect.executor-runtime-proportion {
+  fill: #B3DE69;
+  stroke: #95B957;
+}
+
+rect.shuffle-write-time-proportion {
+  fill: #FFED6F;
+  stroke: #D5C65C;
+}
+
+rect.serialization-time-proportion {
+  fill: #BC80BD;
+  stroke: #9D6B9E;
+}
+
+rect.getting-result-time-proportion {
+  fill: #8DD3C7;
+  stroke: #75B0A6;
+}
+
+.vis-timeline {
+  line-height: 14px;
+}
+
+.vis-timeline div.vis-item-content {
+  width: 100%;
+}
+
+.vis-timeline .vis-item.stage {
+  cursor: pointer;
+}
+
+.vis-timeline .vis-item.stage.complete {
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+}
+
+.vis-timeline .vis-item.stage.complete.vis-selected {
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+  z-index: auto;
+}
+
+.legend-area rect.completed-stage-legend {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+}
+
+.vis-timeline .vis-item.stage.failed {
+  background-color: #FFA1B0;
+  border-color: #FF4D6D;
+}
+
+.vis-timeline .vis-item.stage.failed.vis-selected {
+  background-color: #FFA1B0;
+  border-color: #FF4D6D;
+  z-index: auto;
+}
+
+.legend-area rect.failed-stage-legend {
+  fill: #FFA1B0;
+  stroke: #FF4D6D;
+}
+
+.vis-timeline .vis-item.stage.active {
+  background-color: #A2FCC0;
+  border-color: #36F572;
+}
+
+.vis-timeline .vis-item.stage.active.vis-selected {
+  background-color: #A2FCC0;
+  border-color: #36F572;
+  z-index: auto;
+}
+
+.legend-area rect.active-stage-legend {
+  fill: #A2FCC0;
+  stroke: #36F572;
+}
+
+.vis-timeline .vis-foreground {
+  cursor: move;
+}
+
+.vis-timeline .vis-item.job {
+  cursor: pointer;
+}
+
+.vis-timeline .vis-item.job.succeeded {
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+}
+
+.vis-timeline .vis-item.job.succeeded.vis-selected {
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+  z-index: auto;
+}
+
+.legend-area rect.succeeded-job-legend {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+}
+
+.vis-timeline .vis-item.job.failed {
+  background-color: #FFA1B0;
+  border-color: #FF4D6D;
+}
+
+.vis-timeline .vis-item.job.failed.vis-selected {
+  background-color: #FFA1B0;
+  border-color: #FF4D6D;
+  z-index: auto;
+}
+
+.legend-area rect.failed-job-legend {
+  fill: #FFA1B0;
+  stroke: #FF4D6D;
+}
+
+.vis-timeline .vis-item.job.running {
+  background-color: #A2FCC0;
+  border-color: #36F572;
+}
+
+.vis-timeline .vis-item.job.running.vis-selected {
+  background-color: #A2FCC0;
+  border-color: #36F572;
+  z-index: auto;
+}
+
+.legend-area rect.running-job-legend {
+  fill: #A2FCC0;
+  stroke: #36F572;
+}
+
+.vis-timeline .vis-item.executor.added {
+  background-color: #A0DFFF;
+  border-color: #3EC0FF;
+}
+
+.vis-timeline .vis-item.executor.added.vis-selected {
+  background-color: #00AAFF;
+  border-color: #184C66;
+  z-index: 2;
+}
+
+.legend-area rect.executor-added-legend {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+}
+
+.vis-timeline .vis-item.executor.removed {
+  background-color: #FFA1B0;
+  border-color: #FF4D6D;
+}
+
+.vis-timeline .vis-item.executor.removed.vis-selected {
+  background-color: #FF6680;
+  border-color: #661F2C;
+  z-index: 2;
+}
+
+.legend-area rect.executor-removed-legend {
+  fill: #FFA1B0;
+  stroke: #FF4D6D;
+}
+
+tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
+  background-color: #D6FFE4 !important;
+}
+
+.control-panel {
+  margin-bottom: 5px;
+}
+
+.control-panel input[type="checkbox"] {
+  margin: 0;
+}
+
+span.expand-application-timeline, span.expand-job-timeline,
+span.expand-task-assignment-timeline {
+  cursor: pointer;
+}
+
+.control-panel input + span {
+  cursor: pointer;
+}
+
+.vis-timeline .vis-item.vis-range .vis-item-content {
+  position: unset;
+}
+
+.vis-timeline .vis-item .tooltip-inner {
+  max-width: unset !important;
+}
+
+.vis-panel.vis-center {
+  font-size: 12px;
+  line-height: 12px;
+}
+
+.legend-area text {
+  fill: #4D4D4D;
+}
+
+.additional-metrics ul {
+  list-style: none;
+  margin-left: 15px;
+}

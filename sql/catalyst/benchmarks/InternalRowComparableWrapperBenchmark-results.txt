@@ -1,0 +1,7 @@
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+internal row comparable wrapper:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+toSet                                               142            149           8          1.4         707.9       1.0X
+mergePartitions                                     268            270           3          0.7        1340.0       0.5X
+

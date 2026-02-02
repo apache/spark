@@ -1,0 +1,168 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Intentionally has a general name.
+# because the test status check created in GitHub Actions
+# currently randomly picks any associated workflow.
+# So, the name was changed to make sense in that context too.
+# See also https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380/10
+name: On pull request update
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  notify:
+    name: Notify test workflow
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+    steps:
+      - name: "Notify test workflow"
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const endpoint = 'GET /repos/:owner/:repo/actions/workflows/:id/runs?&branch=:branch'
+            const check_run_endpoint = 'GET /repos/:owner/:repo/commits/:ref/check-runs?per_page=100'
+
+            // TODO: Should use pull_request.user and pull_request.user.repos_url?
+            // If a different person creates a commit to another forked repo,
+            // it wouldn't be able to detect.
+            const params = {
+              owner: context.payload.pull_request.head.repo.owner.login,
+              repo: context.payload.pull_request.head.repo.name,
+              id: 'build_main.yml',
+              branch: context.payload.pull_request.head.ref,
+            }
+            const check_run_params = {
+              owner: context.payload.pull_request.head.repo.owner.login,
+              repo: context.payload.pull_request.head.repo.name,
+              ref: context.payload.pull_request.head.ref,
+            }
+
+            console.log('Ref: ' + context.payload.pull_request.head.ref)
+            console.log('SHA: ' + context.payload.pull_request.head.sha)
+
+            // Wait 3 seconds to make sure the fork repository triggered a workflow.
+            await new Promise(r => setTimeout(r, 3000))
+
+            let runs
+            try {
+              runs = await github.request(endpoint, params)
+            } catch (error) {
+              console.error(error)
+              // Assume that runs were not found.
+            }
+
+            const name = 'Build'
+            const head_sha = context.payload.pull_request.head.sha
+            let status = 'queued'
+
+            if (!runs || runs.data.workflow_runs.length === 0) {
+              status = 'completed'
+              const conclusion = 'action_required'
+
+              github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: name,
+                head_sha: head_sha,
+                status: status,
+                conclusion: conclusion,
+                output: {
+                  title: 'Workflow run detection failed',
+                  summary: `
+            Unable to detect the workflow run for testing the changes in your PR.
+
+            1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing Github Actions Settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
+            2. It is possible your branch is based on the old \`master\` branch in Apache Spark, please sync your branch to the latest master branch. For example as below:
+                \`\`\`bash
+                git fetch upstream
+                git rebase upstream/master
+                git push origin YOUR_BRANCH --force
+                \`\`\``,
+                  images: [
+                    {
+                      alt: 'enabling workflows button',
+                      image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+                    }
+                  ]
+                }
+              })
+            } else {
+              const run_id = runs.data.workflow_runs[0].id
+
+              if (runs.data.workflow_runs[0].head_sha != context.payload.pull_request.head.sha) {
+                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
+              }
+
+              // Here we get check run ID to provide Check run view instead of Actions view, see also SPARK-37879.
+              let retryCount = 0;
+              let check_run_head;
+              while (retryCount < 3) {
+                const check_runs = await github.request(check_run_endpoint, check_run_params);
+                check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
+                if (check_run_head) {
+                  break;
+                }
+                retryCount++;
+                if (retryCount < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+                }
+              }
+              if (!check_run_head) {
+                throw new Error('Failed to retrieve check_run_head after 3 attempts');
+              }
+
+              if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
+                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
+              }
+
+              const check_run_url = 'https://github.com/'
+                + context.payload.pull_request.head.repo.full_name
+                + '/runs/'
+                + check_run_head.id
+              console.log('Check run URL: ' + check_run_url)
+
+              const actions_url = 'https://github.com/'
+                + context.payload.pull_request.head.repo.full_name
+                + '/actions/runs/'
+                + run_id
+              console.log('Actions URL: ' + actions_url)
+
+              github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: name,
+                head_sha: head_sha,
+                status: status,
+                output: {
+                  title: 'Test results',
+                  summary: '[See test results](' + check_run_url + ')',
+                  text: JSON.stringify({
+                    owner: context.payload.pull_request.head.repo.owner.login,
+                    repo: context.payload.pull_request.head.repo.name,
+                    run_id: run_id
+                  })
+                },
+                details_url: actions_url,
+              })
+            }

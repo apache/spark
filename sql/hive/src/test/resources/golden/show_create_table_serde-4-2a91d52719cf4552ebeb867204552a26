@@ -1,0 +1,14 @@
+CREATE EXTERNAL TABLE `tmp_showcrt1`(
+  `key` string, 
+  `value` boolean)
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe' 
+STORED BY 
+  'org.apache.hadoop.hive.ql.metadata.DefaultStorageHandler' 
+WITH SERDEPROPERTIES ( 
+  'serialization.format'='$', 
+  'field.delim'=',')
+LOCATION
+  'file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sparkHiveWarehouse1201055597819413730/tmp_showcrt1'
+TBLPROPERTIES (
+  'transient_lastDdlTime'='1413891332')

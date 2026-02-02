@@ -1,0 +1,19 @@
+{
+  "jobId" : 0,
+  "jobTags" : [ ],
+  "killedTasksSummary" : { },
+  "name" : "count at <console>:15",
+  "numActiveStages" : 0,
+  "numActiveTasks" : 0,
+  "numCompletedIndices" : 8,
+  "numCompletedStages" : 1,
+  "numCompletedTasks" : 8,
+  "numFailedStages" : 0,
+  "numFailedTasks" : 0,
+  "numKilledTasks" : 0,
+  "numSkippedStages" : 0,
+  "numSkippedTasks" : 0,
+  "numTasks" : 8,
+  "stageIds" : [ 0 ],
+  "status" : "SUCCEEDED"
+}

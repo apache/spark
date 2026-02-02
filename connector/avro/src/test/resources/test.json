@@ -1,0 +1,42 @@
+{
+	"string": "OMG SPARK IS AWESOME",
+	"simple_map": {"abc": 1, "bcd": 7},
+	"complex_map": {"key": {"a": "b", "c": "d"}},
+	"union_string_null": {"string": "abc"},
+	"union_int_long_null": {"int": 1},
+	"union_float_double": {"float": 3.1415926535},
+	"fixed3":"\u0002\u0003\u0004",
+	"fixed2":"\u0011\u0012",
+	"enum": "SPADES",
+	"record": {"value_field": "Two things are infinite: the universe and human stupidity; and I'm not sure about universe."},
+	"array_of_boolean": [true, false, false],
+	"bytes": "\u0041\u0042\u0043"
+}
+{
+	"string": "Terran is IMBA!",
+	"simple_map": {"mmm": 0, "qqq": 66},
+	"complex_map": {"key": {"1": "2", "3": "4"}},
+	"union_string_null": {"string": "123"},
+	"union_int_long_null": {"long": 66},
+	"union_float_double": {"double": 6.6666666666666},
+	"fixed3":"\u0007\u0007\u0007",
+	"fixed2":"\u0001\u0002",
+	"enum": "CLUBS",
+	"record": {"value_field": "Life did not intend to make us perfect. Whoever is perfect belongs in a museum."},
+	"array_of_boolean": [],
+	"bytes": ""
+}
+{
+	"string": "The cake is a LIE!",
+	"simple_map": {},
+	"complex_map": {"key": {}},
+	"union_string_null": {"null": null},
+	"union_int_long_null": {"null": null},
+	"union_float_double": {"double": 0},
+	"fixed3":"\u0011\u0022\u0009",
+	"fixed2":"\u0010\u0090",
+	"enum": "DIAMONDS",
+	"record": {"value_field": "TEST_STR123"},
+	"array_of_boolean": [false],
+	"bytes": "\u0053"
+}

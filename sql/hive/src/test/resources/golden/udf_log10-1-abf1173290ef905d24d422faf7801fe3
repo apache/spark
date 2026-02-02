@@ -1,0 +1,4 @@
+log10(x) - Returns the logarithm of x with base 10
+Example:
+  > SELECT log10(10) FROM src LIMIT 1;
+  1

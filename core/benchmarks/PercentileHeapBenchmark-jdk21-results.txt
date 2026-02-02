@@ -1,0 +1,41 @@
+================================================================================================
+PercentileHeap Operations
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+PercentileHeap Operations - Input Size: 10000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Percentile: 0.5                                            1              1           0          9.6         103.9       1.0X
+Percentile: 0.9                                            1              1           0         17.5          57.2       1.8X
+Percentile: 0.95                                           0              0           0         22.9          43.7       2.4X
+Percentile: 0.99                                           0              0           0         30.6          32.7       3.2X
+
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+PercentileHeap Operations - Input Size: 50000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Percentile: 0.5                                            6              6           0          8.6         116.1       1.0X
+Percentile: 0.9                                            3              3           0         16.9          59.3       2.0X
+Percentile: 0.95                                           2              2           0         22.2          45.0       2.6X
+Percentile: 0.99                                           2              2           0         29.4          34.0       3.4X
+
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+PercentileHeap Operations - Input Size: 100000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Percentile: 0.5                                            13             13           0          7.9         125.8       1.0X
+Percentile: 0.9                                             7              7           1         15.2          65.7       1.9X
+Percentile: 0.95                                            5              5           0         20.5          48.8       2.6X
+Percentile: 0.99                                            4              4           0         27.3          36.6       3.4X
+
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+PercentileHeap Operations - Input Size: 200000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+Percentile: 0.5                                            26             28           2          7.6         131.9       1.0X
+Percentile: 0.9                                            14             15           1         14.3          69.8       1.9X
+Percentile: 0.95                                           10             10           0         19.2          52.1       2.5X
+Percentile: 0.99                                            7              8           0         27.2          36.8       3.6X
+
+

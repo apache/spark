@@ -1,0 +1,457 @@
+== Physical Plan ==
+TakeOrderedAndProject (73)
++- Union (72)
+   :- * HashAggregate (28)
+   :  +- Exchange (27)
+   :     +- * HashAggregate (26)
+   :        +- * Project (25)
+   :           +- * BroadcastHashJoin Inner BuildRight (24)
+   :              :- * Project (19)
+   :              :  +- * BroadcastHashJoin Inner BuildRight (18)
+   :              :     :- * Project (13)
+   :              :     :  +- * BroadcastHashJoin Inner BuildRight (12)
+   :              :     :     :- * Project (10)
+   :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+   :              :     :     :     :- * Filter (3)
+   :              :     :     :     :  +- * ColumnarToRow (2)
+   :              :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
+   :              :     :     :     +- BroadcastExchange (8)
+   :              :     :     :        +- * Project (7)
+   :              :     :     :           +- * Filter (6)
+   :              :     :     :              +- * ColumnarToRow (5)
+   :              :     :     :                 +- Scan parquet spark_catalog.default.customer_demographics (4)
+   :              :     :     +- ReusedExchange (11)
+   :              :     +- BroadcastExchange (17)
+   :              :        +- * Filter (16)
+   :              :           +- * ColumnarToRow (15)
+   :              :              +- Scan parquet spark_catalog.default.store (14)
+   :              +- BroadcastExchange (23)
+   :                 +- * Filter (22)
+   :                    +- * ColumnarToRow (21)
+   :                       +- Scan parquet spark_catalog.default.item (20)
+   :- * HashAggregate (50)
+   :  +- Exchange (49)
+   :     +- * HashAggregate (48)
+   :        +- * Project (47)
+   :           +- * BroadcastHashJoin Inner BuildRight (46)
+   :              :- * Project (44)
+   :              :  +- * BroadcastHashJoin Inner BuildRight (43)
+   :              :     :- * Project (37)
+   :              :     :  +- * BroadcastHashJoin Inner BuildRight (36)
+   :              :     :     :- * Project (34)
+   :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (33)
+   :              :     :     :     :- * Filter (31)
+   :              :     :     :     :  +- * ColumnarToRow (30)
+   :              :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (29)
+   :              :     :     :     +- ReusedExchange (32)
+   :              :     :     +- ReusedExchange (35)
+   :              :     +- BroadcastExchange (42)
+   :              :        +- * Project (41)
+   :              :           +- * Filter (40)
+   :              :              +- * ColumnarToRow (39)
+   :              :                 +- Scan parquet spark_catalog.default.store (38)
+   :              +- ReusedExchange (45)
+   +- * HashAggregate (71)
+      +- Exchange (70)
+         +- * HashAggregate (69)
+            +- * Project (68)
+               +- * BroadcastHashJoin Inner BuildRight (67)
+                  :- * Project (62)
+                  :  +- * BroadcastHashJoin Inner BuildRight (61)
+                  :     :- * Project (59)
+                  :     :  +- * BroadcastHashJoin Inner BuildRight (58)
+                  :     :     :- * Project (56)
+                  :     :     :  +- * BroadcastHashJoin Inner BuildRight (55)
+                  :     :     :     :- * Filter (53)
+                  :     :     :     :  +- * ColumnarToRow (52)
+                  :     :     :     :     +- Scan parquet spark_catalog.default.store_sales (51)
+                  :     :     :     +- ReusedExchange (54)
+                  :     :     +- ReusedExchange (57)
+                  :     +- ReusedExchange (60)
+                  +- BroadcastExchange (66)
+                     +- * Filter (65)
+                        +- * ColumnarToRow (64)
+                           +- Scan parquet spark_catalog.default.item (63)
+
+
+(1) Scan parquet spark_catalog.default.store_sales
+Output [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#8), (ss_sold_date_sk#8 >= 2451545), (ss_sold_date_sk#8 <= 2451910), dynamicpruningexpression(ss_sold_date_sk#8 IN dynamicpruning#9)]
+PushedFilters: [IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
+ReadSchema: struct<ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 5]
+Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
+
+(3) Filter [codegen id : 5]
+Input [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
+Condition : ((isnotnull(ss_cdemo_sk#2) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_item_sk#1))
+
+(4) Scan parquet spark_catalog.default.customer_demographics
+Output [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,D), EqualTo(cd_education_status,Primary             ), IsNotNull(cd_demo_sk)]
+ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
+
+(6) Filter [codegen id : 1]
+Input [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
+Condition : ((((((isnotnull(cd_gender#11) AND isnotnull(cd_marital_status#12)) AND isnotnull(cd_education_status#13)) AND (cd_gender#11 = F)) AND (cd_marital_status#12 = D)) AND (cd_education_status#13 = Primary             )) AND isnotnull(cd_demo_sk#10))
+
+(7) Project [codegen id : 1]
+Output [1]: [cd_demo_sk#10]
+Input [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
+
+(8) BroadcastExchange
+Input [1]: [cd_demo_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(9) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_cdemo_sk#2]
+Right keys [1]: [cd_demo_sk#10]
+Join type: Inner
+Join condition: None
+
+(10) Project [codegen id : 5]
+Output [7]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
+Input [9]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, cd_demo_sk#10]
+
+(11) ReusedExchange [Reuses operator id: 78]
+Output [1]: [d_date_sk#14]
+
+(12) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_sold_date_sk#8]
+Right keys [1]: [d_date_sk#14]
+Join type: Inner
+Join condition: None
+
+(13) Project [codegen id : 5]
+Output [6]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7]
+Input [8]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8, d_date_sk#14]
+
+(14) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#15, s_state#16]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [In(s_state, [AL,SD,TN]), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_state:string>
+
+(15) ColumnarToRow [codegen id : 3]
+Input [2]: [s_store_sk#15, s_state#16]
+
+(16) Filter [codegen id : 3]
+Input [2]: [s_store_sk#15, s_state#16]
+Condition : (s_state#16 IN (TN,AL,SD) AND isnotnull(s_store_sk#15))
+
+(17) BroadcastExchange
+Input [2]: [s_store_sk#15, s_state#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
+
+(18) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#15]
+Join type: Inner
+Join condition: None
+
+(19) Project [codegen id : 5]
+Output [6]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, s_state#16]
+Input [8]: [ss_item_sk#1, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, s_store_sk#15, s_state#16]
+
+(20) Scan parquet spark_catalog.default.item
+Output [2]: [i_item_sk#17, i_item_id#18]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_item_id:string>
+
+(21) ColumnarToRow [codegen id : 4]
+Input [2]: [i_item_sk#17, i_item_id#18]
+
+(22) Filter [codegen id : 4]
+Input [2]: [i_item_sk#17, i_item_id#18]
+Condition : isnotnull(i_item_sk#17)
+
+(23) BroadcastExchange
+Input [2]: [i_item_sk#17, i_item_id#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
+
+(24) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#17]
+Join type: Inner
+Join condition: None
+
+(25) Project [codegen id : 5]
+Output [6]: [i_item_id#18, s_state#16, ss_quantity#4 AS agg1#19, ss_list_price#5 AS agg2#20, ss_coupon_amt#7 AS agg3#21, ss_sales_price#6 AS agg4#22]
+Input [8]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, s_state#16, i_item_sk#17, i_item_id#18]
+
+(26) HashAggregate [codegen id : 5]
+Input [6]: [i_item_id#18, s_state#16, agg1#19, agg2#20, agg3#21, agg4#22]
+Keys [2]: [i_item_id#18, s_state#16]
+Functions [4]: [partial_avg(agg1#19), partial_avg(UnscaledValue(agg2#20)), partial_avg(UnscaledValue(agg3#21)), partial_avg(UnscaledValue(agg4#22))]
+Aggregate Attributes [8]: [sum#23, count#24, sum#25, count#26, sum#27, count#28, sum#29, count#30]
+Results [10]: [i_item_id#18, s_state#16, sum#31, count#32, sum#33, count#34, sum#35, count#36, sum#37, count#38]
+
+(27) Exchange
+Input [10]: [i_item_id#18, s_state#16, sum#31, count#32, sum#33, count#34, sum#35, count#36, sum#37, count#38]
+Arguments: hashpartitioning(i_item_id#18, s_state#16, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(28) HashAggregate [codegen id : 6]
+Input [10]: [i_item_id#18, s_state#16, sum#31, count#32, sum#33, count#34, sum#35, count#36, sum#37, count#38]
+Keys [2]: [i_item_id#18, s_state#16]
+Functions [4]: [avg(agg1#19), avg(UnscaledValue(agg2#20)), avg(UnscaledValue(agg3#21)), avg(UnscaledValue(agg4#22))]
+Aggregate Attributes [4]: [avg(agg1#19)#39, avg(UnscaledValue(agg2#20))#40, avg(UnscaledValue(agg3#21))#41, avg(UnscaledValue(agg4#22))#42]
+Results [7]: [i_item_id#18, s_state#16, 0 AS g_state#43, avg(agg1#19)#39 AS agg1#44, cast((avg(UnscaledValue(agg2#20))#40 / 100.0) as decimal(11,6)) AS agg2#45, cast((avg(UnscaledValue(agg3#21))#41 / 100.0) as decimal(11,6)) AS agg3#46, cast((avg(UnscaledValue(agg4#22))#42 / 100.0) as decimal(11,6)) AS agg4#47]
+
+(29) Scan parquet spark_catalog.default.store_sales
+Output [8]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#55), (ss_sold_date_sk#55 >= 2451545), (ss_sold_date_sk#55 <= 2451910), dynamicpruningexpression(ss_sold_date_sk#55 IN dynamicpruning#9)]
+PushedFilters: [IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
+ReadSchema: struct<ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(30) ColumnarToRow [codegen id : 11]
+Input [8]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55]
+
+(31) Filter [codegen id : 11]
+Input [8]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55]
+Condition : ((isnotnull(ss_cdemo_sk#49) AND isnotnull(ss_store_sk#50)) AND isnotnull(ss_item_sk#48))
+
+(32) ReusedExchange [Reuses operator id: 8]
+Output [1]: [cd_demo_sk#56]
+
+(33) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ss_cdemo_sk#49]
+Right keys [1]: [cd_demo_sk#56]
+Join type: Inner
+Join condition: None
+
+(34) Project [codegen id : 11]
+Output [7]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55]
+Input [9]: [ss_item_sk#48, ss_cdemo_sk#49, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55, cd_demo_sk#56]
+
+(35) ReusedExchange [Reuses operator id: 78]
+Output [1]: [d_date_sk#57]
+
+(36) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ss_sold_date_sk#55]
+Right keys [1]: [d_date_sk#57]
+Join type: Inner
+Join condition: None
+
+(37) Project [codegen id : 11]
+Output [6]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
+Input [8]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, ss_sold_date_sk#55, d_date_sk#57]
+
+(38) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#58, s_state#59]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [In(s_state, [AL,SD,TN]), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_state:string>
+
+(39) ColumnarToRow [codegen id : 9]
+Input [2]: [s_store_sk#58, s_state#59]
+
+(40) Filter [codegen id : 9]
+Input [2]: [s_store_sk#58, s_state#59]
+Condition : (s_state#59 IN (TN,AL,SD) AND isnotnull(s_store_sk#58))
+
+(41) Project [codegen id : 9]
+Output [1]: [s_store_sk#58]
+Input [2]: [s_store_sk#58, s_state#59]
+
+(42) BroadcastExchange
+Input [1]: [s_store_sk#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(43) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ss_store_sk#50]
+Right keys [1]: [s_store_sk#58]
+Join type: Inner
+Join condition: None
+
+(44) Project [codegen id : 11]
+Output [5]: [ss_item_sk#48, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54]
+Input [7]: [ss_item_sk#48, ss_store_sk#50, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, s_store_sk#58]
+
+(45) ReusedExchange [Reuses operator id: 23]
+Output [2]: [i_item_sk#60, i_item_id#61]
+
+(46) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ss_item_sk#48]
+Right keys [1]: [i_item_sk#60]
+Join type: Inner
+Join condition: None
+
+(47) Project [codegen id : 11]
+Output [5]: [i_item_id#61, ss_quantity#51 AS agg1#62, ss_list_price#52 AS agg2#63, ss_coupon_amt#54 AS agg3#64, ss_sales_price#53 AS agg4#65]
+Input [7]: [ss_item_sk#48, ss_quantity#51, ss_list_price#52, ss_sales_price#53, ss_coupon_amt#54, i_item_sk#60, i_item_id#61]
+
+(48) HashAggregate [codegen id : 11]
+Input [5]: [i_item_id#61, agg1#62, agg2#63, agg3#64, agg4#65]
+Keys [1]: [i_item_id#61]
+Functions [4]: [partial_avg(agg1#62), partial_avg(UnscaledValue(agg2#63)), partial_avg(UnscaledValue(agg3#64)), partial_avg(UnscaledValue(agg4#65))]
+Aggregate Attributes [8]: [sum#66, count#67, sum#68, count#69, sum#70, count#71, sum#72, count#73]
+Results [9]: [i_item_id#61, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81]
+
+(49) Exchange
+Input [9]: [i_item_id#61, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81]
+Arguments: hashpartitioning(i_item_id#61, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(50) HashAggregate [codegen id : 12]
+Input [9]: [i_item_id#61, sum#74, count#75, sum#76, count#77, sum#78, count#79, sum#80, count#81]
+Keys [1]: [i_item_id#61]
+Functions [4]: [avg(agg1#62), avg(UnscaledValue(agg2#63)), avg(UnscaledValue(agg3#64)), avg(UnscaledValue(agg4#65))]
+Aggregate Attributes [4]: [avg(agg1#62)#82, avg(UnscaledValue(agg2#63))#83, avg(UnscaledValue(agg3#64))#84, avg(UnscaledValue(agg4#65))#85]
+Results [7]: [i_item_id#61, null AS s_state#86, 1 AS g_state#87, avg(agg1#62)#82 AS agg1#88, cast((avg(UnscaledValue(agg2#63))#83 / 100.0) as decimal(11,6)) AS agg2#89, cast((avg(UnscaledValue(agg3#64))#84 / 100.0) as decimal(11,6)) AS agg3#90, cast((avg(UnscaledValue(agg4#65))#85 / 100.0) as decimal(11,6)) AS agg4#91]
+
+(51) Scan parquet spark_catalog.default.store_sales
+Output [8]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#99), (ss_sold_date_sk#99 >= 2451545), (ss_sold_date_sk#99 <= 2451910), dynamicpruningexpression(ss_sold_date_sk#99 IN dynamicpruning#9)]
+PushedFilters: [IsNotNull(ss_cdemo_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
+ReadSchema: struct<ss_item_sk:int,ss_cdemo_sk:int,ss_store_sk:int,ss_quantity:int,ss_list_price:decimal(7,2),ss_sales_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
+
+(52) ColumnarToRow [codegen id : 17]
+Input [8]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99]
+
+(53) Filter [codegen id : 17]
+Input [8]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99]
+Condition : ((isnotnull(ss_cdemo_sk#93) AND isnotnull(ss_store_sk#94)) AND isnotnull(ss_item_sk#92))
+
+(54) ReusedExchange [Reuses operator id: 8]
+Output [1]: [cd_demo_sk#100]
+
+(55) BroadcastHashJoin [codegen id : 17]
+Left keys [1]: [ss_cdemo_sk#93]
+Right keys [1]: [cd_demo_sk#100]
+Join type: Inner
+Join condition: None
+
+(56) Project [codegen id : 17]
+Output [7]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99]
+Input [9]: [ss_item_sk#92, ss_cdemo_sk#93, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99, cd_demo_sk#100]
+
+(57) ReusedExchange [Reuses operator id: 78]
+Output [1]: [d_date_sk#101]
+
+(58) BroadcastHashJoin [codegen id : 17]
+Left keys [1]: [ss_sold_date_sk#99]
+Right keys [1]: [d_date_sk#101]
+Join type: Inner
+Join condition: None
+
+(59) Project [codegen id : 17]
+Output [6]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
+Input [8]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, ss_sold_date_sk#99, d_date_sk#101]
+
+(60) ReusedExchange [Reuses operator id: 42]
+Output [1]: [s_store_sk#102]
+
+(61) BroadcastHashJoin [codegen id : 17]
+Left keys [1]: [ss_store_sk#94]
+Right keys [1]: [s_store_sk#102]
+Join type: Inner
+Join condition: None
+
+(62) Project [codegen id : 17]
+Output [5]: [ss_item_sk#92, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98]
+Input [7]: [ss_item_sk#92, ss_store_sk#94, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, s_store_sk#102]
+
+(63) Scan parquet spark_catalog.default.item
+Output [1]: [i_item_sk#103]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int>
+
+(64) ColumnarToRow [codegen id : 16]
+Input [1]: [i_item_sk#103]
+
+(65) Filter [codegen id : 16]
+Input [1]: [i_item_sk#103]
+Condition : isnotnull(i_item_sk#103)
+
+(66) BroadcastExchange
+Input [1]: [i_item_sk#103]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7]
+
+(67) BroadcastHashJoin [codegen id : 17]
+Left keys [1]: [ss_item_sk#92]
+Right keys [1]: [i_item_sk#103]
+Join type: Inner
+Join condition: None
+
+(68) Project [codegen id : 17]
+Output [4]: [ss_quantity#95 AS agg1#104, ss_list_price#96 AS agg2#105, ss_coupon_amt#98 AS agg3#106, ss_sales_price#97 AS agg4#107]
+Input [6]: [ss_item_sk#92, ss_quantity#95, ss_list_price#96, ss_sales_price#97, ss_coupon_amt#98, i_item_sk#103]
+
+(69) HashAggregate [codegen id : 17]
+Input [4]: [agg1#104, agg2#105, agg3#106, agg4#107]
+Keys: []
+Functions [4]: [partial_avg(agg1#104), partial_avg(UnscaledValue(agg2#105)), partial_avg(UnscaledValue(agg3#106)), partial_avg(UnscaledValue(agg4#107))]
+Aggregate Attributes [8]: [sum#108, count#109, sum#110, count#111, sum#112, count#113, sum#114, count#115]
+Results [8]: [sum#116, count#117, sum#118, count#119, sum#120, count#121, sum#122, count#123]
+
+(70) Exchange
+Input [8]: [sum#116, count#117, sum#118, count#119, sum#120, count#121, sum#122, count#123]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(71) HashAggregate [codegen id : 18]
+Input [8]: [sum#116, count#117, sum#118, count#119, sum#120, count#121, sum#122, count#123]
+Keys: []
+Functions [4]: [avg(agg1#104), avg(UnscaledValue(agg2#105)), avg(UnscaledValue(agg3#106)), avg(UnscaledValue(agg4#107))]
+Aggregate Attributes [4]: [avg(agg1#104)#124, avg(UnscaledValue(agg2#105))#125, avg(UnscaledValue(agg3#106))#126, avg(UnscaledValue(agg4#107))#127]
+Results [7]: [null AS i_item_id#128, null AS s_state#129, 1 AS g_state#130, avg(agg1#104)#124 AS agg1#131, cast((avg(UnscaledValue(agg2#105))#125 / 100.0) as decimal(11,6)) AS agg2#132, cast((avg(UnscaledValue(agg3#106))#126 / 100.0) as decimal(11,6)) AS agg3#133, cast((avg(UnscaledValue(agg4#107))#127 / 100.0) as decimal(11,6)) AS agg4#134]
+
+(72) Union
+
+(73) TakeOrderedAndProject
+Input [7]: [i_item_id#18, s_state#16, g_state#43, agg1#44, agg2#45, agg3#46, agg4#47]
+Arguments: 100, [i_item_id#18 ASC NULLS FIRST, s_state#16 ASC NULLS FIRST], [i_item_id#18, s_state#16, g_state#43, agg1#44, agg2#45, agg3#46, agg4#47]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#8 IN dynamicpruning#9
+BroadcastExchange (78)
++- * Project (77)
+   +- * Filter (76)
+      +- * ColumnarToRow (75)
+         +- Scan parquet spark_catalog.default.date_dim (74)
+
+
+(74) Scan parquet spark_catalog.default.date_dim
+Output [2]: [d_date_sk#14, d_year#135]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int>
+
+(75) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#14, d_year#135]
+
+(76) Filter [codegen id : 1]
+Input [2]: [d_date_sk#14, d_year#135]
+Condition : ((((isnotnull(d_year#135) AND (d_year#135 = 2000)) AND (d_date_sk#14 >= 2451545)) AND (d_date_sk#14 <= 2451910)) AND isnotnull(d_date_sk#14))
+
+(77) Project [codegen id : 1]
+Output [1]: [d_date_sk#14]
+Input [2]: [d_date_sk#14, d_year#135]
+
+(78) BroadcastExchange
+Input [1]: [d_date_sk#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
+
+Subquery:2 Hosting operator id = 29 Hosting Expression = ss_sold_date_sk#55 IN dynamicpruning#9
+
+Subquery:3 Hosting operator id = 51 Hosting Expression = ss_sold_date_sk#99 IN dynamicpruning#9
+
+

@@ -1,0 +1,1230 @@
+{
+  "accumulatorUpdates" : [ ],
+  "attemptId" : 0,
+  "completionTime" : "2018-01-18T18:33:15.279GMT",
+  "details" : "org.apache.spark.rdd.RDD.map(RDD.scala:370)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:27)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:35)\n$line15.$read$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:37)\n$line15.$read$$iw$$iw$$iw$$iw$$iw.<init>(<console>:39)\n$line15.$read$$iw$$iw$$iw$$iw.<init>(<console>:41)\n$line15.$read$$iw$$iw$$iw.<init>(<console>:43)\n$line15.$read$$iw$$iw.<init>(<console>:45)\n$line15.$read$$iw.<init>(<console>:47)\n$line15.$read.<init>(<console>:49)\n$line15.$read$.<init>(<console>:53)\n$line15.$read$.<clinit>(<console>)\n$line15.$eval$.$print$lzycompute(<console>:7)\n$line15.$eval$.$print(<console>:6)\n$line15.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:498)\nscala.tools.nsc.interpreter.IMain$ReadEvalPrint.call(IMain.scala:786)",
+  "diskBytesSpilled" : 0,
+  "executorCpuTime" : 1163210819,
+  "executorDeserializeCpuTime" : 1029819716,
+  "executorDeserializeTime" : 3679,
+  "executorRunTime" : 5080,
+  "executorSummary" : {
+    "1" : {
+      "diskBytesSpilled" : 0,
+      "failedTasks" : 0,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "isBlacklistedForStage" : false,
+      "isExcludedForStage" : false,
+      "killedTasks" : 0,
+      "memoryBytesSpilled" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "peakMemoryMetrics" : {
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
+        "DirectPoolMemory" : 0,
+        "JVMHeapMemory" : 0,
+        "JVMOffHeapMemory" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0,
+        "MappedPoolMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OffHeapStorageMemory" : 0,
+        "OffHeapUnifiedMemory" : 0,
+        "OnHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "TotalGCTime" : 0
+      },
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 585,
+      "shuffleWriteRecords" : 12,
+      "succeededTasks" : 4,
+      "taskTime" : 2411
+    },
+    "2" : {
+      "diskBytesSpilled" : 0,
+      "failedTasks" : 0,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "isBlacklistedForStage" : false,
+      "isExcludedForStage" : false,
+      "killedTasks" : 0,
+      "memoryBytesSpilled" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "peakMemoryMetrics" : {
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
+        "DirectPoolMemory" : 0,
+        "JVMHeapMemory" : 0,
+        "JVMOffHeapMemory" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0,
+        "MappedPoolMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OffHeapStorageMemory" : 0,
+        "OffHeapUnifiedMemory" : 0,
+        "OnHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "TotalGCTime" : 0
+      },
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 732,
+      "shuffleWriteRecords" : 15,
+      "succeededTasks" : 5,
+      "taskTime" : 2446
+    },
+    "3" : {
+      "diskBytesSpilled" : 0,
+      "failedTasks" : 0,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true,
+      "killedTasks" : 0,
+      "memoryBytesSpilled" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "peakMemoryMetrics" : {
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
+        "DirectPoolMemory" : 0,
+        "JVMHeapMemory" : 0,
+        "JVMOffHeapMemory" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0,
+        "MappedPoolMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OffHeapStorageMemory" : 0,
+        "OffHeapUnifiedMemory" : 0,
+        "OnHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "TotalGCTime" : 0
+      },
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 144,
+      "shuffleWriteRecords" : 3,
+      "succeededTasks" : 1,
+      "taskTime" : 1774
+    },
+    "4" : {
+      "diskBytesSpilled" : 0,
+      "failedTasks" : 2,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true,
+      "killedTasks" : 0,
+      "memoryBytesSpilled" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "peakMemoryMetrics" : {
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
+        "DirectPoolMemory" : 0,
+        "JVMHeapMemory" : 0,
+        "JVMOffHeapMemory" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0,
+        "MappedPoolMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OffHeapStorageMemory" : 0,
+        "OffHeapUnifiedMemory" : 0,
+        "OnHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "TotalGCTime" : 0
+      },
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 0,
+      "shuffleWriteRecords" : 0,
+      "succeededTasks" : 0,
+      "taskTime" : 1589
+    },
+    "5" : {
+      "diskBytesSpilled" : 0,
+      "failedTasks" : 2,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true,
+      "killedTasks" : 0,
+      "memoryBytesSpilled" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "peakMemoryMetrics" : {
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
+        "DirectPoolMemory" : 0,
+        "JVMHeapMemory" : 0,
+        "JVMOffHeapMemory" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0,
+        "MappedPoolMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OffHeapStorageMemory" : 0,
+        "OffHeapUnifiedMemory" : 0,
+        "OnHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "TotalGCTime" : 0
+      },
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 0,
+      "shuffleWriteRecords" : 0,
+      "succeededTasks" : 0,
+      "taskTime" : 1579
+    }
+  },
+  "firstTaskLaunchedTime" : "2018-01-18T18:33:12.816GMT",
+  "inputBytes" : 0,
+  "inputRecords" : 0,
+  "isShufflePushEnabled" : false,
+  "jvmGcTime" : 370,
+  "killedTasksSummary" : { },
+  "memoryBytesSpilled" : 0,
+  "name" : "map at <console>:27",
+  "numActiveTasks" : 0,
+  "numCompleteTasks" : 10,
+  "numCompletedIndices" : 10,
+  "numFailedTasks" : 4,
+  "numKilledTasks" : 0,
+  "numTasks" : 10,
+  "outputBytes" : 0,
+  "outputRecords" : 0,
+  "peakExecutionMemory" : 0,
+  "peakExecutorMetrics" : {
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
+    "DirectPoolMemory" : 0,
+    "JVMHeapMemory" : 0,
+    "JVMOffHeapMemory" : 0,
+    "MajorGCCount" : 0,
+    "MajorGCTime" : 0,
+    "MappedPoolMemory" : 0,
+    "MinorGCCount" : 0,
+    "MinorGCTime" : 0,
+    "OffHeapExecutionMemory" : 0,
+    "OffHeapStorageMemory" : 0,
+    "OffHeapUnifiedMemory" : 0,
+    "OnHeapExecutionMemory" : 0,
+    "OnHeapStorageMemory" : 0,
+    "OnHeapUnifiedMemory" : 0,
+    "ProcessTreeJVMRSSMemory" : 0,
+    "ProcessTreeJVMVMemory" : 0,
+    "ProcessTreeOtherRSSMemory" : 0,
+    "ProcessTreeOtherVMemory" : 0,
+    "ProcessTreePythonRSSMemory" : 0,
+    "ProcessTreePythonVMemory" : 0,
+    "TotalGCTime" : 0
+  },
+  "rddIds" : [ 1, 0 ],
+  "resourceProfileId" : 0,
+  "resultSerializationTime" : 5,
+  "resultSize" : 10824,
+  "schedulingPool" : "default",
+  "shuffleCorruptMergedBlockChunks" : 0,
+  "shuffleFetchWaitTime" : 0,
+  "shuffleLocalBlocksFetched" : 0,
+  "shuffleLocalBytesRead" : 0,
+  "shuffleMergedFetchFallbackCount" : 0,
+  "shuffleMergedLocalBlocksFetched" : 0,
+  "shuffleMergedLocalBytesRead" : 0,
+  "shuffleMergedLocalChunksFetched" : 0,
+  "shuffleMergedRemoteBlocksFetched" : 0,
+  "shuffleMergedRemoteBytesRead" : 0,
+  "shuffleMergedRemoteChunksFetched" : 0,
+  "shuffleMergedRemoteReqsDuration" : 0,
+  "shuffleMergersCount" : 0,
+  "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
+  "shuffleRemoteBlocksFetched" : 0,
+  "shuffleRemoteBytesRead" : 0,
+  "shuffleRemoteBytesReadToDisk" : 0,
+  "shuffleRemoteReqsDuration" : 0,
+  "shuffleWriteBytes" : 1461,
+  "shuffleWriteRecords" : 30,
+  "shuffleWriteTime" : 33251697,
+  "stageId" : 0,
+  "status" : "COMPLETE",
+  "submissionTime" : "2018-01-18T18:33:12.658GMT",
+  "tasks" : {
+    "0" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 2064,
+      "executorId" : "1",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 0,
+      "launchTime" : "2018-01-18T18:33:12.816GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 68,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 0,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 368865439,
+        "executorDeserializeCpuTime" : 353981050,
+        "executorDeserializeTime" : 1081,
+        "executorRunTime" : 914,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 75,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 1,
+        "resultSize" : 1134,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 144,
+          "recordsWritten" : 3,
+          "writeTime" : 3662221
+        }
+      }
+    },
+    "1" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 1506,
+      "errorMessage" : "java.lang.RuntimeException: Bad executor\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:28)\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:27)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.collection.ExternalSorter.insertAll(ExternalSorter.scala:193)\n\tat org.apache.spark.shuffle.sort.SortShuffleWriter.write(SortShuffleWriter.scala:63)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:96)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:53)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:109)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:345)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:748)\n",
+      "executorId" : "5",
+      "executorLogs" : {
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-2.gce.test.com",
+      "index" : 1,
+      "launchTime" : "2018-01-18T18:33:12.832GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 174,
+      "speculative" : false,
+      "status" : "FAILED",
+      "taskId" : 1,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 0,
+        "executorDeserializeCpuTime" : 0,
+        "executorDeserializeTime" : 0,
+        "executorRunTime" : 1332,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 33,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 0,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0,
+          "writeTime" : 3075188
+        }
+      }
+    },
+    "10" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 1,
+      "duration" : 132,
+      "executorId" : "2",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 1,
+      "launchTime" : "2018-01-18T18:33:15.069GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 50,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 10,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 20826337,
+        "executorDeserializeCpuTime" : 4598966,
+        "executorDeserializeTime" : 5,
+        "executorRunTime" : 76,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 1,
+        "resultSize" : 1091,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 144,
+          "recordsWritten" : 3,
+          "writeTime" : 301705
+        }
+      }
+    },
+    "11" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 93,
+      "executorId" : "1",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 7,
+      "launchTime" : "2018-01-18T18:33:15.072GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 12,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 11,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 21689428,
+        "executorDeserializeCpuTime" : 4239884,
+        "executorDeserializeTime" : 4,
+        "executorRunTime" : 77,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 1048,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 323898
+        }
+      }
+    },
+    "12" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 60,
+      "executorId" : "1",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 8,
+      "launchTime" : "2018-01-18T18:33:15.165GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 22,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 12,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 21657558,
+        "executorDeserializeCpuTime" : 4010338,
+        "executorDeserializeTime" : 4,
+        "executorRunTime" : 34,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 1048,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 319101
+        }
+      }
+    },
+    "13" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 76,
+      "executorId" : "2",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 9,
+      "launchTime" : "2018-01-18T18:33:15.200GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 26,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 13,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 20585619,
+        "executorDeserializeCpuTime" : 5860574,
+        "executorDeserializeTime" : 25,
+        "executorRunTime" : 25,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 1048,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 369513
+        }
+      }
+    },
+    "2" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 1774,
+      "executorId" : "3",
+      "executorLogs" : {
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000004/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-2.gce.test.com",
+      "index" : 2,
+      "launchTime" : "2018-01-18T18:33:12.832GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 74,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 2,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 278399617,
+        "executorDeserializeCpuTime" : 263386625,
+        "executorDeserializeTime" : 1206,
+        "executorRunTime" : 493,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 78,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 1,
+        "resultSize" : 1134,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 144,
+          "recordsWritten" : 3,
+          "writeTime" : 3322956
+        }
+      }
+    },
+    "3" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 2027,
+      "executorId" : "2",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 3,
+      "launchTime" : "2018-01-18T18:33:12.833GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 63,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 3,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 349920830,
+        "executorDeserializeCpuTime" : 365807898,
+        "executorDeserializeTime" : 1282,
+        "executorRunTime" : 681,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 102,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 1,
+        "resultSize" : 1134,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 3587839
+        }
+      }
+    },
+    "4" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 1522,
+      "errorMessage" : "java.lang.RuntimeException: Bad executor\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:28)\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:27)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.collection.ExternalSorter.insertAll(ExternalSorter.scala:193)\n\tat org.apache.spark.shuffle.sort.SortShuffleWriter.write(SortShuffleWriter.scala:63)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:96)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:53)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:109)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:345)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:748)\n",
+      "executorId" : "4",
+      "executorLogs" : {
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-2.gce.test.com",
+      "index" : 4,
+      "launchTime" : "2018-01-18T18:33:12.833GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 338,
+      "speculative" : false,
+      "status" : "FAILED",
+      "taskId" : 4,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 0,
+        "executorDeserializeCpuTime" : 0,
+        "executorDeserializeTime" : 0,
+        "executorRunTime" : 1184,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 82,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 0,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0,
+          "writeTime" : 16858066
+        }
+      }
+    },
+    "5" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 73,
+      "errorMessage" : "java.lang.RuntimeException: Bad executor\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:28)\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:27)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.collection.ExternalSorter.insertAll(ExternalSorter.scala:193)\n\tat org.apache.spark.shuffle.sort.SortShuffleWriter.write(SortShuffleWriter.scala:63)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:96)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:53)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:109)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:345)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:748)\n",
+      "executorId" : "5",
+      "executorLogs" : {
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000007/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-2.gce.test.com",
+      "index" : 5,
+      "launchTime" : "2018-01-18T18:33:14.320GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 46,
+      "speculative" : false,
+      "status" : "FAILED",
+      "taskId" : 5,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 0,
+        "executorDeserializeCpuTime" : 0,
+        "executorDeserializeTime" : 0,
+        "executorRunTime" : 27,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 0,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0,
+          "writeTime" : 191901
+        }
+      }
+    },
+    "6" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 0,
+      "duration" : 67,
+      "errorMessage" : "java.lang.RuntimeException: Bad executor\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:28)\n\tat $line15.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$anonfun$2.apply(<console>:27)\n\tat scala.collection.Iterator$$anon$11.next(Iterator.scala:409)\n\tat org.apache.spark.util.collection.ExternalSorter.insertAll(ExternalSorter.scala:193)\n\tat org.apache.spark.shuffle.sort.SortShuffleWriter.write(SortShuffleWriter.scala:63)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:96)\n\tat org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:53)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:109)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:345)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:748)\n",
+      "executorId" : "4",
+      "executorLogs" : {
+        "stderr" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-2.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000005/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-2.gce.test.com",
+      "index" : 6,
+      "launchTime" : "2018-01-18T18:33:14.323GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 16,
+      "speculative" : false,
+      "status" : "FAILED",
+      "taskId" : 6,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 0,
+        "executorDeserializeCpuTime" : 0,
+        "executorDeserializeTime" : 0,
+        "executorRunTime" : 51,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 0,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0,
+          "writeTime" : 183718
+        }
+      }
+    },
+    "7" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 1,
+      "duration" : 115,
+      "executorId" : "2",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 5,
+      "launchTime" : "2018-01-18T18:33:14.859GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 20,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 7,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 28283110,
+        "executorDeserializeCpuTime" : 10894331,
+        "executorDeserializeTime" : 11,
+        "executorRunTime" : 84,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 1048,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 377601
+        }
+      }
+    },
+    "8" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 1,
+      "duration" : 194,
+      "executorId" : "1",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000002/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 6,
+      "launchTime" : "2018-01-18T18:33:14.879GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 84,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 8,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 27304550,
+        "executorDeserializeCpuTime" : 12246145,
+        "executorDeserializeTime" : 56,
+        "executorRunTime" : 54,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 0,
+        "resultSize" : 1048,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 311940
+        }
+      }
+    },
+    "9" : {
+      "accumulatorUpdates" : [ ],
+      "attempt" : 1,
+      "duration" : 96,
+      "executorId" : "2",
+      "executorLogs" : {
+        "stderr" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stderr?start=-4096",
+        "stdout" : "http://apiros-3.gce.test.com:8042/node/containerlogs/container_1516285256255_0012_01_000003/attilapiros/stdout?start=-4096"
+      },
+      "gettingResultTime" : 0,
+      "host" : "apiros-3.gce.test.com",
+      "index" : 4,
+      "launchTime" : "2018-01-18T18:33:14.973GMT",
+      "partitionId" : -1,
+      "schedulerDelay" : 42,
+      "speculative" : false,
+      "status" : "SUCCESS",
+      "taskId" : 9,
+      "taskLocality" : "PROCESS_LOCAL",
+      "taskMetrics" : {
+        "diskBytesSpilled" : 0,
+        "executorCpuTime" : 25678331,
+        "executorDeserializeCpuTime" : 4793905,
+        "executorDeserializeTime" : 5,
+        "executorRunTime" : 48,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "jvmGcTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "peakExecutionMemory" : 0,
+        "resultSerializationTime" : 1,
+        "resultSize" : 1091,
+        "shuffleReadMetrics" : {
+          "fetchWaitTime" : 0,
+          "localBlocksFetched" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0,
+          "remoteBlocksFetched" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "remoteReqsDuration" : 0,
+          "shufflePushReadMetrics" : {
+            "corruptMergedBlockChunks" : 0,
+            "localMergedBlocksFetched" : 0,
+            "localMergedBytesRead" : 0,
+            "localMergedChunksFetched" : 0,
+            "mergedFetchFallbackCount" : 0,
+            "remoteMergedBlocksFetched" : 0,
+            "remoteMergedBytesRead" : 0,
+            "remoteMergedChunksFetched" : 0,
+            "remoteMergedReqsDuration" : 0
+          }
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 147,
+          "recordsWritten" : 3,
+          "writeTime" : 366050
+        }
+      }
+    }
+  }
+}

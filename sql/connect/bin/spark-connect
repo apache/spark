@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Start the spark-connect with server logs printed in the standard output. The script rebuild the
+# server dependencies and start the server at the default port. This can be used to debug client
+# during client development.
+#
+# Set SCBUILD=0 to skip rebuilding the spark-connect server.
+
+# Go to the Spark project root directory
+FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
+cd "$FWDIR"
+export SPARK_HOME=$FWDIR
+
+# Determine the Scala version used in Spark
+SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
+
+SCBUILD="${SCBUILD:-1}"
+if [ "$SCBUILD" -eq "1" ]; then
+  # Build the jars needed for spark submit and spark connect
+  build/sbt "${SCALA_ARG}" -Phive package || exit 1
+fi
+
+# This jar is already in the classpath, but the submit commands wants a jar as the input.
+CONNECT_JAR=`ls "${SPARK_HOME}"/assembly/target/scala-"${SCALA_BINARY_VER}"/jars/spark-connect_*.jar | paste -sd ',' -`
+
+exec "${SPARK_HOME}"/bin/spark-submit "$@" --class org.apache.spark.sql.connect.SimpleSparkConnectService "$CONNECT_JAR"
