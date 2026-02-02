@@ -5064,7 +5064,7 @@ def st_geomfromwkb(
     else:
         srid = _enum_to_value(srid)
         srid = lit(srid) if isinstance(srid, int) else srid
-        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)  # type: ignore[arg-type]
 
 
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__

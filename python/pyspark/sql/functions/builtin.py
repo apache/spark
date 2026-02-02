@@ -26262,11 +26262,9 @@ def st_geomfromwkb(
     if srid is None:
         return _invoke_function_over_columns("st_geomfromwkb", wkb)
     else:
-        from pyspark.sql.functions import lit
-
         srid = _enum_to_value(srid)
         srid = lit(srid) if isinstance(srid, int) else srid
-        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
