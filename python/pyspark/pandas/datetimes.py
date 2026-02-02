@@ -517,7 +517,7 @@ class DatetimeMethods:
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="Y"))
+        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="YE"))
         >>> dates_series
         0   2012-12-31
         1   2013-12-31
