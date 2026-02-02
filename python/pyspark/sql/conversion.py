@@ -124,65 +124,82 @@ class ArrowBatchTransformer:
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
     @classmethod
-    def coerce_types(
-        cls, batch: "pa.RecordBatch", arrow_return_type: "pa.StructType"
+    def enforce_schema(
+        cls,
+        batch: "pa.RecordBatch",
+        return_type: "StructType",
+        timezone: str = "UTC",
+        prefer_large_var_types: bool = False,
+        safecheck: bool = True,
     ) -> "pa.RecordBatch":
         """
-        Apply type coercion to a RecordBatch based on expected schema.
+        Enforce target schema on a RecordBatch by reordering columns and coercing types.
 
         This method:
-        1. Handles empty batches (no columns or empty struct) - returns as-is
-        2. Validates field names match expected schema
-        3. Casts arrays to expected types if needed (safe casting)
+        1. Reorders columns to match the target schema field order by name
+        2. Casts column types to match target schema types
 
         Parameters
         ----------
         batch : pa.RecordBatch
-            Input RecordBatch to coerce
-        arrow_return_type : pa.StructType
-            Expected Arrow schema for type coercion
+            Input RecordBatch to transform
+        return_type : pyspark.sql.types.StructType
+            Target Spark schema to enforce.
+        timezone : str, default "UTC"
+            Timezone for timestamp type conversion.
+        prefer_large_var_types : bool, default False
+            If True, use large variable types (large_string, large_binary) in Arrow.
+        safecheck : bool, default True
+            If True, use safe casting (fails on overflow/truncation).
 
         Returns
         -------
         pa.RecordBatch
-            RecordBatch with coerced column types
+            RecordBatch with columns reordered and types coerced to match target schema
+
+        Used by
+        -------
+        - wrap_grouped_map_arrow_udf
+        - wrap_grouped_map_arrow_iter_udf
+        - wrap_cogrouped_map_arrow_udf
+        - SQL_ARROW_UDTF mapper
         """
         import pyarrow as pa
+        from pyspark.sql.pandas.types import to_arrow_schema
 
         # Handle empty batch case (no columns) or empty struct case
-        if batch.num_columns == 0 or len(arrow_return_type) == 0:
+        if batch.num_columns == 0:
             return batch
 
-        # Check field names match
-        expected_field_names = [field.name for field in arrow_return_type]
-        actual_field_names = batch.schema.names
+        if len(return_type) == 0:
+            return batch
 
-        if expected_field_names != actual_field_names:
-            raise PySparkTypeError(
-                "Target schema's field names are not matching the record batch's "
-                "field names. "
-                f"Expected: {expected_field_names}, but got: {actual_field_names}."
-            )
+        # Convert Spark StructType to PyArrow schema
+        arrow_schema = to_arrow_schema(
+            return_type, timezone=timezone, prefers_large_types=prefer_large_var_types
+        )
 
-        # Apply type coercion if needed
+        target_field_names = [field.name for field in arrow_schema]
+
+        # Reorder columns by name and coerce types
         coerced_arrays = []
-        for i, field in enumerate(arrow_return_type):
-            original_array = batch.column(i)
-            if original_array.type == field.type:
-                coerced_arrays.append(original_array)
+        for field in arrow_schema:
+            arr = batch.column(field.name)
+            if arr.type == field.type:
+                coerced_arrays.append(arr)
             else:
                 try:
-                    coerced_arrays.append(original_array.cast(target_type=field.type, safe=True))
+                    coerced_arrays.append(arr.cast(target_type=field.type, safe=safecheck))
                 except (pa.ArrowInvalid, pa.ArrowTypeError):
                     raise PySparkRuntimeError(
                         errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
                         messageParameters={
                             "expected": str(field.type),
-                            "actual": str(original_array.type),
+                            "actual": str(arr.type),
                         },
                     )
 
-        return pa.RecordBatch.from_arrays(coerced_arrays, names=expected_field_names)
+        return pa.RecordBatch.from_arrays(coerced_arrays, names=target_field_names)
 
     @classmethod
     def concat_batches(cls, batches: List["pa.RecordBatch"]) -> "pa.RecordBatch":
@@ -350,69 +367,6 @@ class ArrowBatchTransformer:
 
         # Create RecordBatch from columns
         return pa.RecordBatch.from_arrays(all_columns, ["_%d" % i for i in range(len(all_columns))])
-
-    @classmethod
-    def reorder_columns(
-        cls, batch: "pa.RecordBatch", target_schema: Union["pa.StructType", "StructType"]
-    ) -> "pa.RecordBatch":
-        """
-        Reorder columns in a RecordBatch to match target schema field order.
-
-        This method is useful when columns need to be arranged in a specific order
-        for schema compatibility, particularly when assign_cols_by_name is enabled.
-
-        Parameters
-        ----------
-        batch : pa.RecordBatch
-            Input RecordBatch with columns to reorder
-        target_schema : pa.StructType or pyspark.sql.types.StructType
-            Target schema defining the desired column order.
-            Can be either PyArrow StructType or Spark StructType.
-
-        Returns
-        -------
-        pa.RecordBatch
-            New RecordBatch with columns reordered to match target schema
-
-        Used by
-        -------
-        - wrap_grouped_map_arrow_udf
-        - wrap_grouped_map_arrow_iter_udf
-        - wrap_cogrouped_map_arrow_udf
-
-        Examples
-        --------
-        >>> import pyarrow as pa
-        >>> from pyspark.sql.types import StructType, StructField, IntegerType
-        >>> batch = pa.RecordBatch.from_arrays([pa.array([1, 2]), pa.array([3, 4])], ['b', 'a'])
-        >>> # Using PyArrow schema
-        >>> target_pa = pa.struct([pa.field('a', pa.int64()), pa.field('b', pa.int64())])
-        >>> result = ArrowBatchTransformer.reorder_columns(batch, target_pa)
-        >>> result.schema.names
-        ['a', 'b']
-        >>> # Using Spark schema
-        >>> target_spark = StructType([StructField('a', IntegerType()), StructField('b', IntegerType())])
-        >>> result = ArrowBatchTransformer.reorder_columns(batch, target_spark)
-        >>> result.schema.names
-        ['a', 'b']
-        """
-        import pyarrow as pa
-
-        # Convert Spark StructType to PyArrow StructType if needed
-        if hasattr(target_schema, "fields") and hasattr(target_schema.fields[0], "dataType"):
-            # This is Spark StructType - convert to PyArrow
-            from pyspark.sql.pandas.types import to_arrow_schema
-
-            arrow_schema = to_arrow_schema(target_schema)
-            field_names = [field.name for field in arrow_schema]
-        else:
-            # This is PyArrow StructType
-            field_names = [field.name for field in target_schema]
-
-        return pa.RecordBatch.from_arrays(
-            [batch.column(name) for name in field_names],
-            names=field_names,
-        )
 
     @classmethod
     def to_pandas(

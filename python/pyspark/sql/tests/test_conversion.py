@@ -308,6 +308,104 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(rewrapped.num_columns, 1)
         self.assertEqual(rewrapped.column(0).to_pylist(), original.column(0).to_pylist())
 
+    def test_enforce_schema_reorder(self):
+        """Test reordering columns to match target schema."""
+        import pyarrow as pa
+        from pyspark.sql.types import LongType
+
+        # Batch with columns in different order than target
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2]), pa.array(["a", "b"])],
+            names=["b", "a"],
+        )
+        target = StructType(
+            [
+                StructField("a", StringType()),
+                StructField("b", LongType()),
+            ]
+        )
+
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+
+        self.assertEqual(result.schema.names, ["a", "b"])
+        self.assertEqual(result.column(0).to_pylist(), ["a", "b"])
+        self.assertEqual(result.column(1).to_pylist(), [1, 2])
+
+    def test_enforce_schema_coerce_types(self):
+        """Test coercing column types to match target schema."""
+        import pyarrow as pa
+        from pyspark.sql.types import LongType
+
+        # Batch with int32 that should be coerced to int64 (LongType)
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2], type=pa.int32())],
+            names=["x"],
+        )
+        target = StructType([StructField("x", LongType())])
+
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+
+        self.assertEqual(result.column(0).type, pa.int64())
+        self.assertEqual(result.column(0).to_pylist(), [1, 2])
+
+    def test_enforce_schema_reorder_and_coerce(self):
+        """Test both reordering and type coercion together."""
+        import pyarrow as pa
+        from pyspark.sql.types import LongType
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2], type=pa.int32()), pa.array(["x", "y"])],
+            names=["b", "a"],
+        )
+        target = StructType(
+            [
+                StructField("a", StringType()),
+                StructField("b", LongType()),
+            ]
+        )
+
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+
+        self.assertEqual(result.schema.names, ["a", "b"])
+        self.assertEqual(result.column(0).to_pylist(), ["x", "y"])
+        self.assertEqual(result.column(1).type, pa.int64())
+        self.assertEqual(result.column(1).to_pylist(), [1, 2])
+
+    def test_enforce_schema_empty_batch(self):
+        """Test that empty batch is returned as-is."""
+        import pyarrow as pa
+        from pyspark.sql.types import LongType
+
+        batch = pa.RecordBatch.from_arrays([], names=[])
+        target = StructType([StructField("x", LongType())])
+
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+
+        self.assertEqual(result.num_columns, 0)
+
+    def test_enforce_schema_with_large_var_types(self):
+        """Test using prefer_large_var_types option."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2]), pa.array(["a", "b"])],
+            names=["b", "a"],
+        )
+        target = StructType(
+            [
+                StructField("a", StringType()),
+                StructField("b", IntegerType()),
+            ]
+        )
+
+        result = ArrowBatchTransformer.enforce_schema(batch, target, prefer_large_var_types=True)
+
+        self.assertEqual(result.schema.names, ["a", "b"])
+        # With prefer_large_var_types=True, string should be large_string
+        self.assertEqual(result.column(0).type, pa.large_string())
+        self.assertEqual(result.column(0).to_pylist(), ["a", "b"])
+        self.assertEqual(result.column(1).to_pylist(), [1, 2])
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class PandasBatchTransformerTests(unittest.TestCase):

@@ -623,10 +623,12 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
         verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
 
-        # Reorder columns by name if needed, then wrap each batch into struct
         for batch in result.to_batches():
-            if runner_conf.assign_cols_by_name:
-                batch = ArrowBatchTransformer.reorder_columns(batch, return_type)
+            batch = ArrowBatchTransformer.enforce_schema(
+                batch,
+                return_type,
+                prefer_large_var_types=runner_conf.use_large_var_types,
+            )
             yield ArrowBatchTransformer.wrap_struct(batch)
 
     return lambda kl, vl, kr, vr: wrapped(kl, vl, kr, vr)
@@ -783,10 +785,13 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
         verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
 
-        # Reorder columns by name if needed, then wrap each batch into struct
+        # Enforce schema (reorder + coerce) and wrap each batch into struct
         for batch in result.to_batches():
-            if runner_conf.assign_cols_by_name:
-                batch = ArrowBatchTransformer.reorder_columns(batch, return_type)
+            batch = ArrowBatchTransformer.enforce_schema(
+                batch,
+                return_type,
+                prefer_large_var_types=runner_conf.use_large_var_types,
+            )
             yield ArrowBatchTransformer.wrap_struct(batch)
 
     return lambda k, v: wrapped(k, v)
@@ -811,8 +816,11 @@ def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
 
         for batch in result:
             verify_arrow_batch(batch, runner_conf.assign_cols_by_name, expected_cols_and_types)
-            if runner_conf.assign_cols_by_name:
-                batch = ArrowBatchTransformer.reorder_columns(batch, return_type)
+            batch = ArrowBatchTransformer.enforce_schema(
+                batch,
+                return_type,
+                prefer_large_var_types=runner_conf.use_large_var_types,
+            )
             yield ArrowBatchTransformer.wrap_struct(batch)
 
     return lambda k, v: wrapped(k, v)
@@ -2545,14 +2553,18 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 except Exception as e:
                     raise_conversion_error(e)
 
-                # Coerce types for each batch
+                # Enforce schema (reorder + coerce) for each batch
                 table = verify_result(table)
                 batches = table.to_batches()
                 if len(batches) == 0:
                     # Empty table - create empty batch for lateral join semantics
                     batches = [pa.RecordBatch.from_pylist([], schema=table.schema)]
                 for batch in batches:
-                    yield ArrowBatchTransformer.coerce_types(batch, arrow_return_type)
+                    yield ArrowBatchTransformer.enforce_schema(
+                        batch,
+                        return_type,
+                        prefer_large_var_types=runner_conf.use_large_var_types,
+                    )
 
             def evaluate(*args: list, num_rows=1):
                 if len(args) == 0:
@@ -2678,7 +2690,11 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                             messageParameters={},
                         )
                     yield from (
-                        ArrowBatchTransformer.coerce_types(verify_result(batch), arrow_return_type)
+                        ArrowBatchTransformer.enforce_schema(
+                            verify_result(batch),
+                            return_type,
+                            prefer_large_var_types=runner_conf.use_large_var_types,
+                        )
                         for batch in batches
                     )
 
