@@ -700,7 +700,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.round("H")
+        >>> series.dt.round("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
@@ -755,7 +755,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.floor("H")
+        >>> series.dt.floor("h")
         0   2018-01-01 11:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
@@ -810,7 +810,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.ceil("H")
+        >>> series.dt.ceil("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 13:00:00
