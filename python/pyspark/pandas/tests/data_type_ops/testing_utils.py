@@ -219,3 +219,15 @@ class OpsTestBase:
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
         self.assert_eq(left, right)
+
+    def assert_eq(self, left, right, **kwargs):
+        """
+        SPARK-55321:
+        Ignore null values when comparing numeric values.
+        """
+        try:
+            if left.isnull().to_numpy().any() or right.isnull().to_numpy().any():
+                kwargs["ignore_null"] = True
+        except AttributeError:
+            pass
+        return super().assert_eq(left, right, **kwargs)
