@@ -48,8 +48,7 @@ class CoGroupedArrowPythonRunner(
     pythonRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
@@ -121,7 +120,7 @@ class CoGroupedArrowPythonRunner(
       private var rightGroupArrowWriter: ArrowWriterWrapper = null
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
       /**

@@ -1697,6 +1697,9 @@ class SparkConnectPlanner(
         if (streamSource.getSchema.nonEmpty) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
+        if (streamSource.hasSourceName) {
+          reader.name(streamSource.getSourceName)
+        }
         val streamDF = streamSource.getPathsCount match {
           case 0 => reader.load()
           case 1 => reader.load(streamSource.getPaths(0))
@@ -3433,6 +3436,8 @@ class SparkConnectPlanner(
         writer.trigger(Trigger.Once())
       case TriggerCase.CONTINUOUS_CHECKPOINT_INTERVAL =>
         writer.trigger(Trigger.Continuous(writeOp.getContinuousCheckpointInterval))
+      case TriggerCase.REAL_TIME_BATCH_DURATION =>
+        writer.trigger(Trigger.RealTime(writeOp.getRealTimeBatchDuration))
       case TriggerCase.TRIGGER_NOT_SET =>
     }
 

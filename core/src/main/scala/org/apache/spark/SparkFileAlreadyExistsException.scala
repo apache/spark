@@ -26,7 +26,8 @@ import org.apache.hadoop.fs.FileAlreadyExistsException
  */
 private[spark] class SparkFileAlreadyExistsException(
     errorClass: String,
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String] = None)
   extends FileAlreadyExistsException(
     SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
@@ -34,4 +35,6 @@ private[spark] class SparkFileAlreadyExistsException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getCondition: String = errorClass
+
+  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 }

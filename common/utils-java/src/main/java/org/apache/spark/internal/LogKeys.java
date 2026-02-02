@@ -316,6 +316,7 @@ public enum LogKeys implements LogKey {
   JAVA_VERSION,
   JAVA_VM_NAME,
   JOB_ID,
+  JOB_IDS,
   JOIN_CONDITION,
   JOIN_CONDITION_SUB_EXPR,
   JOIN_TYPE,

@@ -34,7 +34,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
   test("Table Ownership") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing")
-      checkHiveClientCalls(expected = 6) {
+      checkHiveClientCalls(expected = 2) {
         checkAnswer(
           sql(s"DESCRIBE TABLE EXTENDED $t")
             .where("col_name='Owner'")

@@ -100,38 +100,64 @@ private[sql] object ArrowUtils {
     case _ => throw ExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
+  private val metadataKey = "SPARK::metadata::json"
+  private def toArrowMetaData(metadata: Metadata) = {
+    if (metadata != null && !metadata.isEmpty) {
+      Map(metadataKey -> metadata.json).asJava
+    } else {
+      null // Arrow metadata defaults to NULL
+    }
+  }
+  private def fromArrowMetaData(map: java.util.Map[String, String]) = {
+    if (map != null && map.containsKey(metadataKey)) {
+      Metadata.fromJson(map.get(metadataKey))
+    } else {
+      Metadata.empty // Spark metadata defaults to Metadata.empty
+    }
+  }
+
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
   def toArrowField(
       name: String,
       dt: DataType,
       nullable: Boolean,
       timeZoneId: String,
-      largeVarTypes: Boolean = false): Field = {
+      largeVarTypes: Boolean = false,
+      metadata: Metadata = Metadata.empty): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
-        val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
+        val fieldType =
+          new FieldType(nullable, ArrowType.List.INSTANCE, null, toArrowMetaData(metadata))
         new Field(
           name,
           fieldType,
           Seq(
             toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
       case StructType(fields) =>
-        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+        val fieldType =
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
         new Field(
           name,
           fieldType,
           fields
             .map { field =>
-              toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
+              toArrowField(
+                field.name,
+                field.dataType,
+                field.nullable,
+                timeZoneId,
+                largeVarTypes,
+                field.metadata)
             }
             .toImmutableArraySeq
             .asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
-        val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
+        val fieldType =
+          new FieldType(nullable, new ArrowType.Map(false), null, toArrowMetaData(metadata))
         // Note: Map Type struct can not be null, Struct Type key field can not be null
         new Field(
           name,
-          mapType,
+          fieldType,
           Seq(
             toArrowField(
               MapVector.DATA_VECTOR_NAME,
@@ -142,10 +168,10 @@ private[sql] object ArrowUtils {
               timeZoneId,
               largeVarTypes)).asJava)
       case udt: UserDefinedType[_] =>
-        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
+        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, metadata)
       case g: GeometryType =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geometry schema.
@@ -164,7 +190,7 @@ private[sql] object ArrowUtils {
 
       case g: GeographyType =>
         val fieldType =
-          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, null)
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geography schema.
@@ -181,7 +207,8 @@ private[sql] object ArrowUtils {
             toArrowField("srid", IntegerType, false, timeZoneId, largeVarTypes),
             new Field("wkb", wkbFieldType, Seq.empty[Field].asJava)).asJava)
       case _: VariantType =>
-        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+        val fieldType =
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
         // The metadata field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a variant schema.
         val metadataFieldType = new FieldType(
@@ -196,8 +223,11 @@ private[sql] object ArrowUtils {
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
       case dataType =>
-        val fieldType =
-          new FieldType(nullable, toArrowType(dataType, timeZoneId, largeVarTypes), null)
+        val fieldType = new FieldType(
+          nullable,
+          toArrowType(dataType, timeZoneId, largeVarTypes),
+          null,
+          toArrowMetaData(metadata))
         new Field(name, fieldType, Seq.empty[Field].asJava)
     }
   }
@@ -268,7 +298,7 @@ private[sql] object ArrowUtils {
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)
-          StructField(child.getName, dt, child.isNullable)
+          StructField(child.getName, dt, child.isNullable, fromArrowMetaData(child.getMetadata))
         }
         StructType(fields.toArray)
       case arrowType => fromArrowType(arrowType)
@@ -289,14 +319,18 @@ private[sql] object ArrowUtils {
         deduplicateFieldNames(field.dataType, errorOnDuplicatedFieldNames),
         field.nullable,
         timeZoneId,
-        largeVarTypes)
+        largeVarTypes,
+        field.metadata)
     }.asJava)
   }
 
   def fromArrowSchema(schema: Schema): StructType = {
     StructType(schema.getFields.asScala.map { field =>
-      val dt = fromArrowField(field)
-      StructField(field.getName, dt, field.isNullable)
+      StructField(
+        field.getName,
+        fromArrowField(field),
+        field.isNullable,
+        fromArrowMetaData(field.getMetadata))
     }.toArray)
   }
 

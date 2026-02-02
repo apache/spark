@@ -25,7 +25,6 @@ import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone worker.
@@ -38,8 +37,6 @@ class WorkerWebUI(
   extends WebUI(worker.securityMgr, worker.securityMgr.getSSLOptions("standalone"),
     requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
-
-  private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)
 
   initialize()
 

@@ -28,6 +28,11 @@
 # - ASF_PASSWORD:
 #     The password associated with your ASF account.
 #
+# - ASF_NEXUS_TOKEN:
+#     ASF Nexus API token associated with your ASF account.
+#     Can be found in https://repository.apache.org/#profile;User%20Token
+#     It is written in `<password>...</password>` and ignore `User Code`.
+#
 # - GPG_PRIVATE_KEY:
 #     Your GPG private key, exported using:
 #       gpg --armor --export-secret-keys ABCD1234 > private.key
@@ -114,6 +119,13 @@ jobs:
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
+      - name: Use master branch's base Dockerfile for release
+        # The release Docker image should always use master's base Dockerfile which is actively maintained.
+        # Old branch Dockerfiles may have broken dependencies (expired GPG keys, outdated base images, etc.)
+        run: |
+          git fetch origin master --depth=1
+          git checkout origin/master -- dev/create-release/spark-rm/Dockerfile.base
+          echo "Using master branch's Dockerfile.base for building release image"
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
@@ -128,6 +140,7 @@ jobs:
           GIT_NAME: "${{ github.actor }}"
           ASF_USERNAME: "${{ secrets.ASF_USERNAME }}"
           ASF_PASSWORD: "${{ secrets.ASF_PASSWORD }}"
+          ASF_NEXUS_TOKEN: "${{ secrets.ASF_NEXUS_TOKEN }}"
           GPG_PRIVATE_KEY: "${{ secrets.GPG_PRIVATE_KEY }}"
           GPG_PASSPHRASE: "${{ secrets.GPG_PASSPHRASE }}"
           PYPI_API_TOKEN: "${{ secrets.PYPI_API_TOKEN }}"
@@ -163,6 +176,7 @@ jobs:
             GPG_PRIVATE_KEY="not_used"
             GPG_PASSPHRASE="not_used"
             ASF_USERNAME="gurwls223"
+            ASF_NEXUS_TOKEN="not_used"
             export SKIP_TAG=1
             unset RELEASE_VERSION
           else
@@ -170,7 +184,7 @@ jobs:
             export DRYRUN_MODE=0
           fi
 
-          export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME
+          export ASF_PASSWORD GPG_PRIVATE_KEY GPG_PASSPHRASE ASF_USERNAME ASF_NEXUS_TOKEN
           export GIT_BRANCH="${GIT_BRANCH:-master}"
           [ -n "$RELEASE_VERSION" ] && export RELEASE_VERSION
 
@@ -239,7 +253,7 @@ jobs:
           # Redact sensitive information in log files
           shopt -s globstar nullglob
           FILES=("$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log)
-          PATTERNS=("$ASF_USERNAME" "$ASF_PASSWORD" "$GPG_PRIVATE_KEY" "$GPG_PASSPHRASE" "$PYPI_API_TOKEN")
+          PATTERNS=("$ASF_USERNAME" "$ASF_PASSWORD" "$GPG_PRIVATE_KEY" "$GPG_PASSPHRASE" "$PYPI_API_TOKEN" "$ASF_NEXUS_TOKEN")
           for file in "${FILES[@]}"; do
             [ -f "$file" ] || continue
             cp "$file" "$file.bak"

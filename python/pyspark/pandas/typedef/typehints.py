@@ -28,8 +28,10 @@ from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hi
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
+
+from pyspark.loose_version import LooseVersion
 
 
 extension_dtypes: Tuple[type, ...]
@@ -148,8 +150,6 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    from pyspark.loose_version import LooseVersion
-
     # For NumPy typing, NumPy version should be 1.21+
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
@@ -204,11 +204,15 @@ def as_spark_type(
     elif tpe in (str, np.str_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
-    elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):
+    elif tpe in (datetime.datetime, np.datetime64, "M", pd.Timestamp) or (
+        isinstance(tpe, np.dtype) and tpe.type is np.datetime64
+    ):
         return types.TimestampNTZType() if prefer_timestamp_ntz else types.TimestampType()
 
     # DayTimeIntervalType
-    elif tpe in (datetime.timedelta, np.timedelta64, "timedelta64[ns]"):
+    elif tpe in (datetime.timedelta, np.timedelta64) or (
+        isinstance(tpe, np.dtype) and tpe.type is np.timedelta64
+    ):
         return types.DayTimeIntervalType()
 
     # categorical types
@@ -270,7 +274,10 @@ def spark_type_to_pandas_dtype(
                 return BooleanDtype()
             # StringType
             elif isinstance(spark_type, types.StringType):
-                return StringDtype()
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    return StringDtype()
+                else:
+                    return StringDtype(na_value=np.nan)
 
         # FractionalType
         if extension_float_dtypes_available:
@@ -330,10 +337,19 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
 
     Examples
     --------
+    >>> from pyspark.loose_version import LooseVersion
+    >>> using_pandas_3 = LooseVersion(pd.__version__) >= "3.0.0"
+
     >>> pandas_on_spark_type(int)
     (dtype('int64'), LongType())
-    >>> pandas_on_spark_type(str)
-    (dtype('<U'), StringType())
+    >>> t = pandas_on_spark_type(str)
+    >>> if using_pandas_3:
+    ...     t[0] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     t[0] == np.str_
+    True
+    >>> t[1]
+    StringType()
     >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType())
     >>> pandas_on_spark_type(datetime.datetime)
@@ -388,6 +404,9 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     The returned type class indicates both dtypes (a pandas only dtype object
     or a numpy dtype object) and its corresponding Spark DataType.
 
+    >>> from pyspark.loose_version import LooseVersion
+    >>> using_pandas_3 = LooseVersion(pd.__version__) >= "3.0.0"
+
     >>> def func() -> int:
     ...    pass
     >>> inferred = infer_return_type(func)
@@ -407,8 +426,13 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> def func() -> ps.DataFrame[float, str]:
     ...    pass
     >>> inferred = infer_return_type(func)
-    >>> inferred.dtypes
-    [dtype('float64'), dtype('<U')]
+    >>> inferred.dtypes[0]
+    dtype('float64')
+    >>> if using_pandas_3:
+    ...     inferred.dtypes[1] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     inferred.dtypes[1] == np.str_
+    True
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
@@ -439,8 +463,13 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> def func() -> 'ps.DataFrame[float, str]':
     ...    pass
     >>> inferred = infer_return_type(func)
-    >>> inferred.dtypes
-    [dtype('float64'), dtype('<U')]
+    >>> inferred.dtypes[0]
+    dtype('float64')
+    >>> if using_pandas_3:
+    ...     inferred.dtypes[1] == pd.StringDtype(na_value=np.nan)
+    ... else:
+    ...     inferred.dtypes[1] == np.str_
+    True
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 

@@ -127,12 +127,30 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_toJSON(self):
+        sdf = self.spark.range(10).withColumn("s", SF.col("id").cast("string"))
+        cdf = self.connect.range(10).withColumn("s", CF.col("id").cast("string"))
+
+        str1 = sdf.toJSON().collect()
+        str2 = [row.value for row in cdf.toJSON().collect()]
+        self.assertEqual(str1, str2)
+
     def test_serialization(self):
         from pyspark.cloudpickle import dumps, loads
 
         cdf = self.connect.range(10)
         data = dumps(cdf)
         cdf2 = loads(data)
+        self.assertEqual(cdf.collect(), cdf2.collect())
+
+    def test_serialization_II(self):
+        from pyspark.serializers import CPickleSerializer
+
+        pickle_ser = CPickleSerializer()
+
+        cdf = self.connect.range(10)
+        data = pickle_ser.dumps(cdf)
+        cdf2 = pickle_ser.loads(data)
         self.assertEqual(cdf.collect(), cdf2.collect())
 
     def test_window_spec_serialization(self):
@@ -156,7 +174,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(type(sdf._simple_extension), type(cdf._simple_extension))
 
         self.assertTrue(hasattr(cdf, "_simple_extension"))
-        self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
+        with self.temp_env({"PYSPARK_VALIDATE_COLUMN_NAME_LEGACY": None}):
+            self.assertTrue(hasattr(cdf, "_simple_extension_does_not_exsit"))
+            self.assertIsInstance(getattr(cdf, "_simple_extension_does_not_exsit"), Column)
+            self.assertIsInstance(cdf._simple_extension_does_not_exsit, Column)
+
+            # For name starting with '__', still validate it eagerly
+            self.assertFalse(hasattr(cdf, "__simple_extension_does_not_exsit"))
+
+        with self.temp_env({"PYSPARK_VALIDATE_COLUMN_NAME_LEGACY": "1"}):
+            self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
+            self.assertFalse(hasattr(cdf, "__simple_extension_does_not_exsit"))
 
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__

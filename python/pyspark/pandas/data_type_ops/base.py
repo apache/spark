@@ -116,7 +116,7 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
     from pyspark.pandas.base import IndexOpsMixin
-    from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+    from pandas.api.types import is_list_like
 
     def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
         return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)

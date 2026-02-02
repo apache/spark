@@ -401,15 +401,25 @@ public class JavaUtils {
     byteSuffixes = Map.ofEntries(
       Map.entry("b", ByteUnit.BYTE),
       Map.entry("k", ByteUnit.KiB),
+      Map.entry("ki", ByteUnit.KiB),
       Map.entry("kb", ByteUnit.KiB),
+      Map.entry("kib", ByteUnit.KiB),
       Map.entry("m", ByteUnit.MiB),
+      Map.entry("mi", ByteUnit.MiB),
       Map.entry("mb", ByteUnit.MiB),
+      Map.entry("mib", ByteUnit.MiB),
       Map.entry("g", ByteUnit.GiB),
+      Map.entry("gi", ByteUnit.GiB),
       Map.entry("gb", ByteUnit.GiB),
+      Map.entry("gib", ByteUnit.GiB),
       Map.entry("t", ByteUnit.TiB),
+      Map.entry("ti", ByteUnit.TiB),
       Map.entry("tb", ByteUnit.TiB),
+      Map.entry("tib", ByteUnit.TiB),
       Map.entry("p", ByteUnit.PiB),
-      Map.entry("pb", ByteUnit.PiB));
+      Map.entry("pi", ByteUnit.PiB),
+      Map.entry("pb", ByteUnit.PiB),
+      Map.entry("pib", ByteUnit.PiB));
   }
 
   private static final Pattern TIME_STRING_PATTERN = Pattern.compile("(-?[0-9]+)([a-z]+)?");

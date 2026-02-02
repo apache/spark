@@ -17,8 +17,8 @@
 
 import unittest
 import logging
-from typing import cast
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -52,7 +52,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property
@@ -254,8 +254,9 @@ class CogroupedApplyInPandasTestsMixin:
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        rf"ValueError: Exception thrown when converting pandas.Series \({pandas_type_name}\) "
                         r"with name 'k' to Arrow Array \(double\)."
                     )
                     if safely:
