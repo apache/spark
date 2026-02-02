@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(key, summary);
        6.0
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleSketchSummaryDouble(left: Expression, right: Expression)
@@ -103,7 +103,7 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
       > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (1, 2), (2, 3) tab(key, summary);
        6
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleSketchSummaryInteger(left: Expression, right: Expression)
