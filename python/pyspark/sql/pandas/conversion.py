@@ -826,54 +826,49 @@ class SparkConversionMixin:
         from pandas.api.types import is_datetime64_dtype
         import pyarrow as pa
 
-        # Create the Spark schema from list of names passed in with Arrow types
-        if isinstance(schema, (list, tuple)):
+        # If schema is not a StructType, infer full schema from Arrow types
+        if not isinstance(schema, StructType):
+            # Get column names from user-provided schema or DataFrame
+            if isinstance(schema, (list, tuple)):
+                _cols: List[str] = [str(x) if not isinstance(x, str) else x for x in schema]
+            elif schema is None:
+                _cols = [str(x) if not isinstance(x, str) else x for x in pdf.columns]
+            else:
+                # schema is a single DataType (not StructType)
+                raise PySparkTypeError(
+                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    messageParameters={"data_type": str(schema)},
+                )
+
+            # Infer full schema from Arrow types
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
-            if infer_pandas_dict_as_map:
-                spark_type: Union[MapType, DataType]
-                for name, field in zip(schema, arrow_schema):
-                    field_type = field.type
-                    if isinstance(field_type, pa.StructType):
-                        if len(field_type) == 0:
-                            raise PySparkValueError(
-                                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
-                                messageParameters={},
-                            )
-                        arrow_type = field_type.field(0).type
-                        spark_type = MapType(
-                            StringType(), from_arrow_type(arrow_type, prefer_timestamp_ntz)
+            spark_type: Union[MapType, DataType]
+            for col_name, field, pandas_dtype in zip(_cols, arrow_schema, pdf.dtypes):
+                field_type = field.type
+                # Handle dict -> MapType inference when enabled
+                if infer_pandas_dict_as_map and isinstance(field_type, pa.StructType):
+                    if len(field_type) == 0:
+                        raise PySparkValueError(
+                            errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                            messageParameters={},
                         )
-                    else:
-                        spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
-                    struct.add(name, spark_type, nullable=field.nullable)
-            else:
-                for name, field in zip(schema, arrow_schema):
-                    struct.add(
-                        name,
-                        from_arrow_type(field.type, prefer_timestamp_ntz),
-                        nullable=field.nullable,
+                    arrow_type = field_type.field(0).type
+                    spark_type = MapType(
+                        StringType(), from_arrow_type(arrow_type, prefer_timestamp_ntz)
                     )
+                # Special handling for timestamps to ensure Spark compatibility
+                elif is_datetime64_dtype(pandas_dtype) or isinstance(
+                    pandas_dtype, pd.DatetimeTZDtype
+                ):
+                    spark_type = TimestampType()
+                else:
+                    spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
+                struct.add(col_name, spark_type, nullable=field.nullable)
             schema = struct
 
-        # Determine arrow types to coerce data when creating batches
-        if isinstance(schema, StructType):
-            spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
-        elif isinstance(schema, DataType):
-            raise PySparkTypeError(
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                messageParameters={"data_type": str(schema)},
-            )
-        else:
-            # When no schema is provided, infer Spark types from Arrow types.
-            # Timestamps are handled specially to ensure compatibility with Spark.
-            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
-            spark_types = [
-                TimestampType()
-                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                else from_arrow_type(field.type, prefer_timestamp_ntz)
-                for t, field in zip(pdf.dtypes, arrow_schema)
-            ]
+        # At this point, schema is always a StructType
+        spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
 
         # Slice the DataFrame to be batched
         step = arrow_batch_size
@@ -885,9 +880,7 @@ class SparkConversionMixin:
             [
                 (
                     c,
-                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types)
-                    if t is not None
-                    else None,
+                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types),
                     t,
                 )
                 for (_, c), t in zip(pdf_slice.items(), spark_types)

@@ -72,7 +72,6 @@ from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
-    to_arrow_type,
     _deduplicate_field_names,
     from_arrow_schema,
     from_arrow_type,
@@ -555,78 +554,73 @@ class SparkSession:
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
             # `pyspark.sql.pandas.conversion.py`. Should ideally deduplicate the logics.
 
-            # If no schema supplied by user then get the names of columns only
-            if schema is None:
-                _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+            # If schema is not a StructType, infer full schema from Arrow types
+            if not isinstance(schema, StructType):
+                # Get column names from user-provided schema or DataFrame
+                if isinstance(schema, (list, tuple)):
+                    _cols = [str(x) if not isinstance(x, str) else x for x in schema]
+                    # Handle case where user provided fewer column names than DataFrame columns
+                    if len(_cols) < len(data.columns):
+                        _cols.extend([f"_{i + 1}" for i in range(len(_cols), len(data.columns))])
+                elif schema is None:
+                    _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                else:
+                    # schema is a single DataType (not StructType)
+                    raise PySparkTypeError(
+                        errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                        messageParameters={"data_type": str(schema)},
+                    )
+
                 if len(_cols) == 0:
                     raise PySparkValueError(
                         errorClass="CANNOT_INFER_EMPTY_SCHEMA",
                         messageParameters={},
                     )
+
+                # Infer full schema from Arrow types
                 infer_pandas_dict_as_map = (
                     configs["spark.sql.execution.pandas.inferPandasDictAsMap"] == "true"
                 )
-                if infer_pandas_dict_as_map:
-                    struct = StructType()
-                    pa_schema = pa.Schema.from_pandas(data)
-                    spark_type: Union[MapType, DataType]
-                    for field in pa_schema:
-                        field_type = field.type
-                        if isinstance(field_type, pa.StructType):
-                            if len(field_type) == 0:
-                                raise PySparkValueError(
-                                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
-                                    messageParameters={},
-                                )
-                            arrow_type = field_type.field(0).type
-                            spark_type = MapType(
-                                StringType(),
-                                from_arrow_type(arrow_type, prefer_timestamp_ntz),
-                            )
-                        else:
-                            spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
-                        struct.add(field.name, spark_type, nullable=field.nullable)
-                    schema = struct
-            elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
-                assert isinstance(_cols, list)
-                _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
-                _num_cols = len(_cols)
-
-            # Determine arrow types to coerce data when creating batches
-            arrow_schema: Optional[pa.Schema] = None
-            spark_types: List[DataType]
-            arrow_types: List[pa.DataType]
-            if isinstance(schema, StructType):
-                deduped_schema = cast(StructType, _deduplicate_field_names(schema))
-                spark_types = [field.dataType for field in deduped_schema.fields]
-                arrow_schema = to_arrow_schema(
-                    deduped_schema,
-                    timezone="UTC",
-                    prefers_large_types=prefers_large_types,
-                )
-                arrow_types = [field.type for field in arrow_schema]
-                _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
-            elif isinstance(schema, DataType):
-                raise PySparkTypeError(
-                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    messageParameters={"data_type": str(schema)},
-                )
-            else:
-                # When no schema is provided, infer Spark types from Arrow types.
-                # Timestamps and timedeltas are handled specially to ensure compatibility.
+                struct = StructType()
                 pa_schema = pa.Schema.from_pandas(data, preserve_index=False)
-                spark_types = [
-                    TimestampType()
-                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                    else DayTimeIntervalType()
-                    if is_timedelta64_dtype(t)
-                    else from_arrow_type(field.type, prefer_timestamp_ntz)
-                    for t, field in zip(data.dtypes, pa_schema)
-                ]
-                arrow_types = [
-                    to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
-                    for dt in spark_types
-                ]
+                spark_type: Union[MapType, DataType]
+                for col_name, field, pandas_dtype in zip(_cols, pa_schema, data.dtypes):
+                    field_type = field.type
+                    # Handle dict -> MapType inference when enabled
+                    if infer_pandas_dict_as_map and isinstance(field_type, pa.StructType):
+                        if len(field_type) == 0:
+                            raise PySparkValueError(
+                                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                                messageParameters={},
+                            )
+                        arrow_type = field_type.field(0).type
+                        spark_type = MapType(
+                            StringType(),
+                            from_arrow_type(arrow_type, prefer_timestamp_ntz),
+                        )
+                    # Special handling for timestamps to ensure Spark compatibility
+                    elif is_datetime64_dtype(pandas_dtype) or isinstance(
+                        pandas_dtype, pd.DatetimeTZDtype
+                    ):
+                        spark_type = TimestampType()
+                    # Special handling for timedelta
+                    elif is_timedelta64_dtype(pandas_dtype):
+                        spark_type = DayTimeIntervalType()
+                    else:
+                        spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
+                    struct.add(col_name, spark_type, nullable=field.nullable)
+                schema = struct
+
+            # At this point, schema is always a StructType
+            deduped_schema = cast(StructType, _deduplicate_field_names(schema))
+            spark_types: List[DataType] = [field.dataType for field in deduped_schema.fields]
+            arrow_schema = to_arrow_schema(
+                deduped_schema,
+                timezone="UTC",
+                prefers_large_types=prefers_large_types,
+            )
+            arrow_types: List[pa.DataType] = [field.type for field in arrow_schema]
+            _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
