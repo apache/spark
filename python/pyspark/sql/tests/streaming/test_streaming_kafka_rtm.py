@@ -94,7 +94,7 @@ class StreamingKafkaTestsMixin:
     @classmethod
     def tearDownClass(cls):
         # Stop Kafka container and clean up resources
-        if hasattr(cls, 'kafka_utils'):
+        if hasattr(cls, "kafka_utils"):
             cls.kafka_utils.teardown()
         super().tearDownClass()
 
@@ -132,8 +132,7 @@ class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
 
         # Build streaming query for Kafka to Kafka.
         kafka_source = (
-            self.spark.readStream
-            .format("kafka")
+            self.spark.readStream.format("kafka")
             .option("kafka.bootstrap.servers", self.kafka_utils.broker)
             .option("subscribe", self.source_topic)
             .option("startingOffsets", "earliest")
@@ -143,8 +142,7 @@ class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
         checkpoint_dir = os.path.join(tempfile.mkdtemp(), "checkpoint")
 
         query = (
-            kafka_source.writeStream
-            .format("kafka")
+            kafka_source.writeStream.format("kafka")
             .option("kafka.bootstrap.servers", self.kafka_utils.broker)
             .option("topic", self.sink_topic)
             .option("checkpointLocation", checkpoint_dir)
@@ -160,12 +158,12 @@ class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
         expected = {k: k for k in sorted([str(i) for i in range(10)])}
         try:
             self.kafka_utils.assert_eventually(
-                result_func=lambda: self.kafka_utils.get_all_records(
-                    self.spark, self.sink_topic
-                ), expected=expected
+                result_func=lambda: self.kafka_utils.get_all_records(self.spark, self.sink_topic),
+                expected=expected,
             )
         finally:
             query.stop()
+
 
 if __name__ == "__main__":
     try:

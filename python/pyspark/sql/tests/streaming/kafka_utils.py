@@ -119,7 +119,7 @@ class KafkaUtils:
         self._admin_client = KafkaAdminClient(
             bootstrap_servers=self.broker,
             request_timeout_ms=10000,
-            api_version_auto_timeout_ms=10000
+            api_version_auto_timeout_ms=10000,
         )
 
         # Initialize producer for sending test messages
@@ -128,7 +128,7 @@ class KafkaUtils:
             key_serializer=lambda k: str(k).encode("utf-8") if k is not None else None,
             value_serializer=lambda v: str(v).encode("utf-8") if v is not None else None,
             request_timeout_ms=10000,
-            max_block_ms=10000
+            max_block_ms=10000,
         )
 
         self.initialized = True
@@ -173,12 +173,11 @@ class KafkaUtils:
     def _assert_initialized(self) -> None:
         """Check if KafkaUtils has been initialized, raise error if not."""
         if not self.initialized:
-            raise RuntimeError(
-                "KafkaUtils has not been initialized. Call setup() first."
-            )
+            raise RuntimeError("KafkaUtils has not been initialized. Call setup() first.")
 
-    def create_topics(self, topic_names: List[str], num_partitions: int = 1,
-                     replication_factor: int = 1) -> None:
+    def create_topics(
+        self, topic_names: List[str], num_partitions: int = 1, replication_factor: int = 1
+    ) -> None:
         """
         Create Kafka topics.
 
@@ -197,9 +196,7 @@ class KafkaUtils:
 
         topics = [
             NewTopic(
-                name=name,
-                num_partitions=num_partitions,
-                replication_factor=replication_factor
+                name=name, num_partitions=num_partitions, replication_factor=replication_factor
             )
             for name in topic_names
         ]
@@ -252,9 +249,13 @@ class KafkaUtils:
 
         self._producer.flush()
 
-    def get_all_records(self, spark, topic: str,
-                       key_deserializer: str = "STRING",
-                       value_deserializer: str = "STRING") -> Dict[str, str]:
+    def get_all_records(
+        self,
+        spark,
+        topic: str,
+        key_deserializer: str = "STRING",
+        value_deserializer: str = "STRING",
+    ) -> Dict[str, str]:
         """
         Read all records from a Kafka topic using Spark.
 
@@ -274,8 +275,7 @@ class KafkaUtils:
         self._assert_initialized()
 
         df = (
-            spark.read
-            .format("kafka")
+            spark.read.format("kafka")
             .option("kafka.bootstrap.servers", self.broker)
             .option("subscribe", topic)
             .option("startingOffsets", "earliest")
@@ -285,14 +285,19 @@ class KafkaUtils:
 
         df = df.selectExpr(
             f"CAST(key AS {key_deserializer}) AS key_str",
-            f"CAST(value AS {value_deserializer}) AS value_str"
+            f"CAST(value AS {value_deserializer}) AS value_str",
         )
 
         rows = df.collect()
         return {row.key_str: row.value_str for row in rows}
 
-    def assert_eventually(self, result_func: Callable[[], Any], expected: Any,
-                         timeout: int = 60, interval: float = 1.0) -> None:
+    def assert_eventually(
+        self,
+        result_func: Callable[[], Any],
+        expected: Any,
+        timeout: int = 60,
+        interval: float = 1.0,
+    ) -> None:
         """
         Assert that a condition becomes true within a timeout.
 
@@ -324,8 +329,7 @@ class KafkaUtils:
 
         # Timeout reached, raise assertion error
         raise AssertionError(
-            f"Condition not met within {timeout}s. "
-            f"Expected: {expected}, Got: {last_result}"
+            f"Condition not met within {timeout}s. " f"Expected: {expected}, Got: {last_result}"
         )
 
     def wait_for_query_alive(self, query, timeout: int = 60, interval: float = 1.0) -> None:

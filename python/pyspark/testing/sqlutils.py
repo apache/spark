@@ -38,7 +38,7 @@ from pyspark.find_spark_home import _find_spark_home
 SPARK_HOME = _find_spark_home()
 
 
-def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix, return_first = False):
+def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix, return_first=False):
     # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
     # vary for SBT or Maven specifically. See also SPARK-26856
     project_full_path = os.path.join(SPARK_HOME, project_relative_path)
@@ -61,6 +61,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix, 
         raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]
+
 
 def get_sbt_runtime_classpath(project_relative_path, project_name_map):
     """
@@ -88,7 +89,7 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
             cwd=SPARK_HOME,
             capture_output=True,
             text=True,
-            timeout=180
+            timeout=180,
         )
 
         if result.returncode != 0:
@@ -98,7 +99,7 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
         # Look for lines like: [info] * Attributed(/path/to/file.jar)
         jar_paths = []
         for line in result.stdout.splitlines():
-            match = re.search(r'Attributed\(([^)]+\.jar)\)', line)
+            match = re.search(r"Attributed\(([^)]+\.jar)\)", line)
             if match:
                 jar_paths.append(match.group(1))
 
@@ -108,6 +109,7 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
         return None
     except Exception:
         return None
+
 
 def read_classpath(project_relative_path, project_name_map=None):
     """
@@ -156,6 +158,7 @@ def read_classpath(project_relative_path, project_name_map=None):
         f"-Dmdep.outputFile=target/classpath.txt' "
         f"or with SBT: 'build/sbt Test/package'"
     )
+
 
 test_not_compiled_message = ""
 try:
