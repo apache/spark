@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.Status
+import io.grpc.{Metadata, ServerCall, Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 import org.json4s.JsonDSL._
@@ -264,6 +264,89 @@ private[connect] object ErrorUtils extends Logging {
   }
 
   /**
+   * Process an error by retrieving session context, converting to gRPC status,
+   * logging, posting events, and executing callbacks. This is the core error
+   * handling logic shared by both StreamObserver and ServerCall variants.
+   *
+   * @param opType The operation type (analysis, execution, planDecompression, etc.)
+   * @param userId The user id
+   * @param sessionId The session id
+   * @param st The throwable to process
+   * @param events Optional ExecuteEventsManager to report failures (None for interceptors)
+   * @param isInterrupted Whether the error was caused by interruption
+   * @param callback Optional callback to execute after processing
+   * @return Tuple of (original throwable, wrapped StatusRuntimeException)
+   */
+  private def processErrorCommon(
+      opType: String,
+      userId: String,
+      sessionId: String,
+      st: Throwable,
+      events: Option[ExecuteEventsManager] = None,
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): (Throwable, StatusRuntimeException) = {
+
+    // SessionHolder may not be present, e.g. if the session was already closed.
+    // When SessionHolder is not present error details will not be available for FetchErrorDetails.
+    val sessionHolderOpt =
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
+        SessionKey(userId, sessionId))
+    if (sessionHolderOpt.isEmpty) {
+      logWarning(
+        log"SessionHolder not found during error handling for " +
+          log"${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}, SessionId: ${MDC(SESSION_ID, sessionId)}. " +
+          log"Error details will not be available for FetchErrorDetails.")
+    }
+
+    // Convert throwable to StatusRuntimeException with appropriate error metadata
+    val wrapped: StatusRuntimeException = st match {
+      case se: SparkException if isPythonExecutionException(se) =>
+        StatusProto.toStatusRuntimeException(
+          buildStatusFromThrowable(se.getCause, sessionHolderOpt))
+
+      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+
+      case e: Throwable =>
+        Status.UNKNOWN
+          .withCause(e)
+          .withDescription(Utils.abbreviate(e.getMessage, 2048))
+          .asRuntimeException()
+    }
+
+    // Log the error based on context
+    if (events.isDefined) {
+      // Errors thrown inside execution are user query errors, return then as INFO.
+      logInfo(
+        log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
+        st)
+    } else {
+      // Other errors are server RPC errors, return them as ERROR.
+      logError(
+        log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
+          log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
+        st)
+    }
+
+    // If ExecuteEventsManager is present, this is an execution error that needs to be
+    // posted to it.
+    events.foreach { executeEventsManager =>
+      if (isInterrupted) {
+        executeEventsManager.postCanceled()
+      } else {
+        executeEventsManager.postFailed(wrapped.getMessage)
+      }
+    }
+
+    // Execute callback if present
+    callback.foreach(_.apply())
+
+    (st, wrapped)
+  }
+
+  /**
    * Common exception handling function for RPC methods. Closes the stream after the error has
    * been sent.
    *
@@ -293,58 +376,50 @@ private[connect] object ErrorUtils extends Logging {
       events: Option[ExecuteEventsManager] = None,
       isInterrupted: Boolean = false,
       callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
-
-    // SessionHolder may not be present, e.g. if the session was already closed.
-    // When SessionHolder is not present error details will not be available for FetchErrorDetails.
-    val sessionHolderOpt =
-      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
-        SessionKey(userId, sessionId))
-
-    val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
-      case se: SparkException if isPythonExecutionException(se) =>
-        (
-          se,
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, sessionHolderOpt)))
-
-      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt)))
-
-      case e: Throwable =>
-        (
-          e,
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(Utils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException())
+    { case st: Throwable =>
+      val (_, wrapped) =
+        processErrorCommon(opType, userId, sessionId, st, events, isInterrupted, callback)
+      observer.onError(wrapped)
     }
-    partial
-      .andThen { case (original, wrapped) =>
-        if (events.isDefined) {
-          // Errors thrown inside execution are user query errors, return then as INFO.
-          logInfo(
-            log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
-              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
-            original)
-        } else {
-          // Other errors are server RPC errors, return them as ERROR.
-          logError(
-            log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
-              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
-            original)
-        }
+  }
 
-        // If ExecuteEventsManager is present, this this is an execution error that needs to be
-        // posted to it.
-        events.foreach { executeEventsManager =>
-          if (isInterrupted) {
-            executeEventsManager.postCanceled()
-          } else {
-            executeEventsManager.postFailed(wrapped.getMessage)
-          }
-        }
-        callback.foreach(_.apply())
-        observer.onError(wrapped)
-      }
+  /**
+   * Common exception handling function for interceptor-level errors. Closes the ServerCall
+   * after the error has been sent.
+   *
+   * Note: Interceptors typically pass events=None since ExecuteEventsManager is not
+   * available at the interceptor level.
+   *
+   * @param opType
+   *   String value indicating the operation type (planDecompression, etc.)
+   * @param call
+   *   The ServerCall to close with error status
+   * @param userId
+   *   The user id
+   * @param sessionId
+   *   The session id
+   * @tparam ReqT
+   *   Request type
+   * @tparam RespT
+   *   Response type
+   * @return
+   *   PartialFunction for error handling
+   */
+  def handleError[ReqT, RespT](
+      opType: String,
+      call: ServerCall[ReqT, RespT],
+      userId: String,
+      sessionId: String): PartialFunction[Throwable, Unit] = {
+    { case st: Throwable =>
+      // Include method name in opType for better error logging
+      val methodName = call.getMethodDescriptor.getBareMethodName
+      val opTypeWithMethod = s"$opType [$methodName]"
+      val (_, wrapped) = processErrorCommon(opTypeWithMethod, userId, sessionId, st)
+
+      // Close ServerCall with error status and trailers
+      val status = wrapped.getStatus
+      val trailers = Option(wrapped.getTrailers).getOrElse(new Metadata())
+      call.close(status, trailers)
+    }
   }
 }

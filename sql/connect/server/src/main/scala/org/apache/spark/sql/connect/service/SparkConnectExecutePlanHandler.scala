@@ -22,7 +22,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.utils.PlanCompressionUtils
+import org.apache.spark.internal.LogKeys.BYTE_SIZE
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
@@ -36,8 +36,13 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
 
-    val decompressedRequest =
-      v.toBuilder.setPlan(PlanCompressionUtils.decompressPlan(v.getPlan)).build()
+    // Log compressed sizes from gRPC Context (set by RequestDecompressionInterceptor)
+    val compressedSize = RequestDecompressionContext.getCompressedSize
+    if (compressedSize.isDefined) {
+      logDebug(
+        log"ExecutePlan request received with compressed plan: " +
+        log"compressedSize=${MDC(BYTE_SIZE, compressedSize.get)} bytes")
+    }
 
     SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
       case None =>
@@ -45,11 +50,11 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(
             executeKey,
-            decompressedRequest,
+            v,
             sessionHolder,
             responseObserver)
       case Some(executeHolder)
-          if executeHolder.request.getPlan.equals(decompressedRequest.getPlan) =>
+          if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
