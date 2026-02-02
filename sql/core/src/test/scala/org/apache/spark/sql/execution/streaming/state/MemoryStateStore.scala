@@ -93,8 +93,8 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 
-  override def initiateEventTimeAwareStateOperations(
-      columnFamilyName: String): EventTimeAwareStateOperations = {
+  override def initiateTimestampAwareStateOperations(
+      columnFamilyName: String): TimestampAwareStateOperations = {
     throw new UnsupportedOperationException("Doesn't support event time aware operations")
   }
 

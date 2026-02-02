@@ -347,107 +347,107 @@ trait StateStore extends ReadStateStore {
    */
   def hasCommitted: Boolean
 
-  /** Initiate event-time aware state operations for the given column family. */
-  def initiateEventTimeAwareStateOperations(
-      columnFamilyName: String): EventTimeAwareStateOperations
+  /** Initiate timestamp aware state operations for the given column family. */
+  def initiateTimestampAwareStateOperations(
+      columnFamilyName: String): TimestampAwareStateOperations
 }
 
 /**
- * The interface for event-time aware state operations, which are based on (key, eventTime, value)
+ * The interface for timestamp aware state operations, which are based on (key, timestamp, value)
  * data structure instead of (key, value).
  */
-trait EventTimeAwareStateOperations {
+trait TimestampAwareStateOperations {
   /** The target column family the operations with this instance is applied to. */
   def columnFamilyName: String
 
-  /** Get the current value of a non-null key with the event time. */
-  def get(key: UnsafeRow, eventTime: Long): UnsafeRow
+  /** Get the current value of a non-null key with the timestamp. */
+  def get(key: UnsafeRow, timestamp: Long): UnsafeRow
 
   /**
-   * Provides an iterator containing all values of a non-null key with event time.
+   * Provides an iterator containing all values of a non-null key with timestamp.
    * If key does not exist, an empty iterator is returned. Implementations should make sure
    * to return an empty iterator if the key does not exist.
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def valuesIterator(key: UnsafeRow, eventTime: Long): Iterator[UnsafeRow]
+  def valuesIterator(key: UnsafeRow, timestamp: Long): Iterator[UnsafeRow]
 
   /**
-   * Return an iterator containing all the (key, event time, value) pairs which are matched with
-   * the given prefix key. In [[EventTimeAwareStateOperations]], prefix key is a key, while the
-   * remaining key is event time.
+   * Return an iterator containing all the (key, timestamp, value) pairs which are matched with
+   * the given prefix key. In [[TimestampAwareStateOperations]], prefix key is a key, while the
+   * remaining key is timestamp.
    *
    * It is expected to throw exception if Spark calls this method without proper key encoding spec.
    */
-  def prefixScan(prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime]
+  def prefixScan(prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairTimestamp]
 
   /**
-   * Return an iterator containing all the (key, event time, value) pairs which are matched with
-   * the given prefix key. In [[EventTimeAwareStateOperations]], prefix key is a key, while the
-   * remaining key is event time. This method should be used for multiple values per key.
+   * Return an iterator containing all the (key, timestamp, value) pairs which are matched with
+   * the given prefix key. In [[TimestampAwareStateOperations]], prefix key is a key, while the
+   * remaining key is timestamp. This method should be used for multiple values per key.
    *
    * It is expected to throw exception if Spark calls this method without proper key encoding spec.
    * It is also expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
   def prefixScanWithMultiValues(
-      prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime]
+      prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairTimestamp]
 
   /**
-   * Return an iterator containing all the (key, event time, value) pairs in the StateStore.
-   * The column family with the key encoding spec having event time as prefix produces the
-   * data in the order of eventTime.
+   * Return an iterator containing all the (key, timestamp, value) pairs in the StateStore.
+   * The column family with the key encoding spec having timestamp as prefix produces the
+   * data in the order of timestamp.
    */
-  def iterator(): StateStoreIterator[UnsafeRowPairWithEventTime]
+  def iterator(): StateStoreIterator[UnsafeRowPairTimestamp]
 
   /**
-   * Return an iterator containing all the (key, event time, value) pairs in the StateStore.
-   * The column family with the key encoding spec having event time as prefix produces the
-   * data in the order of eventTime. This method should be used for multiple values per key.
+   * Return an iterator containing all the (key, timestamp, value) pairs in the StateStore.
+   * The column family with the key encoding spec having timestamp as prefix produces the
+   * data in the order of timestamp. This method should be used for multiple values per key.
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairWithEventTime]
+  def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairTimestamp]
 
   /**
-   * Put a new non-null value for a non-null key with event time. Implementations must be aware
+   * Put a new non-null value for a non-null key with timestamp. Implementations must be aware
    * that the UnsafeRows in the params can be reused, and must make copies of the data as needed
    * for persistence.
    */
-  def put(key: UnsafeRow, eventTime: Long, value: UnsafeRow): Unit
+  def put(key: UnsafeRow, timestamp: Long, value: UnsafeRow): Unit
 
   /**
-   * Put a new list of non-null values for a non-null key with event time. Implementations must
+   * Put a new list of non-null values for a non-null key with timestamp. Implementations must
    * be aware that the UnsafeRows in the params can be reused, and must make copies of the data
    * as needed for persistence.
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def putList(key: UnsafeRow, eventTime: Long, values: Array[UnsafeRow]): Unit
+  def putList(key: UnsafeRow, timestamp: Long, values: Array[UnsafeRow]): Unit
 
-  /** Remove a single non-null key with event time. */
-  def remove(key: UnsafeRow, eventTime: Long): Unit
+  /** Remove a single non-null key with timestamp. */
+  def remove(key: UnsafeRow, timestamp: Long): Unit
 
   /**
-   * Merges the provided value with existing values of a non-null key and event time. If a existing
+   * Merges the provided value with existing values of a non-null key and timestamp. If an existing
    * value does not exist, this operation behaves as [[StateStore.put()]].
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def merge(key: UnsafeRow, eventTime: Long, value: UnsafeRow): Unit
+  def merge(key: UnsafeRow, timestamp: Long, value: UnsafeRow): Unit
 
   /**
-   * Merges the provided list of values with existing values of a non-null key and event time.
-   * If a existing value does not exist, this operation behaves as [[StateStore.putList()]].
+   * Merges the provided list of values with existing values of a non-null key and timestamp.
+   * If an existing value does not exist, this operation behaves as [[StateStore.putList()]].
    *
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def mergeList(key: UnsafeRow, eventTime: Long, values: Array[UnsafeRow]): Unit
+  def mergeList(key: UnsafeRow, timestamp: Long, values: Array[UnsafeRow]): Unit
 }
 
 /** Wraps the instance of StateStore to make the instance read-only. */
@@ -741,35 +741,39 @@ case class RangeKeyScanStateEncoderSpec(
 }
 
 /**
- * Encodes row with event time as prefix of the key, so that they can be scanned based on
- * event time ordering.
+ * Encodes row with timestamp as prefix of the key, so that they can be scanned based on
+ * timestamp ordering.
  */
-case class EventTimeAsPrefixStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
-    new EventTimeAsPrefixStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+    new TimestampAsPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
   }
 
   override def jsonValue: JValue = {
-    "keyStateEncoderType" -> JString("EventTimeAsPrefixStateEncoderSpec")
+    "keyStateEncoderType" -> JString("TimestampAsPrefixKeyStateEncoderSpec")
   }
 }
 
 /**
- * Encodes row with event time as postfix of the key, so that prefix scan with the keys
- * having the same key but different event times is supported. In addition, event time is stored
- * in sort order to support event time ordered iteration in the result of prefix scan.
+ * Encodes row with timestamp as postfix of the key, so that prefix scan with the keys
+ * having the same key but different timestamps is supported. In addition, timestamp is stored
+ * in sort order to support timestamp ordered iteration in the result of prefix scan.
  */
-case class EventTimeAsPostfixStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
       useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
-    new EventTimeAsPostfixStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+    new TimestampAsPostfixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
   }
 
   override def jsonValue: JValue = {
-    "keyStateEncoderType" -> JString("EventTimeAsPostfixStateEncoderSpec")
+    "keyStateEncoderType" -> JString("TimestampAsPostfixKeyStateEncoderSpec")
   }
 }
 
@@ -1207,8 +1211,14 @@ object StateStoreId {
   val DEFAULT_STORE_NAME = "default"
 }
 
+trait UnsafeRowPairTrait {
+  def key: UnsafeRow
+  def value: UnsafeRow
+}
+
 /** Mutable, and reusable class for representing a pair of UnsafeRows. */
-class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
+class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null)
+  extends UnsafeRowPairTrait {
   def withRows(key: UnsafeRow, value: UnsafeRow): UnsafeRowPair = {
     this.key = key
     this.value = value
@@ -1216,13 +1226,13 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   }
 }
 
-class UnsafeRowPairWithEventTime(
+class UnsafeRowPairTimestamp(
     var key: UnsafeRow = null,
-    var eventTime: Long = -1L,
-    var value: UnsafeRow = null) {
-  def withRows(key: UnsafeRow, eventTime: Long, value: UnsafeRow): UnsafeRowPairWithEventTime = {
+    var timestamp: Long = -1L,
+    var value: UnsafeRow = null) extends UnsafeRowPairTrait {
+  def withRows(key: UnsafeRow, timestamp: Long, value: UnsafeRow): UnsafeRowPairTimestamp = {
     this.key = key
-    this.eventTime = eventTime
+    this.timestamp = timestamp
     this.value = value
     this
   }

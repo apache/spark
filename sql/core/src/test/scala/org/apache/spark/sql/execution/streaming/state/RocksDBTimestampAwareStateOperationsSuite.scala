@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
-class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
+class RocksDBTimestampAwareStateOperationsSuite extends SharedSparkSession
   with BeforeAndAfterEach with Matchers {
 
   // Test schemas
@@ -272,7 +272,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
           val results = iterator.map { pair =>
             val keyString = pair.key.getString(0)
             val partitionId = pair.key.getInt(1)
-            val eventTime = pair.eventTime
+            val eventTime = pair.timestamp
             val value = pair.value.getInt(0)
             (keyString, partitionId, eventTime, value)
           }.toList
@@ -367,7 +367,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
           val results = iterator.map { pair =>
             val keyStr = pair.key.getString(0)
             val partitionId = pair.key.getInt(1)
-            val eventTime = pair.eventTime
+            val eventTime = pair.timestamp
             val value = pair.value.getInt(0)
             (keyStr, partitionId, eventTime, value)
           }.toList
@@ -435,7 +435,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
           val results = iterator.map { pair =>
             val keyStr = pair.key.getString(0)
             val partitionId = pair.key.getInt(1)
-            val eventTime = pair.eventTime
+            val eventTime = pair.timestamp
             val value = pair.value.getInt(0)
             (keyStr, partitionId, eventTime, value)
           }.toList
@@ -509,7 +509,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
 
       // Should throw exception when trying to create event time operations
       intercept[IllegalArgumentException] {
-        store.initiateEventTimeAwareStateOperations(testColFamily)
+        store.initiateTimestampAwareStateOperations(testColFamily)
       }
 
       store.abort()
@@ -546,8 +546,8 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
       dataEncoding: String = "unsaferow"): RocksDBStateStoreProvider = {
 
     val keyStateEncoderSpec = encoderType match {
-      case "prefix" => EventTimeAsPrefixStateEncoderSpec(keySchema)
-      case "postfix" => EventTimeAsPostfixStateEncoderSpec(keySchema)
+      case "prefix" => TimestampAsPrefixKeyStateEncoderSpec(keySchema)
+      case "postfix" => TimestampAsPostfixKeyStateEncoderSpec(keySchema)
       case _ => throw new IllegalArgumentException(s"Unknown encoder type: $encoderType")
     }
 
@@ -591,11 +591,11 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
       version: Long = 0,
       columnFamily: String = testColFamily,
       encoderType: String = "prefix",
-      useMultipleValuesPerKey: Boolean = false): (StateStore, EventTimeAwareStateOperations) = {
+      useMultipleValuesPerKey: Boolean = false): (StateStore, TimestampAwareStateOperations) = {
 
     val keyStateEncoderSpec = encoderType match {
-      case "prefix" => EventTimeAsPrefixStateEncoderSpec(keySchema)
-      case "postfix" => EventTimeAsPostfixStateEncoderSpec(keySchema)
+      case "prefix" => TimestampAsPrefixKeyStateEncoderSpec(keySchema)
+      case "postfix" => TimestampAsPostfixKeyStateEncoderSpec(keySchema)
       case _ => throw new IllegalArgumentException(s"Unknown encoder type: $encoderType")
     }
 
@@ -609,7 +609,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
       keyStateEncoderSpec,
       useMultipleValuesPerKey = useMultipleValuesPerKey)
 
-    val operations = store.initiateEventTimeAwareStateOperations(columnFamily)
+    val operations = store.initiateTimestampAwareStateOperations(columnFamily)
     (store, operations)
   }
 

@@ -324,8 +324,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
     }
 
-    override def initiateEventTimeAwareStateOperations(
-        columnFamilyName: String): EventTimeAwareStateOperations = {
+    override def initiateTimestampAwareStateOperations(
+        columnFamilyName: String): TimestampAwareStateOperations = {
       throw StateStoreErrors.unsupportedOperationException(
         "initiateEventTimeAwareStateOperations", providerName)
     }

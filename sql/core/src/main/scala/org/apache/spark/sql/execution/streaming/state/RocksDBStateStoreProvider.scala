@@ -244,13 +244,26 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      _get(key, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.decodeValue)
+      }
+    }
+
+    private def _get(
+        key: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodeKeyAndDecodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], Array[Byte] => UnsafeRow)
+      ): UnsafeRow = {
+
       validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("get", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val (fnEncodeKey, fnDecodeValue) = fnEncodeKeyAndDecodeValue(kvEncoder)
       val value =
-        kvEncoder._2.decodeValue(rocksDB.get(kvEncoder._1.encodeKey(key), colFamilyName))
+        fnDecodeValue(rocksDB.get(fnEncodeKey(key), colFamilyName))
 
       if (!isValidated && value != null && !useColumnFamilies) {
         StateStoreProvider.validateStateRowFormat(
@@ -263,22 +276,44 @@ private[sql] class RocksDBStateStoreProvider
     override def multiGet(
         keys: Array[UnsafeRow],
         colFamilyName: String): Iterator[UnsafeRow] = {
+      _multiGet(keys, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.decodeValue)
+      }
+    }
+
+    private def _multiGet(
+        keys: Array[UnsafeRow],
+        colFamilyName: String)(
+        fnEncodeKeyAndDecodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], Array[Byte] => UnsafeRow)
+      ): Iterator[UnsafeRow] = {
       validateAndTransitionState(UPDATE)
       verify(keys != null && keys.forall(_ != null), "Keys cannot be null")
       verifyColFamilyOperations("multiGet", colFamilyName)
+
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val encodedKeys = keys.map(kvEncoder._1.encodeKey)
+      val (fnEncodeKey, fnDecodeValue) = fnEncodeKeyAndDecodeValue(kvEncoder)
+      val encodedKeys = keys.map(fnEncodeKey)
       val encodedValues = rocksDB.multiGet(encodedKeys, colFamilyName)
-      encodedValues.map(kvEncoder._2.decodeValue)
+      encodedValues.map(fnDecodeValue)
     }
 
     override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
+      _keyExists(key, colFamilyName) { kvEncoder =>
+        kvEncoder._1.encodeKey
+      }
+    }
+
+    private def _keyExists(
+        key: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodeKey: KeyValueEncoder => UnsafeRow => Array[Byte]): Boolean = {
       validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("keyExists", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.keyExists(kvEncoder._1.encodeKey(key), colFamilyName)
+      rocksDB.keyExists(fnEncodeKey(kvEncoder)(key), colFamilyName)
     }
 
     /**
@@ -292,71 +327,122 @@ private[sql] class RocksDBStateStoreProvider
      * values per key.
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      _valuesIterator(key, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.decodeValues, kvEncoder._2.decodeValues)
+      }
+    }
+
+    private def _valuesIterator(
+        key: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodeKeyAndDecodeValues: KeyValueEncoder => (
+          UnsafeRow => Array[Byte],
+          Iterator[ArrayIndexRange[Byte]] => Iterator[UnsafeRow],
+          Array[Byte] => Iterator[UnsafeRow])
+      ): Iterator[UnsafeRow] = {
       validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("valuesIterator", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val valueEncoder = kvEncoder._2
-      val keyEncoder = kvEncoder._1
+      verify(kvEncoder._2.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
+        "that supports multiple values for a single key.")
 
-      verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
-      "that supports multiple values for a single key.")
+      val (fnEncodeKey, fnDecodeValuesForMergedValues, fnDecodeValues) =
+        fnEncodeKeyAndDecodeValues(kvEncoder)
 
       if (storeConf.rowChecksumEnabled) {
         // getMergedValues provides better perf for row checksum, since it avoids copying values
         val encodedValuesIterator =
-          rocksDB.getMergedValues(keyEncoder.encodeKey(key), colFamilyName)
-        valueEncoder.decodeValues(encodedValuesIterator)
+          rocksDB.getMergedValues(fnEncodeKey(key), colFamilyName)
+        fnDecodeValuesForMergedValues(encodedValuesIterator)
       } else {
-        val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
-        valueEncoder.decodeValues(encodedValues)
+        val encodedValues = rocksDB.get(fnEncodeKey(key), colFamilyName)
+        fnDecodeValues(encodedValues)
       }
     }
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      _merge(key, value, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.encodeValue)
+      }
+    }
+
+    private def _merge(
+        key: UnsafeRow,
+        value: UnsafeRow,
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)(
+        fnEncodeKeyAndEncodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], UnsafeRow => Array[Byte])
+      ): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
       verifyColFamilyOperations("merge", colFamilyName)
 
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val keyEncoder = kvEncoder._1
-      val valueEncoder = kvEncoder._2
-      verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
-        " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
 
-      rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._2.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+        " which supports multiple values for a single key")
+
+      val (fnEncodeKey, fnEncodeValue) = fnEncodeKeyAndEncodeValue(kvEncoder)
+
+      rocksDB.merge(fnEncodeKey(key), fnEncodeValue(value), colFamilyName)
     }
 
     override def mergeList(
         key: UnsafeRow,
         values: Array[UnsafeRow],
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      _mergeList(key, values, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.encodeValue)
+      }
+    }
+
+    private def _mergeList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)(
+        fnEncodeKeyAndEncodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], UnsafeRow => Array[Byte])
+      ): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
       verifyColFamilyOperations("merge", colFamilyName)
 
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val keyEncoder = kvEncoder._1
-      val valueEncoder = kvEncoder._2
-      verify(
-        valueEncoder.supportsMultipleValuesPerKey,
-        "Merge operation requires an encoder" +
-          " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
       require(values != null, "Cannot merge a null value")
       values.foreach(v => require(v != null, "Cannot merge a null value in the array"))
 
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Merge operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val (fnEncodeKey, fnEncodeValue) = fnEncodeKeyAndEncodeValue(kvEncoder)
+
       rocksDB.mergeList(
-        keyEncoder.encodeKey(key),
-        values.map(valueEncoder.encodeValue).toList,
+        fnEncodeKey(key),
+        values.map(fnEncodeValue).toList,
         colFamilyName)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+      _put(key, value, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.encodeValue)
+      }
+    }
+
+    private def _put(
+        key: UnsafeRow,
+        value: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodeKeyAndEncodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], UnsafeRow => Array[Byte])
+      ): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
@@ -364,13 +450,27 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("put", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value), colFamilyName)
+      val (fnEncodeKey, fnEncodeValue) = fnEncodeKeyAndEncodeValue(kvEncoder)
+
+      rocksDB.put(fnEncodeKey(key), fnEncodeValue(value), colFamilyName)
     }
 
     override def putList(
         key: UnsafeRow,
         values: Array[UnsafeRow],
         colFamilyName: String): Unit = {
+      _putList(key, values, colFamilyName) { kvEncoder =>
+        (kvEncoder._1.encodeKey, kvEncoder._2.encodeValue)
+      }
+    }
+
+    private def _putList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String)(
+        fnEncodeKeyAndEncodeValue: KeyValueEncoder =>
+          (UnsafeRow => Array[Byte], UnsafeRow => Array[Byte])
+      ): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
@@ -383,26 +483,51 @@ private[sql] class RocksDBStateStoreProvider
         kvEncoder._2.supportsMultipleValuesPerKey,
         "Multi-value put operation requires an encoder" +
           " which supports multiple values for a single key")
+
+      val (fnEncodeKey, fnEncodeValue) = fnEncodeKeyAndEncodeValue(kvEncoder)
+
       rocksDB.putList(
-        kvEncoder._1.encodeKey(key),
-        values.map(kvEncoder._2.encodeValue).toList,
+        fnEncodeKey(key),
+        values.map(fnEncodeValue).toList,
         colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
+      _remove(key, colFamilyName) { kvEncoder =>
+        kvEncoder._1.encodeKey
+      }
+    }
+
+    private def _remove(
+        key: UnsafeRow,
+        colFamilyName: String)(fnEncodeKey: KeyValueEncoder => UnsafeRow => Array[Byte]): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("remove", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
+      rocksDB.remove(fnEncodeKey(kvEncoder)(key), colFamilyName)
     }
 
     override def deleteRange(
         beginKey: UnsafeRow,
         endKey: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      _deleteRange(beginKey, endKey, colFamilyName) {
+        val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+        verify(kvEncoder._1.supportsDeleteRange,
+          "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
+
+        kvEncoder._1.encodeKey
+      }
+    }
+
+    private def _deleteRange(
+        beginKey: UnsafeRow,
+        endKey: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodeKey: => UnsafeRow => Array[Byte]): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot deleteRange after already committed or aborted")
       verify(beginKey != null, "Begin key cannot be null")
@@ -412,25 +537,37 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       verify(kvEncoder._1.supportsDeleteRange,
         "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
-      val encodedBeginKey = kvEncoder._1.encodeKey(beginKey)
-      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+
+      val encodedBeginKey = fnEncodeKey(beginKey)
+      val encodedEndKey = fnEncodeKey(endKey)
       rocksDB.deleteRange(encodedBeginKey, encodedEndKey, colFamilyName)
     }
 
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      _iterator[UnsafeRowPair](colFamilyName) { kvEncoder =>
+        val rowPair = new UnsafeRowPair()
+        (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+          rowPair.withRows(kvEncoder._1.decodeKey(keyBytes), kvEncoder._2.decodeValue(valueBytes))
+        }
+      }
+    }
+
+    private def _iterator[T <: UnsafeRowPairTrait](
+        colFamilyName: String)(
+        fnKvToRowPair: KeyValueEncoder =>
+          (Array[Byte], Array[Byte]) => T): StateStoreIterator[T] = {
       validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
       verifyColFamilyOperations("iterator", colFamilyName)
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val rowPair = new UnsafeRowPair()
+
       if (useColumnFamilies) {
         val rocksDbIter = rocksDB.iterator(colFamilyName)
 
         val iter = rocksDbIter.map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-            kvEncoder._2.decodeValue(kv.value))
+          val rowPair = fnKvToRowPair(kvEncoder)(kv.key, kv.value)
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
               rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
@@ -444,8 +581,7 @@ private[sql] class RocksDBStateStoreProvider
         val rocksDbIter = rocksDB.iterator()
 
         val iter = rocksDbIter.map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-            kvEncoder._2.decodeValue(kv.value))
+          val rowPair = fnKvToRowPair(kvEncoder)(kv.key, kv.value)
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
               rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
@@ -458,285 +594,297 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    def iteratorWithMultiValues(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      _iteratorWithMultiValues[UnsafeRowPair](colFamilyName) { kvEncoder =>
+        (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+          val keyRow = kvEncoder._1.decodeKey(keyBytes)
+          val valueRows = kvEncoder._2.decodeValues(valueBytes)
+
+          val rowPair = new UnsafeRowPair()
+          valueRows.iterator.map { valueRow =>
+            rowPair.withRows(keyRow, valueRow)
+          }
+        }
+      }
+    }
+
+    private def _iteratorWithMultiValues[T <: UnsafeRowPairTrait](
+        colFamilyName: String)(
+        fnKvToRowPairIter: KeyValueEncoder =>
+          (Array[Byte], Array[Byte]) => Iterator[T]): StateStoreIterator[T] = {
+      validateAndTransitionState(UPDATE)
+      // Note this verify function only verify on the colFamilyName being valid,
+      // we are actually doing prefix when useColumnFamilies,
+      // but pass "iteratorWithMultiValues" to throw correct error message
+      verifyColFamilyOperations("iteratorWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val rocksDbIter = rocksDB.iterator(colFamilyName)
+
+      val iter = rocksDbIter.flatMap { kv =>
+        val rowPairIter = fnKvToRowPairIter(kvEncoder)(kv.key, kv.value)
+        rowPairIter.map { rowPair =>
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
     override def prefixScan(
         prefixKey: UnsafeRow,
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      _prefixScan[UnsafeRowPair](prefixKey, colFamilyName) { kvEncoder =>
+        kvEncoder._1.encodePrefixKey
+      } { kvEncoder =>
+        val rowPair = new UnsafeRowPair()
+        (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+          rowPair.withRows(
+            kvEncoder._1.decodeKey(keyBytes),
+            kvEncoder._2.decodeValue(valueBytes)
+          )
+        }
+      }
+    }
+
+    private def _prefixScan[T <: UnsafeRowPairTrait](
+        prefixKey: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodePrefixKey: KeyValueEncoder => UnsafeRow => Array[Byte])(
+        fnKvToRowPair: KeyValueEncoder => (Array[Byte], Array[Byte]) => T
+      ): StateStoreIterator[T] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       require(kvEncoder._1.supportPrefixKeyScan,
         "Prefix scan requires setting prefix key!")
-
-      val rowPair = new UnsafeRowPair()
-      val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
+      val prefix = fnEncodePrefixKey(kvEncoder)(prefixKey)
 
       val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
       val iter = rocksDbIter.map { kv =>
-        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-          kvEncoder._2.decodeValue(kv.value))
+        val rowPair = fnKvToRowPair(kvEncoder)(kv.key, kv.value)
         rowPair
       }
 
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
-    class RocksDBEventTimeAwareStateOperations(cfName: String)
-      extends EventTimeAwareStateOperations {
+    def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      _prefixScanWithMultiValues[UnsafeRowPair](prefixKey, colFamilyName) { kvEncoder =>
+        kvEncoder._1.encodePrefixKey
+      } { kvEncoder =>
+        val rowPair = new UnsafeRowPair()
+        (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+          val keyRow = kvEncoder._1.decodeKey(keyBytes)
+          val valueRows = kvEncoder._2.decodeValues(valueBytes)
+
+          valueRows.iterator.map { valueRow =>
+            rowPair.withRows(keyRow, valueRow)
+          }
+        }
+      }
+    }
+
+    private def _prefixScanWithMultiValues[T <: UnsafeRowPairTrait](
+        prefixKey: UnsafeRow,
+        colFamilyName: String)(
+        fnEncodePrefixKey: KeyValueEncoder => UnsafeRow => Array[Byte])(
+        fnKvToRowPairIter: KeyValueEncoder => (Array[Byte], Array[Byte]) => Iterator[T]
+      ): StateStoreIterator[T] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("prefixScanWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._1.supportPrefixKeyScan,
+        "prefixScanWithMultiValues requires encoder supporting prefix scan!")
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val prefix = fnEncodePrefixKey(kvEncoder)(prefixKey)
+
+      val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
+
+      val iter = rocksDbIter.flatMap { kv =>
+        val rowPairIter = fnKvToRowPairIter(kvEncoder)(kv.key, kv.value)
+        rowPairIter.map { rowPair =>
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    class RocksDBTimestampAwareStateOperations(cfName: String)
+      extends TimestampAwareStateOperations {
 
       override val columnFamilyName: String = cfName
 
-      verifyColFamilyOperations("doEventTimeAwareStateOperations", columnFamilyName)
+      verifyColFamilyOperations("doTimestampAwareKeyStateOperations", columnFamilyName)
 
       private val kvEncoder = keyValueEncoderMap.get(columnFamilyName)
-      private val keyEncoder = kvEncoder._1
+
+      require(kvEncoder._1.isInstanceOf[RocksDBKeyWithTimestampStateEncoder],
+        "TimestampAwareKeyStateOperations requires encoder supporting timestamp!")
+
+      private val keyEncoder = kvEncoder._1.asInstanceOf[RocksDBKeyWithTimestampStateEncoder]
       private val valueEncoder = kvEncoder._2
 
-      require(keyEncoder.supportEventTime,
-        "EventTimeAwareStateOperations requires encoder supporting event time!")
-
-      override def get(key: UnsafeRow, eventTime: Long): UnsafeRow = {
-        validateAndTransitionState(UPDATE)
-        verifyColFamilyOperations("get", columnFamilyName)
-        verify(key != null, "Key cannot be null")
-
-        val value = valueEncoder.decodeValue(
-          rocksDB.get(keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName))
-
-        if (!isValidated && value != null && !useColumnFamilies) {
-          StateStoreProvider.validateStateRowFormat(
-            key, keySchema, value, valueSchema, stateStoreId, storeConf)
-          isValidated = true
-        }
-        value
-      }
-
-      override def valuesIterator(key: UnsafeRow, eventTime: Long): Iterator[UnsafeRow] = {
-        validateAndTransitionState(UPDATE)
-        verify(key != null, "Key cannot be null")
-        verifyColFamilyOperations("valuesIterator", columnFamilyName)
-
-        verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
-          "that supports multiple values for a single key.")
-
-        if (storeConf.rowChecksumEnabled) {
-          // multiGet provides better perf for row checksum, since it avoids copying values
-          val encodedValuesIterator = rocksDB.getMergedValues(
-            keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName)
-          valueEncoder.decodeValues(encodedValuesIterator)
-        } else {
-          val encodedValues = rocksDB.get(
-            keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName)
-          valueEncoder.decodeValues(encodedValues)
+      override def get(key: UnsafeRow, timestamp: Long): UnsafeRow = {
+        _get(key, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (
+            keyEncoder.encodeKeyWithTimestamp(_, timestamp),
+            valueEncoder.decodeValue
+          )
         }
       }
 
-      override def prefixScan(
-          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime] = {
-        validateAndTransitionState(UPDATE)
-        verifyColFamilyOperations("prefixScan", columnFamilyName)
-
-        require(keyEncoder.supportPrefixKeyScan,
-          "prefixScan requires encoder supporting prefix scan!")
-
-        val rowPair = new UnsafeRowPairWithEventTime()
-        val prefix = keyEncoder.encodePrefixKey(prefixKey)
-
-        val rocksDbIter = rocksDB.prefixScan(prefix, columnFamilyName)
-        val iter = rocksDbIter.map { kv =>
-          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
-          val keyRow = keyWithEventTime._1
-          val ts = keyWithEventTime._2
-          val valueRow = valueEncoder.decodeValue(kv.value)
-          rowPair.withRows(keyRow, ts, valueRow)
-          rowPair
+      override def valuesIterator(key: UnsafeRow, timestamp: Long): Iterator[UnsafeRow] = {
+        _valuesIterator(key, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (
+            keyEncoder.encodeKeyWithTimestamp(_, timestamp),
+            valueEncoder.decodeValues,
+            valueEncoder.decodeValues
+          )
         }
-
-        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-      }
-
-      override def prefixScanWithMultiValues(
-          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime] = {
-        validateAndTransitionState(UPDATE)
-        verifyColFamilyOperations("prefixScanWithMultiValues", columnFamilyName)
-
-        verify(keyEncoder.supportPrefixKeyScan,
-          "prefixScanWithMultiValues requires encoder supporting prefix scan!")
-        verify(
-          valueEncoder.supportsMultipleValuesPerKey,
-          "Multi-value iterator operation requires an encoder" +
-            " which supports multiple values for a single key")
-
-        val prefix = keyEncoder.encodePrefixKey(prefixKey)
-
-        val rocksDbIter = rocksDB.prefixScan(prefix, columnFamilyName)
-
-        val rowPair = new UnsafeRowPairWithEventTime()
-        val iter = rocksDbIter.flatMap { kv =>
-          val (keyRow, ts) = keyEncoder.decodeKeyWithEventTime(kv.key)
-          valueEncoder.decodeValues(kv.value).map { valueRow =>
-            rowPair.withRows(keyRow, ts, valueRow)
-            rowPair
-          }
-        }
-
-        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-      }
-
-      override def iterator(): StateStoreIterator[UnsafeRowPairWithEventTime] = {
-        validateAndTransitionState(UPDATE)
-        // Note this verify function only verify on the colFamilyName being valid,
-        // we are actually doing prefix when useColumnFamilies,
-        // but pass "iterator" to throw correct error message
-        verifyColFamilyOperations("iterator", columnFamilyName)
-        verify(useColumnFamilies, "iterator requires using column families!")
-
-        val rowPair = new UnsafeRowPairWithEventTime()
-        val rocksDbIter = rocksDB.iterator(columnFamilyName)
-
-        val iter = rocksDbIter.map { kv =>
-          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
-          val keyRow = keyWithEventTime._1
-          val ts = keyWithEventTime._2
-          val valueRow = valueEncoder.decodeValue(kv.value)
-
-          rowPair.withRows(keyRow, ts, valueRow)
-
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-            StateStoreProvider.validateStateRowFormat(
-              keyRow, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
-            isValidated = true
-          }
-          rowPair
-        }
-
-        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-      }
-
-      override def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairWithEventTime] = {
-        validateAndTransitionState(UPDATE)
-        // Note this verify function only verify on the colFamilyName being valid,
-        // we are actually doing prefix when useColumnFamilies,
-        // but pass "iteratorWithMultiValues" to throw correct error message
-        verifyColFamilyOperations("iteratorWithMultiValues", columnFamilyName)
-
-        verify(
-          valueEncoder.supportsMultipleValuesPerKey,
-          "Multi-value iterator operation requires an encoder" +
-            " which supports multiple values for a single key")
-
-        val rowPair = new UnsafeRowPairWithEventTime()
-        val rocksDbIter = rocksDB.iterator(columnFamilyName)
-
-        val iter = rocksDbIter.flatMap { kv =>
-          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
-          val keyRow = keyWithEventTime._1
-          val ts = keyWithEventTime._2
-          val valueRows = valueEncoder.decodeValues(kv.value)
-          valueRows.map { valueRow =>
-            rowPair.withRows(keyRow, ts, valueRow)
-            if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-              StateStoreProvider.validateStateRowFormat(
-                keyRow, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
-              isValidated = true
-            }
-            rowPair
-          }
-        }
-
-        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-      }
-
-      override def put(
-          key: UnsafeRow,
-          eventTime: Long,
-          value: UnsafeRow): Unit = {
-        validateAndTransitionState(UPDATE)
-        verify(state == UPDATING, "Cannot put after already committed or aborted")
-        verify(key != null, "Key cannot be null")
-        verify(value != null, "Cannot put a null value")
-        verifyColFamilyOperations("put", columnFamilyName)
-
-        rocksDB.put(
-          keyEncoder.encodeKeyWithEventTime(key, eventTime),
-          valueEncoder.encodeValue(value),
-          columnFamilyName)
-      }
-
-      override def putList(
-          key: UnsafeRow,
-          eventTime: Long,
-          values: Array[UnsafeRow]): Unit = {
-        validateAndTransitionState(UPDATE)
-        verify(state == UPDATING, "Cannot put after already committed or aborted")
-        verify(key != null, "Key cannot be null")
-        verify(values != null, "Cannot put a null value")
-        verifyColFamilyOperations("putList", columnFamilyName)
-
-        verify(
-          valueEncoder.supportsMultipleValuesPerKey,
-          "Multi-value put operation requires an encoder" +
-            " which supports multiple values for a single key")
-
-        rocksDB.putList(
-          keyEncoder.encodeKeyWithEventTime(key, eventTime),
-          values.map(valueEncoder.encodeValue).toList,
-          columnFamilyName)
-      }
-
-      override def remove(key: UnsafeRow, eventTime: Long): Unit = {
-        validateAndTransitionState(UPDATE)
-        verify(state == UPDATING, "Cannot remove after already committed or aborted")
-        verify(key != null, "Key cannot be null")
-        verifyColFamilyOperations("remove", columnFamilyName)
-
-        rocksDB.remove(
-          keyEncoder.encodeKeyWithEventTime(key, eventTime),
-          columnFamilyName)
       }
 
       override def merge(
           key: UnsafeRow,
-          eventTime: Long,
+          timestamp: Long,
           value: UnsafeRow): Unit = {
-        validateAndTransitionState(UPDATE)
-        verify(state == UPDATING, "Cannot merge after already committed or aborted")
-        verify(key != null, "Key cannot be null")
-        verify(value != null, "Cannot put a null value")
-        verifyColFamilyOperations("merge", columnFamilyName)
-
-        verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
-          " which supports multiple values for a single key")
-
-        rocksDB.merge(
-          keyEncoder.encodeKeyWithEventTime(key, eventTime),
-          valueEncoder.encodeValue(value),
-          columnFamilyName)
+        _merge(key, value, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (keyEncoder.encodeKeyWithTimestamp(_, timestamp), valueEncoder.encodeValue)
+        }
       }
 
       override def mergeList(
           key: UnsafeRow,
-          eventTime: Long,
+          timestamp: Long,
           values: Array[UnsafeRow]): Unit = {
-        validateAndTransitionState(UPDATE)
-        verify(state == UPDATING, "Cannot merge after already committed or aborted")
-        verify(key != null, "Key cannot be null")
-        require(values != null, "Cannot put a null value")
-        verifyColFamilyOperations("mergeList", columnFamilyName)
+        _mergeList(key, values, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (keyEncoder.encodeKeyWithTimestamp(_, timestamp), valueEncoder.encodeValue)
+        }
+      }
 
-        verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
-          " which supports multiple values for a single key")
+      override def put(
+          key: UnsafeRow,
+          timestamp: Long,
+          value: UnsafeRow): Unit = {
+        _put(key, value, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (keyEncoder.encodeKeyWithTimestamp(_, timestamp), valueEncoder.encodeValue)
+        }
+      }
 
-        rocksDB.mergeList(
-          keyEncoder.encodeKeyWithEventTime(key, eventTime),
-          values.map(valueEncoder.encodeValue).toList,
-          columnFamilyName)
+      override def putList(
+          key: UnsafeRow,
+          timestamp: Long,
+          values: Array[UnsafeRow]): Unit = {
+        _putList(key, values, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (keyEncoder.encodeKeyWithTimestamp(_, timestamp), valueEncoder.encodeValue)
+        }
+      }
+
+      override def remove(key: UnsafeRow, timestamp: Long): Unit = {
+        _remove(key, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          keyEncoder.encodeKeyWithTimestamp(_, timestamp)
+        }
+      }
+
+      override def iterator(): StateStoreIterator[UnsafeRowPairTimestamp] = {
+        _iterator[UnsafeRowPairTimestamp](columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          val rowPair = new UnsafeRowPairTimestamp()
+          (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+            val keyWithEventTime = keyEncoder.decodeKeyWithTimestamp(keyBytes)
+            val keyRow = keyWithEventTime._1
+            val ts = keyWithEventTime._2
+            val valueRow = valueEncoder.decodeValue(valueBytes)
+
+            rowPair.withRows(keyRow, ts, valueRow)
+          }
+        }
+      }
+
+      override def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairTimestamp] = {
+        _iteratorWithMultiValues[UnsafeRowPairTimestamp](columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+            val (keyRow, ts) = keyEncoder.decodeKeyWithTimestamp(keyBytes)
+            val valueRows = valueEncoder.decodeValues(valueBytes)
+
+            val rowPair = new UnsafeRowPairTimestamp()
+            valueRows.iterator.map { valueRow =>
+              rowPair.withRows(keyRow, ts, valueRow)
+            }
+          }
+        }
+      }
+
+      override def prefixScan(
+          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairTimestamp] = {
+        _prefixScan[UnsafeRowPairTimestamp](prefixKey, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          keyEncoder.encodePrefixKey
+        } { _ =>
+          // We use the encoder we already stored in the class
+          val rowPair = new UnsafeRowPairTimestamp()
+          (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+            val keyWithEventTime = keyEncoder.decodeKeyWithTimestamp(keyBytes)
+            val keyRow = keyWithEventTime._1
+            val ts = keyWithEventTime._2
+            val valueRow = valueEncoder.decodeValue(valueBytes)
+            rowPair.withRows(keyRow, ts, valueRow)
+            rowPair
+          }
+        }
+      }
+
+      override def prefixScanWithMultiValues(
+          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairTimestamp] = {
+        _prefixScanWithMultiValues[UnsafeRowPairTimestamp](prefixKey, columnFamilyName) { _ =>
+          // We use the encoder we already stored in the class
+          keyEncoder.encodePrefixKey
+        } { _ =>
+          // We use the encoder we already stored in the class
+          val rowPair = new UnsafeRowPairTimestamp()
+
+          (keyBytes: Array[Byte], valueBytes: Array[Byte]) => {
+            val (keyRow, ts) = keyEncoder.decodeKeyWithTimestamp(keyBytes)
+            val valueRows = valueEncoder.decodeValues(valueBytes)
+
+            valueRows.iterator.map { valueRow =>
+              rowPair.withRows(keyRow, ts, valueRow)
+            }
+          }
+        }
       }
     }
 
-    override def initiateEventTimeAwareStateOperations(
-        columnFamilyName: String): EventTimeAwareStateOperations = {
-      new RocksDBEventTimeAwareStateOperations(columnFamilyName)
+    override def initiateTimestampAwareStateOperations(
+        columnFamilyName: String): TimestampAwareStateOperations = {
+      new RocksDBTimestampAwareStateOperations(columnFamilyName)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
@@ -1378,6 +1526,8 @@ object RocksDBStateStoreProvider {
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
   private val DEFAULT_SCHEMA_IDS = StateSchemaInfo(0, 0)
+
+  type KeyValueEncoder = (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)
 
   /**
    * Encodes a virtual column family ID into a byte array suitable for RocksDB.
