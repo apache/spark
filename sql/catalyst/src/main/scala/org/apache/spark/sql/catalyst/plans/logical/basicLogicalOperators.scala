@@ -690,6 +690,10 @@ case class SequentialUnion(
 }
 
 object SequentialUnion {
+  def apply(left: LogicalPlan, right: LogicalPlan): SequentialUnion = {
+    SequentialUnion(left :: right :: Nil)
+  }
+
   /**
    * Flattens nested SequentialUnions into a single level.
    * This allows chaining: df1.followedBy(df2).followedBy(df3)

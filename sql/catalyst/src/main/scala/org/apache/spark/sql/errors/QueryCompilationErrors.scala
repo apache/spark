@@ -4539,4 +4539,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "UNSUPPORTED_TIME_TYPE",
       messageParameters = Map.empty)
   }
+
+  def nestedSequentialUnionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "NESTED_SEQUENTIAL_UNION",
+      messageParameters = Map(
+        "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
+  }
+
+  def invalidNumberOfChildrenForUnionError(
+      operator: String,
+      actual: Int,
+      minimum: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_NUMBER_OF_CHILDREN_FOR_UNION",
+      messageParameters = Map(
+        "operator" -> operator,
+        "actual" -> actual.toString,
+        "minimum" -> minimum.toString))
+  }
+
+  def notStreamingDatasetError(operator: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_STREAMING_DATASET",
+      messageParameters = Map("operator" -> operator))
+  }
 }

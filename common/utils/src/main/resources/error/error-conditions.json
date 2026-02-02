@@ -3537,6 +3537,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_NUMBER_OF_CHILDREN_FOR_UNION" : {
+    "message" : [
+      "<operator> requires at least <minimum> children, but only <actual> were provided."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_OBSERVED_METRICS" : {
     "message" : [
       "Invalid observed metrics."
@@ -4710,6 +4716,12 @@
     ],
     "sqlState" : "07501"
   },
+  "NESTED_SEQUENTIAL_UNION" : {
+    "message" : [
+      "Nested SequentialUnion is not supported. <hint>"
+    ],
+    "sqlState" : "42601"
+  },
   "NEW_CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
       "The new check constraint (<expression>) cannot be added because it would be violated by existing data in table <tableName>. Please ensure all existing rows satisfy the constraint before adding it."
@@ -4871,6 +4883,12 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_STREAMING_DATASET" : {
+    "message" : [
+      "All sources in <operator> must be streaming relations."
+    ],
+    "sqlState" : "42K0A"
   },
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
