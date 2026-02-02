@@ -268,14 +268,15 @@ private[client] object GrpcExceptionConverter {
         errorClass = getErrorClassOrFallback(params),
         messageParameters = errorParamsToMessageParameters(params),
         queryContext = params.queryContext)),
-    errorConstructor(params =>
+    errorConstructor(params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3100")
       new AnalysisException(
-        message = params.message,
-        cause = params.cause,
-        errorClass = resolveParams(params).errorClass,
-        messageParameters = errorParamsToMessageParameters(params),
-        context = params.queryContext,
-        sqlState = getSqlStateOrFallback(params))),
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        cause = updatedParams.cause,
+        context = updatedParams.queryContext,
+        sqlState = getSqlStateOrFallback(updatedParams))
+    }),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(
         getErrorClassOrFallback(params),
@@ -304,45 +305,57 @@ private[client] object GrpcExceptionConverter {
         getErrorClassOrFallback(params),
         errorParamsToMessageParameters(params),
         params.cause)),
-    errorConstructor[NumberFormatException](params =>
+    errorConstructor[NumberFormatException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3104")
       new SparkNumberFormatException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
-        messageParameters = errorParamsToMessageParameters(params),
-        params.queryContext,
-        getSqlStateOrFallback(params))),
-    errorConstructor[IllegalArgumentException](params =>
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        updatedParams.queryContext,
+        getSqlStateOrFallback(updatedParams))
+    }),
+    errorConstructor[IllegalArgumentException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3105")
       new SparkIllegalArgumentException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3105"),
-        messageParameters = errorParamsToMessageParameters(params),
-        params.queryContext,
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        updatedParams.queryContext,
         summary = "",
-        cause = params.cause.orNull,
-        getSqlStateOrFallback(params))),
-    errorConstructor[ArithmeticException](params =>
+        cause = updatedParams.cause.orNull,
+        getSqlStateOrFallback(updatedParams))
+    }),
+    errorConstructor[ArithmeticException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3106")
       new SparkArithmeticException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3106"),
-        messageParameters = errorParamsToMessageParameters(params),
-        params.queryContext,
-        getSqlStateOrFallback(params))),
-    errorConstructor[UnsupportedOperationException](params =>
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        updatedParams.queryContext,
+        getSqlStateOrFallback(updatedParams))
+    }),
+    errorConstructor[UnsupportedOperationException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3107")
       new SparkUnsupportedOperationException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3107"),
-        messageParameters = errorParamsToMessageParameters(params),
-        getSqlStateOrFallback(params))),
-    errorConstructor[ArrayIndexOutOfBoundsException](params =>
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        getSqlStateOrFallback(updatedParams))
+    }),
+    errorConstructor[ArrayIndexOutOfBoundsException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3108")
       new SparkArrayIndexOutOfBoundsException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3108"),
-        messageParameters = errorParamsToMessageParameters(params),
-        params.queryContext,
-        getSqlStateOrFallback(params))),
-    errorConstructor[DateTimeException](params =>
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        updatedParams.queryContext,
+        getSqlStateOrFallback(updatedParams))
+    }),
+    errorConstructor[DateTimeException](params => {
+      val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3109")
       new SparkDateTimeException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3109"),
-        messageParameters = errorParamsToMessageParameters(params),
-        params.queryContext,
+        errorClass = updatedParams.errorClass.get,
+        messageParameters = updatedParams.messageParameters,
+        updatedParams.queryContext,
         summary = "",
         cause = None,
-        getSqlStateOrFallback(params))),
+        getSqlStateOrFallback(updatedParams))
+    }),
     errorConstructor(params =>
       new SparkRuntimeException(
         getErrorClassOrFallback(params),
@@ -364,6 +377,18 @@ private[client] object GrpcExceptionConverter {
         messageParameters = errorParamsToMessageParameters(params),
         context = params.queryContext,
         sqlState = getSqlStateOrFallback(params))))
+
+  // Explicitly deal with cases where there are fallback legacy error classes
+  private def getParamsWithLegacyErrorClass(
+      params: ErrorParams,
+      fallbackErrorClass: String): ErrorParams = {
+    if (params.errorClass.isDefined) {
+      return params
+    }
+    params.copy(
+      errorClass = Some(fallbackErrorClass),
+      messageParameters = Map("message" -> params.message))
+  }
 
   /**
    * errorsToThrowable reconstructs the exception based on a list of protobuf messages

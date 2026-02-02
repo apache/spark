@@ -352,6 +352,78 @@ class FrameCombineMixin:
             pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
         )
 
+    def test_merge_cross(self):
+        # Test basic cross merge
+        left_pdf = pd.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right_pdf = pd.DataFrame({"C": [3, 4], "D": ["c", "d"]})
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        psdf = left_psdf.merge(right_psdf, how="cross")
+        pdf = left_pdf.merge(right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with duplicate column names (should add suffixes)
+        left_pdf = pd.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right_pdf = pd.DataFrame({"A": [3, 4], "C": ["c", "d"]})
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        psdf = left_psdf.merge(right_psdf, how="cross")
+        pdf = left_pdf.merge(right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with custom suffixes
+        psdf = left_psdf.merge(right_psdf, how="cross", suffixes=("_left", "_right"))
+        pdf = left_pdf.merge(right_pdf, how="cross", suffixes=("_left", "_right"))
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with ps.merge function
+        psdf = ps.merge(left_psdf, right_psdf, how="cross")
+        pdf = pd.merge(left_pdf, right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+    def test_merge_cross_raises(self):
+        left = ps.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right = ps.DataFrame({"C": [3, 4], "D": ["c", "d"]})
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", on="A")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", left_on="A", right_on="C")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", right_on="C")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", left_index=True)
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", right_index=True)
+
     def test_merge_raises(self):
         left = ps.DataFrame(
             {"value": [1, 2, 3, 5, 6], "x": list("abcde")},
@@ -392,7 +464,7 @@ class FrameCombineMixin:
         ):
             left.merge(right, left_on=["value", "x"], right_on="value")
 
-        with self.assertRaisesRegex(ValueError, "['inner', 'left', 'right', 'full', 'outer']"):
+        with self.assertRaisesRegex(ValueError, r"\['inner', 'left', 'right', 'outer', 'cross'\]"):
             left.merge(right, left_index=True, right_index=True, how="foo")
 
         with self.assertRaisesRegex(KeyError, "id"):

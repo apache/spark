@@ -189,7 +189,9 @@ public class ReloadingX509TrustManagerSuite {
   public void testReloadMissingTrustStore() throws Exception {
     KeyPair kp = generateKeyPair("RSA");
     X509Certificate cert1 = generateCertificate("CN=Cert1", kp, 30, "SHA1withRSA");
-    File trustStore = new File("testmissing.jks");
+    File trustStore = File.createTempFile("testmissing", "jks");
+    trustStore.delete();
+    // trustStore is going to be re-created later so delete it on exit.
     trustStore.deleteOnExit();
     assertFalse(trustStore.exists());
     createTrustStore(trustStore, "password", "cert1", cert1);

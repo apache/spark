@@ -226,11 +226,12 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
                     .collect()
                 )
                 result = repr([row[0] for row in rows])
-                # "\t" is used as the delimiter
-                result = result.replace("\t", "")
                 result = result[:40]
             except Exception:
                 result = "X"
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
 
             err = None
             if testing:
