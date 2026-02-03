@@ -150,7 +150,7 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
-    if (arrowWriter == null) {
+    if (arrowWriter == null && unloader == null) {
       arrowWriter = ArrowWriter.create(root)
       unloader = new VectorUnloader(root, true, codec, true)
     }
@@ -193,7 +193,7 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
-    if (arrowWriter == null) {
+    if (arrowWriter == null && unloader == null) {
       arrowWriter = ArrowWriter.create(root)
       unloader = new VectorUnloader(root, true, codec, true)
     }
