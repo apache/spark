@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Evolving
  * A class to manage operations on streaming query checkpoints.
  */
 @Evolving
-abstract class StreamingCheckpointManager {
+private[spark] abstract class StreamingCheckpointManager {
 
   /**
    * Repartition the stateful streaming operators state in the streaming checkpoint to have
