@@ -37,6 +37,7 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
+    PandasBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -664,32 +665,21 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         if len(df.columns) == 0:
             return pa.array([{}] * len(df), arrow_struct_type)
-        # Assign result columns by schema name if user labeled with strings
-        if self._assign_cols_by_name and any(isinstance(name, str) for name in df.columns):
-            struct_arrs = [
-                self._create_array(
-                    df[spark_field.name],
-                    spark_field.dataType,
-                    arrow_cast=self._arrow_cast,
-                    prefers_large_types=prefers_large_types,
-                )
-                for spark_field in return_type
-            ]
-        # Assign result columns by position
-        else:
-            struct_arrs = [
-                # the selected series has name '1', so we rename it to spark_field.name
-                # as the name is used by _create_array to provide a meaningful error message
-                self._create_array(
-                    df[df.columns[i]].rename(spark_field.name),
-                    spark_field.dataType,
-                    arrow_cast=self._arrow_cast,
-                    prefers_large_types=prefers_large_types,
-                )
-                for i, spark_field in enumerate(return_type)
-            ]
 
-        return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
+        # Use PandasBatchTransformer.to_arrow to convert DataFrame to RecordBatch,
+        # then wrap into a struct and extract the struct column
+        arrow_schema = pa.schema(list(arrow_struct_type))
+        return ArrowBatchTransformer.wrap_struct(
+            PandasBatchTransformer.to_arrow(
+                df,
+                arrow_schema,
+                timezone=self._timezone,
+                safecheck=self._safecheck,
+                arrow_cast=self._arrow_cast,
+                assign_cols_by_name=self._assign_cols_by_name,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+            )
+        ).column(0)
 
     def _create_batch(
         self, series, *, arrow_cast=False, prefers_large_types=False, struct_in_pandas="dict"
@@ -1812,7 +1802,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             def row_stream():
                 for batch in batches:
                     self._update_batch_size_stats(batch)
-                    data_pandas = [
+                    series = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             from_arrow_type(c.type),
@@ -1823,7 +1813,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                         )
                         for c in pa.Table.from_batches([batch]).itercolumns()
                     ]
-                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    for row in PandasBatchTransformer.wrap_series(series).itertuples(index=False):
                         batch_key = tuple(row[s] for s in self.key_offsets)
                         yield (batch_key, row)
 
@@ -1949,7 +1939,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     self._update_batch_size_stats(batch)
 
                     flatten_state_table = flatten_columns(batch, "inputData")
-                    data_pandas = [
+                    input_data_series = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             self._input_type[i].dataType
@@ -1964,7 +1954,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     ]
 
                     flatten_init_table = flatten_columns(batch, "initState")
-                    init_data_pandas = [
+                    init_state_series = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             self._input_type[i].dataType
@@ -1978,14 +1968,18 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
-                    assert not (bool(init_data_pandas) and bool(data_pandas))
+                    assert not (bool(init_state_series) and bool(input_data_series))
 
-                    if bool(data_pandas):
-                        for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                    if bool(input_data_series):
+                        for row in PandasBatchTransformer.wrap_series(
+                            input_data_series
+                        ).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_data_pandas):
-                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                    elif bool(init_state_series):
+                        for row in PandasBatchTransformer.wrap_series(
+                            init_state_series
+                        ).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 
