@@ -232,6 +232,12 @@ private class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunct
 
   override val workerModule = "pyspark.sql.worker.lookup_data_sources"
 
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // No input needed.
   }
@@ -281,6 +287,12 @@ private class UserDefinedPythonDataSourceRunner(
   extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
 
   override val workerModule = "pyspark.sql.worker.create_data_source"
+
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send python data source
@@ -446,6 +458,12 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
   // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
   override val workerModule = "pyspark.sql.worker.data_source_pushdown_filters"
 
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
   def isAnyFilterSupported: Boolean = serializedFilters.nonEmpty
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -538,6 +556,12 @@ private class UserDefinedPythonDataSourceReadRunner(
   // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_read"
 
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python data source
     PythonWorkerUtils.writePythonFunction(func, dataOut)
@@ -579,6 +603,12 @@ private class UserDefinedPythonDataSourceWriteRunner(
     isStreaming: Boolean) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
 
   override val workerModule: String = "pyspark.sql.worker.write_into_data_source"
+
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send the Python data source class.
@@ -638,6 +668,12 @@ private class UserDefinedPythonDataSourceCommitRunner(
     messages: Array[WriterCommitMessage],
     abort: Boolean) extends PythonPlannerRunner[Unit](dataSourceCls) {
   override val workerModule: String = "pyspark.sql.worker.commit_data_source_write"
+
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send the Python data source writer.
