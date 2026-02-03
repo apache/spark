@@ -3020,12 +3020,24 @@ class DatasetSuite extends QueryTest
     assert(indices === (0L until 5L).toArray)
   }
 
-  test("zipWithIndex should throw if column name already exists") {
+  test("zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
     val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
     val ex = intercept[AnalysisException] {
-      ds.zipWithIndex().collect()
+      result.select("index").collect()
     }
-    assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
   }
 }
 

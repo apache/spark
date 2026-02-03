@@ -2027,11 +2027,13 @@ abstract class Dataset[T] extends Serializable {
    *
    * The index column is appended as the last column of the resulting [[DataFrame]].
    *
+   * @note
+   *   If a column with `indexColName` already exists in the schema, the resulting [[DataFrame]]
+   *   will have duplicate column names. Selecting the duplicate column by name will throw
+   *   `AMBIGUOUS_REFERENCE`, and writing the [[DataFrame]] will throw `COLUMN_ALREADY_EXISTS`.
+   *
    * @param indexColName
-   *   The name of the index column to append. The dataset must not already contain a column with
-   *   this name.
-   * @throws AnalysisException
-   *   if a column with `indexColName` already exists in the schema.
+   *   The name of the index column to append.
    * @group typedrel
    * @since 4.2.0
    */

@@ -788,12 +788,24 @@ class ClientE2ETestSuite
     assert(indices === Array(0L, 1L, 2L))
   }
 
-  test("Dataset zipWithIndex should throw if column name already exists") {
+  test("Dataset zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
     val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
     val ex = intercept[AnalysisException] {
-      df.zipWithIndex().collect()
+      result.select("index").collect()
     }
-    assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("Dataset zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
   }
 
   test("Dataset collect tuple") {
