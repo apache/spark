@@ -112,7 +112,7 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
         override def onMessage(message: Any): Unit = {
           receivedMessage = message
           // Capture the context value while it's still attached
-          capturedCompressedSize = RequestDecompressionContext.getCompressedSize()
+          capturedCompressedSize = RequestDecompressionContext.getCompressedSize
         }
       }
     }
