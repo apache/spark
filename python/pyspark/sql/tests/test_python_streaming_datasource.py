@@ -421,35 +421,31 @@ class BasePythonStreamingDataSourceTestsMixin:
                         total_committed_rows += commit_data.get("total_rows", 0)
                         total_committed_batches += commit_data.get("total_batches", 0)
 
-                # We should have both committed data AND JSON files written
-                json_files = [
-                    f
-                    for f in os.listdir(temp_dir)
-                    if f.startswith("partition_") and f.endswith(".json")
-                ]
-
-                # Verify that we have both committed data AND JSON files
-                has_committed_data = total_committed_rows > 0
-                has_json_files = len(json_files) > 0
-
                 self.assertTrue(
-                    has_committed_data,
+                    total_committed_rows > 0,
                     f"Expected committed data but got {total_committed_rows} rows",
                 )
-                self.assertTrue(
-                    has_json_files, f"Expected JSON files but found {len(json_files)} files"
-                )
-
-                # Verify JSON files contain valid data
-                for json_file in json_files:
-                    with open(os.path.join(temp_dir, json_file), "r") as f:
-                        data = json.load(f)
-                        self.assertTrue(len(data) > 0, f"JSON file {json_file} is empty")
 
             check()
 
             query.stop()
             query.awaitTermination()
+
+            json_files = [
+                f
+                for f in os.listdir(temp_dir)
+                if f.startswith("partition_") and f.endswith(".json")
+            ]
+
+            self.assertTrue(
+                len(json_files) > 0, f"Expected JSON files but found {len(json_files)} files"
+            )
+
+            # Verify JSON files contain valid data
+            for json_file in json_files:
+                with open(os.path.join(temp_dir, json_file), "r") as f:
+                    data = json.load(f)
+                    self.assertTrue(len(data) > 0, f"JSON file {json_file} is empty")
 
         finally:
             # Clean up
