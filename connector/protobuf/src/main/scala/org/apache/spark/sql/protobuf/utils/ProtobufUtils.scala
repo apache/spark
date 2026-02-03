@@ -254,7 +254,12 @@ private[sql] object ProtobufUtils extends Logging {
         throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
       }
     val (extensionRegistry, fullNamesToExtensions) = buildExtensionRegistry(fileDescriptors)
-    DescriptorWithExtensions(descriptor, extensionRegistry, fullNamesToExtensions)
+
+    if (SQLConf.get.getConf(SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED)) {
+      DescriptorWithExtensions(descriptor, extensionRegistry, fullNamesToExtensions)
+    } else {
+      DescriptorWithExtensions(descriptor, ExtensionRegistry.getEmptyRegistry, Map.empty)
+    }
   }
 
   private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
