@@ -637,6 +637,7 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
+        activate-environment: ""
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
