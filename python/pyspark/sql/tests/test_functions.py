@@ -3065,6 +3065,23 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
 
+    def test_st_geomfromwkb(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
+            ["wkb", "srid"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb", "srid"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb", 4326))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+
     def test_st_setsrid(self):
         df = self.spark.createDataFrame(
             [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
@@ -3092,10 +3109,12 @@ class FunctionsTestsMixin:
         results = df.select(
             F.st_srid(F.st_geogfromwkb("wkb")),
             F.st_srid(F.st_geomfromwkb("wkb")),
+            F.st_srid(F.st_geomfromwkb("wkb", 4326)),
         ).collect()
         expected = Row(
             4326,
             0,
+            4326,
         )
         self.assertEqual(results, [expected])
 

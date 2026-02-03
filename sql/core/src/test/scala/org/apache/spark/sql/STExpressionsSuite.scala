@@ -145,7 +145,7 @@ class STExpressionsSuite
     val wkbLiteral = Literal.create(wkb, BinaryType)
 
     // Construct the input GEOMETRY expression.
-    val geomExpr = ST_GeomFromWKB(wkbLiteral)
+    val geomExpr = new ST_GeomFromWKB(wkbLiteral)
     assert(geomExpr.dataType.sameType(defaultGeometryType))
     checkEvaluation(ST_AsBinary(geomExpr), wkb)
     // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
@@ -483,9 +483,75 @@ class STExpressionsSuite
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
     checkEvaluation(ST_AsBinary(geographyExpression), wkb)
     // ST_GeomFromWKB and ST_AsBinary.
-    val geometryExpression = ST_GeomFromWKB(wkbLiteral)
+    val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
     checkEvaluation(ST_AsBinary(geometryExpression), wkb)
+  }
+
+  test("ST_GeomFromWKB - expressions") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+    val validSrid = 4326
+    val validSridLiteral = Literal.create(validSrid, IntegerType)
+    val invalidSrid = 9999
+    val invalidSridLiteral = Literal.create(invalidSrid, IntegerType)
+    // ST_GeomFromWKB with default SRID.
+    val geometryExpressionNoSrid = new ST_GeomFromWKB(wkbLiteral)
+    assert(geometryExpressionNoSrid.dataType.sameType(defaultGeometryType))
+    checkEvaluation(ST_AsBinary(geometryExpressionNoSrid), wkb)
+    // ST_GeomFromWKB with valid SRID.
+    val geometryExpressionValidSrid = ST_GeomFromWKB(wkbLiteral, validSridLiteral)
+    assert(geometryExpressionValidSrid.dataType.sameType(GeometryType(validSrid)))
+    checkEvaluation(ST_AsBinary(geometryExpressionValidSrid), wkb)
+    // ST_GeomFromWKB with invalid SRID.
+    val geometryExpressionInvalidSrid = ST_GeomFromWKB(wkbLiteral, invalidSridLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geometryExpressionInvalidSrid.eval()
+      },
+      condition = "ST_INVALID_SRID_VALUE",
+      parameters = Map("srid" -> s"$invalidSrid")
+    )
+  }
+
+  test("ST_GeomFromWKB - columns") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    val validSrid = 4326
+    val invalidSrid = 9999
+
+    withTable("tbl") {
+      // Construct the test table.
+      sql(s"CREATE TABLE tbl (wkb BINARY, srid INT)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString', $validSrid)")
+
+      // ST_GeomFromWKB with default SRID.
+      val geomColNoSrid = "ST_GeomFromWKB(wkb)"
+      assertType(s"SELECT $geomColNoSrid FROM tbl", defaultGeometryType)
+      checkAnswer(
+        sql(s"SELECT hex(ST_AsBinary($geomColNoSrid)) FROM tbl WHERE srid = $validSrid"),
+        Row(wkbString)
+      )
+
+      // ST_GeomFromWKB with valid SRID.
+      val geomColValidSrid = "ST_GeomFromWKB(wkb, srid)"
+      assertType(s"SELECT $geomColValidSrid FROM tbl", GeometryType("ANY"))
+      checkAnswer(
+        sql(s"SELECT hex(ST_AsBinary($geomColValidSrid)) FROM tbl WHERE srid = $validSrid"),
+        Row(wkbString)
+      )
+
+      // ST_GeomFromWKB with invalid SRID.
+      val geomColInvalidSrid = "ST_GeomFromWKB(wkb, 9999)"
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(s"SELECT $geomColInvalidSrid FROM tbl WHERE srid = $validSrid").collect()
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        parameters = Map("srid" -> s"$invalidSrid")
+      )
+    }
   }
 
   /** ST accessor expressions. */
@@ -507,7 +573,7 @@ class STExpressionsSuite
     checkEvaluation(stSridGeographyNull, null)
 
     // ST_Srid with GEOMETRY.
-    val geometryExpression = ST_GeomFromWKB(wkbLiteral)
+    val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     val stSridGeometry = ST_Srid(geometryExpression)
     assert(stSridGeometry.dataType.sameType(IntegerType))
     checkEvaluation(stSridGeometry, defaultGeometrySrid)
@@ -527,7 +593,7 @@ class STExpressionsSuite
     val wkbLiteral = Literal.create(wkb, BinaryType)
     val geographyLiteral = ST_GeogFromWKB(wkbLiteral)
     val nullGeographyLiteral = Literal.create(null, defaultGeographyType)
-    val geometryLiteral = ST_GeomFromWKB(wkbLiteral)
+    val geometryLiteral = new ST_GeomFromWKB(wkbLiteral)
     val nullGeometryLiteral = Literal.create(null, defaultGeometryType)
     val srid = 4326
     val sridLiteral = Literal.create(srid, IntegerType)
