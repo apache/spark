@@ -126,8 +126,11 @@ class TimedeltaIndex(Index):
             kwargs["freq"] = freq
 
         if LooseVersion(pd.__version__) < "3.0.0":
-            kwargs["unit"] = unit
-            kwargs["closed"] = closed
+            if unit is not _NoValue:
+                kwargs["unit"] = unit
+
+            if closed is not _NoValue:
+                kwargs["closed"] = closed
         else:
             if unit is not _NoValue:
                 raise ValueError("The 'unit' keyword is not supported in pandas 3.0.0 and later.")
