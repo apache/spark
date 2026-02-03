@@ -49,12 +49,16 @@ object UnsupportedExpressionInOperatorValidation {
       isSortOnTopOfAggregate: Boolean,
       isFilterOnTopOfAggregate: Boolean): Boolean = {
     expression match {
-      case _: WindowExpression => operator.isInstanceOf[Window]
+      case _: WindowExpression =>
+        !(operator.isInstanceOf[Project] ||
+        operator.isInstanceOf[Aggregate])
       case _: AggregateExpression =>
         !(operator.isInstanceOf[Project] ||
         operator.isInstanceOf[Aggregate] ||
+        operator.isInstanceOf[AggregatePart] ||
         operator.isInstanceOf[Window] ||
         operator.isInstanceOf[CollectMetrics] ||
+        operator.isInstanceOf[Pivot] ||
         isSortOnTopOfAggregate ||
         isFilterOnTopOfAggregate ||
         onlyInLateralSubquery(operator))

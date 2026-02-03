@@ -110,7 +110,11 @@ class ExpressionTreeTraversalStack extends SQLConfHelper {
     stack.push(
       ExpressionTreeTraversal(
         parentOperator = parentOperator,
+        // BEGIN-EDGE
+        ansiMode = conf.enforceAnsiTypeCoercion,
+        /* // END-EDGE
         ansiMode = conf.ansiEnabled,
+         */ // EDGE
         lcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED),
         groupByAliases = conf.groupByAliases,
         sessionLocalTimeZone = conf.sessionLocalTimeZone,

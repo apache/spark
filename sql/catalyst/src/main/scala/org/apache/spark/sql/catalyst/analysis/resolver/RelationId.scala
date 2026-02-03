@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -27,5 +28,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class RelationId(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty,
-    isStreaming: Boolean = false
+    isStreaming: Boolean = false,
+    timeTravelSpec: Option[TimeTravelSpec] = None // EDGE
 )

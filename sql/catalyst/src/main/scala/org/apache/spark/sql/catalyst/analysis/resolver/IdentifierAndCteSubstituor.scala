@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{
   CTERelationDef,
   LogicalPlan,
@@ -42,7 +43,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{
  * We only recurse into the plan if [[IdentifierAndCteSubstitutor.NODES_OF_INTEREST]] are present.
  * This is done so that [[IdentifierAndCteSubstitutor]] is fast and not invasive.
  */
-class IdentifierAndCteSubstitutor {
+class IdentifierAndCteSubstitutor
+    extends ResolverMetricTracker // EDGE
+    {
   private var cteRegistry = new CteRegistry
 
   /**
@@ -54,9 +57,11 @@ class IdentifierAndCteSubstitutor {
    * in isolation.
    */
   def substitutePlan(unresolvedPlan: LogicalPlan): LogicalPlan = {
-    cteRegistry = new CteRegistry
+    recordProfile("substitutePlan") { // EDGE
+      cteRegistry = new CteRegistry
 
-    substitute(unresolvedPlan)
+      substitute(unresolvedPlan)
+    } // EDGE
   }
 
   private def substitute(unresolvedPlan: LogicalPlan): LogicalPlan = {
@@ -91,12 +96,22 @@ class IdentifierAndCteSubstitutor {
    * )
    * SELECT * FROM rel2 -- `rel2` is a table reference
    * }}}
+   *
+   * For each CTE definition, a scope is pushed with the CTE name to enable self-reference
+   * detection for recursive CTEs. During substitution, we use dummy values for cteId (0) since
+   * the actual ID is assigned later during resolution.
    */
   private def handleWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     val cteRelationsAfterSubstitution = unresolvedWith.cteRelations.map { cteRelation =>
       val (cteName, ctePlan, maxDepth) = cteRelation
 
-      cteRegistry.pushScope()
+      val recursiveCteParams = if (unresolvedWith.allowRecursion) {
+        Some(RecursiveCteParameters(cteId = 0, cteName = cteName, maxDepth = None))
+      } else {
+        None
+      }
+
+      cteRegistry.pushScope(recursiveCteParameters = recursiveCteParams)
 
       val ctePlanAfter = try {
         substitute(ctePlan).asInstanceOf[SubqueryAlias]
@@ -132,17 +147,13 @@ class IdentifierAndCteSubstitutor {
    * replace it with [[UnresolvedCteRelationRef]].
    */
   private def handleUnresolvedRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
-    if (unresolvedRelation.multipartIdentifier.size == 1) {
-      cteRegistry.resolveCteName(unresolvedRelation.multipartIdentifier.head) match {
-        case Some(_) =>
-          val result = withOrigin(unresolvedRelation.origin) {
-            UnresolvedCteRelationRef(unresolvedRelation.multipartIdentifier.head)
-          }
-          result.copyTagsFrom(unresolvedRelation)
-          result
-        case None =>
-          unresolvedRelation
+    if (unresolvedRelation.multipartIdentifier.size == 1 &&
+      cteRegistry.cteExists(unresolvedRelation.multipartIdentifier.head)) {
+      val result = withOrigin(unresolvedRelation.origin) {
+        UnresolvedCteRelationRef(unresolvedRelation.multipartIdentifier.head)
       }
+      result.copyTagsFrom(unresolvedRelation)
+      result
     } else {
       unresolvedRelation
     }

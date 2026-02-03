@@ -82,7 +82,8 @@ trait RelationMetadataProvider extends LookupCatalog {
           multipartIdentifier =
             Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name()),
           options = unresolvedRelation.options,
-          isStreaming = unresolvedRelation.isStreaming
+          isStreaming = unresolvedRelation.isStreaming,
+          timeTravelSpec = None // EDGE
         )
       case _ =>
         unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)

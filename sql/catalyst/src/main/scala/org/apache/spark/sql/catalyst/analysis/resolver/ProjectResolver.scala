@@ -17,19 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{HashMap, HashSet}
+import com.databricks.sql.DatabricksSQLConf
 
-import scala.jdk.CollectionConverters._
-
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  Expression,
-  ExprId,
-  ExprUtils,
-  NamedExpression
-}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -40,23 +31,38 @@ import org.apache.spark.sql.internal.SQLConf
  * [[buildProjectWithResolvedLCAs]] method.
  */
 class ProjectResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
-    extends TreeNodeResolver[Project, LogicalPlan] {
+    extends TreeNodeResolver[Project, LogicalPlan]
+    with RetainsOriginalJoinOutput
+    with CollectsWindowSourceExpressions {
   private val scopes = operatorResolver.getNameScopes
+  private val cteRegistry = operatorResolver.getCteRegistry
   private val lcaResolver = expressionResolver.getLcaResolver
+  private val windowResolver = operatorResolver.getWindowResolver
+  protected val windowResolutionContextStack = expressionResolver.getWindowResolutionContextStack
 
   /**
    * [[Project]] introduces a new scope to resolve its subtree and project list expressions.
-   * During the resolution we determine whether the output operator will be [[Aggregate]] or
-   * [[Project]] (based on the `hasAggregateExpressions` flag). If the result is an [[Aggregate]]
-   * validate it using the [[ExprUtils.assertValidAggregation]].
+   * It also introduces a new [[WindowResolutionContext]] for potential window resolution.
+   * During the resolution we determine whether the output operator will be [[Aggregate]],
+   * [[Window]] or [[Project]] (based on the `hasAggregateExpressionsOutsideWindow` and
+   * `hasWindowExpressions` flags) and delegate the operator building process to an appropriate
+   * method in the following way:
+   *  - If the operator contains aggregate expressions that are not part of the window functions,
+   *  delegate resolution to [[buildAggregate]];
+   *  - Else if the operator contains lateral column aliases and window functions, delegate
+   *  resolution to [[buildProjectWithLca]];
+   *  - Else if the operator contains window functions, but not lateral column aliases, delegate
+   *  resolution to [[WindowBuilder.buildWindow]];
+   *  - Else if the operator contains just the lateral alias references, delegate resolution to
+   *  [[buildProjectWithLca]];
    *
-   * If the output operator is [[Project]] and if lateral column alias resolution is enabled, we
-   * construct a multi-level [[Project]], created from all lateral column aliases and their
-   * dependencies. Finally, we place the original resolved project on top of this multi-level one.
-   *
-   * If the output operator is [[Aggregate]] and if the [[Aggregate]] contains lateral column
-   * references, delegate the resolution of these column to
-   * [[LateralColumnAliasResolver.handleLcaInAggregate]].
+   * When resolving inside a recursive CTE definition, we pre-scan the unresolved project list to
+   * detect aggregate and window functions before resolving the child. This is necessary because we
+   * must disallow recursive CTE references before resolving the child, as the child resolution (or
+   * subquery resolution within the project list) may encounter recursive CTE references that should
+   * be disallowed in aggregates (always per SQL standard) or window functions (if the config flag
+   * is set). The pre-scan is skipped for non-recursive CTE contexts to avoid unnecessary overhead
+   * on the common path.
    *
    * After the subtree and project-list expressions are resolved in the child scope we overwrite
    * current scope with resolved operators output to expose new names to the parent operators.
@@ -67,63 +73,58 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
     scopes.pushScope()
+    windowResolutionContextStack.pushScope()
 
     val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
 
-      scopes.current.availableAliases.clear()
+      scopes.current.clearAvailableAliases()
 
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
 
-      val resolvedChildWithMetadataColumns =
-        retainOriginalJoinOutput(resolvedChild, resolvedProjectList, childReferencedAttributes)
+      val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
+        plan = resolvedChild,
+        outputExpressions = resolvedProjectList.expressions,
+        scopes = scopes,
+        childReferencedAttributes = childReferencedAttributes
+      )
 
-      if (resolvedProjectList.hasAggregateExpressions) {
-        val aggregate = Aggregate(
-          groupingExpressions = Seq.empty[Expression],
-          aggregateExpressions = resolvedProjectList.expressions,
-          child = resolvedChildWithMetadataColumns,
-          hint = None
+      if (resolvedProjectList.hasAggregateExpressionsOutsideWindow) {
+        buildAggregate(
+          resolvedProjectList = resolvedProjectList,
+          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
         )
-
-        if (resolvedProjectList.hasLateralColumnAlias) {
-          val aggregateWithLcaResolutionResult = lcaResolver.handleLcaInAggregate(aggregate)
-          val projectList = ResolvedProjectList(
-            expressions = aggregateWithLcaResolutionResult.outputList,
-            hasAggregateExpressions = false,
-            hasLateralColumnAlias = false,
-            aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
-            baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
-          )
-          (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
-        } else {
-          // TODO: This validation function does a post-traversal. This is discouraged in
-          // single-pass Analyzer.
-          ExprUtils.assertValidAggregation(aggregate)
-
-          val resolvedAggregateList = resolvedProjectList.copy(
-            aggregateListAliases = scopes.current.aggregateListAliases,
-            baseAggregate = Some(aggregate)
-          )
-
-          (aggregate, resolvedAggregateList)
-        }
+      } else if (resolvedProjectList.hasLateralColumnAlias &&
+        resolvedProjectList.hasWindowExpressions) {
+        buildProjectWithLca(
+          resolvedProjectList = resolvedProjectList,
+          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
+        )
+      } else if (resolvedProjectList.hasWindowExpressions) {
+        WindowBuilder.buildWindow(
+          windowResolver = windowResolver,
+          originalOperator = unresolvedProject,
+          resolvedProjectList = resolvedProjectList.expressions,
+          childOperator = resolvedChildWithMetadataColumns,
+          hasCorrelatedScalarSubqueryExpressions =
+            resolvedProjectList.hasCorrelatedScalarSubqueryExpressions,
+          cteRegistry = cteRegistry
+        )
+      } else if (resolvedProjectList.hasLateralColumnAlias) {
+        buildProjectWithLca(
+          resolvedProjectList = resolvedProjectList,
+          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
+        )
       } else {
-        val projectWithLca = if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
-          lcaResolver.buildProjectWithResolvedLca(
-            resolvedChild = resolvedChildWithMetadataColumns,
-            scope = scopes.current,
-            originalProjectList = resolvedProjectList.expressions,
-            firstIterationProjectList = scopes.current.output
-          )
-        } else {
+        val resolvedProject =
           Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
-        }
-        (projectWithLca, resolvedProjectList)
+
+        (resolvedProject, resolvedProjectList)
       }
     } finally {
+      windowResolutionContextStack.popScope()
       scopes.popScope()
     }
 
@@ -137,123 +138,85 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
   }
 
   /**
-   * This method adds a [[Project]] node on top of a [[Join]], if [[Join]]'s output has been
-   * changed when metadata columns are added to [[Project]] nodes below the [[Join]]. This is
-   * necessary in order to stay compatible with fixed-point analyzer. Instead of doing this in
-   * [[JoinResolver]] we must do this here, because while resolving [[Join]] we still don't know if
-   * we should add a [[Project]] or not. For example consider the following query:
+   * Resolve the original [[Project]] node with aggregate expressions to an appropriate node
+   * ([[Project]], [[Aggregate]] or [[Window]]).
    *
-   * {{{
-   * -- tables: nt1(k, v1), nt2(k, v2), nt3(k, v3)
-   * SELECT * FROM nt1 NATURAL JOIN nt2 JOIN nt3 ON nt2.k = nt3.k;
-   * }}}
+   *  - If the [[Aggregate]] contains lateral column references, delegate the resolution to
+   *    [[LateralColumnAliasResolver.handleLcaInAggregate]];
+   *  - If the [[Aggregate]] has window expressions, delegate the resolution to [[buildWindow]].
+   *    Currently, window expressions together with lateral column aliases are not supported;
+   *  - Otherwise, validate the result [[Aggregate]] using [[ExprUtils.assertValidAggregation]];
    *
-   * Unresolved plan will be:
-   *
-   * 'Project [*]
-   * +- 'Join Inner, ('nt2.k = 'nt3.k)
-   * :- 'Join NaturalJoin(Inner)
-   * :  :- 'UnresolvedRelation [nt1], [], false
-   * :  +- 'UnresolvedRelation [nt2], [], false
-   * +- 'UnresolvedRelation [nt3], [], false
-   *
-   * After resolving the inner natural join, the plan becomes:
-   *
-   * 'Project [*]
-   * +- 'Join Inner, ('nt2.k = 'nt3.k)
-   *    :- Project [k#15, v1#16, v2#28, k#27]
-   *    :  +- Join Inner, (k#15 = k#27)
-   *    :  :  +- SubqueryAlias nt1
-   *    :  :     +- LocalRelation [k#15, v1#16]
-   *    :  +- SubqueryAlias nt2
-   *    :     +- LocalRelation [k#27, v2#28]
-   *    +- 'UnresolvedRelation [nt3], [], false
-   *
-   * Because we are resolving a natural join, we have placed a [[Project]] node on top of it with
-   * the inner join's output. Additionally, in single-pass, we add all metadata columns as we
-   * resolve up and then prune away unnecessary columns later (more in [[PruneMetadataColumns]]).
-   * This is necessary in order to stay compatible with fixed-point's [[AddMetadataColumns]] rule,
-   * because [[AddMetadata]] columns will recognize k#27 as missing attribute needed for [[Join]]
-   * condition and will therefore add it in the below [[Project]] node. Because of this we are also
-   * adding k#27 as a metadata column to this [[Project]]. This addition of a metadata column
-   * changes the original output of the outer join (because one of the inputs has changed) and in
-   * order to stay compatible with fixed-point, we need to place another [[Project]] on top of the
-   * outer join with its original output. Now, the final plan looks like this:
-   *
-   * Project [k#15, v1#16, v2#28, k#31, v3#32]
-   * +- Project [k#15, v1#16, v2#28, k#31, v3#32]
-   *    +- Join Inner, (k#27 = k#31)
-   *    :- Project [k#15, v1#16, v2#28, k#27]
-   *    :  +- Join Inner, (k#15 = k#27)
-   *    :     :- SubqueryAlias nt1
-   *    :     :  +- LocalRelation [k#15, v1#16]
-   *    :     +- SubqueryAlias nt2
-   *    :        +- LocalRelation [k#27, v2#28]
-   *    +- SubqueryAlias nt3
-   *        +- LocalRelation [k#31, v3#32]
-   *
-   * As can be seen, the [[Project]] node immediately on top of [[Join]] doesn't contain the
-   * metadata column k#27 that we have added. Because of this, k#27 will be pruned away later.
-   *
-   * Now consider the following query for the same input:
-   *
-   * {{{ SELECT *, nt2.k FROM nt1 NATURAL JOIN nt2 JOIN nt3 ON nt2.k = nt3.k; }}}
-   *
-   * The plan will be:
-   *
-   * Project [k#15, v1#16, v2#28, k#31, v3#32, k#27]
-   * +- Join Inner, (k#27 = k#31)
-   * :- Project [k#15, v1#16, v2#28, k#27]
-   * :  +- Join Inner, (k#15 = k#27)
-   * :     :- SubqueryAlias nt1
-   * :     :  +- LocalRelation [k#15, v1#16]
-   * :     +- SubqueryAlias nt2
-   * :        +- LocalRelation [k#27, v2#28]
-   * +- SubqueryAlias nt3
-   *    +- LocalRelation [k#31, v3#32]
-   *
-   * In fixed-point, because we are referencing k#27 from [[Project]] node, [[AddMetadataColumns]]
-   * (which is transforming the tree top-down) will see that [[Project]] has a missing metadata
-   * column and will therefore place k#27 in the [[Project]] node below outer [[Join]]. This is
-   * important, because by [[AddMetadataColumns]] logic, we don't check whether the output of the
-   * outer [[Join]] has changed, and we only check the output change for top-most [[Project]].
-   * Because we need to stay fully compatible with fixed-point, in this case w don't place a
-   * [[Project]] on top of the outer [[Join]] even though its output has changed.
+   *  Note: Recursive CTE self references are disallowed before entering this method by the
+   *  pre-scan in [[resolve]].
    */
-  private def retainOriginalJoinOutput(
-      plan: LogicalPlan,
+  private def buildAggregate(
       resolvedProjectList: ResolvedProjectList,
-      childReferencedAttributes: HashMap[ExprId, Attribute]): LogicalPlan = {
-    plan match {
-      case join: Join
-          if childHasMissingAttributesNotInProjectList(
-            resolvedProjectList.expressions,
-            childReferencedAttributes
-          ) =>
-        Project(scopes.current.output, join)
-      case other => other
+      resolvedChildWithMetadataColumns: LogicalPlan
+  ): (LogicalPlan, ResolvedProjectList) = {
+    val aggregate = Aggregate(
+      groupingExpressions = Seq.empty[Expression],
+      aggregateExpressions = resolvedProjectList.expressions,
+      child = resolvedChildWithMetadataColumns,
+      hint = None
+    )
+
+    cteRegistry.currentScope.failIfScopeHasSelfReference()
+
+    if (resolvedProjectList.hasLateralColumnAlias) {
+      val aggregateWithLcaResolutionResult = lcaResolver.handleLcaInAggregate(aggregate)
+      val projectList = ResolvedProjectList(
+        expressions = aggregateWithLcaResolutionResult.outputList,
+        hasAggregateExpressionsOutsideWindow = false,
+        hasWindowExpressions = false,
+        hasLateralColumnAlias = false,
+        hasCorrelatedScalarSubqueryExpressions = false,
+        aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
+        baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
+      )
+      (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
+    } else if (resolvedProjectList.hasWindowExpressions) {
+      WindowBuilder.buildWindow(
+        windowResolver = windowResolver,
+        originalOperator = aggregate,
+        resolvedProjectList = resolvedProjectList.expressions,
+        childOperator = aggregate.child,
+        hasCorrelatedScalarSubqueryExpressions =
+          resolvedProjectList.hasCorrelatedScalarSubqueryExpressions,
+        cteRegistry = cteRegistry
+      )
+    } else {
+      // TODO: This validation function does a post-traversal. This is discouraged in
+      // single-pass Analyzer.
+      ExprUtils.assertValidAggregation(aggregate)
+
+      val resolvedAggregateList = resolvedProjectList.copy(
+        aggregateListAliases = scopes.current.aggregateListAliases,
+        baseAggregate = Some(aggregate)
+      )
+
+      (aggregate, resolvedAggregateList)
     }
   }
 
   /**
-   * Returns true if a child node of [[Project]] has missing attributes that can be resolved from
-   * [[NameScope.hiddenOutput]] and those attributes are not present in the project list.
+   * If lateral column alias resolution is enabled and the resolved project list contains LCAs, we
+   * construct a multi-level [[Project]], created from all lateral column aliases and their
+   * dependencies. Finally, we place the original resolved project on top of this multi-level one.
    */
-  private def childHasMissingAttributesNotInProjectList(
-      projectList: Seq[NamedExpression],
-      referencedAttributes: HashMap[ExprId, Attribute]): Boolean = {
-    val expressionIdsFromProjectList = new HashSet[ExprId](projectList.map(_.exprId).asJava)
-    val missingAttributes = new HashMap[ExprId, Attribute]
-    referencedAttributes.asScala
-      .foreach {
-        case (exprId, attribute) =>
-          if (!expressionIdsFromProjectList.contains(exprId) && attribute.isMetadataCol) {
-            missingAttributes.put(exprId, attribute)
-          }
-      }
-    val missingAttributeResolvedByHiddenOutput =
-      scopes.current.resolveMissingAttributesByHiddenOutput(missingAttributes)
-
-    missingAttributeResolvedByHiddenOutput.nonEmpty
+  private def buildProjectWithLca(
+      resolvedProjectList: ResolvedProjectList,
+      resolvedChildWithMetadataColumns: LogicalPlan): (LogicalPlan, ResolvedProjectList) = {
+    val projectWithLca = if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+      lcaResolver.buildOperatorWithResolvedLca(
+        resolvedChild = resolvedChildWithMetadataColumns,
+        scope = scopes.current,
+        originalProjectList = resolvedProjectList.expressions,
+        firstIterationProjectList = scopes.current.output
+      )
+    } else {
+      Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
+    }
+    (projectWithLca, resolvedProjectList)
   }
 }

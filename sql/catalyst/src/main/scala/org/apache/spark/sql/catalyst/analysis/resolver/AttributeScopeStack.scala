@@ -19,7 +19,10 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A scope with registered attributes encountered during the logical plan validation process. We
@@ -55,15 +58,16 @@ class AttributeScopeStack {
 
   /**
    * Check if the `attribute` is present in this stack. We check the current scope by default. If
-   * `isOuterReference` is true, we check the first scope above our subquery root.
+   * `isOuterReference` is true, we check the outer scopes too. If
+   * `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is true, we check all the
+   * outer scopes, otherwise we check the first outer scope only.
    */
   def contains(attribute: Attribute, isOuterReference: Boolean = false): Boolean = {
     if (!isOuterReference) {
       current.attributes.contains(attribute)
     } else {
-      outer match {
-        case Some(outer) => outer.attributes.contains(attribute)
-        case _ => false
+      outers.exists { outer =>
+        outer.attributes.contains(attribute)
       }
     }
   }
@@ -96,25 +100,27 @@ class AttributeScopeStack {
    * Pop current attribute scope.
    */
   def popScope(): Unit = {
-      stack.pop()
+    stack.pop()
   }
 
   override def toString: String = stack.toString
 
   private def current: AttributeScope = stack.peek
 
-  private def outer: Option[AttributeScope] = {
-    var outerScope: Option[AttributeScope] = None
+  private def outers: Seq[AttributeScope] = {
+    val supportNestedCorrelations =
+      SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)
+    val outerScopes = mutable.ArrayBuffer.empty[AttributeScope]
 
     val iter = stack.iterator
-    while (iter.hasNext && !outerScope.isDefined) {
+    while (iter.hasNext && (supportNestedCorrelations || outerScopes.isEmpty)) {
       val scope = iter.next
 
       if (scope.isSubqueryRoot && iter.hasNext) {
-        outerScope = Some(iter.next)
+        outerScopes += iter.next
       }
     }
 
-    outerScope
+    outerScopes.toList
   }
 }

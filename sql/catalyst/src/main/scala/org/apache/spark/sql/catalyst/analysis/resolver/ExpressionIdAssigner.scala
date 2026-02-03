@@ -25,11 +25,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
   ExprId,
-  NamedExpression
+  NamedExpression,
+  NamedLambdaVariable,
+  SubqueryExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationRef, LeafNode}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * [[ExpressionIdAssigner]] is used by the [[ExpressionResolver]] to assign unique expression IDs to
@@ -218,8 +221,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *    plan. In this case we call [[pushMapping]] with `isSubqueryRoot = true` to pass the current
  *    mapping as outer mapping to the subquery branches. Any subquery branch may reference
  *    outer attributes, so if `isSubqueryRoot` is `false`, we pass the previous `outerMapping` to
- *    lower branches. Since we only support one level of correlation, for every subquery level
- *    current `mapping` becomes `outerMapping` for the next level.
+ *    lower branches. For every subquery level, if
+ *    `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to `false`, only
+ *    one level of correlation is supported and the current `mapping` becomes `outerMapping`
+ *    for the next level. Otherwise, the current `mapping` is merged with existing
+ *    `outerMapping` as the new `outerMapping` for the next level.
  *  - Continue remapping expressions until we reach the root of the operator tree.
  */
 class ExpressionIdAssigner {
@@ -233,23 +239,27 @@ class ExpressionIdAssigner {
    * Push new mapping entry into the `mappingStack` to make sure that each operator branch uses an
    * isolated expression ID mapping.
    *
-   * @param isSubqueryRoot whether the new branch is related to a subquery root. In this case we
-   *   pass current `mapping` as `outerMapping` to the subquery branches. Otherwise we just
-   *   propagate `outerMapping` itself, because any nested subquery operator may reference outer
-   *   attributes.
+   * @param isSubqueryRoot whether the new branch is related to a subquery root.
+   *   If the new branch is not related to a subquery root, we propagate `outerMapping` itself,
+   *   because any nested subquery operator may reference outer attributes.
+   *   If the new branch is related to a subquery root and
+   *   `spark.sql.optimizer.supportNestedCorrelatedSubqueries` is turned off, we propagate current
+   *   `mapping` as the new `outerMapping` for the next level. If the flag is turned on, we
+   *   merge current `mapping` with existing `outerMapping` as new `outerMapping`.
    */
   def pushMapping(isSubqueryRoot: Boolean = false): Unit = {
     val currentStackEntry = mappingStack.peek()
 
-    mappingStack.push(
-      ExpressionIdAssigner.StackEntry(
-        outerMapping = if (isSubqueryRoot) {
-          currentStackEntry.mapping.map(new ExpressionIdAssigner.Mapping(_))
-        } else {
-          currentStackEntry.outerMapping
-        }
+    val outerMapping = if (isSubqueryRoot) {
+      mergeCurrentAndOuterMappings(
+        outerMapping = currentStackEntry.outerMapping,
+        currentMapping = currentStackEntry.mapping
       )
-    )
+    } else {
+      currentStackEntry.outerMapping
+    }
+
+    mappingStack.push(ExpressionIdAssigner.StackEntry(outerMapping = outerMapping))
   }
 
   /**
@@ -258,15 +268,46 @@ class ExpressionIdAssigner {
    * @param collectChildMapping whether to collect a child mapping into the current stack entry.
    *   This is used in multi-child operators to automatically propagate mapped expression IDs
    *   upwards using [[createMappingFromChildMappings]].
+   * @param oldOutputSet a special parameter used when AssignNewExprIds is calling [[popMapping]]
+   *   for optimized plans. oldOutputSet contains the original output `ExprId`s for the current
+   *   child plan. If it is not empty, [[popMapping]] filters out Ids not related to the original
+   *   outputSet and only maintains the mapping from original oldId to new Id and new Id to itself.
+   *   This is useful because certain optimization plans may contain duplicated `ExprId`s covered
+   *   with aliases from different branches. E.g:
+   *   {{{
+   *     Join LeftOuter [a#1 = a#2]
+   *     - Aggregate [a#1] [a#1 as a#2]
+   *       - Project [a#1]
+   *         - Scan
+   *     + Project [a#1]
+   *       + Scan
+   *   }}}
+   *   It is important that we don't collect mappings including a#1 from the left child and collect
+   *   new mapping for a#1 from the right child of the join.
+   *   When oldOutputSet is empty, do not do any filtering of current `childMapping`.
    */
-  def popMapping(collectChildMapping: Boolean = false): Unit = {
+  def popMapping(
+      collectChildMapping: Boolean = false,
+      oldOutputSet: Set[ExprId] = Set.empty): Unit = {
     val childStackEntry = mappingStack.pop()
 
     if (collectChildMapping) {
       childStackEntry.mapping match {
         case Some(childMapping) =>
+          val outputChildMapping = if (oldOutputSet.nonEmpty) {
+            val filtered = new ExpressionIdAssigner.Mapping
+            childMapping.forEach { (oldId, newId) =>
+              if (oldOutputSet.contains(oldId)) {
+                filtered.put(oldId, newId)
+                filtered.put(newId, newId)
+              }
+            }
+            filtered
+          } else {
+            childMapping
+          }
           val currentStackEntry = mappingStack.peek()
-          currentStackEntry.childMappings.push(childMapping)
+          currentStackEntry.childMappings.push(outputChildMapping)
         case None =>
       }
     }
@@ -432,13 +473,19 @@ class ExpressionIdAssigner {
    * a conflict, or if `alwaysUpdateAlias` is true, we reallocate with a new ID and return
    * that instance.
    *
-   * For [[AttributeReference]]s: If the attribute is present in the current [[mappingStack]] entry,
-   * return that instance, otherwise reallocate with a new ID and return that instance. The mapping
-   * is done both from the original expression ID _and_ from the new expression ID - this way we are
-   * able to replace old references to that attribute in the current operator branch, and preserve
-   * already reallocated attributes to make this call idempotent.
-   * Dangling attribute reference results in an exception, unless `addDanglingAttributeReference`
-   * is true.
+   * For [[NamedLambdaVariable]]s: Always preserve the ID and map it to itself in the current
+   * mapping. Conflicting [[NamedLambdaVariable]] IDs can't appear in the plan since those are
+   * generated randomly and are unique by design (bound to the function in which they appear).
+   *
+   * For [[AttributeReference]]s:
+   *  - If `allowUpdatesForAttributeReferences` is false, all attributes will be mapped according
+   *  to the [[mappingStack]] entry and an exception will be thrown if no mapping for the attribute
+   *  is found. This is useful for operators that always introduce new attributes (if any) via
+   *  [[Alias]]s, e.g. [[Project]].
+   *  - If `allowUpdatesForAttributeReferences` is true, the logic is very similar to [[Alias]]es.
+   *  Try to preserve the attribute if the attribute's ID doesn't conflict with
+   *  `globalExpressionIds`. Otherwise, reallocate with a new ID and return that instance.
+   *  See [[GenerateResolver]] for an example of usage.
    *
    * When remapping the provided expressions, we don't replace them with the previously seen
    * attributes, but replace their IDs ([[NamedExpression.withExprId]]). This is done to preserve
@@ -485,11 +532,50 @@ class ExpressionIdAssigner {
    * {{{
    * df.groupBy($"a", $"b".as("sum_d")).agg(Map.empty[String, String])
    * }}}
+   *
+   * `alwaysUpdateAttributeReferences` and `alwaysMaintainAttributeReferences` are used in
+   * `AssignNewExprIds` when reassigning expression ids for optimized plans.
+   * Setting `alwaysUpdateAttributeReferences` to true ensures that a new expression id is assigned
+   * to the input expression when it is not in the current mapping, regardless of whether it is in
+   * `globalExpressionIds` or not. This is usually used for new attributes generated from special
+   * operators like `Generate`, `Expand`, `UnionLoop`, etc.
+   * For example, when optimization rules duplicate plans and call `AssignNewExprIds` to reassign
+   * the expression ids in the duplicate plan, it expects all the attributes in the duplicate plan
+   * to get new expression ids except for AggregateExpressions used in Partial Aggregates.
+   * {{{
+   * caller:
+   *   // Some optimization rules which do self joins
+   *   val duplicate = AssignNewExprId(plan)
+   *   val res = Join(plan, duplicate)
+   *
+   * plan:
+   * Project [out#1, null AS NULL#2, 'column' AS column#3]
+   * +- Generate explode(array(1, 2)), false, [out#1]
+   *    +- OneRowRelation
+   *
+   * We want all the expression ids in the plan to get reassigned.
+   * target result:
+   * Project [out#4, null AS NULL#5, 'column' AS column#6]
+   * +- Generate explode(array(1, 2)), false, [out#4]
+   *    +- OneRowRelation
+   * }}}
+   * We want `out#1` to be reassigned to `out#4` in the above example even if `out#1` is not in
+   * the `globalExpressionIds` generated from the input plan. In this case we need to set
+   * `alwaysUpdateAttributeReferences` to true.
+   *
+   * Setting `alwaysMaintainAttributeReferences` to true ensures that we always keep the original
+   * expression id, regardless of whether it is in `globalExpressionIds` or not. This is used to
+   * keep the intermediate results of [[Partial]]/[[PartialMerge]] mode [[AggregateExpression]]s
+   * unchanged. Analyzer usecase does not need this feature as [[Partial]]/[[PartialMerge]] mode
+   * [[AggregateExpression]] only appear after the optimization rule
+   * [[AggregatePushdownThroughJoins]].
    */
   def mapExpression[NamedExpressionType <: NamedExpression](
       originalExpression: NamedExpressionType,
       alwaysUpdateAlias: Boolean = false,
-      addDanglingAttributeReference: Boolean = false,
+      allowUpdatesForAttributeReferences: Boolean = false,
+      alwaysUpdateAttributeReferences: Boolean = false,
+      alwaysMaintainAttributeReferences: Boolean = false,
       prioritizeOldDuplicateAliasId: Boolean = false): NamedExpressionType = {
     if (mappingStack.peek().mapping.isEmpty) {
       throw SparkException.internalError(
@@ -516,20 +602,34 @@ class ExpressionIdAssigner {
         globalExpressionIds.add(alias.exprId)
 
         alias
+      case namedLambdaVariable: NamedLambdaVariable =>
+        currentMapping.put(namedLambdaVariable.exprId, namedLambdaVariable.exprId)
+        globalExpressionIds.add(namedLambdaVariable.exprId)
+
+        namedLambdaVariable
       case attributeReference: AttributeReference =>
         currentMapping.get(attributeReference.exprId) match {
-          case null =>
-            if (addDanglingAttributeReference) {
+          case null if allowUpdatesForAttributeReferences =>
+            if (globalExpressionIds.contains(attributeReference.exprId) ||
+                alwaysUpdateAttributeReferences) {
               val newAttribute = attributeReference.newInstance()
               currentMapping.put(attributeReference.exprId, newAttribute.exprId)
               currentMapping.put(newAttribute.exprId, newAttribute.exprId)
               globalExpressionIds.add(newAttribute.exprId)
               newAttribute
             } else {
-              throw SparkException.internalError(
-                s"Encountered a dangling attribute reference $attributeReference"
-              )
+              currentMapping.put(attributeReference.exprId, attributeReference.exprId)
+              globalExpressionIds.add(attributeReference.exprId)
+              attributeReference
             }
+          case null if alwaysMaintainAttributeReferences =>
+            currentMapping.put(attributeReference.exprId, attributeReference.exprId)
+            globalExpressionIds.add(attributeReference.exprId)
+            attributeReference
+          case null =>
+            throw SparkException.internalError(
+              s"Encountered a dangling attribute reference $attributeReference"
+            )
           case mappedExpressionId =>
             attributeReference.withExprId(mappedExpressionId)
         }
@@ -597,6 +697,110 @@ class ExpressionIdAssigner {
     }
   }
 
+  /**
+   * Insert the subquery expression id to the current mapping.
+   * Some optimization rules rely on subquery expression ids such as [[mergeScalarSubqueries]].
+   * And some subquery expression id may be referenced in other operators. (e.g.: [[Exists]]
+   * subquery expression id may be referenced as an attribute reference in [[Filter]] condition).
+   * It is important to avoid duplicated subquery expression ids and add the (oldId -> newId) into
+   * the current mapping to make sure later references is correct if the subquery expression id is
+   * reassigned.
+   *
+   * There are also cases where the same subquery expression can appear again in the same operator
+   * instead of being referenced as an [[AttributeReference]] in the latter usage. For example,
+   * consider the following query:
+   * {{{
+   *  select country,
+   *   (select count(*) from data) as cnt,
+   *   count(id) as cnt_id from data group by all
+   * }}}
+   * The logical plan for it is:
+   * {{{
+   * Aggregate [country#30, scalar-subquery#27 []],
+   *    [country#30, scalar-subquery#27 [] AS cnt#28L, count(1) AS cnt_id#29L]
+   *  :- Aggregate [count(1) AS count(1)#52L]
+   *  :  +- Project
+   *  :     +- LocalRelation [country#40, city#41, name#42, id#43, power#44]
+   *  +- Aggregate [count(1) AS count(1)#52L]
+   *     +- Project
+   *        +- LocalRelation [country#53, city#54, name#55, id#56, power#57]
+   * +- Project [country#30]
+   *   +- LocalRelation [country#30, city#31, name#32, id#33, power#34]
+   * }}}
+   * In this case, we reassign all the attributes within the subquery plan together with the
+   * subquery expression itself to avoid duplicate expression ids.
+   */
+  def mapSubqueryExpression[SubqueryExpressionType <: SubqueryExpression](
+      subquery: SubqueryExpression,
+      alwaysUpdateExpressionId: Boolean = false): SubqueryExpressionType = {
+    if (mappingStack.peek().mapping.isEmpty) {
+      throw SparkException.internalError(
+        "Expression ID mapping doesn't exist. Please first call " +
+          "createMappingForLeafOperator(...) for leaf nodes or " +
+          "createMappingFromChildMappings(...) " +
+          s"for multi-child nodes. Original expression: $SubqueryExpression"
+      )
+    }
+
+    val currentMapping = mappingStack.peek().mapping.get
+
+    val newSubquery = currentMapping.get(subquery.exprId) match {
+      case null =>
+        if (globalExpressionIds.contains(subquery.exprId) ||
+          alwaysUpdateExpressionId) {
+          val newSubquery = subquery.newInstance()
+          currentMapping.put(subquery.exprId, newSubquery.exprId)
+          currentMapping.put(newSubquery.exprId, newSubquery.exprId)
+          globalExpressionIds.add(newSubquery.exprId)
+          newSubquery
+        } else {
+          currentMapping.put(subquery.exprId, subquery.exprId)
+          globalExpressionIds.add(subquery.exprId)
+          subquery
+        }
+      case mappedExpressionId =>
+        // Reassign new expression id for the subquery expression
+        val newSubquery = subquery.newInstance()
+        currentMapping.put(subquery.exprId, newSubquery.exprId)
+        currentMapping.put(newSubquery.exprId, newSubquery.exprId)
+        globalExpressionIds.add(newSubquery.exprId)
+        newSubquery
+    }
+
+    newSubquery.asInstanceOf[SubqueryExpressionType]
+  }
+
+  /**
+   * Assign a correct ID to the given [[originalAttribute]] and return a new instance of that
+   * expression, or return a corresponding new instance of the same attribute, that was previously
+   * reallocated and is present in the current [[mappingStack]] entry or the outer mapping.
+   *
+   * This function is used in [[AssignNewExprIds]] when the originalAttribute can be either from
+   * the current mapping or from the outer mapping.
+   */
+  def mapExpressionOrOuterReference(
+      originalAttribute: AttributeReference): AttributeReference = {
+    if (mappingStack.peek().mapping.isEmpty) {
+      throw SparkException.internalError(
+        "Expression ID mapping doesn't exist. Please first call " +
+          "createMappingForLeafOperator(...) for leaf nodes or" +
+          " createMappingFromChildMappings(...) " +
+          s"for multi-child nodes. Original expression: $originalAttribute"
+      )
+    }
+
+    val currentMapping = mappingStack.peek().mapping.get
+
+    currentMapping.get(originalAttribute.exprId) match {
+      case null =>
+        // Try to map from the outer mapping. If no outer mapping exists or
+        // no mapped expression id is found, internal errors are thrown.
+        mapOuterReference(originalAttribute, ignoreAbsent = false)
+      case mappedExpressionId =>
+        originalAttribute.withExprId(mappedExpressionId)
+    }
+  }
+
   private def setCurrentMapping(mapping: ExpressionIdAssigner.Mapping): Unit = {
     val currentEntry = mappingStack.pop()
     mappingStack.push(currentEntry.copy(mapping = Some(mapping)))
@@ -643,6 +847,41 @@ class ExpressionIdAssigner {
         newMapping.put(oldId, remappedId)
 
       case _ =>
+    }
+  }
+
+  /**
+   * If `spark.sql.optimizer.supportNestedCorrelatedSubqueries` is turned off,
+   * return current `mapping`, which will be treated as outer mapping in the new subquery scope.
+   *
+   * If the flag is turned on, merges two mappings of expression IDs: outerMapping and
+   * currentMapping. The merge rules are as follows:
+   *  1. If both mappings exist, return a new mapping that combines them. Entries in
+   *  currentMapping take priority over entries in outerMapping. This is because for
+   *  outerReferences in a subquery, we resolve them from the nearest enclosing subquery scope.
+   *  2. If only outerMapping exists, return a copy of outerMapping.
+   *  3. If only currentMapping exists, return a copy of currentMapping.
+   *  4. If neither mapping exists, return None.
+   */
+  private def mergeCurrentAndOuterMappings(
+      outerMapping: Option[ExpressionIdAssigner.Mapping],
+      currentMapping: Option[ExpressionIdAssigner.Mapping]
+  ): Option[ExpressionIdAssigner.Mapping] = {
+    if (SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) {
+      (outerMapping, currentMapping) match {
+        case (Some(outerMap), Some(currentMap)) =>
+          val combinedMap = new ExpressionIdAssigner.Mapping(outerMap)
+          combinedMap.putAll(currentMap)
+          Some(combinedMap)
+        case (Some(outerMapping), None) =>
+          Some(new ExpressionIdAssigner.Mapping(outerMapping))
+        case (None, Some(currentMapping)) =>
+          Some(new ExpressionIdAssigner.Mapping(currentMapping))
+        case (None, None) =>
+          None
+      }
+    } else {
+      currentMapping.map(new ExpressionIdAssigner.Mapping(_))
     }
   }
 }

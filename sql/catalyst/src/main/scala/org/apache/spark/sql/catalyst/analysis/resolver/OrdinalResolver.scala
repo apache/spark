@@ -25,9 +25,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * Resolves [[UnresolvedOrdinal]] to an expression from aggregate/project list, if possible.
  */
-class OrdinalResolver(expressionResolver: ExpressionResolver)
+class OrdinalResolver(operatorResolver: Resolver)
     extends TreeNodeResolver[UnresolvedOrdinal, Expression] {
-  private val scopes = expressionResolver.getNameScopes
+  private val operatorResolutionContextStack = operatorResolver.getOperatorResolutionContextStack
 
   /**
    * Resolves [[UnresolvedOrdinal]] to an expression from aggregate/project list, if enabled by a
@@ -35,7 +35,7 @@ class OrdinalResolver(expressionResolver: ExpressionResolver)
    * previously been set by either [[AggregateResolver]] or [[SortResolver]].
    */
   override def resolve(unresolvedOrdinal: UnresolvedOrdinal): Expression =
-    scopes.current.getOrdinalReplacementExpressions match {
+    operatorResolutionContextStack.current.ordinalReplacementExpressions match {
       case Some(resolvedAggregateExpressions: OrdinalReplacementGroupingExpressions)
           if conf.groupByOrdinal =>
         replaceOrdinalInGroupingExpressions(unresolvedOrdinal.ordinal, resolvedAggregateExpressions)
