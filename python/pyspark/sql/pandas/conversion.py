@@ -811,7 +811,6 @@ class SparkConversionMixin:
         from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
-            to_arrow_type,
             _deduplicate_field_names,
         )
         from pyspark.sql.pandas.utils import (
@@ -875,22 +874,23 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
+        # Create list of (series, spark_type) for serializer dump_stream
         arrow_data = [
             [
-                (
-                    c,
-                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types),
-                    t,
-                )
-                for (_, c), t in zip(pdf_slice.items(), spark_types)
+                (series, spark_type)
+                for (_, series), spark_type in zip(pdf_slice.items(), spark_types)
             ]
             for pdf_slice in pdf_slices
         ]
 
         jsparkSession = self._jsparkSession
 
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
+        ser = ArrowStreamPandasSerializer(
+            timezone=timezone,
+            safecheck=safecheck,
+            int_to_decimal_coercion_enabled=False,
+            prefers_large_types=prefers_large_var_types,
+        )
 
         @no_type_check
         def reader_func(temp_filename):

@@ -619,20 +619,22 @@ class SparkSession:
                 timezone="UTC",
                 prefers_large_types=prefers_large_types,
             )
-            arrow_types: List[pa.DataType] = [field.type for field in arrow_schema]
             _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
+            ser = ArrowStreamPandasSerializer(
+                timezone=cast(str, timezone),
+                safecheck=safecheck == "true",
+                int_to_decimal_coercion_enabled=False,
+                prefers_large_types=prefers_large_types,
+            )
 
             _table = pa.Table.from_batches(
                 [
                     ser._create_batch(
-                        [
-                            (c, at, st)
-                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
-                        ]
+                        [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                        prefers_large_types=prefers_large_types,
                     )
                 ]
             )
