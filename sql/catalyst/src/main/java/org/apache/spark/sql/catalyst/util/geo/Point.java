@@ -98,4 +98,32 @@ class Point extends GeometryModel {
   int getDimensionCount() {
     return coordinates.length;
   }
+
+  @Override
+  protected void appendWktContent(StringBuilder sb) {
+    appendCoordinate(sb, getX());
+    sb.append(" ");
+    appendCoordinate(sb, getY());
+    if (hasZ) {
+      sb.append(" ");
+      appendCoordinate(sb, getZ());
+    }
+    if (hasM) {
+      sb.append(" ");
+      appendCoordinate(sb, getM());
+    }
+  }
+
+  /**
+   * Appends a single coordinate value, formatting integers without decimal point.
+   */
+  private static void appendCoordinate(StringBuilder sb, double value) {
+    if (value == Math.floor(value) && !Double.isInfinite(value)) {
+      // For integer values, append as long to avoid decimal point.
+      sb.append((long) value);
+    } else {
+      // For floating-point / decimal values, append as is (double).
+      sb.append(value);
+    }
+  }
 }

@@ -46,4 +46,19 @@ class MultiLineString extends GeometryModel {
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
   }
+
+  @Override
+  protected void appendWktContent(StringBuilder sb) {
+    for (int i = 0; i < lineStrings.size(); i++) {
+      if (i > 0) {
+        sb.append(",");
+      }
+      LineString ls = lineStrings.get(i);
+      if (ls.isEmpty()) {
+        sb.append("EMPTY");
+      } else {
+        ls.appendCoordinatesToWkt(sb);
+      }
+    }
+  }
 }

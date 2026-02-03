@@ -46,4 +46,21 @@ class MultiPoint extends GeometryModel {
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
   }
+
+  @Override
+  protected void appendWktContent(StringBuilder sb) {
+    for (int i = 0; i < points.size(); i++) {
+      if (i > 0) {
+        sb.append(",");
+      }
+      Point p = points.get(i);
+      if (p.isEmpty()) {
+        sb.append("EMPTY");
+      } else {
+        sb.append("(");
+        p.appendWktContent(sb);
+        sb.append(")");
+      }
+    }
+  }
 }

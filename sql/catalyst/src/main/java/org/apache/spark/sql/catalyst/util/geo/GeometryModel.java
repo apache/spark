@@ -176,4 +176,50 @@ public abstract class GeometryModel {
     throw new ClassCastException(
       "Cannot cast " + getClass().getSimpleName() + " to GeometryCollection");
   }
+
+  /**
+   * Appends dimension suffix (Z, M, or ZM) to the WKT type name.
+   */
+  protected void appendDimensionSuffix(StringBuilder sb) {
+    if (hasZ && hasM) {
+      sb.append(" ZM");
+    } else if (hasZ) {
+      sb.append(" Z");
+    } else if (hasM) {
+      sb.append(" M");
+    }
+  }
+
+  /**
+   * Appends the WKT (Well-Known Text) representation of this geometry to the given StringBuilder.
+   */
+  protected void toWkt(StringBuilder sb) {
+    sb.append(typeId.getWktName());
+    appendDimensionSuffix(sb);
+    if (isEmpty()) {
+      sb.append(" EMPTY");
+    } else {
+      if (hasZ || hasM) {
+        sb.append(" (");
+      } else {
+        sb.append("(");
+      }
+      appendWktContent(sb);
+      sb.append(")");
+    }
+  }
+
+  /**
+   * Appends the geometry-specific WKT content (i.e. coordinate values of all child geometries).
+   * Note that this utility method is invoked by `toWkt` when the current geometry is not empty.
+   * All GeometryModel subclasses must implement this method to provide their specific WKT content.
+   */
+  protected abstract void appendWktContent(StringBuilder sb);
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    toWkt(sb);
+    return sb.toString();
+  }
 }

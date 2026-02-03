@@ -46,4 +46,14 @@ class GeometryCollection extends GeometryModel {
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
   }
+
+  @Override
+  protected void appendWktContent(StringBuilder sb) {
+    for (int i = 0; i < geometries.size(); i++) {
+      if (i > 0) {
+        sb.append(",");
+      }
+      geometries.get(i).toWkt(sb);
+    }
+  }
 }
