@@ -721,9 +721,9 @@ class DataSourceStreamReader(ABC):
         to figure out how much new data should be read given the limit.
 
         The `start` will be provided from the return value of :meth:`initialOffset()` for
-        the very first micro-batch, and the offset continues from the last micro-batch for the
-        following. The source can return the same offset as start offset if there is no data to
-        process.
+        the very first micro-batch, and for subsequent micro-batches, the start offset is the
+        ending offset from the previous micro-batch. The source can return the `start` parameter
+        as it is, if there is no data to process.
 
         :class:`ReadLimit` can be used by the source to limit the amount of data returned in this
         call. The implementation should implement :meth:`getDefaultReadLimit()` to provide the
