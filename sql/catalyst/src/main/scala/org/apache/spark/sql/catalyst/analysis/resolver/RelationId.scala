@@ -28,6 +28,5 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class RelationId(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty,
-    isStreaming: Boolean = false,
-    timeTravelSpec: Option[TimeTravelSpec] = None // EDGE
+    isStreaming: Boolean = false
 )

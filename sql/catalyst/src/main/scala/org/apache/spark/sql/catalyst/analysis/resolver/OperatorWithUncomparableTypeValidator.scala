@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import com.databricks.sql.DatabricksSQLConf
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LogicalPlan, SetOperation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, MapType, VariantType}
 
 /**
@@ -41,8 +39,7 @@ object OperatorWithUncomparableTypeValidator {
   def validate(operator: LogicalPlan, output: Seq[Attribute]): Unit = {
     operator match {
       case unsupportedOperator @ (_: SetOperation | _: Distinct) =>
-        val enableUndefinedVariantGroupingBehavior =
-          SQLConf.get.getConf(DatabricksSQLConf.ENABLE_UNDEFINED_VARIANT_GROUPING_BEHAVIOR)
+        val enableUndefinedVariantGroupingBehavior = false
 
         output.foreach { element =>
           if (hasMapType(element.dataType)) {
@@ -52,12 +49,6 @@ object OperatorWithUncomparableTypeValidator {
           if (!enableUndefinedVariantGroupingBehavior && hasVariantType(element.dataType)) {
             throwUnsupportedSetOperationOnVariantType(element, unsupportedOperator)
           }
-          // BEGIN-EDGE
-
-          if (hasGeoType(element.dataType)) {
-            throwUnsupportedOperationForGeoType(element, unsupportedOperator.nodeName)
-          }
-        // END-EDGE
         }
       case _ =>
     }
@@ -70,12 +61,6 @@ object OperatorWithUncomparableTypeValidator {
   private def hasVariantType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[VariantType])
   }
-  // BEGIN-EDGE
-
-  private def hasGeoType(dt: DataType): Boolean = {
-    dt.existsRecursively(dt => dt.isInstanceOf[GeometryType] || dt.isInstanceOf[GeographyType])
-  }
-  // END-EDGE
 
   private def throwUnsupportedSetOperationOnMapType(
       mapCol: Attribute,
@@ -94,13 +79,4 @@ object OperatorWithUncomparableTypeValidator {
       origin = unresolvedPlan.origin
     )
   }
-  // BEGIN-EDGE
-
-  private def throwUnsupportedOperationForGeoType(col: Attribute, operatorName: String): Unit = {
-    throw QueryCompilationErrors.unsupportedOperationForGeoType(
-      dataType = col.dataType,
-      operation = operatorName
-    )
-  }
-  // END-EDGE
 }

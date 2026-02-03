@@ -17,18 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import com.databricks.spark.util.FrameProfiler
-import com.databricks.sql.DatabricksSQLConf
-
-import org.apache.spark.sql.catalyst.{MetricKey, MetricKeyUtils, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.rules.QueryExecutionMetering
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Trait for tracking and logging timing metrics for single-pass resolver.
  */
 trait ResolverMetricTracker {
-  private val profilerGroup: String = getClass.getSimpleName // EDGE
 
   /**
    * Log top-level timing metrics for single-pass analyzer. In order to utilize existing logging
@@ -37,49 +32,21 @@ trait ResolverMetricTracker {
    */
   protected def recordTopLevelMetrics[R](tracker: QueryPlanningTracker)(body: => R): R =
     QueryPlanningTracker.withTracker(tracker) {
-      // BEGIN-EDGE
-      val ruleResult = QueryPlanningTracker.measureRule(
-        SQLConf.get.getConf(DatabricksSQLConf.TRACK_CATALYST_RULES_MEMORY_ALLOCATION),
-        profilerGroup
-      )(body)
-      // END-EDGE
+      val startTime = System.nanoTime()
 
-      collectQueryExecutionMetrics(ruleResult.totalTimeNs)
+      val result = body
+
+      val runTime = System.nanoTime() - startTime
+
+      collectQueryExecutionMetrics(runTime)
       tracker.recordRuleInvocation(
         rule = ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS,
-        timeNs = ruleResult.totalTimeNs,
-        effective = true,
-        memoryAllocatedBytes = ruleResult.memoryAllocatedBytes // Edge
+        timeNs = runTime,
+        effective = true
       )
 
-      ruleResult.result
+      result
     }
-  // BEGIN-EDGE
-
-  /**
-   * Records the QPL [[MetricKey]] counter and the frame profile of a specific code block in the
-   * resolver. We generally use this mechanism for blocking and potentially slow code paths.
-   */
-  protected def recordProfileAndLatency[R](methodName: String, metricKey: MetricKey.MetricKey)(
-      body: => R): R = {
-    val startTime = System.nanoTime()
-    try {
-      FrameProfiler.record(profilerGroup, methodName)(body)
-    } finally {
-      val duration = System.nanoTime() - startTime
-      QueryPlanningTracker.incrementMetric(metricKey, duration)
-    }
-  }
-
-  /**
-   * Records the frame profile of a specific code block in the resolver. We generally use this
-   * mechanism for blocking and potentially slow code paths.
-   */
-  protected def recordProfile[R](methodName: String)(body: => R) =
-    FrameProfiler.record(profilerGroup, methodName) {
-      body
-    }
-  // END-EDGE
 
   private def collectQueryExecutionMetrics(runTime: Long) = {
     val queryExecutionMetrics = QueryExecutionMetering.INSTANCE

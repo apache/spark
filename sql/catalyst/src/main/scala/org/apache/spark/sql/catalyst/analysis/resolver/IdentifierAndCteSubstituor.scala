@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{
   CTERelationDef,
   LogicalPlan,
@@ -57,11 +56,9 @@ class IdentifierAndCteSubstitutor
    * in isolation.
    */
   def substitutePlan(unresolvedPlan: LogicalPlan): LogicalPlan = {
-    recordProfile("substitutePlan") { // EDGE
-      cteRegistry = new CteRegistry
+    cteRegistry = new CteRegistry
 
-      substitute(unresolvedPlan)
-    } // EDGE
+    substitute(unresolvedPlan)
   }
 
   private def substitute(unresolvedPlan: LogicalPlan): LogicalPlan = {

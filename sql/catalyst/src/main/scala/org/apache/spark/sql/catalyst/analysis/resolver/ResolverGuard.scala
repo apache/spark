@@ -21,26 +21,15 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import com.databricks.sql.DatabricksSQLConf
-import com.databricks.sql.acl.TrustedPlan
-import com.databricks.sql.catalyst.TemporalTableIdentifier
-import com.databricks.sql.catalyst.catalog.SessionTempTableCatalogEdgeInterface
-import com.databricks.sql.catalyst.expressions.ai.{AIFunctionBase, AIGen, AIQueryBase}
-import com.databricks.sql.catalyst.plans.logical.ExplainResult
-import com.databricks.sql.expressions.GetSecretImplementation
-
 import org.apache.spark.sql.catalyst.{
   FunctionIdentifier,
-  MetricKey,
   QueryPlanningTracker,
   SQLConfHelper,
   SqlScriptingContextManager
 }
 import org.apache.spark.sql.catalyst.analysis.{
-  DummyMultiStatementTransactionAccessor,
   FunctionRegistry,
   GetViewColumnByNameAndOrdinal,
-  MultiStatementTransactionAccessor,
   NamedParameter,
   NameParameterizedQuery,
   ResolvedInlineTable,
@@ -80,14 +69,7 @@ import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode
  *
  * This is a one-shot object and should not be reused after [[apply]] call.
  */
-class ResolverGuard(
-    catalogManager: CatalogManager,
-    // BEGIN-EDGE
-    multiStatementTransactionAccessor: MultiStatementTransactionAccessor =
-      new DummyMultiStatementTransactionAccessor,
-    // END-EDGE
-    tracker: Option[QueryPlanningTracker] = None
-) extends SQLConfHelper {
+class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
   /**
@@ -102,13 +84,6 @@ class ResolverGuard(
       Some("temp variables")
     } else if (!checkScriptingVariables()) {
       Some("scripting variables")
-      // BEGIN-EDGE
-    } else if (multiStatementTransactionAccessor.isActive) {
-      Some("multi-statement transaction")
-    } else if (conf.getConf(DatabricksSQLConf.SQL_TEMP_TABLE_CREATE_ENABLED)
-      && sessionTempTableNamespaceCreated()) {
-      Some("temp tables")
-      // END-EDGE
     } else {
       checkOperator(operator)
     }
@@ -123,7 +98,6 @@ class ResolverGuard(
    * their children. For unimplemented ones, return Some("reason").
    */
   private def checkOperator(operator: LogicalPlan): Option[String] = {
-    checkOperatorSecondPassAnalysis(operator)
 
     operator match {
       case unresolvedWith: UnresolvedWith =>
@@ -148,7 +122,7 @@ class ResolverGuard(
         checkLocalLimit(localLimit)
       case limitAll: LimitAll
         if conf.getConf(
-          DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_RECURSIVE_CTE_RESOLUTION
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_RECURSIVE_CTE_RESOLUTION
         ) =>
         checkLimitAll(limitAll)
       case offset: Offset =>
@@ -183,16 +157,6 @@ class ResolverGuard(
         checkSort(sort)
       case supervisingCommand: SupervisingCommand =>
         None
-      // BEGIN-EDGE
-      case explainNode: ExplainResult
-          if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPLAIN_NODE_RESOLUTION
-          ) =>
-        recordExperimentalFeatureUsed("ExplainNode")
-        checkExplainNode(explainNode)
-      case signalStatement: SignalStatement =>
-        checkSignalStatement(signalStatement)
-      // END-EDGE
       case repartition: Repartition =>
         checkRepartition(repartition)
       case having: UnresolvedHaving =>
@@ -201,39 +165,29 @@ class ResolverGuard(
         checkSample(sample)
       case unresolvedTVF: UnresolvedTableValuedFunction
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TVF_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TVF_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("UnresolvedTableValuedFunction")
         checkUnresolvedTableValuedFunction(unresolvedTVF)
-      // BEGIN-EDGE
-      case trustedPlan: TrustedPlan
-          if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TRUSTED_PLAN_RESOLUTION
-          ) =>
-        recordExperimentalFeatureUsed("TrustedPlan")
-        checkTrustedPlan(trustedPlan)
-      // END-EDGE
       case nameParameterizedQuery: NameParameterizedQuery
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PARAMETER_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PARAMETER_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("NameParameterizedQuery")
         checkNameParameterizedQuery(nameParameterizedQuery)
       case repartitionByExpression: RepartitionByExpression
           if conf.getConf(
             // scalastyle:off line.size.limit
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_REPARTITION_BY_EXPRESSION_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_REPARTITION_BY_EXPRESSION_RESOLUTION
             // scalastyle:on line.size.limit
           ) =>
         checkRepartitionByExpression(repartitionByExpression)
       case pivot: Pivot
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PIVOT_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PIVOT_RESOLUTION
           ) =>
         checkPivot(pivot)
       case unpivot: Unpivot
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_UNPIVOT_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_UNPIVOT_RESOLUTION
           ) =>
         checkUnpivot(unpivot)
       case _ =>
@@ -243,19 +197,6 @@ class ResolverGuard(
 
   private object CheckOperator {
     def unapply(operator: LogicalPlan): Option[String] = checkOperator(operator)
-  }
-
-  private def checkOperatorSecondPassAnalysis(operator: LogicalPlan): Unit = {
-    if (operator.analyzed) {
-      tracker match {
-        case Some(tracker) =>
-          tracker.setNumericMetric(
-            MetricKey.SINGLE_PASS_ANALYZER_RESOLVER_GUARD_DETECTED_SECOND_PASS_ANALYSIS,
-            1.0
-          )
-        case _ =>
-      }
-    }
   }
 
   /**
@@ -300,76 +241,70 @@ class ResolverGuard(
         checkSemiStructuredExtract(semiStructuredExtract)
       case unresolvedExtractValue: UnresolvedExtractValue
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTRACT_VALUE_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTRACT_VALUE_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("UnresolvedExtractValue")
         checkUnresolvedExtractValue(unresolvedExtractValue)
       case star: Star
           if conf.getConf(
             // scalastyle:off line.size.limit
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTENDED_STAR_USE_CASES_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTENDED_STAR_USE_CASES_RESOLUTION
             // scalastyle:on line.size.limit
           ) =>
-        recordExperimentalFeatureUsed("Star")
         checkStar(star)
       case namedParameter: NamedParameter
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PARAMETER_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PARAMETER_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("NamedParameter")
         checkNamedParameter(namedParameter)
       case getStructField: GetStructField
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GET_STRUCT_FIELD_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GET_STRUCT_FIELD_RESOLUTION
           ) =>
         checkGetStructField(getStructField)
       case windowExpression: WindowExpression
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("WindowExpression")
         checkWindowExpression(windowExpression)
       case windowSpecDefinition: WindowSpecDefinition
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("WindowSpecDefinition")
         checkWindowSpecDefinition(windowSpecDefinition)
       case windowFrame: WindowFrame
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION
           ) =>
-        recordExperimentalFeatureUsed("WindowFrame")
         checkWindowFrame(windowFrame)
       case lambdaFunction: LambdaFunction
           if conf.getConf(
             // scalastyle:off line.size.limit
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
             // scalastyle:on line.size.limit
           ) =>
         checkLambdaFunction(lambdaFunction)
       case unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable
           if conf.getConf(
             // scalastyle:off line.size.limit
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
             // scalastyle:on line.size.limit
           ) =>
         checkUnresolvedNamedLambdaVariable(unresolvedNamedLambdaVariable)
       case namedLambdaVariable: NamedLambdaVariable
           if conf.getConf(
             // scalastyle:off line.size.limit
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
             // scalastyle:on line.size.limit
           ) =>
         checkNamedLambdaVariable(namedLambdaVariable)
       case NamePlaceholder
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_NAME_PLACEHOLDER_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_NAME_PLACEHOLDER_RESOLUTION
           ) =>
         checkNamePlaceholder()
       case baseGroupingSets: BaseGroupingSets
           if conf.getConf(
-            DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GROUPING_ANALYTICS_RESOLUTION
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GROUPING_ANALYTICS_RESOLUTION
           ) =>
         checkBaseGroupingSets(baseGroupingSets)
       case expression if isGenerallySupportedExpression(expression) =>
@@ -391,7 +326,7 @@ class ResolverGuard(
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
     if (unresolvedWith.allowRecursion && !conf.getConf(
-        DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_RECURSIVE_CTE_RESOLUTION
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_RECURSIVE_CTE_RESOLUTION
       )) {
       Some("Recursive CTE")
     } else {
@@ -478,26 +413,10 @@ class ResolverGuard(
   private def checkUnresolvedRelation(unresolvedRelation: UnresolvedRelation) = {
     if (unresolvedRelation.isStreaming) {
       Some("streaming relation")
-      // BEGIN-EDGE
-    } else if (isTimeTravel(unresolvedRelation)) {
-      Some("time travel")
-      // END-EDGE
     } else {
       None
     }
   }
-
-  // BEGIN-EDGE
-  private def isTimeTravel(unresolvedRelation: UnresolvedRelation): Boolean = {
-    unresolvedRelation.options.containsKey("versionAsOf") ||
-    unresolvedRelation.options.containsKey("timestampAsOf") || {
-      unresolvedRelation.multipartIdentifier match {
-        case TemporalTableIdentifier(_) => true
-        case _ => false
-      }
-    }
-  }
-  // END-EDGE
 
   private def checkResolvedInlineTable(resolvedInlineTable: ResolvedInlineTable) = {
     resolvedInlineTable.rows.collectFirst { case CheckExpressionSeq(reason) => reason }
@@ -637,7 +556,7 @@ class ResolverGuard(
    *   - Subset of built-in functions defined in:
    *     - [[ResolverGuard.UNSUPPORTED_FUNCTION_NAMES]]
    *     - [[ResolverGuard.SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES]] when the experimental functions
-   *       flag (`DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS`)
+   *       flag (`SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS`)
    *       is disabled.
    *     - [[ResolverGuard.HIGHER_ORDER_FUNCTIONS]] when the experimental functions flag guarding
    *       higher order functions is disabled. See
@@ -685,18 +604,6 @@ class ResolverGuard(
 
   private def checkSemiStructuredExtract(semiStructuredExtract: SemiStructuredExtract) =
     checkExpression(semiStructuredExtract.child)
-  // BEGIN-EDGE
-
-  private def checkExplainNode(explainNode: ExplainResult) = {
-    checkOperator(explainNode.logicalPlan)
-  }
-
-  private def checkSignalStatement(signalStatement: SignalStatement) = {
-    checkExpression(signalStatement.messageExpr).orElse {
-      signalStatement.messageArgumentsExpr.collectFirst { case CheckExpression(reason) => reason }
-    }
-  }
-  // END-EDGE
 
   private def checkRepartition(repartition: Repartition) = {
     checkOperator(repartition.child)
@@ -726,12 +633,6 @@ class ResolverGuard(
       unresolvedTVF.functionArgs.collectFirst { case CheckExpression(reason) => reason }
     }
   }
-  // BEGIN-EDGE
-
-  private def checkTrustedPlan(trustedPlan: TrustedPlan) = {
-    checkOperator(trustedPlan.child)
-  }
-  // END-EDGE
 
   private def checkNameParameterizedQuery(nameParameterizedQuery: NameParameterizedQuery) = {
     checkOperator(nameParameterizedQuery.child)
@@ -813,8 +714,7 @@ class ResolverGuard(
         true
       // Decimal
       case _: UnscaledValue | _: MakeDecimal | _: CheckOverflow | _: CheckOverflowInSum |
-          _: DecimalAddNoOverflowCheck | _: DecimalSubtractNoOverflowCheck |
-          _: DecimalDivideWithOverflowCheck =>
+          _: DecimalAddNoOverflowCheck | _: DecimalDivideWithOverflowCheck =>
         true
       // Interval
       case _: ExtractIntervalPart[_] | _: IntervalNumOperation | _: MultiplyInterval |
@@ -834,8 +734,8 @@ class ResolverGuard(
           _: RegExpCount | _: RegExpSubStr | _: RegExpInStr =>
         true
       // JSON
-      case _: GetJsonObjectBase | _: JsonTupleBase | _: JsonToStructs | _: StructsToJson |
-          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
+      case _: JsonToStructs | _: StructsToJson | _: SchemaOfJson | _: JsonObjectKeys |
+           _: LengthOfJsonArray =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
@@ -847,13 +747,10 @@ class ResolverGuard(
       case _: XmlToStructs | _: SchemaOfXml | _: StructsToXml =>
         true
       // Misc
-      case _: SortOrder | _: TaggingExpression | _: GetSecretImplementation =>
+      case _: SortOrder | _: TaggingExpression =>
         true
       // Aggregate
       case _: AggregateExpression | _: AnyValue | _: First | _: Last =>
-        true
-      // AI functions
-      case _: AIFunctionBase | _: AIGen | _: AIQueryBase =>
         true
       case _ =>
         false
@@ -878,13 +775,13 @@ class ResolverGuard(
   }
 
   private def checkTempVariables() = {
-    conf.getConf(DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TEMP_VARIABLE_RESOLUTION) ||
+    conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TEMP_VARIABLE_RESOLUTION) ||
     catalogManager.tempVariableManager.isEmpty
   }
 
   private def checkScriptingVariables() = {
     conf.getConf(
-      DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SCRIPTING_VARIABLE_RESOLUTION
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SCRIPTING_VARIABLE_RESOLUTION
     ) ||
     SqlScriptingContextManager.get().map(_.getVariableManager).forall(_.isEmpty)
   }
@@ -893,11 +790,11 @@ class ResolverGuard(
     val isUnsupportedFunction = ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(name)
     val isExperimentalFunction = ResolverGuard.SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES.contains(name)
     val experimentalFunctionsDisabled = !conf.getConf(
-      DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS
     )
     val isHigherOrderFunction = ResolverGuard.HIGHER_ORDER_FUNCTIONS.contains(name)
     val higherOrderFunctionsDisabled = !conf.getConf(
-      DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION
     )
 
     isUnsupportedFunction ||
@@ -910,21 +807,6 @@ class ResolverGuard(
       .lookupBuiltinOrTempFunction(singlePartName)
       .exists(info => info.getSource == "built-in")
   }
-
-  // BEGIN-EDGE
-  private def sessionTempTableNamespaceCreated(): Boolean = {
-    try {
-      catalogManager.sessionTempTableCatalog
-        .asInstanceOf[SessionTempTableCatalogEdgeInterface]
-        .sessionTempTableNamespaceExists()
-    } catch {
-      // Exceptions thrown during this process e.g. UC disabled or Delta disabled, implies no temp
-      // table exists.
-      case NonFatal(e) =>
-        false
-    }
-  }
-  // END-EDGE
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(reason: Option[String]): Unit = {
     reason match {
@@ -945,22 +827,6 @@ class ResolverGuard(
     project.getTagValue(Project.hiddenOutputTag) match {
       case Some(_) => Some("NaturalJoin second resolution")
       case None => None
-    }
-  }
-
-  /**
-   * Record an experimental feature. Do that by setting the
-   * `MetricKey.SINGLE_PASS_ANALYZER_EXPERIMENTAL_FEATURE` metric to the provided reason
-   * (experimental feature name).
-   */
-  private def recordExperimentalFeatureUsed(reason: String): Unit = {
-    tracker match {
-      case Some(tracker) =>
-        tracker.recordStringMetric(
-          MetricKey.SINGLE_PASS_ANALYZER_EXPERIMENTAL_FEATURE.toString,
-          reason
-        )
-      case None =>
     }
   }
 }
@@ -991,14 +857,6 @@ object ResolverGuard {
     // User info functions are not supported.
     // [[InlineUserInfoExpressions]] cannot be invoked as a post-hoc rule as it produces
     // inconsistent aliases based on the table type (because of the rule ordering in fixed-point).
-    // BEGIN-EDGE
-    map += ("current_oauth_custom_identity_claim", ())
-    map += ("current_metastore", ())
-    map += ("current_recipient", ())
-    map += ("is_account_group_member", ())
-    map += ("is_member", ())
-    map += ("user_home_catalog", ())
-    // END-EDGE
     map += ("current_user", ())
     map += ("session_user", ())
     map += ("user", ())
@@ -1021,21 +879,12 @@ object ResolverGuard {
     map += ("window_time", ())
     // Functions that are not resolved properly.
     // Functions that produce wrong schemas/plans because of alias assignment.
-    map += ("ai_query", ()) // EDGE
     map += ("from_json", ())
-    // BEGIN-EDGE
-    // Functions that expose secrets require running the
-    // [[RedactSecretValuesFromQueryResultsInAnalyzer]] rule which is not supported. After migrating
-    // to the [[RedactSecretValuesFromQueryResultsInOptimizer]] rule, those functions can be safely
-    // removed from this list. See [[DatabricksSQLConf.SQL_REDACT_SECRETS_IN_OPTIMIZER]]
-    map += ("secret", ())
-    map += ("try_secret", ())
-    // END-EDGE
   }
 
   /**
    * Functions supported under the
-   * `DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS` flag.
+   * `SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS` flag.
    */
   private val SUPPORTED_EXPERIMENTAL_FUNCTION_NAMES = {
     val map = new IdentifierMap[Unit]()
@@ -1072,11 +921,9 @@ object ResolverGuard {
     map += ("collations", ())
     map += ("explode", ())
     map += ("explode_outer", ())
-    map += ("get_warmup_tracing", ()) // EDGE
     map += ("inline", ())
     map += ("inline_outer", ())
     map += ("json_tuple", ())
-    map += ("list_secrets", ()) // EDGE
     map += ("posexplode", ())
     map += ("posexplode_outer", ())
     map += ("range", ())

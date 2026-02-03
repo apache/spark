@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.internal.SQLConf
 import java.util.HashSet
 
 import org.apache.spark.sql.catalyst.expressions.{

@@ -22,7 +22,6 @@ import java.util.{HashMap, LinkedHashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import com.databricks.sql.DatabricksSQLConf
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{
@@ -46,7 +45,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Window
 }
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Resolves a [[Sort]] by resolving its child and order expressions.
@@ -222,11 +220,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    * implemented as the latter, but since this behavior isn't standard, it's controlled by a flag.
    */
   private def failIfIllegalRecursiveSelfReference(): Unit = {
-    if (SQLConf.get.getConf(
-      DatabricksSQLConf.DISABLE_SORT_AND_WINDOW_FUNCTIONS_WITH_RECURSIVE_REFERENCE
-    )) {
-      cteRegistry.currentScope.failIfScopeHasSelfReference()
-    }
+    ()
   }
 
   /**
@@ -259,7 +253,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
   private def resolveOrderExpressions(
       partiallyResolvedSort: Sort): (Seq[SortOrder], Seq[Attribute]) = {
     val orderByOrdinal = conf.orderByOrdinal
-    val replaceOrdinalsBeforeAnalysis = conf.replaceOrdinalsBeforeAnalysis
+    val replaceOrdinalsBeforeAnalysis = true
 
     val referencedAttributes = new HashMap[ExprId, Attribute]
 
@@ -289,7 +283,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    * [[OrdinalResolver]].
    *
    * This logic is only relevant for the legacy behavior when
-   * [[DatabricksSQLConf.REPLACE_ORDINALS_BEFORE_ANALYSIS]] is `false`.
+   * Ordinal replacement uses the legacy behavior when disabled.
    */
   private def legacyReplaceOrdinalInSortOrder(
       resolvedSortOrder: SortOrder,

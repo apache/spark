@@ -41,13 +41,6 @@ class PlanRewriter(
   private val planRewriter = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
       Seq(
-        // BEGIN-EDGE
-        Batch(
-          "Repartition AIFunctions",
-          Once,
-          AIFunctionRepartition
-        ),
-        // END-EDGE
         Batch(
           "Plan Rewriting",
           Once,
@@ -66,16 +59,9 @@ class PlanRewriter(
    * them and then applying post-resolution rules on the entire plan.
    */
   def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
-    // BEGIN-EDGE
-    recordProfileAndLatency(
-      "rewriteWithSubqueries",
-      MetricKey.SINGLE_PASS_ANALYZER_PLAN_REWRITER_LATENCY
-    ) {
-      // END-EDGE
-      AnalysisHelper.allowInvokingTransformsInAnalyzer {
-        doRewriteWithSubqueries(plan)
-      }
-    } // EDGE
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      doRewriteWithSubqueries(plan)
+    }
   }
 
   private def doRewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {

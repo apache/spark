@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.LinkedHashMap
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, NameParameterizedQuery}
 import org.apache.spark.sql.catalyst.expressions.{

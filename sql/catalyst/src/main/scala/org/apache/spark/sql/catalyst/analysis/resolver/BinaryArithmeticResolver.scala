@@ -22,12 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   Add,
   BinaryArithmetic,
   Cast,
-  DateAdd,
   Divide,
   Expression,
   Multiply,
-  Subtract,
-  SubtractDates
+  Subtract
 }
 import org.apache.spark.sql.types._
 

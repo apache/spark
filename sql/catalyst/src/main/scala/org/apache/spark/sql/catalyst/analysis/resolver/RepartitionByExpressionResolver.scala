@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import com.databricks.sql.DatabricksSQLConf
 
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -111,7 +110,7 @@ class RepartitionByExpressionResolver(resolver: Resolver, expressionResolver: Ex
 
   private def validateRepartitionByVariant(
       repartitionByExpression: RepartitionByExpression): Unit = {
-    if (conf.getConf(DatabricksSQLConf.ENABLE_UNDEFINED_VARIANT_GROUPING_BEHAVIOR)) {
+    if (false) {
       val variantExpressionInPartitionExpression =
         repartitionByExpression.partitionExpressions.find(e => hasVariantType(e.dataType))
 

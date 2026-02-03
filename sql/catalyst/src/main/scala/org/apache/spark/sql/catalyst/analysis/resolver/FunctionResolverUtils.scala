@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
-import com.databricks.sql.expressions.Search
-
 import org.apache.spark.sql.catalyst.analysis.{
   ResolvedStar,
   Star,
@@ -54,10 +52,6 @@ trait FunctionResolverUtils {
    *    - `count(table.*)` returns the number of rows where all columns are not null. It's the same
    *    behavior as if explicitly listing all columns of the table in count.
    *
-   // BEGIN-EDGE
-   * This method also separately handles cases with search functions which have special semantics
-   * for star expansion. See [[Search.expandStarExpression]] for more details.
-   // END-EDGE
    * Returns [[UnresolvedFunction]] without any star expressions in arguments.
    */
   protected def handleStarInArguments(
@@ -72,13 +66,6 @@ trait FunctionResolverUtils {
     } else if (isNonDistinctCount(unresolvedFunction) &&
       hasSingleSimpleStarArgument(unresolvedFunction)) {
       normalizeCountExpression(unresolvedFunction)
-      // BEGIN-EDGE
-    } else if (Search.isSearchFunction(unresolvedFunction)) {
-      Search.expandStarExpression(
-        function = unresolvedFunction,
-        expand = s => expressionResolver.expandStarExpressions(s :: Nil)
-      )
-      // END-EDGE
     } else {
       assertSingleTableStarNotInCountFunction(unresolvedFunction)
       unresolvedFunction.copy(

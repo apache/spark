@@ -20,15 +20,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.{ArrayDeque, HashMap, HashSet}
 
 import scala.annotation.nowarn
-import scala.collection.compat.immutable.LazyList
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-
-import com.databricks.spark.util.BehaviorChangeLogging
-import com.databricks.sql.BehaviorChangeConf.{
-  SC116075_NAME_COLLISION_ON_OUTER_REFERENCE_AND_LCA,
-  SC128052_RELYING_ON_DERIVED_COLUMN_ALIAS
-}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{
@@ -60,7 +53,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Unpivot
 }
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.Utils
 
@@ -90,9 +83,7 @@ class ExpressionResolver(
     extends TreeNodeResolver[Expression, Expression]
     with ProducesUnresolvedSubtree
     with ResolvesExpressionChildren
-    with BehaviorChangeLogging // EDGE
-    with CoercesExpressionTypes
-    with CollectsWindowSourceExpressions {
+    with CoercesExpressionTypes {
 
   /**
    * This field stores referenced attributes from the most recently resolved expression tree. It is
@@ -146,7 +137,6 @@ class ExpressionResolver(
   private val expressionResolutionContextStack = new ArrayDeque[ExpressionResolutionContext]
   private val scopes = resolver.getNameScopes
   private val subqueryRegistry = resolver.getSubqueryRegistry
-  protected val windowResolutionContextStack = new WindowResolutionContextStack
 
   private val aliasResolver = new AliasResolver(this)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(this)
@@ -161,9 +151,8 @@ class ExpressionResolver(
   )
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
   private val ordinalResolver = new OrdinalResolver(resolver)
-  private val lcaResolver = new LateralColumnAliasResolver(this, resolver)
+  private val lcaResolver = new LateralColumnAliasResolver(this)
   private val semiStructuredExtractResolver = new SemiStructuredExtractResolver(this)
-  private val windowExpressionResolver = new WindowExpressionResolver(this)
   private val extractValueResolver = new ExtractValueResolver(this)
   private val lambdaFunctionResolver = new LambdaFunctionResolver(this)
   private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
@@ -178,12 +167,6 @@ class ExpressionResolver(
    */
   def getExpressionResolutionContextStack: ArrayDeque[ExpressionResolutionContext] =
     expressionResolutionContextStack
-
-  /**
-   * Get the window resolution context stack.
-   */
-  def getWindowResolutionContextStack: WindowResolutionContextStack =
-    windowResolutionContextStack
 
   def getExpressionIdAssigner: ExpressionIdAssigner = expressionIdAssigner
 
@@ -295,8 +278,6 @@ class ExpressionResolver(
             resolveNamedExpression(unresolvedNamedExpression)
           case unresolvedFunction: UnresolvedFunction =>
             functionResolver.resolve(unresolvedFunction)
-          case unresolvedWindowExpression: WindowExpression =>
-            windowExpressionResolver.resolve(unresolvedWindowExpression)
           case unresolvedLiteral: Literal =>
             resolveLiteral(unresolvedLiteral)
           case unresolvedOrdinal: UnresolvedOrdinal =>
@@ -869,8 +850,6 @@ class ExpressionResolver(
 
       val nameTarget: NameTarget = resolveMultipartName(unresolvedAttribute.nameParts)
 
-      logSC128052RelyingOnDerivedColumnAlias(nameTarget) // EDGE
-
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
 
       if (nameTarget.lateralAttributeReference.isEmpty) {
@@ -878,7 +857,6 @@ class ExpressionResolver(
       }
 
       if (nameTarget.isOuterReference) {
-        logSC116075NameCollisionOnOuterReferenceAndLca(candidate)
         expressionResolutionContext.hasOuterReferences = true
       } else {
         expressionResolutionContext.hasLocalReferences = true
@@ -936,8 +914,6 @@ class ExpressionResolver(
           expressionResolutionContext.resolvingTreeUnderAggregateExpression,
         resolvingView = viewResolutionContext.isDefined,
         resolvingExecuteImmediate = false,
-        referredTempVariableNames =
-          viewResolutionContext.map(_.referredTempVariableNames).getOrElse(Seq.empty),
         extractValueExtractionKey = extractValueExtractionKey
       )
     )
@@ -986,10 +962,6 @@ class ExpressionResolver(
       case currentDate: CurrentDate =>
         timezoneAwareExpressionResolver.resolve(currentDate)
       case attribute: Attribute =>
-        collectWindowSourceExpression(
-          expression = attribute,
-          parentOperator = traversals.current.parentOperator
-        )
         attribute
       case extractValue: ExtractValue =>
         extractValueResolver.handleResolvedExtractValue(extractValue)
@@ -1084,11 +1056,6 @@ class ExpressionResolver(
     }
 
     tryAddReferencedAttribute(resultAttributeWithNullability)
-
-    collectWindowSourceExpression(
-      expression = resultAttributeWithNullability,
-      parentOperator = traversals.current.parentOperator
-    )
 
     resultAttributeWithNullability
   }
@@ -1392,11 +1359,6 @@ class ExpressionResolver(
    */
   private def canLaterallyReferenceColumn: Boolean = {
     traversals.current.lcaEnabled &&
-    // BEGIN-EDGE
-    traversals.current.parentOperator
-      .getTagValue(GeneratedColumn.GENERATED_COLUMN_VALIDATION)
-      .isEmpty &&
-    // END-EDGE
     !expressionResolutionContextStack.peek().resolvingGroupingExpressions
   }
 
@@ -1482,27 +1444,6 @@ class ExpressionResolver(
     }
     result
   }
-  // BEGIN-EDGE
-
-  private def logSC128052RelyingOnDerivedColumnAlias(nameTarget: NameTarget): Unit = {
-    nameTarget.aliasMetadata match {
-      case None =>
-      case Some(metadata) =>
-        if (metadata.contains(org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS)) {
-          recordBehavioralChange(SC128052_RELYING_ON_DERIVED_COLUMN_ALIAS.key, false)
-        }
-    }
-  }
-
-  private def logSC116075NameCollisionOnOuterReferenceAndLca(candidate: Expression) = {
-    candidate match {
-      case namedExpression: NamedExpression
-          if scopes.current.hasAvailableAliasWithName(namedExpression.name) =>
-        recordBehavioralChange(SC116075_NAME_COLLISION_ON_OUTER_REFERENCE_AND_LCA.key, false)
-      case _ =>
-    }
-  }
-  // END-EDGE
 
   private def throwUnsupportedSinglePassAnalyzerFeature(unresolvedExpression: Expression): Nothing =
     throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import com.databricks.sql.DatabricksSQLConf
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -32,13 +31,10 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ProjectResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Project, LogicalPlan]
-    with RetainsOriginalJoinOutput
-    with CollectsWindowSourceExpressions {
+    with RetainsOriginalJoinOutput {
   private val scopes = operatorResolver.getNameScopes
   private val cteRegistry = operatorResolver.getCteRegistry
   private val lcaResolver = expressionResolver.getLcaResolver
-  private val windowResolver = operatorResolver.getWindowResolver
-  protected val windowResolutionContextStack = expressionResolver.getWindowResolutionContextStack
 
   /**
    * [[Project]] introduces a new scope to resolve its subtree and project list expressions.
@@ -51,8 +47,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    *  delegate resolution to [[buildAggregate]];
    *  - Else if the operator contains lateral column aliases and window functions, delegate
    *  resolution to [[buildProjectWithLca]];
-   *  - Else if the operator contains window functions, but not lateral column aliases, delegate
-   *  resolution to [[WindowBuilder.buildWindow]];
+   *  - Else if the operator contains window functions, window resolution is not supported here;
    *  - Else if the operator contains just the lateral alias references, delegate resolution to
    *  [[buildProjectWithLca]];
    *
@@ -73,7 +68,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
     scopes.pushScope()
-    windowResolutionContextStack.pushScope()
 
     val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
@@ -91,26 +85,12 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         childReferencedAttributes = childReferencedAttributes
       )
 
-      if (resolvedProjectList.hasAggregateExpressionsOutsideWindow) {
+      if (resolvedProjectList.hasWindowExpressions) {
+        throw new ExplicitlyUnsupportedResolverFeature("WindowExpression")
+      } else if (resolvedProjectList.hasAggregateExpressionsOutsideWindow) {
         buildAggregate(
           resolvedProjectList = resolvedProjectList,
           resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
-        )
-      } else if (resolvedProjectList.hasLateralColumnAlias &&
-        resolvedProjectList.hasWindowExpressions) {
-        buildProjectWithLca(
-          resolvedProjectList = resolvedProjectList,
-          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
-        )
-      } else if (resolvedProjectList.hasWindowExpressions) {
-        WindowBuilder.buildWindow(
-          windowResolver = windowResolver,
-          originalOperator = unresolvedProject,
-          resolvedProjectList = resolvedProjectList.expressions,
-          childOperator = resolvedChildWithMetadataColumns,
-          hasCorrelatedScalarSubqueryExpressions =
-            resolvedProjectList.hasCorrelatedScalarSubqueryExpressions,
-          cteRegistry = cteRegistry
         )
       } else if (resolvedProjectList.hasLateralColumnAlias) {
         buildProjectWithLca(
@@ -124,7 +104,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         (resolvedProject, resolvedProjectList)
       }
     } finally {
-      windowResolutionContextStack.popScope()
       scopes.popScope()
     }
 
@@ -175,16 +154,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
       )
       (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
-    } else if (resolvedProjectList.hasWindowExpressions) {
-      WindowBuilder.buildWindow(
-        windowResolver = windowResolver,
-        originalOperator = aggregate,
-        resolvedProjectList = resolvedProjectList.expressions,
-        childOperator = aggregate.child,
-        hasCorrelatedScalarSubqueryExpressions =
-          resolvedProjectList.hasCorrelatedScalarSubqueryExpressions,
-        cteRegistry = cteRegistry
-      )
     } else {
       // TODO: This validation function does a post-traversal. This is discouraged in
       // single-pass Analyzer.

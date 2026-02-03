@@ -114,12 +114,6 @@ class ResolutionValidator {
         validateRepartitionByExpression(repartitionByExpression)
       case sample: Sample =>
         validateSample(sample)
-      // BEGIN-EDGE
-      case trustedPlan: TrustedPlan =>
-        validateTrustedPlan(trustedPlan)
-      case listSecrets: ListSecrets =>
-        validateListSecrets(listSecrets)
-      // END-EDGE
       case generate: Generate =>
         validateGenerate(generate)
       case expand: Expand =>
@@ -131,10 +125,6 @@ class ResolutionValidator {
         validateRelation(multiInstanceRelation)
       case supervisingCommand: SupervisingCommand =>
         validateSupervisingCommand(supervisingCommand)
-      // BEGIN-EDGE
-      case explainResult: ExplainResult =>
-        validateExplainResult(explainResult)
-      // END-EDGE
       case signalStatement: SignalStatement =>
         validateSignalStatement(signalStatement)
     }
@@ -329,12 +319,6 @@ class ResolutionValidator {
   private def validateSample(sample: Sample): Unit = {
     validate(sample.child)
   }
-  // BEGIN-EDGE
-
-  private def validateTrustedPlan(trustedPlan: TrustedPlan): Unit = {
-    validate(trustedPlan.child)
-  }
-  // END-EDGE
 
   private def validateGenerate(generate: Generate): Unit = {
     validate(generate.child)
@@ -381,19 +365,6 @@ class ResolutionValidator {
   }
 
   private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}
-  // BEGIN-EDGE
-
-  private def validateExplainResult(explainResult: ExplainResult): Unit = {
-    validate(explainResult.logicalPlan)
-  }
-
-  private def validateListSecrets(listSecrets: ListSecrets): Unit = {
-    listSecrets.inputExpressions.foreach(
-      expression => expressionResolutionValidator.validate(expression)
-    )
-    handleOperatorOutput(listSecrets)
-  }
-  // END-EDGE
 
   private def validateSignalStatement(signalStatement: SignalStatement): Unit = {
     expressionResolutionValidator.validate(signalStatement.messageExpr)

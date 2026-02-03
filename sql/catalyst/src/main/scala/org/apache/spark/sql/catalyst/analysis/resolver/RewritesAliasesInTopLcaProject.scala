@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference,
   Expression,
   ExprId,
-  NamedExpression,
-  SortOrder
+  NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE

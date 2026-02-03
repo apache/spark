@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.{MetricKey, SQLConfHelper}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
   AnsiGetDateFieldOperationsTypeCoercion,
   AnsiStringPromotionTypeCoercion,
@@ -65,40 +65,35 @@ trait CoercesExpressionTypes extends SQLConfHelper with ResolverMetricTracker {
   def coerceExpressionTypes(
       expression: Expression,
       expressionTreeTraversal: ExpressionTreeTraversal): Expression = {
-    recordProfileAndLatency(
-      "coerceExpressionTypes",
-      MetricKey.SINGLE_PASS_ANALYZER_TYPE_COERCION_LATENCY
-    ) {
-      withOrigin(expression.origin) {
-        val coercedExpressionOnce = applyTypeCoercion(
-          expression = expression,
+    withOrigin(expression.origin) {
+      val coercedExpressionOnce = applyTypeCoercion(
+        expression = expression,
+        expressionTreeTraversal = expressionTreeTraversal
+      )
+
+      // If the expression isn't changed by the first iteration of type coercion,
+      // second iteration won't be effective either.
+      val expressionAfterTypeCoercion = if (coercedExpressionOnce.eq(expression)) {
+        coercedExpressionOnce
+      } else {
+        // This is a hack necessary because fixed-point analyzer sometimes requires multiple
+        // passes to resolve type coercion. Instead, in single pass, we apply type coercion twice
+        // on the same node in order to ensure that types are resolved.
+        applyTypeCoercion(
+          expression = coercedExpressionOnce,
           expressionTreeTraversal = expressionTreeTraversal
         )
-
-        // If the expression isn't changed by the first iteration of type coercion,
-        // second iteration won't be effective either.
-        val expressionAfterTypeCoercion = if (coercedExpressionOnce.eq(expression)) {
-          coercedExpressionOnce
-        } else {
-          // This is a hack necessary because fixed-point analyzer sometimes requires multiple
-          // passes to resolve type coercion. Instead, in single pass, we apply type coercion twice
-          // on the same node in order to ensure that types are resolved.
-          applyTypeCoercion(
-            expression = coercedExpressionOnce,
-            expressionTreeTraversal = expressionTreeTraversal
-          )
-        }
-
-        val coercionResult = expressionTreeTraversal.defaultCollation match {
-          case Some(defaultCollation) =>
-            DefaultCollationTypeCoercion(expressionAfterTypeCoercion, defaultCollation)
-          case None =>
-            expressionAfterTypeCoercion
-        }
-
-        coercionResult.copyTagsFrom(expression)
-        coercionResult
       }
+
+      val coercionResult = expressionTreeTraversal.defaultCollation match {
+        case Some(defaultCollation) =>
+          DefaultCollationTypeCoercion(expressionAfterTypeCoercion, defaultCollation)
+        case None =>
+          expressionAfterTypeCoercion
+      }
+
+      coercionResult.copyTagsFrom(expression)
+      coercionResult
     }
   }
 
@@ -162,8 +157,7 @@ object CoercesExpressionTypes {
     AnsiTypeCoercion.ImplicitTypeCoercion.apply,
     AnsiTypeCoercion.AnsiDateTimeOperationsTypeCoercion.apply,
     AnsiTypeCoercion.WindowFrameTypeCoercion.apply,
-    AnsiGetDateFieldOperationsTypeCoercion.apply,
-    AnsiTypeCoercion.SearchTypeCoercion.apply
+    AnsiGetDateFieldOperationsTypeCoercion.apply
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
@@ -185,7 +179,6 @@ object CoercesExpressionTypes {
     TypeCoercion.ImplicitTypeCoercion.apply,
     TypeCoercion.DateTimeOperationsTypeCoercion.apply,
     TypeCoercion.WindowFrameTypeCoercion.apply,
-    StringLiteralTypeCoercion.apply,
-    TypeCoercion.SearchTypeCoercion.apply
+    StringLiteralTypeCoercion.apply
   )
 }

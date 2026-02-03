@@ -21,12 +21,11 @@ import java.util.{ArrayDeque, ArrayList, HashSet}
 
 import scala.jdk.CollectionConverters._
 
-import com.databricks.sql.DatabricksSQLConf
-
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.resolver.AliasKind._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * [[LateralColumnAliasRegistryImpl]] is a utility class that contains structures required for
@@ -188,7 +187,7 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
     val aliasReference = aliasReferenceList.get(0)
 
     if (aliasReference.aliasKind == AliasKind.Implicit &&
-      !conf.getConf(DatabricksSQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ALLOW_LCA_ON_IMPLICIT_ALIAS)) {
+      !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ALLOW_LCA_ON_IMPLICIT_ALIAS)) {
       throw QueryCompilationErrors.lateralColumnAliasOnImplicitlyGeneratedAlias(
         name = attributeName,
         implicitAlias = aliasReference.attribute

@@ -86,8 +86,7 @@ class GroupingAnalyticsResolver(resolver: Resolver, expressionResolver: Expressi
           groupByExpressions = groupByExpressions,
           selectedGroupByExpressions = selectedGroupByExpressions,
           child = aggregate.child,
-          aggregationExpressions = aggregate.aggregateExpressions,
-          hint = aggregate.hint
+          aggregationExpressions = aggregate.aggregateExpressions
         )
 
         val newAggregateChild = transformedAggregate.child match {

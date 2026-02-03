@@ -342,6 +342,155 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES =
+    buildConf("spark.sql.singlePassResolver.enableExperimentalFeatures")
+      .internal()
+      .doc("Enable experimental single-pass resolver features.")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GROUPING_ANALYTICS_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableGroupingAnalytics")
+      .internal()
+      .doc("Enable grouping analytics resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FUNCTIONS =
+    buildConf("spark.sql.singlePassResolver.enableExperimentalFunctions")
+      .internal()
+      .doc("Enable experimental function resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_HIGHER_ORDER_FUNCTIONS_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableHigherOrderFunctionsResolution")
+      .internal()
+      .doc("Enable higher-order function resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_RECURSIVE_CTE_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableRecursiveCteResolution")
+      .internal()
+      .doc("Enable recursive CTE resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPLAIN_NODE_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableExplainNodeResolution")
+      .internal()
+      .doc("Enable ExplainNode resolution in the single-pass resolver.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTENDED_STAR_USE_CASES_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableExtendedStarUseCaseResolution")
+      .internal()
+      .doc("Enable extended star resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXTRACT_VALUE_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableExtractValueResolution")
+      .internal()
+      .doc("Enable extract value resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_GET_STRUCT_FIELD_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableGetStructField")
+      .internal()
+      .doc("Enable get struct field resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_NAME_PLACEHOLDER_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableNamePlaceholder")
+      .internal()
+      .doc("Enable name placeholder resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PARAMETER_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableParameterResolution")
+      .internal()
+      .doc("Enable parameter resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_PIVOT_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enablePivotResolution")
+      .internal()
+      .doc("Enable pivot resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_REPARTITION_BY_EXPRESSION_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableRepartitionByExpressionResolution")
+      .internal()
+      .doc("Enable repartition-by-expression resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SCRIPTING_VARIABLE_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableScriptingVariableResolution")
+      .internal()
+      .doc("Enable scripting variable resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TEMP_VARIABLE_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableTempVariableResolution")
+      .internal()
+      .doc("Enable temp variable resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TRUSTED_PLAN_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableTrustedPlanResolution")
+      .internal()
+      .doc("Enable trusted plan resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_TVF_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableTvfResolution")
+      .internal()
+      .doc("Enable table-valued function resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_UNPIVOT_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableUnpivotResolution")
+      .internal()
+      .doc("Enable unpivot resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_WINDOW_RESOLUTION =
+    buildConf("spark.sql.singlePassResolver.enableWindowResolution")
+      .internal()
+      .doc("Enable window resolution in the single-pass resolver.")
+      .fallbackConf(ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_EXPERIMENTAL_FEATURES)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_ALLOW_LCA_ON_IMPLICIT_ALIAS =
+    buildConf("spark.sql.singlePassResolver.allowLcaOnImplicitAlias")
+      .internal()
+      .doc(
+        "When true, allow LCAs on implicit aliases in single-pass analyzer. Otherwise, throw an " +
+          "error. This config does not affect the behavior of fixed-point analyzer."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_LOGICAL_PLAN_DIFF_CONTEXT_SIZE =
+    buildConf("spark.sql.singlePassResolver.logicalPlanDiffContextSize")
+      .internal()
+      .doc("Context window size when logging logical plan diffs.")
+      .intConf
+      .checkValue(_ >= 0, "Context lines must be non-negative")
+      .createWithDefault(2)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_TRIM_LOGICAL_PLAN_DIFF =
+    buildConf("spark.sql.singlePassResolver.trimLogicalPlanDiff")
+      .internal()
+      .doc("Trim logical plan diffs in single-pass dual-run logging.")
+      .booleanConf
+      .createWithDefault(!Utils.isTesting)
+
+  val DEDUPLICATE_SOURCE_WINDOW_EXPRESSIONS =
+    buildConf("spark.sql.deduplicateSourceWindowExpressions")
+      .internal()
+      .doc("Deduplicate source window expressions during analysis.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
       .internal()

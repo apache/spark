@@ -19,12 +19,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
-import scala.collection.mutable
-
-import com.databricks.sql.managedcatalog.DeltaSharingKind
-
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation, ViewResolution}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -100,22 +96,13 @@ class ViewResolver(
    *   - Return the resolved [[View]] with the resolved child and a new [[CatalogTable]]
    *     description.
    */
-  // BEGIN-EDGE
-  override def resolve(unresolvedView: View): View = recordProfile("resolve") {
-    /* // END-EDGE
   override def resolve(unresolvedView: View): View = {
-     */ // EDGE
 
     RestrictRowLevelSecurityFeature(unresolvedView)
-    checkMaterializedView(unresolvedView) // EDGE
 
-    val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
+    val (resolvedChild, _) = withViewResolutionContext(unresolvedView) {
       SQLConf.withExistingConf(
-        // BEGIN-EDGE
-        ViewResolution.getViewResolutionConf(unresolvedView.desc, unresolvedView.isTempView)
-        /* // END-EDGE
         View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
-         */ // EDGE
       ) {
         checkResolverGuard(unresolvedView)
 
@@ -137,23 +124,7 @@ class ViewResolver(
       sourceUnresolvedRelationStack.peek().options
     }
 
-    // BEGIN-EDGE
-    View(
-      desc = ViewResolution.createResolvedViewDescription(
-        sourceDescription = unresolvedView.desc,
-        unresolvedRelationOptions = options,
-        deltaSharingKind = usedViewResolutionContext.deltaSharingKind,
-        referredBuiltInFunctionNames = usedViewResolutionContext.referredBuiltInFunctionNames,
-        referredExternalFunctionNames = usedViewResolutionContext.referredExternalFunctionNames,
-        checkAnalysis = () => {}
-      ),
-      isTempView = unresolvedView.isTempView,
-      child = resolvedChild,
-      options = options
-    )
-    /* // END-EDGE
     unresolvedView.copy(child = resolvedChild, options = options)
-     */ // EDGE
   }
 
   /**
@@ -164,8 +135,6 @@ class ViewResolver(
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
     AnalysisContext.withAnalysisContext(unresolvedView.desc) {
-      val currentAnalysisContext = AnalysisContext.get
-
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,
@@ -177,15 +146,6 @@ class ViewResolver(
 
       val viewResolutionContext = prevContext.copy(
         nestedViewDepth = prevContext.nestedViewDepth + 1,
-        referredTempVariableNames = unresolvedView.desc.viewReferredTempVariableNames,
-        // BEGIN-EDGE
-        deltaSharingKind = prevContext.deltaSharingKind.orElse(
-          unresolvedView.desc.deltaSharingKind
-        ),
-        referredBuiltInFunctionNames = currentAnalysisContext.referredBuiltinFunctionNames,
-        referredExternalFunctionNames = currentAnalysisContext.referredExternalFunctionNames,
-        collation = unresolvedView.desc.collation,
-        // END-EDGE
         catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
       )
       viewResolutionContext.validate(unresolvedView)
@@ -198,17 +158,9 @@ class ViewResolver(
       }
     }
   }
-  // BEGIN-EDGE
-
-  private def checkMaterializedView(unresolvedView: View): Unit = {
-    if (unresolvedView.desc.isMaterializedView) {
-      throw new ExplicitlyUnsupportedResolverFeature("Materialized views")
-    }
-  }
-  // END-EDGE
 
   private def checkResolverGuard(unresolvedView: View): Unit = {
-    val resolverGuard = new ResolverGuard(catalogManager, tracker = tracker)
+    val resolverGuard = new ResolverGuard(catalogManager)
     resolverGuard(unresolvedView).planUnsupportedReason match {
       case Some(reason) =>
         throw new ExplicitlyUnsupportedResolverFeature(s"View body is not supported: $reason")
@@ -225,24 +177,12 @@ class ViewResolver(
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
  * @param referredTempVariableNames All the temporary variables referred in the view.
  *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
- * // BEGIN-EDGE
- * @param deltaSharingKind The delta sharing kind must be propagated to subviews because we must
- *   validate views beneath a shared view.
- * @param referredBuiltinFunctionNames All the built-in functions referred in the view.
- * @param referredExternalFunctionNames All the external functions referred in the view.
- * // END-EDGE
  * @param collation View's default collation if explicitly set.
  * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
  */
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
-    // BEGIN-EDGE
-    deltaSharingKind: Option[DeltaSharingKind] = None,
-    referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    referredBuiltInFunctionNames: mutable.Set[String] = mutable.Set.empty,
-    referredExternalFunctionNames: mutable.Set[String] = mutable.Set.empty,
-    // END-EDGE
     collation: Option[String] = None,
     catalogAndNamespace: Option[Seq[String]] = None) {
   def validate(unresolvedView: View): Unit = {

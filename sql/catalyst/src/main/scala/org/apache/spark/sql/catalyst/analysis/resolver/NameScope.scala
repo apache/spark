@@ -69,11 +69,6 @@ import org.apache.spark.sql.types.Metadata
  *     aliases in aggregate expressions.
  *  4. Resolution of outer references.
  *  5. Resolution of temporary and scripting variables.
- * // BEGIN-EDGE
- *
- * Complete resolution ordering is outlined in the following doc:
- * [[https://docs.databricks.com/en/sql/language-manual/sql-ref-name-resolution.html]]
- * // END-EDGE
  *
  *  Following examples showcase the priority of name resolution:
  *
@@ -1330,7 +1325,6 @@ class NameScopeStack(
     variableResolution.resolveMultipartName(
       nameParts = multipartName,
       resolvingView = parameters.resolvingView,
-      resolvingExecuteImmediate = parameters.resolvingExecuteImmediate,
       referredTempVariableNames = parameters.referredTempVariableNames
     ) match {
       case Some(variable) =>
@@ -1347,11 +1341,9 @@ class NameScopeStack(
    * scope is the root scope.
    */
   private def outerScopes: mutable.ArrayBuffer[NameScope] = {
-    val supportNestedCorrelations =
-      SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)
     val buffer = mutable.ArrayBuffer.empty[NameScope]
     val iter = stack.iterator
-    while (iter.hasNext && (supportNestedCorrelations || buffer.isEmpty)) {
+    while (iter.hasNext && buffer.isEmpty) {
       val scope = iter.next
       if (scope.isSubqueryRoot && iter.hasNext) {
         buffer += iter.next

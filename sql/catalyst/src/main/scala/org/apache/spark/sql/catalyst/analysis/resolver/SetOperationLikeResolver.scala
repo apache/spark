@@ -21,7 +21,7 @@ import java.util.HashSet
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion, TypeCoercionBase}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
@@ -542,11 +542,7 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
   }
 
   private def getTypeCoercion: TypeCoercionBase = {
-    // BEGIN-EDGE
-    if (conf.enforceAnsiTypeCoercion) {
-      /* // END-EDGE
-      if (conf.ansiEnabled) {
-       */ // EDGE
+    if (conf.ansiEnabled) {
       AnsiTypeCoercion
     } else {
       TypeCoercion

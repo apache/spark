@@ -40,9 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
  */
 class ExtractValueResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedExtractValue, Expression]
-    with CollectsWindowSourceExpressions
     with CoercesExpressionTypes {
-  protected val windowResolutionContextStack = expressionResolver.getWindowResolutionContextStack
   private val traversals = expressionResolver.getExpressionTreeTraversals
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
@@ -100,10 +98,6 @@ class ExtractValueResolver(expressionResolver: ExpressionResolver)
   def handleResolvedExtractValue(extractValue: ExtractValue): Expression = {
     extractValue.transformUp {
       case attributeReference: AttributeReference =>
-        collectWindowSourceExpression(
-          expression = attributeReference,
-          parentOperator = traversals.current.parentOperator
-        )
         coerceExpressionTypes(attributeReference, traversals.current)
       case field =>
         coerceExpressionTypes(field, traversals.current)

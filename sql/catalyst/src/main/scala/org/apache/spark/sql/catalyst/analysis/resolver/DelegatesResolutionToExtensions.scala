@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import com.databricks.spark.util.FrameProfiler
-
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -49,17 +47,10 @@ trait DelegatesResolutionToExtensions {
       resolver: LogicalPlanResolver): Option[LogicalPlan] = {
     var resolutionResult: Option[LogicalPlan] = None
     var matchedExtension: Option[ResolverExtension] = None
-    val className: String = this.getClass.getName // EDGE
     extensions.foreach { extension =>
       matchedExtension match {
         case None =>
-          // BEGIN-EDGE
-          FrameProfiler.record(
-            className,
-            s"extension.${extension.getClass.getSimpleName}.resolveOperator"
-          ) { // END-EDGE
-            resolutionResult = extension.resolveOperator(unresolvedOperator, resolver)
-          } // EDGE
+          resolutionResult = extension.resolveOperator(unresolvedOperator, resolver)
 
           if (resolutionResult.isDefined) {
             matchedExtension = Some(extension)

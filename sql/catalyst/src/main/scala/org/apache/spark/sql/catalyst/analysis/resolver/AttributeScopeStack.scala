@@ -22,7 +22,6 @@ import java.util.ArrayDeque
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A scope with registered attributes encountered during the logical plan validation process. We
@@ -108,12 +107,10 @@ class AttributeScopeStack {
   private def current: AttributeScope = stack.peek
 
   private def outers: Seq[AttributeScope] = {
-    val supportNestedCorrelations =
-      SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)
     val outerScopes = mutable.ArrayBuffer.empty[AttributeScope]
 
     val iter = stack.iterator
-    while (iter.hasNext && (supportNestedCorrelations || outerScopes.isEmpty)) {
+    while (iter.hasNext && outerScopes.isEmpty) {
       val scope = iter.next
 
       if (scope.isSubqueryRoot && iter.hasNext) {

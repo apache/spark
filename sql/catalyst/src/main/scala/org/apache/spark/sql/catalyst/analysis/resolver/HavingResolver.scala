@@ -24,7 +24,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedHaving
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Window}
 
 /**

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   Literal,
-  SemiStructuredExtract,
-  SemiStructuredExtractGetJsonObject
+  SemiStructuredExtract
 }
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.types.VariantType
@@ -67,17 +67,10 @@ class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
           )
           timezoneAwareExpressionResolver.resolve(extractResult)
         case _ =>
-          // BEGIN-EDGE
-          SemiStructuredExtractGetJsonObject(
-            json = semiStructuredExtractWithResolvedChildren.child,
-            path = Literal(UTF8String.fromString(semiStructuredExtractWithResolvedChildren.field))
-          )
-        /* END-EDGE
           throw new AnalysisException(
             errorClass = "COLUMN_IS_NOT_VARIANT_TYPE",
             messageParameters = Map.empty
           )
-         */ // EDGE
       }
 
     coerceExpressionTypes(
