@@ -264,18 +264,26 @@ private[connect] object ErrorUtils extends Logging {
   }
 
   /**
-   * Process an error by retrieving session context, converting to gRPC status,
-   * logging, posting events, and executing callbacks. This is the core error
-   * handling logic shared by both StreamObserver and ServerCall variants.
+   * Process an error by retrieving session context, converting to gRPC status, logging, posting
+   * events, and executing callbacks. This is the core error handling logic shared by both
+   * StreamObserver and ServerCall variants.
    *
-   * @param opType The operation type (analysis, execution, planDecompression, etc.)
-   * @param userId The user id
-   * @param sessionId The session id
-   * @param st The throwable to process
-   * @param events Optional ExecuteEventsManager to report failures (None for interceptors)
-   * @param isInterrupted Whether the error was caused by interruption
-   * @param callback Optional callback to execute after processing
-   * @return Tuple of (original throwable, wrapped StatusRuntimeException)
+   * @param opType
+   *   The operation type (analysis, execution, planDecompression, etc.)
+   * @param userId
+   *   The user id
+   * @param sessionId
+   *   The session id
+   * @param st
+   *   The throwable to process
+   * @param events
+   *   Optional ExecuteEventsManager to report failures (None for interceptors)
+   * @param isInterrupted
+   *   Whether the error was caused by interruption
+   * @param callback
+   *   Optional callback to execute after processing
+   * @return
+   *   Tuple of (original throwable, wrapped StatusRuntimeException)
    */
   private def processErrorCommon(
       opType: String,
@@ -384,11 +392,11 @@ private[connect] object ErrorUtils extends Logging {
   }
 
   /**
-   * Common exception handling function for interceptor-level errors. Closes the ServerCall
-   * after the error has been sent.
+   * Common exception handling function for interceptor-level errors. Closes the ServerCall after
+   * the error has been sent.
    *
-   * Note: Interceptors typically pass events=None since ExecuteEventsManager is not
-   * available at the interceptor level.
+   * Note: Interceptors typically pass events=None since ExecuteEventsManager is not available at
+   * the interceptor level.
    *
    * @param opType
    *   String value indicating the operation type (planDecompression, etc.)
@@ -409,17 +417,16 @@ private[connect] object ErrorUtils extends Logging {
       opType: String,
       call: ServerCall[ReqT, RespT],
       userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = {
-    { case st: Throwable =>
-      // Include method name in opType for better error logging
-      val methodName = call.getMethodDescriptor.getBareMethodName
-      val opTypeWithMethod = s"$opType [$methodName]"
-      val (_, wrapped) = processErrorCommon(opTypeWithMethod, userId, sessionId, st)
+      sessionId: String): PartialFunction[Throwable, Unit] = { { case st: Throwable =>
+    // Include method name in opType for better error logging
+    val methodName = call.getMethodDescriptor.getBareMethodName
+    val opTypeWithMethod = s"$opType [$methodName]"
+    val (_, wrapped) = processErrorCommon(opTypeWithMethod, userId, sessionId, st)
 
-      // Close ServerCall with error status and trailers
-      val status = wrapped.getStatus
-      val trailers = Option(wrapped.getTrailers).getOrElse(new Metadata())
-      call.close(status, trailers)
-    }
+    // Close ServerCall with error status and trailers
+    val status = wrapped.getStatus
+    val trailers = Option(wrapped.getTrailers).getOrElse(new Metadata())
+    call.close(status, trailers)
+  }
   }
 }

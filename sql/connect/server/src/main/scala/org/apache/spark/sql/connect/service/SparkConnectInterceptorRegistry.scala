@@ -41,8 +41,7 @@ object SparkConnectInterceptorRegistry {
     // interceptor[DummyInterceptor](classOf[DummyInterceptor])
 
     // Request decompression interceptor handles compressed requests from clients.
-    interceptor[RequestDecompressionInterceptor](classOf[RequestDecompressionInterceptor])
-  )
+    interceptor[RequestDecompressionInterceptor](classOf[RequestDecompressionInterceptor]))
 
   /**
    * Given a NettyServerBuilder instance, will chain all interceptors to it in reverse order.

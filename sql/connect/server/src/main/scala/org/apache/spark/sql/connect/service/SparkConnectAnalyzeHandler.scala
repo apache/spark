@@ -76,10 +76,12 @@ private[connect] class SparkConnectAnalyzeHandler(
     if (compressedSize.isDefined || otherCompressedSize.isDefined) {
       logDebug(
         log"AnalyzePlan request received with compressed plan: " +
-        log"compressedSize=${MDC(BYTE_SIZE, compressedSize.getOrElse(0L))} bytes" +
-          otherCompressedSize.map { size =>
-            log", otherCompressedSize=${MDC(BYTE_SIZE, size)} bytes"
-          }.getOrElse(log""))
+          log"compressedSize=${MDC(BYTE_SIZE, compressedSize.getOrElse(0L))} bytes" +
+          otherCompressedSize
+            .map { size =>
+              log", otherCompressedSize=${MDC(BYTE_SIZE, size)} bytes"
+            }
+            .getOrElse(log""))
     }
 
     def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)

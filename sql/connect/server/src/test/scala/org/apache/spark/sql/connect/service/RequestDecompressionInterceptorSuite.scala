@@ -40,26 +40,29 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
 
   // Helper: Create a compressed plan
   private def createCompressedPlan(query: String): proto.Plan = {
-    val relation = proto.Relation.newBuilder()
+    val relation = proto.Relation
+      .newBuilder()
       .setSql(proto.SQL.newBuilder().setQuery(query))
       .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
       .build()
 
     val compressedBytes = Zstd.compress(relation.toByteArray)
-    proto.Plan.newBuilder()
+    proto.Plan
+      .newBuilder()
       .setCompressedOperation(
-        proto.Plan.CompressedOperation.newBuilder()
+        proto.Plan.CompressedOperation
+          .newBuilder()
           .setData(ByteString.copyFrom(compressedBytes))
           .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
           .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
-          .build()
-      )
+          .build())
       .build()
   }
 
   // Helper: Create an ExecutePlanRequest with a plan
   private def createExecutePlanRequest(plan: proto.Plan): proto.ExecutePlanRequest = {
-    proto.ExecutePlanRequest.newBuilder()
+    proto.ExecutePlanRequest
+      .newBuilder()
       .setPlan(plan)
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
@@ -77,7 +80,8 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
       override def parse(stream: java.io.InputStream): Any = null
     }
 
-    private val descriptor = io.grpc.MethodDescriptor.newBuilder[Any, Any]()
+    private val descriptor = io.grpc.MethodDescriptor
+      .newBuilder[Any, Any]()
       .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
       .setFullMethodName("spark.connect.SparkConnectService/ExecutePlan")
       .setRequestMarshaller(dummyMarshaller)
@@ -143,9 +147,12 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
 
   test("passes through non-compressed ExecutePlanRequest unchanged") {
     val interceptor = new RequestDecompressionInterceptor()
-    val normalPlan = proto.Plan.newBuilder()
-      .setRoot(proto.Relation.newBuilder()
-        .setSql(proto.SQL.newBuilder().setQuery("SELECT 1")))
+    val normalPlan = proto.Plan
+      .newBuilder()
+      .setRoot(
+        proto.Relation
+          .newBuilder()
+          .setSql(proto.SQL.newBuilder().setQuery("SELECT 1")))
       .build()
     val request = createExecutePlanRequest(normalPlan)
 
@@ -165,7 +172,8 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
 
   test("passes through FetchErrorDetailsRequest messages unchanged") {
     val interceptor = new RequestDecompressionInterceptor()
-    val fetchErrorRequest = proto.FetchErrorDetailsRequest.newBuilder()
+    val fetchErrorRequest = proto.FetchErrorDetailsRequest
+      .newBuilder()
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
       .setErrorId("test-error-id")
@@ -185,7 +193,8 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
   test("decompresses compressed AnalyzePlanRequest - Schema") {
     val interceptor = new RequestDecompressionInterceptor()
     val compressedPlan = createCompressedPlan(s"select ${"Apache Spark" * 10000} as value")
-    val request = proto.AnalyzePlanRequest.newBuilder()
+    val request = proto.AnalyzePlanRequest
+      .newBuilder()
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
       .setSchema(proto.AnalyzePlanRequest.Schema.newBuilder().setPlan(compressedPlan))
@@ -209,12 +218,15 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
     val interceptor = new RequestDecompressionInterceptor()
     val plan1 = createCompressedPlan(s"select ${"Apache Spark" * 10000} as value")
     val plan2 = createCompressedPlan("SELECT 1")
-    val request = proto.AnalyzePlanRequest.newBuilder()
+    val request = proto.AnalyzePlanRequest
+      .newBuilder()
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
-      .setSameSemantics(proto.AnalyzePlanRequest.SameSemantics.newBuilder()
-        .setTargetPlan(plan1)
-        .setOtherPlan(plan2))
+      .setSameSemantics(
+        proto.AnalyzePlanRequest.SameSemantics
+          .newBuilder()
+          .setTargetPlan(plan1)
+          .setOtherPlan(plan2))
       .build()
 
     val call = new TestServerCall()
@@ -233,7 +245,8 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
 
   test("passes through non-Plan AnalyzePlanRequest - SparkVersion") {
     val interceptor = new RequestDecompressionInterceptor()
-    val request = proto.AnalyzePlanRequest.newBuilder()
+    val request = proto.AnalyzePlanRequest
+      .newBuilder()
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
       .setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder())
@@ -252,15 +265,18 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
 
   test("handles AnalyzePlanRequest decompression errors") {
     val interceptor = new RequestDecompressionInterceptor()
-    val invalidPlan = proto.Plan.newBuilder()
+    val invalidPlan = proto.Plan
+      .newBuilder()
       .setCompressedOperation(
-        proto.Plan.CompressedOperation.newBuilder()
+        proto.Plan.CompressedOperation
+          .newBuilder()
           .setData(ByteString.copyFrom(Array[Byte](1, 2, 3, 4, 5)))
           .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
           .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD))
       .build()
 
-    val request = proto.AnalyzePlanRequest.newBuilder()
+    val request = proto.AnalyzePlanRequest
+      .newBuilder()
       .setSessionId(testSessionId)
       .setUserContext(testUserCtx)
       .setSchema(proto.AnalyzePlanRequest.Schema.newBuilder().setPlan(invalidPlan))
@@ -281,14 +297,15 @@ class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSpar
     val interceptor = new RequestDecompressionInterceptor()
 
     // Create an invalid compressed plan (corrupted data)
-    val invalidCompressedPlan = proto.Plan.newBuilder()
+    val invalidCompressedPlan = proto.Plan
+      .newBuilder()
       .setCompressedOperation(
-        proto.Plan.CompressedOperation.newBuilder()
+        proto.Plan.CompressedOperation
+          .newBuilder()
           .setData(ByteString.copyFrom(Array[Byte](1, 2, 3, 4, 5))) // Invalid compressed data
           .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
           .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
-          .build()
-      )
+          .build())
       .build()
 
     val request = createExecutePlanRequest(invalidCompressedPlan)

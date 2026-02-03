@@ -41,20 +41,15 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
     if (compressedSize.isDefined) {
       logDebug(
         log"ExecutePlan request received with compressed plan: " +
-        log"compressedSize=${MDC(BYTE_SIZE, compressedSize.get)} bytes")
+          log"compressedSize=${MDC(BYTE_SIZE, compressedSize.get)} bytes")
     }
 
     SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
       case None =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
-          .createExecuteHolderAndAttach(
-            executeKey,
-            v,
-            sessionHolder,
-            responseObserver)
-      case Some(executeHolder)
-          if executeHolder.request.getPlan.equals(v.getPlan) =>
+          .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
+      case Some(executeHolder) if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
