@@ -117,10 +117,47 @@ The `spark-pipelines` command line interface (CLI) is the primary way to manage 
 
 `spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes.
 
-The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for one of the files:
+Since `spark-pipelines` is built on top of `spark-submit`, it supports all `spark-submit` arguments except for `--class`. For the complete list of available parameters, see the [Spark Submit documentation](https://spark.apache.org/docs/latest/submitting-applications.html#launching-applications-with-spark-submit).
 
-* `spark-pipeline.yml`
-* `spark-pipeline.yaml`
+It also supports several pipeline-specific parameters:
+
+* `--spec PATH` - Path to the pipeline specification file. If not provided, the CLI will look in the current directory and parent directories for one of the files:
+  * `spark-pipeline.yml`
+  * `spark-pipeline.yaml`
+
+* `--full-refresh DATASETS` - List of datasets to reset and recompute (comma-separated). This clears all existing data and checkpoints for the specified datasets and recomputes them from scratch.
+
+* `--full-refresh-all` - Perform a full graph reset and recompute. This is equivalent to `--full-refresh` for all datasets in the pipeline.
+
+* `--refresh DATASETS` - List of datasets to update (comma-separated). This triggers an update for the specified datasets without clearing existing data.
+
+#### Refresh Selection Behavior
+
+If no refresh options are specified, a default incremental update is performed. The refresh parameters are mutually exclusive:
+- `--full-refresh-all` cannot be combined with `--full-refresh` or `--refresh`
+- `--full-refresh` and `--refresh` can be used together to specify different behaviors for different datasets
+
+#### Examples
+
+```bash
+# Basic run with default incremental update
+spark-pipelines run
+
+# Run with specific spec file
+spark-pipelines run --spec /path/to/my-pipeline.yaml
+
+# Full refresh of specific datasets
+spark-pipelines run --full-refresh orders,customers
+
+# Full refresh of entire pipeline
+spark-pipelines run --full-refresh-all
+
+# Run with custom Spark configuration
+spark-pipelines run --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
+
+# Run on remote Spark Connect server
+spark-pipelines run --remote sc://my-cluster:15002
+```
 
 ### `spark-pipelines dry-run`
 
@@ -128,6 +165,10 @@ The `--spec` parameter allows selecting the pipeline spec file. If not provided,
 - Syntax errors – e.g. invalid Python or SQL code
 - Analysis errors – e.g. selecting from a table or a column that doesn't exist
 - Graph validation errors - e.g. cyclic dependencies
+
+Since `spark-pipelines` is built on top of `spark-submit`, it supports all `spark-submit` arguments except for `--class`. For the complete list of available parameters, see the [Spark Submit documentation](https://spark.apache.org/docs/latest/submitting-applications.html#launching-applications-with-spark-submit).
+
+It also supports the pipeline-specific `--spec` parameter (see description above in the `run` section).
 
 ## Programming with SDP in Python
 
