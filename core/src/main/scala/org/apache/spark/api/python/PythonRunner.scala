@@ -215,6 +215,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val simplifiedTraceback: Boolean = false
 
   protected def runnerConf: Map[String, String] = Map.empty
+  protected def evalConf: Map[String, String] = Map.empty
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -516,6 +517,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
         dataOut.writeInt(evalType)
         PythonWorkerUtils.writeConf(runnerConf, dataOut)
+        PythonWorkerUtils.writeConf(evalConf, dataOut)
         writeCommand(dataOut)
 
         dataOut.flush()
