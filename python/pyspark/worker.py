@@ -180,6 +180,30 @@ class RunnerConf(Conf):
         return self.get("spark.sql.pyspark.dataSource.profiler", None)
 
 
+class EvalConf(Conf):
+    @property
+    def state_value_schema(self) -> Optional[StructType]:
+        schema = self.get("state_value_schema", None)
+        if schema is None:
+            return None
+        return StructType.fromJson(json.loads(schema))
+
+    @property
+    def grouping_key_schema(self) -> Optional[StructType]:
+        schema = self.get("grouping_key_schema", None)
+        if schema is None:
+            return None
+        return StructType.fromJson(json.loads(schema))
+
+    @property
+    def state_server_socket_port(self) -> Optional[int | str]:
+        port = self.get("state_server_socket_port", None)
+        try:
+            return int(port)
+        except ValueError:
+            return port
+
+
 def report_times(outfile, boot, init, finish, processing_time_ms):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
@@ -2679,9 +2703,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
         return mapper, None, ser, ser
 
 
-def read_udfs(pickleSer, infile, eval_type, runner_conf):
-    state_server_port = None
-    key_schema = None
+def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -2708,20 +2730,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
-        state_object_schema = None
-        if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-            state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
-        elif (
-            eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
-            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
-            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
-            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
-        ):
-            state_server_port = read_int(infile)
-            if state_server_port == -1:
-                state_server_port = utf8_deserializer.loads(infile)
-            key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
-
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if (
             eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
@@ -2770,7 +2778,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
-                state_object_schema,
+                eval_conf.state_value_schema,
                 runner_conf.arrow_max_records_per_batch,
                 runner_conf.use_large_var_types,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
@@ -3001,7 +3009,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+        )
 
         def mapper(a):
             mode = a[0]
@@ -3036,7 +3046,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         ser.init_key_offsets = parsed_offsets[1][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+        )
 
         def mapper(a):
             mode = a[0]
@@ -3066,7 +3078,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+        )
 
         def mapper(a):
             mode = a[0]
@@ -3097,7 +3111,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         ser.init_key_offsets = parsed_offsets[1][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(
+            eval_conf.state_server_socket_port, eval_conf.grouping_key_schema
+        )
 
         def mapper(a):
             mode = a[0]
@@ -3389,6 +3405,7 @@ def main(infile, outfile):
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
         runner_conf = RunnerConf(infile)
+        eval_conf = EvalConf(infile)
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         elif eval_type in (
@@ -3401,7 +3418,7 @@ def main(infile, outfile):
             )
         else:
             func, profiler, deserializer, serializer = read_udfs(
-                pickleSer, infile, eval_type, runner_conf
+                pickleSer, infile, eval_type, runner_conf, eval_conf
             )
 
         init_time = time.time()

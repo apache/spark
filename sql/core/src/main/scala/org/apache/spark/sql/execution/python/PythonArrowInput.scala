@@ -61,8 +61,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
-  protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
-
   protected lazy val allocator: BufferAllocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
@@ -112,7 +110,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        handleMetadataBeforeExec(dataOut)
         writeUDF(dataOut)
       }
 
