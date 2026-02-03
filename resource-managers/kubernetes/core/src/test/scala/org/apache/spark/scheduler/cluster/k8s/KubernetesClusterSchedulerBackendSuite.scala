@@ -35,6 +35,8 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
@@ -97,6 +99,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var podAllocator: ExecutorPodsAllocator = _
 
   @Mock
+  private var podAllocatorMetricsSource: Source = _
+
+  @Mock
+  private var metricsSystem: MetricsSystem = _
+
+  @Mock
   private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
 
   @Mock
@@ -122,6 +130,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(sc.resourceProfileManager).thenReturn(resourceProfileManager)
     when(sc.env).thenReturn(env)
     when(env.rpcEnv).thenReturn(rpcEnv)
+    when(env.metricsSystem).thenReturn(metricsSystem)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])
     when(
       rpcEnv.setupEndpoint(
@@ -134,6 +143,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(configMapsOperations.inNamespace("default")).thenReturn(configMapsWithNamespace)
     when(configMapsWithNamespace.resource(any[ConfigMap]())).thenReturn(configMapResource)
     when(podAllocator.driverPod).thenReturn(None)
+    when(podAllocator.metricsSources).thenReturn(Seq(podAllocatorMetricsSource))
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
@@ -158,6 +168,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
     verify(configMapResource).create()
+    verify(metricsSystem).registerSource(podAllocatorMetricsSource)
   }
 
   test("Stop all components") {
