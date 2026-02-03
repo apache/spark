@@ -156,7 +156,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   test("query stop deactivates related store providers") {
     var coordRef: StateStoreCoordinatorRef = null
     try {
-      implicit val spark: SparkSession = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val spark: SparkSession = SparkSession.builder().sparkContext(sc).getOrCreate()
       SparkSession.setActiveSession(spark)
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
