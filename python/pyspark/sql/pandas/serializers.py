@@ -426,6 +426,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
         df_for_struct: bool = False,
+        input_type: Optional["StructType"] = None,
+        arrow_cast: bool = False,
     ):
         super().__init__()
         self._timezone = timezone
@@ -435,6 +437,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = ndarray_as_list
         self._df_for_struct = df_for_struct
+        if input_type is not None:
+            assert isinstance(input_type, StructType)
+        self._input_type = input_type
+        self._arrow_cast = arrow_cast
 
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
@@ -621,12 +627,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             struct_in_pandas,
             ndarray_as_list,
             df_for_struct,
+            input_type,
+            arrow_cast,
         )
         self._assign_cols_by_name = assign_cols_by_name
-        self._arrow_cast = arrow_cast
-        if input_type is not None:
-            assert isinstance(input_type, StructType)
-        self._input_type = input_type
 
     def _create_struct_array(
         self,
