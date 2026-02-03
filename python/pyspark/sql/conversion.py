@@ -1239,7 +1239,7 @@ class ArrowArrayToPandasConversion:
 
         arr = ArrowTimestampConversion.localize_tz(arr)
 
-        # TODO(fangchen): introduce benchmark for such conversions
+        # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
         # 1, benchmark a nullable integral array
         # a = pa.array(list(range(10000000)) + [9223372036854775707, None], type=pa.int64())
         # %timeit a.to_pandas(types_mapper=pd.ArrowDtype)
@@ -1304,8 +1304,8 @@ class ArrowArrayToPandasConversion:
                 YearMonthIntervalType,
             ),
         ):
-            # TODO(ruifeng): revisit date_as_object
-            # TODO(ruifeng): implement coerce_temporal_nanoseconds
+            # TODO(SPARK-55333): Revisit date_as_object in arrow->pandas conversion
+            # TODO(SPARK-55334): Implement coerce_temporal_nanoseconds
             # If the given column is a date type column, creates a series of datetime.date directly
             # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
             # datetime64[ns] type handling.
@@ -1327,6 +1327,6 @@ class ArrowArrayToPandasConversion:
         #         GeometryType,
         #     ),
         # ):
-        # TODO(fangchen): Support complex types
+        # TODO(SPARK-55324): Support complex types
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
