@@ -789,18 +789,21 @@ class SparkConversionMixin:
     def _create_from_pandas_with_arrow(
         self,
         pdf: "PandasDataFrameLike",
-        schema: Union[StructType, List[str]],
+        schema: Union[DataType, List[str]],
         timezone: str,
         prefer_timestamp_ntz: bool,
         prefers_large_var_types: bool,
-        arrow_batch_size: int,
+        batch_size: int,
         safecheck: bool,
         infer_pandas_dict_as_map: bool,
     ) -> "DataFrame":
         """
-        Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
-        to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
-        data types will be used to coerce the data in Pandas to Arrow conversion.
+        Create a DataFrame from a given pandas.DataFrame by slicing it into batches, converting
+        to Arrow data, then sending to the JVM to parallelize.
+
+        If schema is a StructType, it is used directly for type coercion during Arrow conversion.
+        If schema is a list of column names, types are inferred from Arrow.
+        Other DataTypes raise an error as they are not supported with Arrow.
         """
         from pyspark.sql import SparkSession
         from pyspark.sql.dataframe import DataFrame
@@ -825,21 +828,9 @@ class SparkConversionMixin:
         from pandas.api.types import is_datetime64_dtype
         import pyarrow as pa
 
-        # If schema is not a StructType, infer full schema from Arrow types
-        if not isinstance(schema, StructType):
-            # Get column names from user-provided schema or DataFrame
-            if isinstance(schema, (list, tuple)):
-                _cols: List[str] = [str(x) if not isinstance(x, str) else x for x in schema]
-            elif schema is None:
-                _cols = [str(x) if not isinstance(x, str) else x for x in pdf.columns]
-            else:
-                # schema is a single DataType (not StructType)
-                raise PySparkTypeError(
-                    errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
-                    messageParameters={"data_type": str(schema)},
-                )
-
-            # Infer full schema from Arrow types
+        # Infer types from Arrow if schema is a list of column names
+        if isinstance(schema, (list, tuple)):
+            _cols: List[str] = [str(x) if not isinstance(x, str) else x for x in schema]
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
             spark_type: Union[MapType, DataType]
@@ -865,13 +856,18 @@ class SparkConversionMixin:
                     spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                 struct.add(col_name, spark_type, nullable=field.nullable)
             schema = struct
+        elif not isinstance(schema, StructType):
+            # schema is a single DataType (not StructType) - not supported with Arrow
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                messageParameters={"data_type": str(schema)},
+            )
 
         # At this point, schema is always a StructType
         spark_types = [_deduplicate_field_names(f.dataType) for f in schema.fields]
 
         # Slice the DataFrame to be batched
-        step = arrow_batch_size
-        step = step if step > 0 else len(pdf)
+        step = batch_size if batch_size > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of (series, spark_type) batches for serializer
@@ -915,10 +911,10 @@ class SparkConversionMixin:
         timezone: str,
         prefer_timestamp_ntz: bool,
         prefers_large_var_types: bool,
-        arrow_batch_size: int,
+        batch_size: int,
     ) -> "DataFrame":
         """
-        Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
+        Create a DataFrame from a given pyarrow.Table by slicing it into batches then
         sending to the JVM to parallelize.
         """
         from pyspark.sql import SparkSession
@@ -963,8 +959,7 @@ class SparkConversionMixin:
         )
 
         # Chunk the Arrow Table into RecordBatches
-        chunk_size = arrow_batch_size
-        arrow_data = table.to_batches(max_chunksize=chunk_size)
+        arrow_batches = table.to_batches(max_chunksize=batch_size)
 
         jsparkSession = self._jsparkSession
 
@@ -979,7 +974,7 @@ class SparkConversionMixin:
             return self._jvm.ArrowIteratorServer()
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
+        jiter = self._sc._serialize_to_jvm(arrow_batches, ser, reader_func, create_iter_server)
         assert self._jvm is not None
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
         df = DataFrame(jdf, self)
