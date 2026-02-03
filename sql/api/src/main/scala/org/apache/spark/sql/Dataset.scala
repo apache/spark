@@ -2037,7 +2037,9 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 4.2.0
    */
-  def zipWithIndex(indexColName: String): DataFrame
+  def zipWithIndex(indexColName: String): DataFrame = {
+    select(col("*"), Column.internalFn("distributed_sequence_id").alias(indexColName))
+  }
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement), using a
