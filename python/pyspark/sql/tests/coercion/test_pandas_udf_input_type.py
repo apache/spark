@@ -72,7 +72,7 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class PandasUDFInputTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
+class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     @property
     def prefix(self):
         return "golden_pandas_udf_input_type_coercion"

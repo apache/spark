@@ -47,6 +47,24 @@ class GoldenFileTestMixin:
 
     _tz_prev: Optional[str] = None
 
+    def __init_subclass__(cls, **kwargs):
+        """Verify correct inheritance order at class definition time."""
+        super().__init_subclass__(**kwargs)
+        # Check that GoldenFileTestMixin comes before any class with setUpClass in MRO.
+        # This ensures setup_timezone() will be called after Spark session is created.
+        # Correct:   class MyTest(GoldenFileTestMixin, ReusedSQLTestCase)
+        # Incorrect: class MyTest(ReusedSQLTestCase, GoldenFileTestMixin)
+        for base in cls.__mro__:
+            if base is GoldenFileTestMixin:
+                break
+            # If we find a class with setUpClass before GoldenFileTestMixin, that's wrong
+            if base is not cls and hasattr(base, "setUpClass") and "setUpClass" in base.__dict__:
+                raise TypeError(
+                    f"{cls.__name__} has incorrect inheritance order. "
+                    f"GoldenFileTestMixin must be listed BEFORE {base.__name__}. "
+                    f"Use: class {cls.__name__}(GoldenFileTestMixin, {base.__name__}, ...)"
+                )
+
     @classmethod
     def setUpClass(cls) -> None:
         """Setup test class with timezone configuration."""

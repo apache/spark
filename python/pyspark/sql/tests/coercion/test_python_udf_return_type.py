@@ -71,7 +71,7 @@ if have_numpy:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFReturnTypeTests(ReusedSQLTestCase, GoldenFileTestMixin):
+class UDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     @property
     def prefix(self):
         return "golden_python_udf_return_type_coercion"
