@@ -575,6 +575,73 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     sql("DROP TEMPORARY FUNCTION current_database")
   }
 
+  test("SECTION 11: Parameterless functions - qualified names require explicit parentheses") {
+    // Parameterless functions like current_user, current_schema are functions and should
+    // be callable via qualified names WITH explicit parentheses.
+    // - Qualified WITH parens: "system.builtin.current_user()" works as function call
+    // - Qualified WITHOUT parens: "system.builtin.current_user" is treated as column
+    //   reference (NOT auto-converted to function call) to avoid attribute resolution
+    //   complexity
+
+    // Qualified WITH parentheses should work as function calls
+    checkAnswer(
+      sql("SELECT system.builtin.current_user()"),
+      Row(sql("SELECT current_user()").collect().head.getString(0)))
+    checkAnswer(
+      sql("SELECT builtin.current_user()"),
+      Row(sql("SELECT current_user()").collect().head.getString(0)))
+    checkAnswer(
+      sql("SELECT system.builtin.current_schema()"),
+      Row(sql("SELECT current_schema()").collect().head.getString(0)))
+    checkAnswer(
+      sql("SELECT builtin.current_schema()"),
+      Row(sql("SELECT current_schema()").collect().head.getString(0)))
+
+    // Qualified WITHOUT parentheses should fail as unresolved column
+    // (NOT auto-converted to function call)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT system.builtin.current_user")
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`system`.`builtin`.`current_user`"
+      ),
+      context = ExpectedContext(
+        fragment = "system.builtin.current_user",
+        start = 7,
+        stop = 33)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT builtin.current_user")
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`builtin`.`current_user`"
+      ),
+      context = ExpectedContext(
+        fragment = "builtin.current_user",
+        start = 7,
+        stop = 26)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT system.builtin.current_schema")
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`system`.`builtin`.`current_schema`"
+      ),
+      context = ExpectedContext(
+        fragment = "system.builtin.current_schema",
+        start = 7,
+        stop = 35)
+    )
+  }
+
   // ============================================================================
   // SECTION 12: Extension Function Tests
   // ============================================================================
