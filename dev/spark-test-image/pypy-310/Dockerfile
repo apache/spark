@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260127
+ENV FULL_REFRESH_DATE=20260202
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
     git \
     gnupg \
     libgit2-dev \
+    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
     libssl-dev \

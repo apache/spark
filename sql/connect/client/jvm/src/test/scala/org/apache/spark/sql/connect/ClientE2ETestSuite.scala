@@ -1656,7 +1656,10 @@ class ClientE2ETestSuite
     val observation = Observation("test_observation")
     val observed_df = spark
       .range(10)
-      .observe(observation, sum("id").as("sum_id"), (sum("id") / lit(0)).as("sum_id_div_by_zero"))
+      .observe(
+        observation,
+        sum("id").as("sum_id"),
+        raise_error(lit("test error")).as("raise_error"))
 
     observed_df.collect()
 

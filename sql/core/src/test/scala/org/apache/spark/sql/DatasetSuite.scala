@@ -1164,7 +1164,7 @@ class DatasetSuite extends QueryTest
     val observed_df = spark.range(10).observe(
       observation,
       sum($"id").as("sum_id"),
-      (sum($"id") / lit(0)).as("sum_id_div_by_zero")
+      raise_error(lit("test error")).as("raise_error")
     )
 
     observed_df.collect()
@@ -1173,7 +1173,7 @@ class DatasetSuite extends QueryTest
       observation.get
     }
 
-    assert(exception.getCause.getMessage.contains("DIVIDE_BY_ZERO"))
+    assert(exception.getCause.getMessage.contains("test error"))
   }
 
   test("sample with replacement") {

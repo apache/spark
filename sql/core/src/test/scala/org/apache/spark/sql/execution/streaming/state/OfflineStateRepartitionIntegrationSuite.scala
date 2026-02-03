@@ -37,7 +37,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
-    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "3")
   }
 
   /**
@@ -47,7 +47,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       checkpointDir: String,
       batchId: Long,
       storeName: String,
-      additionalOptions: Map[String, String]): Dataset[Row] = {
+      additionalOptions: Map[String, String],
+      selectExprs: Seq[String]): Dataset[Row] = {
     var reader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -59,8 +60,11 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       reader = reader.option(k, v)
     }
 
+    // Not querying partition id because a key will be in different partitions
+    // before and after repartitioning
+    val selectExprsWithoutPartitionId = selectExprs.filterNot(_ == "partition_id")
     reader.load()
-      .selectExpr("key", "value", "partition_id")
+      .selectExpr(selectExprsWithoutPartitionId: _*)
       .orderBy("key")
   }
 
@@ -72,25 +76,20 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
   private def readStateDataByStoreName(
       checkpointDir: String,
       batchId: Long,
-      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]]
+      storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]],
+      storeToColumnFamilyToSelectExprs: Map[String, Map[String, Seq[String]]] = Map.empty
   ): Map[String, Map[String, Array[Row]]] = {
     storeToColumnFamilyToStateSourceOptions.map { case (storeName, columnFamilyToOptions) =>
       val columnFamilyData = columnFamilyToOptions.map { case (cfName, options) =>
+        val selectExprs = storeToColumnFamilyToSelectExprs
+          .getOrElse(storeName, Map.empty)
+          .getOrElse(cfName, Seq("key", "value"))
         val stateData = readStateData(
-          checkpointDir, batchId, storeName, options).collect()
+          checkpointDir, batchId, storeName, options, selectExprs).collect()
         cfName -> stateData
       }
       storeName -> columnFamilyData
     }
-  }
-
-  /**
-   * Extracts (key, value) pairs from Row array and sorts by key.
-   */
-  private def extractKeyValuePairs(rows: Array[Row]): Array[(String, String)] = {
-    rows
-      .map(row => (row.get(0).toString, row.get(1).toString))
-      .sortBy(_._1)
   }
 
   /**
@@ -109,6 +108,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
    * @param useManualClock Whether this test requires a manual clock (for processing time)
    * @param storeToColumnFamilyToStateSourceOptions Map of store name -> column family
    *                                                 name -> options
+   * @param storeToColumnFamilyToSelectExprs Map of store name -> column family
+   *                                          name -> select expressions
    * @tparam T The type of data in the input stream (requires implicit Encoder)
    */
   def testRepartitionWorkflow[T : Encoder](
@@ -118,7 +119,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       useManualClock: Boolean = false,
       storeToColumnFamilyToStateSourceOptions: Map[String, Map[String, Map[String, String]]] =
         Map(StateStoreId.DEFAULT_STORE_NAME ->
-          Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty))): Unit = {
+          Map(StateStore.DEFAULT_COL_FAMILY_NAME -> Map.empty)),
+      storeToColumnFamilyToSelectExprs: Map[String, Map[String, Seq[String]]] = Map.empty): Unit = {
     withTempDir { checkpointDir =>
       val clock = if (useManualClock) Some(new StreamManualClock) else None
       val inputData = MemoryStream[T]
@@ -132,8 +134,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       val lastBatchId = checkpointMetadata.commitLog.getLatestBatchId().get
 
       val stateBeforeRepartition = readStateDataByStoreName(
-        checkpointDir.getAbsolutePath, lastBatchId, storeToColumnFamilyToStateSourceOptions)
-
+        checkpointDir.getAbsolutePath, lastBatchId, storeToColumnFamilyToStateSourceOptions,
+        storeToColumnFamilyToSelectExprs)
       // Verify all stores and column families have data before repartition
       storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
         columnFamilies.keys.foreach { cfName =>
@@ -159,7 +161,8 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
 
       // Step 5: Validate state for each store and column family after repartition
       val stateAfterRepartition = readStateDataByStoreName(
-        checkpointDir.getAbsolutePath, repartitionBatchId, storeToColumnFamilyToStateSourceOptions)
+        checkpointDir.getAbsolutePath, repartitionBatchId, storeToColumnFamilyToStateSourceOptions,
+        storeToColumnFamilyToSelectExprs)
 
       storeToColumnFamilyToStateSourceOptions.foreach { case (storeName, columnFamilies) =>
         columnFamilies.keys.foreach { cfName =>
@@ -171,17 +174,15 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
             s"Store '$storeName', CF '$cfName': State row count mismatch: " +
               s"before=${beforeState.length}, after=${afterState.length}")
 
-          // Extract (key, value) pairs and compare
-          val beforeByKey = extractKeyValuePairs(beforeState)
-          val afterByKey = extractKeyValuePairs(afterState)
+          val sourceSorted = beforeState.sortBy(_.toString)
+          val targetSorted = afterState.sortBy(_.toString)
 
-          // Compare each (key, value) pair
-          beforeByKey.zip(afterByKey).zipWithIndex.foreach {
-            case (((keyBefore, valueBefore), (keyAfter, valueAfter)), idx) =>
-              assert(keyBefore == keyAfter,
-                s"Store '$storeName', CF '$cfName': Key mismatch at index $idx")
-              assert(valueBefore == valueAfter,
-                s"Store '$storeName', CF '$cfName': Value mismatch for key $keyBefore")
+          sourceSorted.zip(targetSorted).zipWithIndex.foreach {
+            case ((sourceRow, targetRow), idx) =>
+              assert(sourceRow == targetRow,
+                s"Row mismatch at index $idx:\n" +
+                  s"  Source: $sourceRow\n" +
+                  s"  Target: $targetRow")
           }
         }
       }
@@ -215,7 +216,7 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
    */
   def testWithAllRepartitionOperations(testNamePrefix: String)
       (testFun: Int => Unit): Unit = {
-    Seq(("increase", 8), ("decrease", 3)).foreach { case (direction, newPartitions) =>
+    Seq(("increase", 5), ("decrease", 2)).foreach { case (direction, newPartitions) =>
       testWithChangelogConfig(s"$testNamePrefix - $direction partitions") {
         testFun(newPartitions)
       }
