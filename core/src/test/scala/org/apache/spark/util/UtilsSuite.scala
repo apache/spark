@@ -134,10 +134,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     assert(Utils.byteStringAsBytes("1") === 1)
     assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ki") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KB") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KiB") === ByteUnit.KiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mi") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mb") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1MiB") === ByteUnit.MiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1g") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1GI") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1gb") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1giB") === ByteUnit.GiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ti") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1tb") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Tib") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pi") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pb") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pib") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
     // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
@@ -1625,7 +1640,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   private def callGetTryAgain(t: Try[String]): String = {
-    Utils.getTryWithCallerStacktrace(t)
+    Utils.getTryWithCallerStacktrace(t, isFirstAccess = false)
   }
 
   test("doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
@@ -1654,26 +1669,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!st1.exists(_.getMethodName == "callDoTry"))
     assert(st1.exists(_.getMethodName == "callGetTry"))
 
-    // The original stack trace with callDoTry should be in the suppressed exceptions.
-    // Example:
-    // scalastyle:off line.size.limit
-    // Suppressed: java.lang.Exception: Full stacktrace of original doTryWithCallerStacktrace caller
-    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
-    //   at scala.util.Try$.apply(Try.scala:213)
-    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
-    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
-    //   ... 56 more
-    // scalastyle:on line.size.limit
-    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
-    assert(origSt.isDefined)
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
-
-    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
-    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
-      .doTryWithCallerStacktraceDepth == 4)
+    // First access (isFirstAccess = true by default) - no suppressed exception
+    assert(!e1.getSuppressed.exists(_.isInstanceOf[Utils.OriginalTryStackTraceException]))
 
     val e2 = intercept[Exception] {
       callGetTryAgain(t)
@@ -1699,6 +1696,24 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(st2.exists(_.getMethodName == "callGetTryAgain"))
     // callGetTry that we called before shouldn't be on the stack trace.
     assert(!st2.exists(_.getMethodName == "callGetTry"))
+
+    // Second access (isFirstAccess = false) - suppressed exception should be added.
+    // The original stack trace with callDoTry should be in the suppressed exceptions.
+    // Example:
+    // scalastyle:off line.size.limit
+    // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
+    //   ... 56 more
+    // scalastyle:on line.size.limit
+    val origSt = e2.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
+    assert(origSt.isDefined, "Suppressed exception should be added on subsequent access")
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
 
     // Unfortunately, this utility is not able to clone the exception, but modifies it in place,
     // so now e1 is also pointing to "callGetTryAgain" instead of "callGetTry".
@@ -1745,20 +1760,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
       //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
       // ...
-      // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
-      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
-      //  at scala.util.Try$.apply(Try.scala:217)
-      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
-      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
-      //  ...
       // scalastyle:on line.size.limit
 
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1806,7 +1814,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1850,7 +1859,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(e.getStackTrace.exists(_.getMethodName == "callGetTry"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
-    assert(e.getSuppressed.length == 1)
+    // No suppressed exception - the wrapper is used internally only
+    assert(e.getSuppressed.length == 0)
   }
 }
 

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, ScalarSubquery, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, ScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.RELATION_TIME_TRAVEL
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.{QueryExecution, ScalarSubquery => ScalarSubqueryExec, SubqueryExec}
 
 class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
@@ -35,26 +34,15 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
           // outer references and should not be correlated.
           assert(!s.isCorrelated, "Correlated subquery should not appear in " +
             classOf[EvalSubqueriesForTimeTravel].getSimpleName)
-          SimpleAnalyzer.checkSubqueryExpression(r, s)
-          val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, s.plan)
-          val physicalSubquery = ScalarSubqueryExec(
-            SubqueryExec.createForScalarSubquery(
-              s"scalar-subquery#${s.exprId.id}", executedPlan),
-            s.exprId)
-          evalSubqueries(physicalSubquery)
-          Literal(physicalSubquery.eval(), s.dataType)
+          // Wrap the scalar subquery in a Project over OneRowRelation to execute it
+          // through the normal query execution path. This properly handles table
+          // references in the subquery (e.g., V2 tables).
+          val wrappedPlan = Project(Seq(Alias(s, "result")()), OneRowRelation())
+          val spark = SparkSession.active
+          val qe = spark.sessionState.executePlan(wrappedPlan)
+          val result = qe.executedPlan.executeCollect().head.get(0, s.dataType)
+          Literal(result, s.dataType)
       }
       r.copy(timestamp = Some(subqueryEvaluated))
-  }
-
-  // Evaluate subqueries in a bottom-up way.
-  private def evalSubqueries(subquery: ScalarSubqueryExec): Unit = {
-    subquery.plan.foreachUp { plan =>
-      plan.expressions.foreach(_.foreachUp {
-        case s: ScalarSubqueryExec => evalSubqueries(s)
-        case _ =>
-      })
-    }
-    subquery.updateResult()
   }
 }

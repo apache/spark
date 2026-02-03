@@ -461,6 +461,9 @@ Aggregate Functions
     kll_sketch_agg_bigint
     kll_sketch_agg_double
     kll_sketch_agg_float
+    kll_merge_agg_bigint
+    kll_merge_agg_float
+    kll_merge_agg_double
     kurtosis
     last
     last_value

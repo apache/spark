@@ -163,7 +163,7 @@ def _convert_arrow_table_to_pandas(
     )
 
     # Restore original column names (including duplicates)
-    pdf.columns = schema.names
+    pdf.columns = pd.Index(schema.names)
 
     return pdf
 
@@ -294,9 +294,7 @@ class PandasConversionMixin:
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
         if len(rows) > 0:
-            pdf = pd.DataFrame.from_records(
-                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
-            )
+            pdf = pd.DataFrame.from_records(rows, index=range(len(rows)), columns=self.columns)
         else:
             pdf = pd.DataFrame(columns=self.columns)
 
@@ -698,7 +696,7 @@ class SparkConversionMixin:
 
                     conv = _converter(data_type)
                     if conv is not None:
-                        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+                        return lambda pser: pser.apply(conv)
                     else:
                         return lambda pser: pser
 
@@ -744,7 +742,7 @@ class SparkConversionMixin:
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
-            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
         ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
@@ -825,9 +823,7 @@ class SparkConversionMixin:
         require_minimum_pyarrow_version()
 
         import pandas as pd
-        from pandas.api.types import (  # type: ignore[attr-defined]
-            is_datetime64_dtype,
-        )
+        from pandas.api.types import is_datetime64_dtype
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types

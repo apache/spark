@@ -298,6 +298,7 @@ private[ui] class ExecutionPagedTable(
   private val headerInfo: Seq[(String, Boolean, Option[String])] = {
     Seq(
       ("ID", true, None),
+      ("Query ID", true, None),
       ("Description", true, None),
       ("Submitted", true, None),
       ("Duration", true, Some("Time from query submission to completion (or if still executing," +
@@ -373,6 +374,9 @@ private[ui] class ExecutionPagedTable(
           {executionUIData.executionId.toString}
         </td>
         <td>
+          {Option(executionUIData.queryId).getOrElse("N/A")}
+        </td>
+        <td>
           {descriptionCell(executionUIData)}
         </td>
         <td sorttable_customkey={submissionTime.toString}>
@@ -427,6 +431,9 @@ private[ui] class ExecutionPagedTable(
                   <tr>
                     <td>
                       {executionUIData.executionId.toString}
+                    </td>
+                    <td>
+                      {Option(executionUIData.queryId).getOrElse("N/A")}
                     </td>
                     <td>
                       {descriptionCell(executionUIData)}
@@ -566,6 +573,7 @@ private[ui] class ExecutionDataSource(
   private def ordering(sortColumn: String, desc: Boolean): Ordering[ExecutionTableRowData] = {
     val ordering: Ordering[ExecutionTableRowData] = sortColumn match {
       case "ID" => Ordering.by(_.executionUIData.executionId)
+      case "Query ID" => Ordering.by(_.executionUIData.queryId)
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)

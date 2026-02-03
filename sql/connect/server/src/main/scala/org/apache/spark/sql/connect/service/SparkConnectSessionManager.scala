@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
+import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
@@ -39,8 +39,11 @@ import org.apache.spark.util.ThreadUtils
  */
 class SparkConnectSessionManager extends Logging {
 
+  // Used to lazily initialize the base session
+  @volatile private var baseSessionCreator: Option[() => SparkSession] = None
+
   // Base SparkSession created from the SparkContext, used to create new isolated sessions
-  @volatile private var baseSession: Option[SparkSession] = None
+  @volatile private var _baseSession: Option[SparkSession] = None
 
   private val sessionStore: ConcurrentMap[SessionKey, SessionHolder] =
     new ConcurrentHashMap[SessionKey, SessionHolder]()
@@ -51,13 +54,20 @@ class SparkConnectSessionManager extends Logging {
       .maximumSize(SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
       .build[SessionKey, SessionHolderInfo]()
 
+  private def baseSession: Option[SparkSession] = {
+    if (_baseSession.isEmpty && baseSessionCreator.isDefined) {
+      _baseSession = Some(baseSessionCreator.get())
+    }
+    _baseSession
+  }
+
   /**
    * Initialize the base SparkSession from the provided SparkContext. This should be called once
    * during SparkConnectService startup.
    */
-  def initializeBaseSession(sc: SparkContext): Unit = {
-    if (baseSession.isEmpty) {
-      baseSession = Some(SparkSession.builder().sparkContext(sc).getOrCreate().newSession())
+  def initializeBaseSession(createSession: () => SparkSession): Unit = {
+    if (baseSessionCreator.isEmpty) {
+      baseSessionCreator = Some(createSession)
     }
   }
 

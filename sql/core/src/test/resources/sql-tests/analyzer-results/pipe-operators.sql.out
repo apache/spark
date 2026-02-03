@@ -1100,6 +1100,55 @@ Project [x#x, y#x]
 
 
 -- !query
+table st
+|> drop col.i1
+-- !query analysis
+Project [x#x, named_struct(i2, col#x.i2) AS col#x]
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table st
+|> drop col.i1, col.i2
+-- !query analysis
+Project [x#x, named_struct() AS col#x]
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> as u
+|> drop u.x
+-- !query analysis
+Project [y#x]
++- SubqueryAlias u
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as x, named_struct('x', 2, 'y', 3) as col
+|> as col
+|> drop col.x
+-- !query analysis
+Project [col#x]
++- SubqueryAlias col
+   +- Project [1 AS x#x, named_struct(x, 2, y, 3) AS col#x]
+      +- OneRowRelation
+
+
+-- !query
+select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
+|> drop outer.middle.inner
+-- !query analysis
+Project [x#x, named_struct(middle, named_struct()) AS outer#x]
++- Project [1 AS x#x, named_struct(middle, named_struct(inner, 2)) AS outer#x]
+   +- OneRowRelation
+
+
+-- !query
 table t
 |> drop z
 -- !query analysis
@@ -1123,16 +1172,23 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table st
-|> drop col.i1
+|> drop col.nonexistent
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "FIELD_NOT_FOUND",
+  "sqlState" : "42704",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "fieldName" : "`nonexistent`",
+    "fields" : "`i1`, `i2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "table st\n|> drop col.nonexistent"
+  } ]
 }
 
 

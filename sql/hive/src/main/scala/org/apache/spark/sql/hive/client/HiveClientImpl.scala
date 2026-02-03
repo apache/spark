@@ -28,6 +28,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -60,6 +61,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -586,7 +588,23 @@ private[hive] class HiveClientImpl(
       tableName: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
-    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    try {
+      shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    } catch {
+      case NonFatal(e) =>
+        // Check if the error is due to missing database or table.
+        if (!databaseExists(dbName) || !tableExists(dbName, tableName)) {
+          if (ignoreIfNotExists) {
+            // Database or table doesn't exist and we're ignoring - treat as success
+            return
+          } else {
+            throw new NoSuchTableException(
+              Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+          }
+        }
+        // Both database and table exist, so re-throw the original exception
+        throw e
+    }
   }
 
   override def alterTable(

@@ -95,8 +95,7 @@ trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with Pyth
           pythonRunnerConf,
           pythonMetrics,
           jobArtifactUUID,
-          sessionUUID,
-          conf.pythonUDFProfiler)
+          sessionUUID)
 
         executePython(data, output, runner)
       }

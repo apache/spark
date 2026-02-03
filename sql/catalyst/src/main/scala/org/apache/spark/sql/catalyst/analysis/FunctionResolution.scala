@@ -152,18 +152,8 @@ class FunctionResolution(
             wf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
-          wf match {
-            case nthValue: NthValue =>
-              nthValue.copy(ignoreNulls = u.ignoreNulls)
-            case _ =>
-              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                wf.prettyName,
-                "IGNORE NULLS"
-              )
-          }
         } else {
-          wf
+          resolveIgnoreNulls(wf, u.ignoreNulls)
         }
       case owf: FrameLessOffsetWindowFunction =>
         if (u.isDistinct) {
@@ -176,15 +166,8 @@ class FunctionResolution(
             owf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
-          owf match {
-            case lead: Lead =>
-              lead.copy(ignoreNulls = u.ignoreNulls)
-            case lag: Lag =>
-              lag.copy(ignoreNulls = u.ignoreNulls)
-          }
         } else {
-          owf
+          resolveIgnoreNulls(owf, u.ignoreNulls)
         }
       // We get an aggregate function, we need to wrap it in an AggregateExpression.
       case agg: AggregateFunction =>
@@ -216,21 +199,8 @@ class FunctionResolution(
             )
           case _ =>
         }
-        if (u.ignoreNulls) {
-          val aggFunc = newAgg match {
-            case first: First => first.copy(ignoreNulls = u.ignoreNulls)
-            case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
-            case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
-            case _ =>
-              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                newAgg.prettyName,
-                "IGNORE NULLS"
-              )
-          }
-          aggFunc.toAggregateExpression(u.isDistinct, u.filter)
-        } else {
-          newAgg.toAggregateExpression(u.isDistinct, u.filter)
-        }
+        val aggFunc = resolveIgnoreNulls(newAgg, u.ignoreNulls)
+        aggFunc.toAggregateExpression(u.isDistinct, u.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
         checkUnsupportedAggregateClause(other, u)
@@ -258,12 +228,49 @@ class FunctionResolution(
         "FILTER clause"
       )
     }
-    if (u.ignoreNulls) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "IGNORE NULLS"
       )
     }
+  }
+
+  /**
+   * Resolves the IGNORE NULLS / RESPECT NULLS clause for a function.
+   * If ignoreNulls is defined, applies it to the function; otherwise returns unchanged.
+   */
+  private def resolveIgnoreNulls[T <: Expression](func: T, ignoreNulls: Option[Boolean]): T = {
+    ignoreNulls.map(applyIgnoreNulls(func, _)).getOrElse(func)
+  }
+
+  /**
+   * Applies the IGNORE NULLS / RESPECT NULLS clause to functions that support it.
+   * Returns the modified function if supported, throws error otherwise.
+   */
+  private def applyIgnoreNulls[T <: Expression](func: T, ignoreNulls: Boolean): T = {
+    val result = func match {
+      // Window functions
+      case nthValue: NthValue => nthValue.copy(ignoreNulls = ignoreNulls)
+      case lead: Lead => lead.copy(ignoreNulls = ignoreNulls)
+      case lag: Lag => lag.copy(ignoreNulls = ignoreNulls)
+      // Aggregate functions
+      case first: First => first.copy(ignoreNulls = ignoreNulls)
+      case last: Last => last.copy(ignoreNulls = ignoreNulls)
+      case anyValue: AnyValue => anyValue.copy(ignoreNulls = ignoreNulls)
+      case collectList: CollectList => collectList.copy(ignoreNulls = ignoreNulls)
+      case _ if ignoreNulls =>
+        // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName,
+          "IGNORE NULLS"
+        )
+      case _ =>
+        // RESPECT NULLS is the default, silently return unchanged
+        func
+    }
+    result.asInstanceOf[T]
   }
 
   private def resolveV2Function(
@@ -312,7 +319,8 @@ class FunctionResolution(
         scalarFunc.name(),
         "FILTER clause"
       )
-    } else if (u.ignoreNulls) {
+    } else if (u.ignoreNulls.contains(true)) {
+      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
         "IGNORE NULLS"
@@ -326,7 +334,8 @@ class FunctionResolution(
       aggFunc: V2AggregateFunction[_, _],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    if (u.ignoreNulls) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
         "IGNORE NULLS"

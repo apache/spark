@@ -21,7 +21,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{Future, Promise}
-import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.util.Try
 
@@ -119,8 +119,8 @@ class Observation(val name: String) {
    * @return
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
-    promise.trySuccess(metrics)
+  private[sql] def setMetricsAndNotify(metrics: Try[Row]): Boolean = {
+    promise.tryComplete(metrics)
   }
 
   /**
@@ -130,7 +130,7 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`, or None if the metrics are not available.
    */
   private[sql] def getRowOrEmpty: Option[Row] = {
-    Try(SparkThreadUtils.awaitResult(future, 100.millis)).toOption
+    future.value.flatMap(_.toOption)
   }
 
   /**

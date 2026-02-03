@@ -26,17 +26,17 @@ class DatetimeIndexTestingFuncMixin:
     def fixed_freqs(self):
         return [
             "D",
-            "H",
-            "T",  # min
-            "S",
-            "L",  # ms
-            "U",  # us
+            "h",
+            "min",
+            "s",
+            "ms",
+            "us",
             # 'N' not supported
         ]
 
     @property
     def non_fixed_freqs(self):
-        return ["W", "Q"]
+        return ["W", "QE"]
 
     @property
     def pidxs(self):

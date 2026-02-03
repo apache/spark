@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.utils
 
-import java.io.IOException
+import java.lang.{Long => JLong}
 
 import scala.util.control.NonFatal
 
@@ -102,14 +102,17 @@ object PlanCompressionUtils {
 
     // Create a bounded input stream to limit the decompressed output size to avoid decompression
     // bomb attacks.
-    val boundedStream = new BoundedInputStream(zstdStream, maxOutputSize) {
-      @throws[IOException]
-      override protected def onMaxLength(maxBytes: Long, count: Long): Unit =
+    val boundedStream = BoundedInputStream
+      .builder()
+      .setInputStream(zstdStream)
+      .setMaxCount(maxOutputSize)
+      .setOnMaxCount((_: JLong, _: JLong) => {
         throw new SparkSQLException(
           errorClass = "CONNECT_INVALID_PLAN.PLAN_SIZE_LARGER_THAN_MAX",
           messageParameters =
             Map("planSize" -> "unknown", "maxPlanSize" -> maxOutputSize.toString))
-    }
+      })
+      .get()
     val cis = CodedInputStream.newInstance(boundedStream)
     cis.setSizeLimit(Integer.MAX_VALUE)
     cis.setRecursionLimit(SparkEnv.get.conf.get(Connect.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT))

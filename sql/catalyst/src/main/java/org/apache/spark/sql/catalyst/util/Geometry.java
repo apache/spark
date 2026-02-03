@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.GeometryModel;
+import org.apache.spark.sql.catalyst.util.geo.WkbReader;
+import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.unsafe.types.GeometryVal;
 
 import java.nio.ByteBuffer;
@@ -77,6 +80,9 @@ public final class Geometry implements Geo {
 
   // Returns a Geometry object with the specified SRID value by parsing the input WKB.
   public static Geometry fromWkb(byte[] wkb, int srid) {
+    WkbReader reader = new WkbReader();
+    reader.read(wkb); // Validate WKB
+
     byte[] bytes = new byte[HEADER_SIZE + wkb.length];
     ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
     System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
@@ -118,19 +124,20 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkb() {
-    // This method returns only the WKB portion of the in-memory Geometry representation.
-    // Note that the header is skipped, and that the WKB is returned as-is (little-endian).
-    return Arrays.copyOfRange(getBytes(), WKB_OFFSET, getBytes().length);
+    return toWkbInternal(DEFAULT_ENDIANNESS);
   }
 
   @Override
   public byte[] toWkb(ByteOrder endianness) {
-    // The default endianness is Little Endian (NDR).
-    if (endianness == DEFAULT_ENDIANNESS) {
-      return toWkb();
-    } else {
-      throw new UnsupportedOperationException("Geometry WKB endianness is not yet supported.");
-    }
+    return toWkbInternal(endianness);
+  }
+
+  private byte[] toWkbInternal(ByteOrder endianness) {
+    WkbReader reader = new WkbReader();
+    GeometryModel model = reader.read(Arrays.copyOfRange(
+      getBytes(), WKB_OFFSET, getBytes().length));
+    WkbWriter writer = new WkbWriter();
+    return writer.write(model, endianness);
   }
 
   @Override

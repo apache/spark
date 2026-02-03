@@ -16,8 +16,6 @@
 #
 
 import unittest
-from typing import cast
-
 from pyspark.sql.types import (
     ArrayType,
     IntegerType,
@@ -46,7 +44,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ConverterTests(unittest.TestCase):
     def test_converter_to_pandas_array(self):

@@ -17,8 +17,6 @@
 
 import os
 import unittest
-from typing import cast
-
 from pyspark import SparkConf
 from pyspark.testing.sqlutils import (
     have_pyarrow,
@@ -33,7 +31,7 @@ from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_v
 
 @unittest.skipIf(
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
-    cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
+    pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TransformWithStateInPySparkStateVariableTestsMixin(TransformWithStateStateVariableTestsMixin):
     @classmethod

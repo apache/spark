@@ -31,7 +31,6 @@ import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
@@ -45,7 +44,7 @@ import org.apache.spark.util.Utils
 case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite
-  extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite with SQLTestUtilsBase {
+  extends OrcTest with CommonFileDataSourceSuite with SQLTestUtilsBase {
   import testImplicits._
 
   override protected def dataSourceFormat = "orc"
