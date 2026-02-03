@@ -133,7 +133,7 @@ class ResampleSeriesMixin:
         self._test_resample(self.pdf6.A, self.psdf6.A, ["111s"], "right", "right", "std")
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], "right", None, "min")
+            self._test_resample(self.pdf1.A, self.psdf1.A, ["4YE"], "right", None, "min")
 
 
 class ResampleSeriesTests(ResampleSeriesMixin, PandasOnSparkTestCase, TestUtils):

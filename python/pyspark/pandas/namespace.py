@@ -1879,7 +1879,7 @@ def date_range(
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -2087,7 +2087,7 @@ def timedelta_range(
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
-    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],
