@@ -614,12 +614,6 @@ class SparkSession:
             # At this point, schema is always a StructType
             deduped_schema = cast(StructType, _deduplicate_field_names(schema))
             spark_types: List[DataType] = [field.dataType for field in deduped_schema.fields]
-            arrow_schema = to_arrow_schema(
-                deduped_schema,
-                timezone="UTC",
-                prefers_large_types=prefers_large_types,
-            )
-            _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
@@ -633,17 +627,21 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [
                     ser._create_batch(
-                        [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                        [
+                            (series, spark_type)
+                            for (_, series), spark_type in zip(data.items(), spark_types)
+                        ],
                         prefers_large_types=prefers_large_types,
                     )
                 ]
             )
 
-            if isinstance(schema, StructType):
-                assert arrow_schema is not None
-                _table = _table.rename_columns(
-                    cast(StructType, _deduplicate_field_names(schema)).names
-                ).cast(arrow_schema)
+            arrow_schema = to_arrow_schema(
+                deduped_schema,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
+            )
+            _table = _table.rename_columns(deduped_schema.names).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
             # If no schema supplied by user then get the names of columns only
@@ -663,7 +661,7 @@ class SparkSession:
                     to_arrow_schema(
                         schema,
                         error_on_duplicated_field_names_in_struct=True,
-                        timezone="UTC",
+                        timezone=timezone,
                         prefers_large_types=prefers_large_types,
                     )
                 )

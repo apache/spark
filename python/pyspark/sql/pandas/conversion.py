@@ -874,8 +874,8 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of (series, spark_type) for serializer dump_stream
-        arrow_data = [
+        # Create list of (series, spark_type) batches for serializer
+        batched_series = [
             [
                 (series, spark_type)
                 for (_, series), spark_type in zip(pdf_slice.items(), spark_types)
@@ -901,7 +901,7 @@ class SparkConversionMixin:
             return self._jvm.ArrowIteratorServer()
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
+        jiter = self._sc._serialize_to_jvm(batched_series, ser, reader_func, create_iter_server)
         assert self._jvm is not None
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
         df = DataFrame(jdf, self)
