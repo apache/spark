@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, SequentialUnion}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, SequentialUnion}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
 class SequentialUnionAnalysisSuite extends AnalysisTest with DataTypeErrorsBase {
@@ -123,6 +123,25 @@ class SequentialUnionAnalysisSuite extends AnalysisTest with DataTypeErrorsBase 
 
     val innerUnion = SequentialUnion(streamingRelation1, streamingRelation2)
     val outerUnion = SequentialUnion(innerUnion, streamingRelation3)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ValidateSequentialUnion(outerUnion)
+      },
+      condition = "NESTED_SEQUENTIAL_UNION",
+      parameters = Map(
+        "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
+  }
+
+  test("ValidateSequentialUnion - rejects indirectly nested SequentialUnion through Project") {
+    val streamingRelation1 = testRelation1.copy(isStreaming = true)
+    val streamingRelation2 = testRelation2.copy(isStreaming = true)
+    val streamingRelation3 = testRelation3.copy(isStreaming = true)
+
+    // Create a nested SequentialUnion wrapped in a Project
+    val innerUnion = SequentialUnion(streamingRelation1, streamingRelation2)
+    val projectOverUnion = Project(Seq($"a", $"b"), innerUnion)
+    val outerUnion = SequentialUnion(projectOverUnion, streamingRelation3)
 
     checkError(
       exception = intercept[AnalysisException] {
