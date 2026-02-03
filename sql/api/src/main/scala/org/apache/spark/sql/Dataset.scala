@@ -2016,7 +2016,7 @@ abstract class Dataset[T] extends Serializable {
    *
    * The index column is appended as the last column of the resulting [[DataFrame]].
    *
-   * @group typedrel
+   * @group untypedrel
    * @since 4.2.0
    */
   def zipWithIndex(): DataFrame = zipWithIndex("index")
@@ -2034,7 +2034,7 @@ abstract class Dataset[T] extends Serializable {
    *
    * @param indexColName
    *   The name of the index column to append.
-   * @group typedrel
+   * @group untypedrel
    * @since 4.2.0
    */
   def zipWithIndex(indexColName: String): DataFrame = {
