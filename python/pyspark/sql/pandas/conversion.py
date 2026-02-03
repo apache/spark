@@ -91,7 +91,7 @@ def create_arrow_array_from_pandas(
     from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
 
     if isinstance(series.dtype, pd.CategoricalDtype):
-        series = series.astype(series.dtypes.categories.dtype)
+        series = series.astype(series.dtype.categories.dtype)
 
     # Derive arrow_type from spark_type
     arrow_type = (
