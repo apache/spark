@@ -3531,17 +3531,17 @@
     ],
     "sqlState" : "42K0E"
   },
-  "INVALID_NUMERIC_LITERAL_RANGE" : {
-    "message" : [
-      "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
-    ],
-    "sqlState" : "22003"
-  },
   "INVALID_NUMBER_OF_CHILDREN_FOR_UNION" : {
     "message" : [
       "<operator> requires at least <minimum> children, but only <actual> were provided."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_NUMERIC_LITERAL_RANGE" : {
+    "message" : [
+      "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_OBSERVED_METRICS" : {
     "message" : [
