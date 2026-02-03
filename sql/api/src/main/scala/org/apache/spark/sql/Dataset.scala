@@ -2034,7 +2034,7 @@ abstract class Dataset[T] extends Serializable {
    *
    * @param indexColName
    *   The name of the index column to append.
-   * @group typedrel
+   * @group untypedrel
    * @since 4.2.0
    */
   def zipWithIndex(indexColName: String): DataFrame
