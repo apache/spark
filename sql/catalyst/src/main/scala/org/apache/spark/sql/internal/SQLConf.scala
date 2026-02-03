@@ -5139,6 +5139,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL =
+    buildConf("spark.sql.artifact.cacheStorageLevel")
+      .internal()
+      .doc("Storage level for cached blocks in artifact manager. Valid values are any " +
+        "StorageLevel name (e.g., MEMORY_AND_DISK_SER, DISK_ONLY, MEMORY_ONLY, etc.).")
+      .version("4.2.0")
+      .stringConf
+      .createWithDefault("MEMORY_AND_DISK_SER")
+
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
       .internal()
