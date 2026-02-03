@@ -298,3 +298,58 @@ PIVOT (
   sum(Earnings)
   FOR Course IN ('dotNET', 'Java')
 );
+
+-- pivot with alias
+SELECT pv.* FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) AS pv;
+
+-- pivot with alias (without AS keyword)
+SELECT pv.* FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) pv;
+
+-- pivot with alias - qualified column references
+SELECT pv.year, pv.dotNET, pv.Java FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) AS pv;
+
+-- pivot with alias and target column aliases
+SELECT pv.year, pv.net, pv.jv FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET' as net, 'Java' as jv)
+) AS pv;
+
+-- pivot with alias - join with another table
+SELECT pv.year, pv.dotNET, y.s FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) AS pv
+JOIN years y ON pv.year = y.y;
+
+-- pivot with alias - multiple aggregations
+SELECT pv.y, pv.dotNET_s, pv.Java_a FROM (
+  SELECT year y, course c, earnings e FROM courseSales
+)
+PIVOT (
+  sum(e) s, avg(e) a
+  FOR c IN ('dotNET', 'Java')
+) AS pv;
