@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from types import CodeType
 from typing import (
     Any,
     Callable,
@@ -44,6 +45,7 @@ try:
 except Exception:
     has_memory_profiler = False
 
+import pyspark
 from pyspark.accumulators import AccumulatorParam
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
@@ -278,6 +280,10 @@ if has_memory_profiler:
             backend = kw.get("backend", "psutil")
             self.code_map = CodeMapForUDFV2(include_children=include_children, backend=backend)
 
+        def add_code(self, code: CodeType) -> None:
+            """Record line profiling information for the given code object."""
+            self.code_map.add(code)
+
 
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
@@ -471,6 +477,17 @@ class MemoryProfiler(Profiler):
             stream.write("Filename: " + filename + "\n\n")
             stream.write(header + "\n")
             stream.write("=" * len(header) + "\n")
+
+            if "pyspark.zip/pyspark/" in filename:
+                # if the original filename is in pyspark.zip file, we try to find the actual
+                # file in pyspark module by concatenating pyspark module directory and the
+                # rest of the filename
+                # Eventually we should ask the data provider to provide the actual lines
+                # because there's no guarantee that we can always find the actual file
+                # on driver side
+                filename = os.path.join(
+                    os.path.dirname(pyspark.__file__), filename.rsplit("pyspark.zip/pyspark/", 1)[1]
+                )
 
             all_lines = linecache.getlines(filename)
             if len(all_lines) == 0:

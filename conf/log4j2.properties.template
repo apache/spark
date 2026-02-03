@@ -55,8 +55,8 @@ logger.parquet1.level = error
 logger.parquet2.name = parquet
 logger.parquet2.level = error
 
-# SPARK-9183: Settings to avoid annoying messages when looking up nonexistent UDFs in SparkSQL with Hive support
-logger.RetryingHMSHandler.name = org.apache.hadoop.hive.metastore.RetryingHMSHandler
-logger.RetryingHMSHandler.level = fatal
-logger.FunctionRegistry.name = org.apache.hadoop.hive.ql.exec.FunctionRegistry
-logger.FunctionRegistry.level = error
+# SPARK-9183, SPARK-55237: Settings to avoid annoying messages when looking up nonexistent DBs/UDFs in spark-sql with Hive support
+logger.metastore.name = org.apache.hadoop.hive.metastore.RetryingHMSHandler
+logger.metastore.level = fatal
+logger.metastore2.name = org.apache.hadoop.hive.metastore.ObjectStore
+logger.metastore2.level = error

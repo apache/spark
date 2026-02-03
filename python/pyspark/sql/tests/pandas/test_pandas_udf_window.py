@@ -17,7 +17,6 @@
 
 import unittest
 import logging
-from typing import cast
 from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
@@ -48,7 +47,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class WindowPandasUDFTestsMixin:
     @property
@@ -437,7 +436,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -465,7 +464,7 @@ class WindowPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -533,7 +532,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -711,12 +710,6 @@ class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_window import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

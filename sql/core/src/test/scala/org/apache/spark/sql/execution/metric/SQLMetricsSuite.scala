@@ -107,6 +107,25 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-54749: OneRowRelation metrics") {
+    Seq((1L, "false"), (2L, "true")).foreach { case (nodeId, enableWholeStage) =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+        val df = spark.sql("select 1 as c1")
+        val oneRowRelation = df.queryExecution.executedPlan.collect {
+          case oneRowRelation: OneRowRelationExec => oneRowRelation
+        }
+        df.collect()
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(oneRowRelation.size == 1)
+
+        val expected = Map("number of output rows" -> 1L)
+        testSparkPlanMetrics(df.toDF(), 1, Map(
+          nodeId -> (("Scan OneRowRelation", expected))))
+      }
+    }
+  }
+
+
   test("Recursive CTEs metrics") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val df = sql(

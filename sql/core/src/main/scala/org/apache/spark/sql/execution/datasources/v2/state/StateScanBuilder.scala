@@ -42,14 +42,17 @@ class StateScanBuilder(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
+    batchNumPartitions: Int,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String]) extends ScanBuilder {
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
-    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
-    joinColFamilyOpt)
+    batchNumPartitions, keyStateEncoderSpec,
+    stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
+    joinColFamilyOpt, allColumnFamiliesReaderInfo)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -64,11 +67,13 @@ class StateScan(
     schema: StructType,
     sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf,
+    batchNumPartitions: Int,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String])
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
   extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -83,7 +88,11 @@ class StateScan(
     val partitions = fs.listStatus(stateCheckpointPartitionsLocation, new PathFilter() {
       override def accept(path: Path): Boolean = {
         fs.getFileStatus(path).isDirectory &&
-        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
+        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0 &&
+        // Since we now support state repartitioning, it is possible that a future batch has
+        // increased the number of partitions, hence increased the number of partition directories.
+        // So we only want partition dirs for the number of partitions in this batch.
+        path.getName.toInt < batchNumPartitions
       }
     })
 
@@ -144,7 +153,7 @@ class StateScan(
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
         keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt, joinColFamilyOpt)
+        stateSchemaProviderOpt, joinColFamilyOpt, allColumnFamiliesReaderInfo)
   }
 
   override def toBatch: Batch = this

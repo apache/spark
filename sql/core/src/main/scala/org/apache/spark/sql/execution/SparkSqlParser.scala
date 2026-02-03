@@ -27,9 +27,10 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
-  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
+  GlobalTempView, LocalTempView, PersistedView,
+  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -187,7 +188,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         (ident, _) => builder(ident))
     } else if (ctx.errorCapturingIdentifier() != null) {
       // resolve immediately
-      builder.apply(Seq(ctx.errorCapturingIdentifier().getText))
+      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
     } else if (ctx.stringLit() != null) {
       // resolve immediately
       builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
@@ -412,13 +413,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    withCatalogIdentClause(ctx.catalogIdentifierReference, identifiers => {
-      if (identifiers.size > 1) {
-        // can occur when user put multipart string in IDENTIFIER(...) clause
-        throw QueryParsingErrors.invalidNameForSetCatalog(identifiers, ctx)
-      }
-      SetCatalogCommand(identifiers.head)
-    })
+    val expr = expression(ctx.expression())
+    SetCatalogCommand(expr)
   }
 
   /**
@@ -567,7 +563,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val rawArg = remainder(ctx.identifier).trim
+    val rawArg = remainder(ctx.simpleIdentifier).trim
     val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
       case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
       case p => p
@@ -575,14 +571,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" => AddFilesCommand(maybePaths)
           case "jars" | "jar" => AddJarsCommand(maybePaths)
           case "archives" | "archive" => AddArchivesCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (maybePaths.length > 0) {
               ListFilesCommand(maybePaths)
@@ -724,6 +720,56 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  override def visitCreateMetricView(ctx: CreateMetricViewContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
+    checkDuplicateClauses(ctx.METRICS(), "WITH METRICS", ctx)
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
+    if (ctx.METRICS(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+    }
+
+    if (ctx.routineLanguage(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+    }
+
+    val languageCtx = ctx.routineLanguage(0)
+    if (languageCtx.SQL() != null) {
+      operationNotAllowed("Unsupported language for metric view: SQL", languageCtx)
+    }
+    val name: String = languageCtx.IDENTIFIER().getText
+    if (!name.equalsIgnoreCase("YAML")) {
+      operationNotAllowed(s"Unsupported language for metric view: $name", languageCtx)
+    }
+
+    val properties = ctx.propertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
+
+    CreateMetricViewCommand(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      userSpecifiedColumns,
+      visitCommentSpecList(ctx.commentSpec()),
+      properties,
+      codeLiteral,
+      allowExisting = ctx.EXISTS != null,
+      replace = ctx.REPLACE != null
+    )
+  }
+
   /**
    * Create a [[CreateFunctionCommand]].
    *
@@ -735,7 +781,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
+      val resourceType = resource.simpleIdentifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
           FunctionResource(FunctionResourceType.fromString(resourceType),
@@ -981,9 +1027,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), functionName => {
-      val isTemp = ctx.TEMPORARY != null
-      if (isTemp) {
+    val isTemp = ctx.TEMPORARY != null
+    val identCtx = ctx.identifierReference()
+    if (isTemp) {
+      withIdentClause(identCtx, functionName => {
         if (functionName.length > 1) {
           throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
         }
@@ -991,17 +1038,12 @@ class SparkSqlAstBuilder extends AstBuilder {
           identifier = FunctionIdentifier(functionName.head),
           ifExists = ctx.EXISTS != null,
           isTemp = true)
-      } else {
-        val hintStr = "Please use fully qualified identifier to drop the persistent function."
-        DropFunction(
-          UnresolvedFunctionName(
-            functionName,
-            "DROP FUNCTION",
-            requirePersistent = true,
-            funcTypeMismatchHint = Some(hintStr)),
-          ctx.EXISTS != null)
-      }
-    })
+      })
+    } else {
+      DropFunction(
+        withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)),
+        ctx.EXISTS != null)
+    }
   }
 
   private def toStorageFormat(
@@ -1308,7 +1350,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       } else {
         DescribeColumn(
           relation,
-          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(getIdentifierText).toSeq),
           isExtended)
       }
     } else {
@@ -1349,7 +1391,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>
-      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
+      DescribeProcedureCommand(UnresolvedProcedure(procIdentifier)))
   }
 
   override def visitCreatePipelineInsertIntoFlow(

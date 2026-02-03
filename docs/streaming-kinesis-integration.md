@@ -115,18 +115,16 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
     You may also provide the following settings. This is currently only supported in Scala and Java.
 
-    - A "message handler function" that takes a Kinesis `Record` and returns a generic object `T`, in case you would like to use other data included in a `Record` such as partition key.
+    - A "message handler function" that takes a Kinesis `KinesisClientRecord` and returns a generic object `T`, in case you would like to use other data included in a `Record` such as partition key.
 
     <div class="codetabs">
     <div data-lang="scala" markdown="1">
     ```scala
-    import collection.JavaConverters._
     import org.apache.spark.storage.StorageLevel
     import org.apache.spark.streaming.kinesis.KinesisInputDStream
     import org.apache.spark.streaming.{Seconds, StreamingContext}
     import org.apache.spark.streaming.kinesis.KinesisInitialPositions
-    import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration
-    import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
+    import software.amazon.kinesis.metrics.{MetricsLevel, MetricsUtil}
 
     val kinesisStream = KinesisInputDStream.builder
         .streamingContext(streamingContext)
@@ -138,21 +136,23 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
         .checkpointInterval([checkpoint interval])
         .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
         .metricsLevel(MetricsLevel.DETAILED)
-        .metricsEnabledDimensions(KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet)
+        .metricsEnabledDimensions(
+          Set(MetricsUtil.OPERATION_DIMENSION_NAME, MetricsUtil.SHARD_ID_DIMENSION_NAME))
         .buildWithMessageHandler([message handler])
     ```
 
     </div>
     <div data-lang="java" markdown="1">
     ```java
+    import java.util.Set;
+    import scala.jdk.javaapi.CollectionConverters;
     import org.apache.spark.storage.StorageLevel;
     import org.apache.spark.streaming.kinesis.KinesisInputDStream;
     import org.apache.spark.streaming.Seconds;
     import org.apache.spark.streaming.StreamingContext;
     import org.apache.spark.streaming.kinesis.KinesisInitialPositions;
-    import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
-    import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel;
-    import scala.collection.JavaConverters;
+    import software.amazon.kinesis.metrics.MetricsLevel;
+    import software.amazon.kinesis.metrics.MetricsUtil;
 
     KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder()
         .streamingContext(streamingContext)
@@ -165,11 +165,10 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
         .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
         .metricsLevel(MetricsLevel.DETAILED)
         .metricsEnabledDimensions(
-            JavaConverters.asScalaSetConverter(
-                KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS
-            )
-            .asScala().toSet()
-        )
+            CollectionConverters.asScala(
+                Set.of(
+                    MetricsUtil.OPERATION_DIMENSION_NAME,
+                    MetricsUtil.SHARD_ID_DIMENSION_NAME)).toSet())
         .buildWithMessageHandler([message handler]);
     ```
 
@@ -194,7 +193,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
     - `[initial position]`: Can be either `KinesisInitialPositions.TrimHorizon` or `KinesisInitialPositions.Latest` or `KinesisInitialPositions.AtTimestamp` (see [`Kinesis Checkpointing`](#kinesis-checkpointing) section and [`Amazon Kinesis API documentation`](http://docs.aws.amazon.com/streams/latest/dev/developing-consumers-with-sdk.html) for more details).
 
-    - `[message handler]`: A function that takes a Kinesis `Record` and outputs generic `T`.
+    - `[message handler]`: A function that takes a Kinesis `KinesisClientRecord` and outputs generic `T`.
 
     In other versions of the API, you can also specify the AWS access key and secret key directly.
 

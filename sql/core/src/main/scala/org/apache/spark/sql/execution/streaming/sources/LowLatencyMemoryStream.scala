@@ -26,7 +26,12 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
+import org.apache.spark.rpc.{
+  RpcAddress,
+  RpcEndpointRef,
+  RpcEnv,
+  ThreadSafeRpcEndpoint
+}
 import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -68,16 +73,19 @@ class LowLatencyMemoryStream[A: Encoder](
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   @GuardedBy("this")
-  private val records = Seq.fill(numPartitions)(new ListBuffer[UnsafeRow])
+  private val records =
+    Seq.fill(numPartitions)(new ListBuffer[(UnsafeRow, Long)]())
 
-  private val recordEndpoint = new ContinuousRecordEndpoint(records, this)
+  private val recordEndpoint = new LowLatencyMemoryStreamEndpoint(records, this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   override def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
+    val timestamp = clock.getTimeMillis()
     data.iterator.to(Seq).zipWithIndex.map {
       case (item, index) =>
-        records(index % numPartitions) += toRow(item).copy().asInstanceOf[UnsafeRow]
+        val partitionId = index % numPartitions
+        records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -91,7 +99,10 @@ class LowLatencyMemoryStream[A: Encoder](
     )
 
     // Add data to the specified partition.
-    records(partitionId) ++= data.iterator.map(item => toRow(item).copy().asInstanceOf[UnsafeRow])
+    val timestamp = clock.getTimeMillis()
+    data.iterator.foreach { item =>
+      records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+    }
 
     // The new target offset is the offset where all records in all partitions have been processed.
     LowLatencyMemoryStreamOffset((0 until numPartitions).map(i => (i, records(i).size)).toMap)
@@ -271,7 +282,7 @@ class LowLatencyMemoryStreamPartitionReader(
   )
 
   private var currentOffset = startOffset
-  private var current: Option[InternalRow] = None
+  private var current: Option[(InternalRow, Long)] = None
 
   // Defense-in-depth against failing to propagate the task context. Since it's not inheritable,
   // we have to do a bit of error prone work to get it into every thread used by LowLatency
@@ -283,22 +294,22 @@ class LowLatencyMemoryStreamPartitionReader(
   override def nextWithTimeout(timeout: java.lang.Long): RecordStatus = {
     val startReadTime = clock.nanoTime()
     var elapsedTimeMs = 0L
-    current = getRecord
+    current = getRecordWithTimestamp
     while (current.isEmpty) {
       val POLL_TIME = 10L
       if (elapsedTimeMs >= timeout) {
         return RecordStatus.newStatusWithoutArrivalTime(false)
       }
       Thread.sleep(POLL_TIME)
-      current = getRecord
+      current = getRecordWithTimestamp
       elapsedTimeMs = (clock.nanoTime() - startReadTime) / 1000 / 1000
     }
     currentOffset += 1
-    RecordStatus.newStatusWithoutArrivalTime(true)
+    RecordStatus.newStatusWithArrivalTimeMs(current.get._2)
   }
 
   override def next(): Boolean = {
-    current = getRecord
+    current = getRecordWithTimestamp
     if (current.isDefined) {
       currentOffset += 1
       true
@@ -307,18 +318,17 @@ class LowLatencyMemoryStreamPartitionReader(
     }
   }
 
-  override def get(): InternalRow = current.get
-
+  override def get(): InternalRow = current.get._1
   override def close(): Unit = {}
 
   override def getOffset: ContinuousRecordPartitionOffset =
     ContinuousRecordPartitionOffset(partition, currentOffset)
 
-  private def getRecord: Option[InternalRow] = {
+  private def getRecordWithTimestamp: Option[(InternalRow, Long)] = {
     if (currentOffset >= endOffset) {
       return None
     }
-    endpoint.askSync[Option[InternalRow]](
+    endpoint.askSync[Option[(InternalRow, Long)]](
       GetRecord(ContinuousRecordPartitionOffset(partition, currentOffset))
     )
   }
@@ -327,4 +337,26 @@ class LowLatencyMemoryStreamPartitionReader(
 case class LowLatencyMemoryStreamOffset(partitionNums: Map[Int, Int]) extends Offset {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
   override def json(): String = Serialization.write(partitionNums)
+}
+
+/**
+ * Custom endpoint for LowLatencyMemoryStream to support (row, timestamp) retrieval via RPC.
+ */
+class LowLatencyMemoryStreamEndpoint(
+    records: Seq[scala.collection.mutable.Seq[(UnsafeRow, Long)]],
+    lock: Object
+) extends ThreadSafeRpcEndpoint {
+  override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
+
+  override def receiveAndReply(
+      context: org.apache.spark.rpc.RpcCallContext
+  ): PartialFunction[Any, Unit] = {
+    case GetRecord(ContinuousRecordPartitionOffset(partitionId, offset)) =>
+      lock.synchronized {
+        val buf = records(partitionId)
+        val record = if (buf.size <= offset) None else Some(buf(offset))
+
+        context.reply(record)
+      }
+  }
 }

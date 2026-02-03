@@ -1731,15 +1731,25 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if name not in self.columns:
-            raise PySparkAttributeError(
-                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
-            )
+        # Only eagerly validate the column name when:
+        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
+        # 2, the name starts with '__', because it is likely a python internal method and
+        # an AttributeError might be expected to check whether the attribute exists.
+        # For example:
+        # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
+        # and it internally invokes __getattr__("__setstate__").
+        # Returning a dataframe column self._col("__setstate__") in this case will break
+        # the serialization of connect dataframe and features built atop it (e.g. FEB).
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
+            if name not in self.columns:
+                raise PySparkAttributeError(
+                    errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
+                )
 
         return self._col(name)
 
@@ -1840,13 +1850,20 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
+        return self._to_pandas()
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
         return pdf
 
@@ -2068,6 +2085,7 @@ class DataFrame(ParentDataFrame):
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
+        binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
         for schema_or_table in self._session.client.to_table_as_iterator(
@@ -2082,7 +2100,7 @@ class DataFrame(ParentDataFrame):
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(
-                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                    table, schema, binary_as_bytes=binary_as_bytes
                 )
 
     def pandas_api(
@@ -2254,13 +2272,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -2373,7 +2388,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (

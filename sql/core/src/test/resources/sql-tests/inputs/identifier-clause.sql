@@ -367,6 +367,12 @@ SELECT * FROM unpivot_test UNPIVOT (val FOR col IN (a AS IDENTIFIER('col_a'), b 
 SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('cols_ab'), (b, c) AS IDENTIFIER('cols_bc'))) ORDER BY ALL;
 DROP TABLE unpivot_test;
 
+-- DESCRIBE column with IDENTIFIER()
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV;
+DESCRIBE describe_col_test IDENTIFIER('c1');
+DESCRIBE describe_col_test IDENTIFIER('c2');
+DROP TABLE describe_col_test;
+
 -- All the following tests fail because they are not about "true" identifiers
 
 -- This should fail - named parameters don't support IDENTIFIER()

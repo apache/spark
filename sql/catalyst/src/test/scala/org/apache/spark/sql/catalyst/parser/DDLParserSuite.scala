@@ -49,6 +49,11 @@ class DDLParserSuite extends AnalysisTest {
           case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
           case _ => i
         }
+      case o: OverwriteByExpression =>
+        o.table match {
+          case u: UnresolvedRelation => o.copy(table = u.clearWritePrivileges)
+          case _ => o
+        }
     }
     comparePlans(parsed, expected, checkAnalysis = false)
   }
@@ -1763,6 +1768,112 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("insert table: REPLACE WHERE with BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byName(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE without BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  for {
+    isByName <- Seq(true, false)
+    userSpecifiedCols <- if (!isByName) {
+      Seq(Seq("a", "b"), Seq.empty)
+    } else {
+      Seq(Seq.empty)
+    }
+  } {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val userSpecifiedColsClause =
+      if (userSpecifiedCols.isEmpty) "" else userSpecifiedCols.mkString("(", ", ", ")")
+    val testMsg = s"isByName=$isByName, userSpecifiedColsClause=$userSpecifiedColsClause"
+
+    test(s"INSERT INTO with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = userSpecifiedCols,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true)
+      )
+    }
+
+    test(s"INSERT OVERWRITE (static) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.STATIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = userSpecifiedCols,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT OVERWRITE (dynamic) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
@@ -2484,7 +2595,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("DESCRIBE FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DESCRIBE FUNCTION", false, None)
+      UnresolvedFunctionName(name, "DESCRIBE FUNCTION")
     }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2501,15 +2612,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "REFRESH FUNCTION", true, None)
-    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(createFuncPlan(Seq("c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(createFuncPlan(Seq("b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {

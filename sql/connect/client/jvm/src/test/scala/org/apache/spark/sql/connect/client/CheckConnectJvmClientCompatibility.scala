@@ -226,6 +226,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.TestGroupState"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester$"),
 
       // Artifact Manager, client has a totally different implementation.
       ProblemFilters.exclude[MissingClassProblem](
@@ -234,6 +236,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager$"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$StateCleanupRunner"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.RefCountedCacheId"),
 

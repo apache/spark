@@ -43,6 +43,24 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         "0101000000000000000000f03f0000000000000040"))
   }
 
+  test("st_geomfromwkb") {
+    // Test data: Well-Known Binary (WKB) representations.
+    val df = Seq[(String, Int)](
+      (
+        "0101000000000000000000f03f0000000000000040", 4326
+      )).toDF("wkb", "srid")
+    // ST_GeomFromWKB.
+    checkAnswer(
+      df.select(
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"))))).as("col0"),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"), $"srid")))).as("col1"),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"), 4326)))).as("col1")),
+      Row(
+        "0101000000000000000000f03f0000000000000040",
+        "0101000000000000000000f03f0000000000000040",
+        "0101000000000000000000f03f0000000000000040"))
+  }
+
   /** ST accessor expressions. */
 
   test("st_srid") {
@@ -55,8 +73,9 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(
         st_srid(st_geogfromwkb(unhex($"wkb"))).as("col0"),
-        st_srid(st_geomfromwkb(unhex($"wkb"))).as("col1")),
-      Row(4326, 0))
+        st_srid(st_geomfromwkb(unhex($"wkb"))).as("col1"),
+        st_srid(st_geomfromwkb(unhex($"wkb"), 4326)).as("col1")),
+      Row(4326, 0, 4326))
   }
 
   /** ST modifier expressions. */

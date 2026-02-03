@@ -19,7 +19,6 @@ package org.apache.spark
 
 import scala.jdk.CollectionConverters._
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_MANAGER}
@@ -28,7 +27,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
-class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+class SortShuffleSuite extends ShuffleSuite {
 
   // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
   override def beforeAll(): Unit = {

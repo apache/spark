@@ -315,13 +315,6 @@ class StatsTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.computation.test_stats import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -19,6 +19,7 @@
 import copy
 import functools
 import faulthandler
+import gc
 import itertools
 import os
 import platform
@@ -31,7 +32,7 @@ import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, TypeVar, Union, cast
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
@@ -95,6 +96,8 @@ JVM_INT_MIN: int = -(1 << 31)
 JVM_INT_MAX: int = (1 << 31) - 1
 JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def print_exec(stream: TextIO) -> None:
@@ -393,11 +396,15 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     # Spark Connect
     if is_remote():
+        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
         session = f
-        assert session is not None, "Spark Connect session must be provided."
 
         def outer(ff: Callable) -> Callable:
-            thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+            assert isinstance(
+                session, RemoteSparkSession
+            ), "f is expected to be SparkSession for spark connect"
+            thread_local = session.client.thread_local
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
                 for (
@@ -409,15 +416,15 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Propagates the active remote spark session to the current thread.
-                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                assert isinstance(
+                    session, RemoteSparkSession
+                ), "f is expected to be SparkSession for spark connect"
 
-                RemoteSparkSession._set_default_and_active_session(
-                    session  # type: ignore[arg-type]
-                )
+                RemoteSparkSession._set_default_and_active_session(session)
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
-                        session.client.thread_local,  # type: ignore[union-attr, operator]
+                        session.client.thread_local,
                         attr,
                         value,
                     )
@@ -437,7 +444,6 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
         if isinstance(f, SparkSession):
             session = f
-            assert session is not None
             tags = set(session.getTags())
             # Local properties are copied when wrapping the function.
             assert SparkContext._active_spark_context is not None
@@ -561,7 +567,8 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+                assert session is not None
+                thread_local = session.client.thread_local
                 thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
@@ -596,7 +603,7 @@ class InheritableThread(threading.Thread):
         if is_remote():
             # Spark Connect
             assert hasattr(self, "_session")
-            thread_local = self._session.client.thread_local  # type: ignore[union-attr, operator]
+            thread_local = self._session.client.thread_local
             if not hasattr(thread_local, "tags"):
                 thread_local.tags = set()
             self._tags = set(thread_local.tags)
@@ -851,6 +858,23 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
             errorClass="UNEXPECTED_RESPONSE_FROM_SERVER",
             messageParameters={},
         )
+
+
+def disable_gc(f: FuncT) -> FuncT:
+    """Mark the function that should disable gc during execution"""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        gc_enabled_originally = gc.isenabled()
+        if gc_enabled_originally:
+            gc.disable()
+        try:
+            return f(*args, **kwargs)
+        finally:
+            if gc_enabled_originally:
+                gc.enable()
+
+    return cast(FuncT, wrapped)
 
 
 _is_remote_only = None

@@ -116,7 +116,7 @@ package object util extends Logging {
         ),
         dataType = r.dataType
       )
-    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+    case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }

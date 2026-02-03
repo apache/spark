@@ -1342,6 +1342,26 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
   }
 
+  test("try_to_number with whitespace-only input should return NULL") {
+    // Empty string
+    checkAnswer(sql("select try_to_number('', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999')"), Seq(Row(null)))
+
+    // Spaces only
+    checkAnswer(sql("select try_to_number('   ', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' ', '9')"), Seq(Row(null)))
+
+    // Different whitespace characters (tabs, newlines)
+    checkAnswer(sql("select try_to_number('\t\t', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\n\n', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' \t\n ', '99')"), Seq(Row(null)))
+
+    // With format strings containing decimal points, dollar signs, etc.
+    checkAnswer(sql("select try_to_number('   ', '$99.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\t', '9,999')"), Seq(Row(null)))
+  }
+
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
     val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
     intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)

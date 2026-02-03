@@ -19,12 +19,46 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf, WithTestConf}
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf}
+
+/**
+ * A trait for test SparkSession subclasses that need custom SQLConf with test-specific
+ * configurations that persist even after clear().
+ */
+private[sql] trait WithTestConf { self: SparkSession =>
+
+  /**
+   * A map of configurations that should be applied to the test session.
+   * These configs will persist even after SQLConf.clear() is called.
+   */
+  protected def testConfOverrides: Map[String, String]
+
+  /**
+   * Creates a new SQLConf with test-specific configurations that persist even after clear().
+   * Subclasses should call this from their `sqlConf` override.
+   */
+  protected def newTestConf(): SQLConf = {
+    val overrideConfigurations = testConfOverrides
+    val conf = new SQLConf {
+      clear()
+      override def clear(): Unit = {
+        super.clear()
+        // Make sure we start with the default test configs even after clear
+        overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
+      }
+    }
+    SQLConf.mergeSparkConf(conf, sharedState.conf)
+    SQLConf.mergeNonStaticSQLConfigs(conf, sparkContext.conf.getAll.toMap)
+    conf
+  }
+}
 
 /**
  * A special `SparkSession` prepared for testing.
  */
-private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
+private[spark] class TestSparkSession(sc: SparkContext)
+    extends SparkSession(sc) with WithTestConf { self =>
+
   def this(sparkConf: SparkConf, maxLocalTaskFailures: Int = 1, numCores: Int = 2) = {
     this(new SparkContext(s"local[$numCores,$maxLocalTaskFailures]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -36,6 +70,11 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
 
   SparkSession.setDefaultSession(this)
   SparkSession.setActiveSession(this)
+
+  override protected def testConfOverrides: Map[String, String] = TestSQLContext.overrideConfs
+
+  @transient
+  override lazy val sqlConf: SQLConf = newTestConf()
 
   @transient
   override lazy val sessionState: SessionState = {
@@ -73,7 +112,6 @@ private[sql] object TestSQLContext {
 private[sql] class TestSQLSessionStateBuilder(
     session: SparkSession,
     state: Option[SessionState])
-  extends SessionStateBuilder(session, state) with WithTestConf {
-  override def overrideConfs: Map[String, String] = TestSQLContext.overrideConfs
+  extends SessionStateBuilder(session, state) {
   override def newBuilder: NewBuilder = new TestSQLSessionStateBuilder(_, _)
 }

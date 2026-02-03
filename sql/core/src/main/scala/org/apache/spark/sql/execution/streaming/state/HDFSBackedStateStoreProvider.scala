@@ -81,6 +81,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      keys.iterator.map(key => get(key, colFamilyName))
+    }
+
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.iterator()
       new StateStoreIterator(iter)
@@ -104,6 +108,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
     }
+
+    override def allColumnFamilyNames: Set[String] =
+      Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -146,6 +153,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
+    override def allColumnFamilyNames: Set[String] =
+      Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
     // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
     // if the user tries to use a non-default col family.
     private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
@@ -158,6 +168,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
+    }
+
+    override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+      assertUseOfDefaultColFamily(colFamilyName)
+      keys.iterator.map(key => mapToUpdate.get(key))
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {

@@ -42,6 +42,17 @@ try:
                     cov.stop()
                 cov = coverage.process_startup(force=True)
 
+                # When JVM knows the worker has failed, it will kill the worker, and
+                # we won't have enough time to save the coverage data. So we need to save
+                # the coverage data before we let the JVM know about the exception.
+                import pyspark.util
+                handle_worker_exception = pyspark.util.handle_worker_exception
+
+                def handle_worker_exception_wrapper(*args, **kwargs):
+                    cov.save()
+                    handle_worker_exception(*args, **kwargs)
+                pyspark.util.handle_worker_exception = handle_worker_exception_wrapper
+
                 def save_when_exit(func):
                     def wrapper(*args, **kwargs):
                         try:

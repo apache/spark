@@ -157,7 +157,7 @@ object NormalizePlan extends PredicateHelper {
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
-          if project.getTagValue(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).isDefined =>
+          if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
         project.child
 
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
@@ -205,8 +205,14 @@ object NormalizePlan extends PredicateHelper {
         })
       case cteRelationDef: CTERelationDef =>
         cteIdNormalizer.normalizeDef(cteRelationDef)
+      case unionLoop: UnionLoop =>
+        cteIdNormalizer.normalizeUnionLoop(
+          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+        )
       case cteRelationRef: CTERelationRef =>
         cteIdNormalizer.normalizeRef(cteRelationRef)
+      case unionLoopRef: UnionLoopRef =>
+        cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
       case normalizeableRelation: NormalizeableRelation =>
         normalizeableRelation.normalize()
     }
@@ -247,8 +253,12 @@ class CteIdNormalizer {
 
   def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
     try {
-      oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
-      cteRelationDef.copy(id = cteIdCounter)
+      if (oldToNewIdMapping.containsKey(cteRelationDef.id)) {
+        cteRelationDef.copy(id = oldToNewIdMapping.get(cteRelationDef.id))
+      } else {
+        oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
+        cteRelationDef.copy(id = cteIdCounter)
+      }
     } finally {
       cteIdCounter += 1
     }
@@ -259,6 +269,23 @@ class CteIdNormalizer {
       cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
     } else {
       cteRelationRef
+    }
+  }
+
+  def normalizeUnionLoop(unionLoop: UnionLoop): UnionLoop = {
+    if (oldToNewIdMapping.containsKey(unionLoop.id)) {
+      unionLoop.copy(id = oldToNewIdMapping.get(unionLoop.id))
+    } else {
+      unionLoop
+    }
+  }
+
+  def normalizeUnionLoopRef(unionLoopRef: UnionLoopRef): UnionLoopRef = {
+    try {
+      oldToNewIdMapping.put(unionLoopRef.loopId, cteIdCounter)
+      unionLoopRef.copy(loopId = cteIdCounter)
+    } finally {
+      cteIdCounter += 1
     }
   }
 }

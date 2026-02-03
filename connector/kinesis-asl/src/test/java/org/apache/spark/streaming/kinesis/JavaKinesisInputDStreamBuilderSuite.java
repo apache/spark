@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +25,7 @@ import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.Seconds;
+import software.amazon.kinesis.common.InitialPositionInStream;
 
 public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingContext {
   /**

@@ -15,37 +15,22 @@
 # limitations under the License.
 #
 import os
-import sys
 from typing import IO
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
     write_int,
-    SpecialLengths,
 )
 from pyspark.sql.datasource import DataSourceWriter, WriterCommitMessage
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
-from pyspark.worker_util import (
-    check_python_version,
-    pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.util import local_connect_and_auth
+from pyspark.worker_util import pickleSer
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for committing or aborting a data source write operation.
 
@@ -54,65 +39,42 @@ def main(infile: IO, outfile: IO) -> None:
     responsible for invoking either the `commit` or the `abort` method on a data source
     writer instance, given a list of commit messages.
     """
-    try:
-        check_python_version(infile)
+    # Receive the data source writer instance.
+    writer = pickleSer._read_with_length(infile)
+    assert isinstance(writer, DataSourceWriter)
 
-        start_faulthandler_periodic_traceback()
+    # Receive the commit messages.
+    num_messages = read_int(infile)
+    commit_messages = []
+    for _ in range(num_messages):
+        message = pickleSer._read_with_length(infile)
+        if message is not None and not isinstance(message, WriterCommitMessage):
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "an instance of WriterCommitMessage",
+                    "actual": f"'{type(message).__name__}'",
+                },
+            )
+        commit_messages.append(message)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
+    # Receive a boolean to indicate whether to invoke `abort`.
+    abort = read_bool(infile)
 
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
+    with capture_outputs():
+        # Commit or abort the Python data source write.
+        # Note the commit messages can be None if there are failed tasks.
+        if abort:
+            writer.abort(commit_messages)
+        else:
+            writer.commit(commit_messages)
 
-        _accumulatorRegistry.clear()
+    # Send a status code back to JVM.
+    write_int(0, outfile)
 
-        # Receive the data source writer instance.
-        writer = pickleSer._read_with_length(infile)
-        assert isinstance(writer, DataSourceWriter)
 
-        # Receive the commit messages.
-        num_messages = read_int(infile)
-        commit_messages = []
-        for _ in range(num_messages):
-            message = pickleSer._read_with_length(infile)
-            if message is not None and not isinstance(message, WriterCommitMessage):
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "an instance of WriterCommitMessage",
-                        "actual": f"'{type(message).__name__}'",
-                    },
-                )
-            commit_messages.append(message)
-
-        # Receive a boolean to indicate whether to invoke `abort`.
-        abort = read_bool(infile)
-
-        with capture_outputs():
-            # Commit or abort the Python data source write.
-            # Note the commit messages can be None if there are failed tasks.
-            if abort:
-                writer.abort(commit_messages)
-            else:
-                writer.commit(commit_messages)
-
-        # Send a status code back to JVM.
-        write_int(0, outfile)
-
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
-
-    send_accumulator_updates(outfile)
-
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":

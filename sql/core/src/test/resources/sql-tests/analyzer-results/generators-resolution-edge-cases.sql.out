@@ -71,7 +71,7 @@ SELECT explode(collect_list(id)) AS val FROM range(5)
 -- !query analysis
 Project [val#xL]
 +- Generate explode(_gen_input_0#x), false, [val#xL]
-   +- Aggregate [collect_list(id#xL, 0, 0) AS _gen_input_0#x]
+   +- Aggregate [collect_list(id#xL, 0, 0, true) AS _gen_input_0#x]
       +- Range (0, 5, step=1)
 
 
@@ -80,7 +80,7 @@ SELECT explode(collect_list(id)) AS val, count(*) AS cnt FROM range(3)
 -- !query analysis
 Project [val#xL, cnt#xL]
 +- Generate explode(_gen_input_0#x), false, [val#xL]
-   +- Aggregate [collect_list(id#xL, 0, 0) AS _gen_input_0#x, count(1) AS cnt#xL]
+   +- Aggregate [collect_list(id#xL, 0, 0, true) AS _gen_input_0#x, count(1) AS cnt#xL]
       +- Range (0, 3, step=1)
 
 
@@ -204,7 +204,7 @@ GROUP BY ALL
 -- !query analysis
 Project [val#x]
 +- Generate explode(_gen_input_0#x), false, [val#x]
-   +- Aggregate [collect_list(a#x, 0, 0) AS _gen_input_0#x]
+   +- Aggregate [collect_list(a#x, 0, 0, true) AS _gen_input_0#x]
       +- SubqueryAlias t
          +- Project [col1#x AS a#x]
             +- LocalRelation [col1#x]
@@ -460,3 +460,21 @@ Project [col#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FO
          +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
             +- Aggregate [count(1) AS count(1)#xL]
                +- OneRowRelation
+
+
+-- !query
+SELECT explode(array(array(0), array(1), array(2))) as arr, explode(arr) as col
+-- !query analysis
+Project [arr#x, col#x]
++- Generate explode(arr#x), false, [col#x]
+   +- Generate explode(array(array(0), array(1), array(2))), false, [arr#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT explode(arr) as col, explode(array(array(0), array(1), array(2))) as arr
+-- !query analysis
+Project [col#x, arr#x]
++- Generate explode(arr#x), false, [col#x]
+   +- Generate explode(array(array(0), array(1), array(2))), false, [arr#x]
+      +- OneRowRelation

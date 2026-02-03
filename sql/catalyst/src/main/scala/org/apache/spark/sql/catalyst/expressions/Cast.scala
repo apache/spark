@@ -575,7 +575,7 @@ case class Cast(
 
   private def typeCheckFailureInCast: DataTypeMismatch = evalMode match {
     case EvalMode.ANSI =>
-      if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
+      if (containsTag(Cast.BY_TABLE_INSERTION)) {
         Cast.typeCheckFailureMessage(child.dataType, dataType,
           Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
             SQLConf.StoreAssignmentPolicy.LEGACY.toString))

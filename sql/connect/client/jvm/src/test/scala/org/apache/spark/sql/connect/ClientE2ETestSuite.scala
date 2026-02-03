@@ -132,8 +132,8 @@ class ClientE2ETestSuite
       assert(ex.getCause.isInstanceOf[SparkException])
 
       val cause = ex.getCause.asInstanceOf[SparkException]
-      assert(cause.getCondition == null)
-      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getCondition == "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE")
+      assert(cause.getMessageParameters.asScala == Map("message" -> "test".repeat(10000)))
       assert(cause.getMessage.contains("test".repeat(10000)))
     }
   }
@@ -1615,6 +1615,20 @@ class ClientE2ETestSuite
       val metrics2 = SparkThreadUtils.awaitResult(future2, 5.seconds)
       assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
+
+  test("SPARK-55150: observation errors leads to empty result in connect mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark
+      .range(10)
+      .observe(
+        observation,
+        sum("id").as("sum_id"),
+        raise_error(lit("test error")).as("raise_error"))
+
+    observed_df.collect()
+
+    assert(observation.get.isEmpty)
+  }
 
   test("SPARK-48852: trim function on a string column returns correct results") {
     val session: SparkSession = spark

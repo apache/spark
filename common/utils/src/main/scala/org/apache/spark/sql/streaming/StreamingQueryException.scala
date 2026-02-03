@@ -39,7 +39,8 @@ class StreamingQueryException private[sql](
     val startOffset: String,
     val endOffset: String,
     errorClass: String,
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String] = None)
   extends Exception(message, cause) with SparkThrowable {
 
   private[spark] def this(
@@ -55,6 +56,23 @@ class StreamingQueryException private[sql](
       messageParameters.getOrElse("endOffset", ""),
       errorClass,
       messageParameters)
+  }
+
+  private[spark] def this(
+      message: String,
+      cause: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      sqlState: Option[String]) = {
+    this(
+      messageParameters.getOrElse("queryDebugString", ""),
+      message,
+      cause,
+      messageParameters.getOrElse("startOffset", ""),
+      messageParameters.getOrElse("endOffset", ""),
+      errorClass,
+      messageParameters,
+      sqlState)
   }
 
   def this(
@@ -85,6 +103,8 @@ class StreamingQueryException private[sql](
        |$queryDebugString""".stripMargin
 
   override def getCondition: String = errorClass
+
+  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }

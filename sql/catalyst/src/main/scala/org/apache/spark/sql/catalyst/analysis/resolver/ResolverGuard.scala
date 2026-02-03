@@ -328,7 +328,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkUnresolvedAttribute(unresolvedAttribute: UnresolvedAttribute) =
     !ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(unresolvedAttribute.nameParts.head) &&
-    !unresolvedAttribute.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined
+    !unresolvedAttribute.containsTag(LogicalPlan.PLAN_ID_TAG)
 
   private def checkUnresolvedPredicate(unresolvedPredicate: Predicate) = unresolvedPredicate match {
     case inSubquery: InSubquery =>

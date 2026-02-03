@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -272,7 +274,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def getInfo(): Array[String] = this.synchronized {
     val info = mutable.ArrayBuilder.make[String]
     cachedModel.forEach { case (key, value) =>
-      info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"
+      info += compact(
+        render(("id" -> key) ~ ("class" -> value.obj.getClass.getName) ~
+          ("size" -> value.sizeBytes)))
     }
     info.result()
   }
