@@ -78,13 +78,6 @@ object MemoryStream {
    */
   def apply[A](encoder: Encoder[A], sparkSession: SparkSession): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)(encoder)
-
-  /**
-   * Creates a MemoryStream with specified partitions using explicit SparkSession.
-   * Usage: `MemoryStream[Int](numPartitions, spark)`
-   */
-  def apply[A: Encoder](numPartitions: Int, sparkSession: SparkSession): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, Some(numPartitions))
 }
 
 /**
