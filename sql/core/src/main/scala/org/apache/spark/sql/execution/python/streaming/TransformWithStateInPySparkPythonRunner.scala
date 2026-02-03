@@ -49,9 +49,9 @@ class TransformWithStateInPySparkPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
+    schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -59,7 +59,7 @@ class TransformWithStateInPySparkPythonRunner(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[InType](
-    funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
+    funcs, evalType, argOffsets, schema, processorHandle, timeZoneId,
     initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[InType] {
