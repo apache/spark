@@ -106,11 +106,9 @@ class FunctionResolution(
       // Unqualified - check temp first (shadowing), then builtin
       v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
-      // Multi-part name that's not system.builtin/session - might be a persistent function.
-      // However, for backward compatibility, also check if the unqualified name (last part)
-      // matches a builtin or temp function (e.g., catalog.getFunction(db, "abs") should find
-      // the builtin abs function).
-      v1SessionCatalog.lookupBuiltinOrTempFunction(name.last)
+      // Multi-part name that's not system.builtin/session - this is a catalog-qualified name.
+      // Don't check builtins here - let the catalog handle it.
+      None
     }
   }
 
