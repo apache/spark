@@ -638,6 +638,7 @@ jobs:
       with:
         miniforge-version: latest
         activate-environment: ""
+        auto-activate: false
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
