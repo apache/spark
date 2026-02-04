@@ -213,11 +213,7 @@ class PandasToArrowConversion:
         # Handle empty schema (0 columns)
         # Return a RecordBatch with correct row count but no columns
         if len(schema.fields) == 0:
-            if isinstance(data, list):
-                num_rows = len(data[0]) if data else 0
-            else:
-                num_rows = len(data)
-            return pa.RecordBatch.from_pylist([{}] * num_rows, schema=pa.schema([]))
+            return pa.RecordBatch.from_arrays([], [])
 
         # Normalize input: reorder DataFrame columns if needed
         if not isinstance(data, list):
