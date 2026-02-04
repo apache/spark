@@ -436,7 +436,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize.
-        Each element in iterator is an iterable of (series, spark_type) tuples.
+        Each element in iterator is:
+        - For batched UDFs: tuple of (series, spark_type) tuples: ((s1, t1), (s2, t2), ...)
+        - For iterator UDFs: single (series, spark_type) tuple directly
         """
 
         def create_batch(
@@ -453,7 +455,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
 
-        batches = (create_batch(series) for series in iterator)
+        def normalize_and_create_batch(packed):
+            # Normalize: iterator UDFs yield (series, spark_type) directly,
+            # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
+            if len(packed) == 2 and isinstance(packed[1], DataType):
+                # single UDF result: wrap in list
+                return create_batch([packed])
+            else:
+                # multiple UDF results: already iterable of tuples
+                return create_batch(packed)
+
+        batches = (normalize_and_create_batch(series) for series in iterator)
         super().dump_stream(batches, stream)
 
     def load_stream(self, stream):
@@ -527,6 +539,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
         This should be sent after creating the first record batch so in case of an error, it can
         be sent back to the JVM before the Arrow stream starts.
+
+        Each element in iterator is:
+        - For batched UDFs: tuple of (series, spark_type) tuples: ((s1, t1), (s2, t2), ...)
+        - For iterator UDFs: single (series, spark_type) tuple directly
         """
         import pandas as pd
         import pyarrow as pa
@@ -579,8 +595,18 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
             return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
+        def normalize_and_create_batch(packed):
+            # Normalize: iterator UDFs yield (series, spark_type) directly,
+            # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
+            if len(packed) == 2 and isinstance(packed[1], DataType):
+                # single UDF result: wrap in list
+                return create_batch([packed])
+            else:
+                # multiple UDF results: already iterable of tuples
+                return create_batch(packed)
+
         batches = self._write_stream_start(
-            (create_batch(series) for series in iterator),
+            (normalize_and_create_batch(series) for series in iterator),
             stream,
         )
         return ArrowStreamSerializer.dump_stream(self, batches, stream)
@@ -608,32 +634,24 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
         This should be sent after creating the first record batch so in case of an error, it can
         be sent back to the JVM before the Arrow stream starts.
+
+        Each element in iterator is a tuple of (result, arrow_type) tuples:
+        ((r1, t1), (r2, t2), ...) - even for single UDF it's ((r, t),).
         """
         import pyarrow as pa
 
         def create_batches():
             for packed in iterator:
-                if len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                    # single array UDF in a projection
-                    arrs = [
-                        ArrowBatchTransformer.cast_array(
-                            packed[0],
-                            packed[1],
-                            safe=self._safecheck,
-                            allow_cast=self._arrow_cast,
-                        )
-                    ]
-                else:
-                    # multiple array UDFs in a projection
-                    arrs = [
-                        ArrowBatchTransformer.cast_array(
-                            t[0],
-                            t[1],
-                            safe=self._safecheck,
-                            allow_cast=self._arrow_cast,
-                        )
-                        for t in packed
-                    ]
+                # packed is always a tuple of (result, arrow_type) tuples
+                arrs = [
+                    ArrowBatchTransformer.cast_array(
+                        t[0],
+                        t[1],
+                        safe=self._safecheck,
+                        allow_cast=self._arrow_cast,
+                    )
+                    for t in packed
+                ]
                 yield pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
         batches = self._write_stream_start(create_batches(), stream)
@@ -744,13 +762,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         def py_to_batch():
             for packed in iterator:
                 # packed is always a tuple of (results, arrow_type, spark_type) tuples
-                if len(packed) == 1:
-                    # single array UDF in a projection
-                    t = packed[0]
-                    yield create_array(t[0], t[1], t[2]), t[1]
-                else:
-                    # multiple array UDFs in a projection
-                    yield [(create_array(*t), t[1]) for t in packed]
+                # Convert to tuple of (array, arrow_type) tuples for parent serializer
+                yield tuple((create_array(t[0], t[1], t[2]), t[1]) for t in packed)
 
         return super().dump_stream(py_to_batch(), stream)
 

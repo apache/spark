@@ -3261,15 +3261,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 )
 
             # Extract series using offsets (concatenated_batch.columns[o] gives pa.Array)
-            result = tuple(
+            # Always return tuple of results for consistent serializer handling
+            return tuple(
                 f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
             )
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
 
     elif eval_type in (
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -3296,19 +3291,51 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     for i in range(num_columns)
                 ]
 
-            result = tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
+            # Always return tuple of results for consistent serializer handling
+            return tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
 
     else:
+        # Check if using Arrow/Pandas serializer (wrapped tuple format)
+        # or Pickle serializer (single value for single UDF)
+        use_wrapped_tuple = eval_type in (
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+        )
 
-        def mapper(a):
-            # Always return tuple of (data, spark_type) tuples for consistent serializer handling
-            return tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+        if use_wrapped_tuple:
+
+            def mapper(a):
+                # Return tuple of results for Arrow/Pandas serializer
+                return tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+
+        else:
+
+            def mapper(a):
+                # Return unpacked result for Pickle serializer (SQL_BATCHED_UDF)
+                result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+                return result[0] if len(result) == 1 else result
 
     def func(_, it):
         return map(mapper, it)

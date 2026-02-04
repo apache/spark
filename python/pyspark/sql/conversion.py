@@ -245,7 +245,7 @@ class PandasToArrowConversion:
             for i, field in enumerate(schema.fields)
         ]
 
-        return pa.RecordBatch.from_arrays(arrays, ["_%d" % i for i in range(len(arrays))])
+        return pa.RecordBatch.from_arrays(arrays, [field.name for field in schema.fields])
 
     @classmethod
     def series_to_array(
