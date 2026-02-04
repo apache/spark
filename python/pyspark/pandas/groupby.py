@@ -1956,7 +1956,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         if LooseVersion(pd.__version__) < "3.0.0":
-            from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+            from pandas.core.common import is_builtin_func  # type: ignore[import-not-found]
 
             f = is_builtin_func(func)
         else:
@@ -2225,7 +2225,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
-        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
+        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names  # type: ignore[return-value]
 
     @staticmethod
     def _spark_group_map_apply(

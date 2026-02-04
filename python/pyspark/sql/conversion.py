@@ -1152,7 +1152,7 @@ class ArrowArrayToPandasConversion:
                 for field_arr, field in zip(arr.flatten(), spark_type)
             ]
             pdf = pd.concat(series, axis=1)
-            pdf.columns = spark_type.names  # type: ignore[assignment]
+            pdf.columns = spark_type.names
             return pdf
 
         # Convert Arrow array to pandas Series with specific options:
@@ -1234,7 +1234,7 @@ class ArrowArrayToPandasConversion:
                 for field_arr, field in zip(arr.flatten(), spark_type)
             ]
             pdf = pd.concat(series, axis=1)
-            pdf.columns = spark_type.names  # type: ignore[assignment]
+            pdf.columns = spark_type.names
             return pdf
 
         arr = ArrowTimestampConversion.localize_tz(arr)

@@ -6433,7 +6433,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def op(psser: ps.Series) -> ps.Series:
                 if psser.name in to_replace_dict:
                     return psser.replace(
-                        to_replace=to_replace_dict[psser.name], value=value, regex=regex
+                        to_replace=to_replace_dict[psser.name], value=value, regex=regex  # type: ignore[arg-type]
                     )
                 else:
                     return psser

@@ -1577,9 +1577,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 any_value.__doc__ = pysparkfuncs.any_value.__doc__
@@ -1591,9 +1589,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 first_value.__doc__ = pysparkfuncs.first_value.__doc__
@@ -1605,9 +1601,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 last_value.__doc__ = pysparkfuncs.last_value.__doc__
@@ -5064,7 +5058,7 @@ def st_geomfromwkb(
     else:
         srid = _enum_to_value(srid)
         srid = lit(srid) if isinstance(srid, int) else srid
-        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
