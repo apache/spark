@@ -5262,6 +5262,12 @@
     ],
     "sqlState" : "38000"
   },
+  "PYTHON_EXCEPTION" : {
+    "message" : [
+      "<msg>: <traceback>"
+    ],
+    "sqlState" : "38000"
+  },
   "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR" : {
     "message" : [
       "Failed when Python streaming data source perform <action>: <msg>"

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
-import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.FilterExec
@@ -755,14 +755,14 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
 
     withClue("user error") {
-      val error = intercept[SparkException] {
+      val error = intercept[PythonException] {
         spark.range(10).write.format(dataSourceName).mode("append").save()
       }
       assert(error.getMessage.contains("something is wrong"))
     }
 
     withClue("no commit message") {
-      val error = intercept[SparkException] {
+      val error = intercept[PythonException] {
         spark.range(1).write.format(dataSourceName).mode("append").save()
       }
       assert(error.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
@@ -926,7 +926,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       }
 
       withClue("abort") {
-        intercept[SparkException] {
+        intercept[PythonException] {
           sql("SELECT * FROM range(8, 12, 1, 4)")
             .write.format(dataSourceName)
             .mode("append")
