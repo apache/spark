@@ -621,18 +621,20 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            
-            
-            _table = pa.Table.from_batches(
-                [
-                    create_arrow_batch_from_pandas(
-                        [(c, st) for (_, c), st in zip(data.items(), spark_types)],
-                        timezone=cast(str, timezone),
-                        safecheck=safecheck == "true",
-                        prefers_large_types=prefers_large_types,
-                    )
-                ]
-            )
+            # Handle the 0-column case separately to preserve row count.
+            if len(data.columns) == 0:
+                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+            else:
+                _table = pa.Table.from_batches(
+                    [
+                        create_arrow_batch_from_pandas(
+                            [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                            timezone=cast(str, timezone),
+                            safecheck=safecheck == "true",
+                            prefers_large_types=prefers_large_types,
+                        )
+                    ]
+                )
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
