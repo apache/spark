@@ -33,6 +33,7 @@ from pyspark.sql.streaming.datasource import (
     ReadMaxBytes,
     ReadMaxRows,
     ReadMinRows,
+    ReadMaxFiles,
 )
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
@@ -150,6 +151,7 @@ class ReadLimitRegistry:
         self.__register(ReadAllAvailable.type_name(), ReadAllAvailable)
         self.__register(ReadMinRows.type_name(), ReadMinRows)
         self.__register(ReadMaxRows.type_name(), ReadMaxRows)
+        self.__register(ReadMaxFiles.type_name(), ReadMaxFiles)
         self.__register(ReadMaxBytes.type_name(), ReadMaxBytes)
 
     def __register(self, type_name: str, read_limit_type: Type["ReadLimit"]) -> None:
@@ -159,10 +161,11 @@ class ReadLimitRegistry:
         self._registry[type_name] = read_limit_type
 
     def get(self, type_name: str, params: dict) -> ReadLimit:
-        read_limit_type = self._registry[type_name]
+        read_limit_type = self._registry.get(type_name)
         if read_limit_type is None:
             raise PySparkException("type_name '{}' is not registered.".format(type_name))
 
         params_without_type = params.copy()
-        del params_without_type["type"]
+        if "type" in params_without_type:
+            del params_without_type["type"]
         return read_limit_type.load(params_without_type)
