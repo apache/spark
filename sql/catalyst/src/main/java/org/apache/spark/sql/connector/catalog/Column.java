@@ -21,7 +21,6 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
@@ -72,8 +71,8 @@ public interface Column {
    * Creates a column with a generation expression in SQL string form.
    *
    * @since 4.1.0
-   * @deprecated Use {@link #create(String, DataType, boolean, String, GenerationExpression, String)}
-   *             instead.
+   * @deprecated Use
+   *   {@link #create(String, DataType, boolean, String, GenerationExpression, String)} instead.
    */
   @Deprecated
   static Column create(
