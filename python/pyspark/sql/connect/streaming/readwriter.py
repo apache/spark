@@ -19,6 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import json
+import re
 import sys
 import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
@@ -50,6 +51,7 @@ class DataStreamReader(OptionUtils):
         self._schema = ""
         self._client = client
         self._options: Dict[str, str] = {}
+        self._source_name: Optional[str] = None
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
@@ -89,6 +91,28 @@ class DataStreamReader(OptionUtils):
 
     options.__doc__ = PySparkDataStreamReader.options.__doc__
 
+    def name(self, source_name: str) -> "DataStreamReader":
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._source_name = source_name
+        return self
+
+    name.__doc__ = PySparkDataStreamReader.name.__doc__
+
     def load(
         self,
         path: Optional[str] = None,
@@ -113,6 +137,7 @@ class DataStreamReader(OptionUtils):
             options=self._options,
             paths=[path] if path else None,
             is_streaming=True,
+            source_name=self._source_name,
         )
 
         return self._df(plan)

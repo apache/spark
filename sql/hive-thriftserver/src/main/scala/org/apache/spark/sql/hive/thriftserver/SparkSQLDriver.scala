@@ -29,6 +29,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.parser.NamedParameterContext
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -67,7 +68,12 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
       }
       sparkSession.sparkContext.setJobDescription(substitutorCommand)
 
-      val logicalPlan = sparkSession.sessionState.sqlParser.parsePlan(substitutorCommand)
+      // Parse with an empty parameter context to enable pre-parsing phase that scans for
+      // parameter markers. If any parameter markers (:name or ?) are found in the SQL,
+      // the pre-parser will throw UNBOUND_SQL_PARAMETER with proper position information.
+      val emptyParamContext = NamedParameterContext(Map.empty)
+      val logicalPlan = sparkSession.sessionState.sqlParser.parsePlanWithParameters(
+        substitutorCommand, emptyParamContext)
       val conf = sparkSession.sessionState.conf
 
       val shuffleCleanupMode =

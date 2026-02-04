@@ -1213,9 +1213,92 @@ message CloneSessionResponse {
 
   // Session id of the new cloned session.
   string new_session_id = 3;
-  
+
   // Server-side session ID of the new cloned session.
   string new_server_side_session_id = 4;
+}
+
+// Next ID: 6
+message GetStatusRequest {
+  // (Required)
+  //
+  // The session_id specifies a Spark session for a user identified by user_context.user_id.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string session_id = 1;
+
+  // (Required)
+  //
+  // user_context.user_id and session_id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // (Optional)
+  //
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 4;
+
+  // (Optional)
+  //
+  // Get status of operations in the session.
+  optional OperationStatusRequest operation_status = 5;
+
+  // Extension point for custom status request types.
+  repeated google.protobuf.Any extensions = 999;
+
+  message OperationStatusRequest {
+    // Get status of operations with these operation_ids.
+    // If unset or empty, returns status of all operations in the session.
+    repeated string operation_ids = 1;
+
+    // Extension point for custom operation-level status requests.
+    repeated google.protobuf.Any extensions = 999;
+  }
+}
+
+// Next ID: 4
+message GetStatusResponse {
+  // Session id of the session for which the status was requested.
+  string session_id = 1;
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 2;
+
+  // Status information about requested operations.
+  repeated OperationStatus operation_statuses = 3;
+
+  // Extension point for custom status response types.
+  repeated google.protobuf.Any extensions = 999;
+
+  // Status information for a single operation.
+  message OperationStatus {
+    // The operation_id of the operation.
+    string operation_id = 1;
+
+    // The current status of the operation.
+    OperationState state = 2;
+
+    // Extension point for custom operation-level status fields.
+    repeated google.protobuf.Any extensions = 999;
+
+    enum OperationState {
+      OPERATION_STATE_UNSPECIFIED = 0;
+      OPERATION_STATE_UNKNOWN = 1;
+      OPERATION_STATE_RUNNING = 2;
+      OPERATION_STATE_TERMINATING = 3;
+      OPERATION_STATE_SUCCEEDED = 4;
+      OPERATION_STATE_FAILED = 5;
+      OPERATION_STATE_CANCELLED = 6;
+    }
+  }
 }
 
 // Main interface for the SparkConnect service.
@@ -1272,4 +1355,7 @@ service SparkConnectService {
   // The request can optionally specify a custom session ID for the cloned session (must be
   // a valid UUID). If not provided, a new UUID will be generated automatically.
   rpc CloneSession(CloneSessionRequest) returns (CloneSessionResponse) {}
+
+  // Get status information of different types.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
 }

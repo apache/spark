@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark Cl
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20251224
+ENV FULL_REFRESH_DATE=20260203
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -36,27 +36,14 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     git \
     gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
     libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
     libssl-dev \
-    libtiff5-dev \
-    libwebp-dev \
-    libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
-    qpdf \
     tzdata \
     software-properties-common \
-    wget \
     zlib1g-dev
 
 # Install Python 3.12
@@ -68,7 +55,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
 ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
 
 # Install Python 3.12 packages
