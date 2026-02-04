@@ -1079,6 +1079,121 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       stream.commit(offset)
     }
   }
+
+  test("empty batch for stream when latestOffset produces the same offset with start") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |
+         |class ConditionalEmptyBatchReader(DataSourceStreamReader):
+         |    call_count = 0
+         |
+         |    def initialOffset(self):
+         |        return {"offset": 0}
+         |
+         |    def latestOffset(self, start, limit):
+         |        self.call_count += 1
+         |        # For odd call counts, return the same offset (simulating no new data)
+         |        # For even call counts, advance the offset by 2
+         |        if self.call_count % 2 == 1:
+         |            # Return current offset without advancing
+         |            return start
+         |        else:
+         |            # Advance offset by 2
+         |            return {"offset": start["offset"] + 2}
+         |
+         |    def partitions(self, start: dict, end: dict):
+         |        start_offset = start["offset"]
+         |        end_offset = end["offset"]
+         |        # Create partitions for the range [start, end)
+         |        return [InputPartition(i) for i in range(start_offset, end_offset)]
+         |
+         |    def commit(self, end: dict):
+         |        pass
+         |
+         |    def read(self, partition):
+         |        # Yield a value with a marker to identify this is from Python source
+         |        yield (partition.value, 1000)
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT, source INT"
+         |
+         |    def streamReader(self, schema):
+         |        return ConditionalEmptyBatchReader()
+         |""".stripMargin
+
+    val dataSource =
+      createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    val pythonDF = spark.readStream.format(dataSourceName).load()
+
+    // Create a rate source that produces data every microbatch
+    val rateDF = spark.readStream
+      .format("rate-micro-batch")
+      .option("rowsPerBatch", "2")
+      .load()
+      .selectExpr("CAST(value AS INT) as id", "2000 as source")
+
+    // Union the two sources
+    val unionDF = pythonDF.union(rateDF)
+
+    val stopSignal = new CountDownLatch(1)
+    var batchesWithoutPythonData = 0
+    var batchesWithPythonData = 0
+
+    val q = unionDF.writeStream
+      .foreachBatch((df: DataFrame, batchId: Long) => {
+        df.cache()
+        val pythonRows = df.filter("source = 1000").count()
+        val rateRows = df.filter("source = 2000").count()
+
+        // Rate source should always produce 2 rows per batch
+        assert(
+          rateRows == 2,
+          s"Batch $batchId: Expected 2 rows from rate source, got $rateRows"
+        )
+
+        // Python source should produce 0 rows for odd batches (empty batches)
+        // and 2 rows for even batches
+        if (batchId % 2 == 1) {
+          // Odd batch - Python source should return same offset, producing empty batch
+          assert(
+            pythonRows == 0,
+            s"Batch $batchId: Expected 0 rows from Python source (empty batch), got $pythonRows"
+          )
+          batchesWithoutPythonData += 1
+        } else {
+          // Even batch - Python source should advance offset and produce data
+          assert(
+            pythonRows == 2,
+            s"Batch $batchId: Expected 2 rows from Python source, got $pythonRows"
+          )
+          batchesWithPythonData += 1
+        }
+
+        if (batchId >= 7) stopSignal.countDown()
+      })
+      .trigger(ProcessingTimeTrigger(0))
+      .start()
+
+    stopSignal.await()
+
+    // Verify that we observed both types of batches
+    assert(
+      batchesWithoutPythonData >= 4,
+      s"Expected at least 4 batches without Python data, got $batchesWithoutPythonData"
+    )
+    assert(
+      batchesWithPythonData >= 4,
+      s"Expected at least 4 batches with Python data, got $batchesWithPythonData"
+    )
+
+    q.stop()
+    q.awaitTermination()
+  }
 }
 
 class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
