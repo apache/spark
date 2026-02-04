@@ -67,7 +67,7 @@ import org.apache.spark.sql.types._
     are ties in the ordering expression.
   """,
   group = "agg_funcs",
-  since = "4.1.0")
+  since = "4.2.0")
 case class MaxMinByK(
     valueExpr: Expression,
     orderingExpr: Expression,
