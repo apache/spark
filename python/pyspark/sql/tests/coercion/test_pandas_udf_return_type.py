@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import concurrent.futures
 from decimal import Decimal
+import itertools
+import os
 import unittest
 
 from pyspark.sql.functions import pandas_udf
@@ -127,20 +130,46 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    @property
-    def test_cases(self):
-        return self.test_data
+    def repr_value(self, value):
+        # Use extended pandas value representation
+        return self.repr_pandas_value(value)
 
-    @property
-    def column_names(self):
-        return [self.repr_spark_type(t) for t in self.test_types]
+    def test_str_repr(self):
+        self.assertEqual(
+            len(self.test_types),
+            len(set(self.repr_type(t) for t in self.test_types)),
+            "String representations of types should be different!",
+        )
+        self.assertEqual(
+            len(self.test_data),
+            len(set(self.repr_value(d) for d in self.test_data)),
+            "String representations of values should be different!",
+        )
 
-    def run_single_test(self, value):
-        source_value = self.repr_value(value)
-        results = []
+    def test_pandas_return_type_coercion_vanilla(self):
+        self._run_pandas_udf_return_type_coercion(
+            golden_file=f"{self.prefix}_base",
+            test_name="Pandas UDF",
+        )
 
-        for spark_type in self.test_types:
-            target_type = self.repr_spark_type(spark_type)
+    def _run_pandas_udf_return_type_coercion(self, golden_file, test_name):
+        self._compare_or_generate_golden(golden_file, test_name)
+
+    def _compare_or_generate_golden(self, golden_file, test_name):
+        generating = self.is_generating_golden()
+
+        golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
+        golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        def work(arg):
+            spark_type, value = arg
+            str_t = self.repr_type(spark_type)
+            str_v = self.repr_value(value)
+
             try:
 
                 @pandas_udf(returnType=spark_type)
@@ -156,27 +185,52 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
                     .select(pandas_udf_func("id").alias("result"))
                     .collect()
                 )
-                return_value = self.repr_value([row[0] for row in rows])
+                result = repr([row[0] for row in rows])
+                result = result[:40]
             except Exception:
-                return_value = "X"
-            results.append((target_type, return_value))
+                result = "X"
 
-        return (source_value, results)
+            # Clean up exception message to remove newlines and extra whitespace
+            result = self.clean_result(result)
 
-    def test_str_repr(self):
-        self.assertEqual(
-            len(self.test_types),
-            len(set(self.repr_spark_type(t) for t in self.test_types)),
-            "String representations of types should be different!",
-        )
-        self.assertEqual(
-            len(self.test_data),
-            len(set(self.repr_value(d) for d in self.test_data)),
-            "String representations of values should be different!",
-        )
+            err = None
+            if not generating:
+                expected = golden.loc[str_t, str_v]
+                if expected != result:
+                    err = f"{str_v} => {spark_type} expects {expected} but got {result}"
 
-    def test_pandas_return_type_coercion_vanilla(self):
-        self.run_tests("base")
+            return (str_t, str_v, result, err)
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(
+                executor.map(
+                    work,
+                    itertools.product(self.test_types, self.test_data),
+                )
+            )
+
+        if not generating:
+            errs = []
+            for _, _, _, err in results:
+                if err is not None:
+                    errs.append(err)
+            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
+
+        else:
+            index = pd.Index(
+                [self.repr_type(t) for t in self.test_types],
+                name="SQL Type \\  Value@Type",
+            )
+            new_golden = pd.DataFrame({}, index=index)
+            for v in self.test_data:
+                str_v = self.repr_value(v)
+                new_golden[str_v] = "?"
+
+            for str_t, str_v, res, _ in results:
+                new_golden.loc[str_t, str_v] = res
+
+            self.save_golden(new_golden, golden_csv, golden_md)
 
 
 if __name__ == "__main__":

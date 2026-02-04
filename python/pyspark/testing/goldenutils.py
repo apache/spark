@@ -15,11 +15,8 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
-import concurrent.futures
-import inspect
+from typing import Any, Optional, TYPE_CHECKING
 import os
-import re
 import time
 
 from pyspark.testing.utils import have_pandas, have_numpy
@@ -43,6 +40,16 @@ class GoldenFileTestMixin:
     - Result string cleaning utilities
 
     To regenerate golden files, set SPARK_GENERATE_GOLDEN_FILES=1 before running tests.
+
+    Usage:
+        class MyTest(GoldenFileTestMixin, ReusedSQLTestCase):
+            def test_something(self):
+                # Use helper methods from mixin
+                if self.is_generating_golden():
+                    self.save_golden(df, golden_csv, golden_md)
+                else:
+                    golden = self.load_golden_csv(golden_csv)
+                    # compare results with golden
     """
 
     _tz_prev: Optional[str] = None
@@ -114,8 +121,8 @@ class GoldenFileTestMixin:
         golden_csv : str
             Path to the golden CSV file.
         use_index : bool
-            If True, use first column as index (for matrix format).
-            If False, don't use index (for row list format).
+            If True, use first column as index.
+            If False, don't use index.
 
         Returns
         -------
@@ -159,28 +166,41 @@ class GoldenFileTestMixin:
                 )
 
     @staticmethod
-    def repr_spark_type(spark_type: "DataType") -> str:
-        """Convert Spark type to string representation."""
-        return spark_type.simpleString()
+    def repr_type(t: Any) -> str:
+        """
+        Convert a type to string representation.
+
+        Handles different type representations:
+        - Spark DataType: uses simpleString() (e.g., "int", "string", "array<int>")
+        - Python type: uses __name__ (e.g., "int", "str", "list")
+        - Other: uses str()
+
+        Parameters
+        ----------
+        t : Any
+            The type to represent. Can be Spark DataType or Python type.
+
+        Returns
+        -------
+        str
+            String representation of the type.
+        """
+        # Check if it's a Spark DataType (has simpleString method)
+        if hasattr(t, "simpleString"):
+            return t.simpleString()
+        # Check if it's a Python type
+        elif isinstance(t, type):
+            return t.__name__
+        else:
+            return str(t)
 
     @classmethod
-    def repr_value(
-        cls,
-        value: Any,
-        max_len: int = 32,
-        type_override: Optional[str] = None,
-    ) -> str:
+    def repr_value(cls, value: Any, max_len: int = 32) -> str:
         """
         Convert Python value to string representation for golden file.
 
-        Format: "value_str@type_info"
-        - For numpy.ndarray: includes dtype, e.g., "[1 2]@ndarray[int64]"
-        - For pandas.DataFrame: includes schema, e.g., "{...}@DataFrame[_1 int64]"
-        - For list: includes element types, e.g., "[1, 2]@List[int]"
-        - For other types: uses type name, e.g., "True@bool"
-
-        Java object hash codes are normalized (e.g., @69420149 -> @<hash>)
-        for deterministic test results.
+        Default format: "value_str@type_name"
+        Subclasses can override this method for custom representations.
 
         Parameters
         ----------
@@ -188,328 +208,48 @@ class GoldenFileTestMixin:
             The Python value to represent.
         max_len : int, default 32
             Maximum length for the value string portion.
-        type_override : str, optional
-            If provided, use this as the type string instead of auto-detecting.
 
         Returns
         -------
         str
             String representation in format "value@type".
         """
-        # Get value string representation
-        if have_pandas and isinstance(value, pd.DataFrame):
-            v_str = value.to_json()
-        elif have_pandas and isinstance(value, pd.Series):
-            v_str = str(value.tolist())
-        else:
-            v_str = str(value)
-
-        # Get type string
-        type_str = type_override if type_override is not None else cls.repr_type(value)
-
-        # Clean up: replace newlines, normalize Java hash codes, then truncate
-        v_str = v_str.replace("\n", " ")
-        v_str = re.sub(r"@[a-fA-F0-9]+", "@<hash>", v_str)
-        v_str = v_str[:max_len]
-        return f"{v_str}@{type_str}"
+        v_str = str(value)[:max_len]
+        return f"{v_str}@{type(value).__name__}"
 
     @classmethod
-    def repr_type(cls, value: Any) -> str:
+    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
         """
-        Get the type representation string for a value (recursively for containers).
+        Convert Python/Pandas value to string representation for golden file.
+
+        Extended version that handles pandas DataFrame and numpy ndarray specially.
 
         Parameters
         ----------
         value : Any
-            The value to get type representation for.
+            The Python value to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.
 
         Returns
         -------
         str
-            Type string, e.g., "int", "list[int | NoneType]", "DataFrame[col1 int64]".
+            String representation in format "value@type[dtype]".
         """
-        return cls._repr_element_type(value)
-
-    @classmethod
-    def _repr_element_type(cls, elem: Any) -> str:
-        """
-        Recursively get the type representation for an element.
-
-        For containers (list, dict, tuple, DataFrame), inspects nested element types.
-        """
-        if elem is None:
-            return "NoneType"
-        elif have_pandas and isinstance(elem, pd.DataFrame):
-            schema = ", ".join([f"{col} {dtype.name}" for col, dtype in elem.dtypes.items()])
-            return f"DataFrame[{schema}]"
-        elif have_pandas and isinstance(elem, pd.Series):
-            return f"Series[{elem.dtype.name}]"
-        elif have_numpy and isinstance(elem, np.ndarray):
-            return f"ndarray[{elem.dtype.name}]"
-        elif isinstance(elem, list):
-            if len(elem) == 0:
-                return "list"
-            inner = cls._repr_container(elem, container=None)
-            return f"list[{inner}]"
-        elif isinstance(elem, dict):
-            if len(elem) == 0:
-                return "dict"
-            key_str = cls._repr_container(list(elem.keys()), container=None)
-            val_str = cls._repr_container(list(elem.values()), container=None)
-            return f"dict[{key_str}, {val_str}]"
-        elif isinstance(elem, tuple):
-            if len(elem) == 0:
-                return "tuple"
-            inner = cls._repr_container(list(elem), container=None)
-            return f"tuple[{inner}]"
+        if have_pandas and isinstance(value, pd.DataFrame):
+            v_str = value.to_json()
         else:
-            return type(elem).__name__
+            v_str = str(value)
+        v_str = v_str.replace("\n", " ")[:max_len]
 
-    @classmethod
-    def repr_pandas_type(cls, data: "pd.Series") -> str:
-        """
-        Get the type representation for a pandas Series, with element type inspection.
-
-        For object dtype, inspects actual element types recursively.
-
-        Parameters
-        ----------
-        data : pd.Series
-            The pandas Series to get type representation for.
-
-        Returns
-        -------
-        str
-            Type string, e.g., "int64", "list[int | NoneType]", "dict[str, int]".
-        """
-        if not hasattr(data, "dtype"):
-            return type(data).__name__
-
-        dtype_str = str(data.dtype)
-        # For object dtype, inspect actual element types recursively
-        if dtype_str == "object" and len(data) > 0:
-            return cls._repr_container(list(data), container=None)
-        return dtype_str
-
-    @staticmethod
-    def _join_type_strings(type_strs: list, container: str = None) -> str:
-        """
-        Join a list of type strings into a formatted type string.
-
-        Parameters
-        ----------
-        type_strs : list
-            List of type name strings (e.g., ['int', 'str', 'NoneType']).
-        container : str, optional
-            Container type name (e.g., "list", "Series"). If None, returns just the type string.
-
-        Returns
-        -------
-        str
-            Formatted type string with NoneType at the end, e.g., "int | str | NoneType".
-        """
-        unique_types = set(type_strs)
-        # Sort with NoneType at the end
-        has_none = "NoneType" in unique_types
-        other_types = sorted(t for t in unique_types if t != "NoneType")
-        if has_none:
-            other_types.append("NoneType")
-
-        if len(other_types) == 0:
-            type_str = ""
-        elif len(other_types) == 1:
-            type_str = other_types[0]
-        else:
-            type_str = " | ".join(other_types)
-
-        if container is None:
-            return type_str or "object"
-        elif type_str:
-            return f"{container}[{type_str}]"
-        else:
-            return container
-
-    @classmethod
-    def _repr_container(cls, values: list, container: str = None) -> str:
-        """
-        Format a list of values into a container type string.
-
-        Parameters
-        ----------
-        values : list
-            List of values to get type representations for.
-        container : str, optional
-            Container type name (e.g., "list", "Series"). If None, returns just the type string.
-
-        Returns
-        -------
-        str
-            Formatted type string, e.g., "list[int]" or "Series[int64 | object]".
-            NoneType is always placed at the end if present.
-        """
-        type_strs = [cls._repr_element_type(v) for v in values]
-        return cls._join_type_strings(type_strs, container)
+        if have_numpy and isinstance(value, np.ndarray):
+            return f"{v_str}@ndarray[{value.dtype.name}]"
+        elif have_pandas and isinstance(value, pd.DataFrame):
+            simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
+            return f"{v_str}@Dataframe[{simple_schema}]"
+        return f"{v_str}@{type(value).__name__}"
 
     @staticmethod
     def clean_result(result: str) -> str:
         """Clean result string by removing newlines and extra whitespace."""
         return result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-
-    def _compare_or_generate_golden(
-        self,
-        golden_file: str,
-        row_keys: list[str],
-        column_names: list[str],
-        results: list[tuple[str, str, str, Optional[str]]],
-        index_name: str = "Source Value \\ Target Type",
-    ) -> None:
-        """
-        Compare test results against golden file, or generate new golden file.
-
-        This method provides a common framework for matrix-style golden file tests.
-        Each test produces a matrix where rows are source values and columns are
-        target types (or other categories).
-
-        Parameters
-        ----------
-        golden_file : str
-            Full base path of golden file (without extension). Will generate both
-            .csv and .md files. E.g., "/path/to/golden_test_name"
-        row_keys : list[str]
-            Index values (row labels) for the DataFrame.
-        column_names : list[str]
-            Column names for the DataFrame.
-        results : list[tuple[str, str, str, Optional[str]]]
-            List of (row_key, column_name, cell_value, error_or_none) tuples.
-            Each tuple represents one cell in the result matrix.
-        index_name : str
-            Name for the index column in the golden file.
-        """
-        generating = self.is_generating_golden()
-
-        golden_csv = f"{golden_file}.csv"
-        golden_md = f"{golden_file}.md"
-
-        if not generating:
-            golden = self.load_golden_csv(golden_csv)
-            errs = []
-            for row_key, col_name, value, err in results:
-                if err is not None:
-                    errs.append(err)
-                else:
-                    expected = golden.loc[row_key, col_name]
-                    if expected != value:
-                        errs.append(f"{row_key} => {col_name}: expects {expected} but got {value}")
-            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
-        else:
-            index = pd.Index(row_keys, name=index_name)
-            new_golden = pd.DataFrame("?", index=index, columns=column_names)
-
-            for row_key, col_name, value, _ in results:
-                new_golden.loc[row_key, col_name] = value
-
-            self.save_golden(new_golden, golden_csv, golden_md)
-
-    @property
-    def column_names(self) -> list[str]:
-        """Column names for the golden file. Override in subclass."""
-        raise NotImplementedError("Subclass must define column_names property")
-
-    def run_single_test(self, test_item: Any) -> tuple[str, list[tuple[str, str]]]:
-        """
-        Run a single test item and return results.
-
-        Override in subclass to implement test logic.
-
-        Returns
-        -------
-        tuple[str, list[tuple[str, str]]]
-            (row_key, [(column_name, cell_value), ...])
-        """
-        raise NotImplementedError("Subclass must implement run_single_test method")
-
-    @property
-    def test_cases(self) -> Iterable[Any]:
-        """Test cases to iterate over. Override in subclass."""
-        raise NotImplementedError("Subclass must define test_cases property")
-
-    def run_tests(self, golden_name: str) -> None:
-        """
-        Run golden file tests using class properties.
-
-        Uses self.test_cases, self.column_names, and self.run_single_test.
-        """
-        self._run_golden_tests(
-            golden_name=golden_name,
-            test_items=self.test_cases,
-            run_test=self.run_single_test,
-            column_names=self.column_names,
-            parallel=True,
-        )
-
-    def _run_golden_tests(
-        self,
-        golden_name: str,
-        test_items: Iterable[Any],
-        run_test: Callable[[Any], tuple[str, list[tuple[str, str]]]],
-        column_names: list[str],
-        parallel: bool = False,
-    ) -> None:
-        """
-        Run golden file tests with a common framework.
-
-        This method handles test execution, result collection, and golden file
-        comparison/generation. Subclasses only need to provide the test items
-        and a function to run each test.
-
-        Parameters
-        ----------
-        golden_name : str
-            Suffix for golden file name (e.g., "vanilla", "base").
-            Will be combined with prefix property to form full path.
-        test_items : Iterable[Any]
-            Iterable of test items to process.
-        run_test : Callable[[Any], tuple[str, list[tuple[str, str]]]]
-            Function that takes a test item and returns:
-            - row_key: The row index for this result
-            - results: List of (column_name, cell_value) tuples
-            Should return ("X", [...]) or similar on exception.
-        column_names : list[str]
-            Column names for the golden file.
-        parallel : bool
-            If True, execute tests in parallel using ThreadPoolExecutor.
-        """
-
-        def safe_run_test(item):
-            """Wrapper that catches exceptions."""
-            try:
-                return run_test(item)
-            except Exception:
-                return None
-
-        # Execute tests
-        if parallel:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                raw_results = list(executor.map(safe_run_test, test_items))
-        else:
-            raw_results = [safe_run_test(item) for item in test_items]
-
-        # Collect results
-        row_keys = []
-        all_results = []
-        row_key_set = set()
-
-        for result in raw_results:
-            if result is None:
-                continue
-            row_key, col_values = result
-            assert row_key not in row_key_set, f"Duplicate test case name: {row_key}"
-            row_keys.append(row_key)
-            row_key_set.add(row_key)
-            for col_name, value in col_values:
-                all_results.append((row_key, col_name, self.clean_result(value), None))
-
-        # Compare or generate golden file
-        test_file = inspect.getfile(self.__class__)
-        golden_file = os.path.join(os.path.dirname(test_file), f"{self.prefix}_{golden_name}")
-        self._compare_or_generate_golden(golden_file, row_keys, column_names, all_results)

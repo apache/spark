@@ -16,8 +16,12 @@
 #
 
 import array
+import concurrent.futures
 import datetime
 from decimal import Decimal
+import itertools
+import os
+import re
 import unittest
 
 from pyspark.sql import Row
@@ -54,6 +58,8 @@ from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_numpy:
     import numpy as np
+if have_pandas:
+    import pandas as pd
 
 # If you need to re-generate the golden files, you need to set the
 # SPARK_GENERATE_GOLDEN_FILES=1 environment variable before running this test,
@@ -116,34 +122,10 @@ class UDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    @property
-    def test_cases(self):
-        return self.test_data
-
-    @property
-    def column_names(self):
-        return [self.repr_spark_type(t) for t in self.test_types]
-
-    def run_single_test(self, value):
-        source_value = self.repr_value(value)
-        results = []
-
-        for spark_type in self.test_types:
-            target_type = self.repr_spark_type(spark_type)
-            try:
-                test_udf = udf(lambda _: value, spark_type)
-                row = self.spark.range(1).select(test_udf("id")).first()
-                return_value = self.repr_value(row[0])
-            except Exception:
-                return_value = "X"
-            results.append((target_type, return_value))
-
-        return (source_value, results)
-
     def test_str_repr(self):
         self.assertEqual(
             len(self.test_types),
-            len(set(self.repr_spark_type(t) for t in self.test_types)),
+            len(set(self.repr_type(t) for t in self.test_types)),
             "String representations of types should be different!",
         )
         self.assertEqual(
@@ -153,21 +135,104 @@ class UDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         )
 
     def test_python_return_type_coercion_vanilla(self):
-        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
-            self.run_tests("vanilla")
+        self._run_udf_return_type_coercion(
+            use_arrow=False,
+            legacy_pandas=False,
+            golden_file=f"{self.prefix}_vanilla",
+            test_name="Vanilla Python UDF",
+        )
 
     def test_python_return_type_coercion_with_arrow(self):
-        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
-            self.run_tests("with_arrow")
+        self._run_udf_return_type_coercion(
+            use_arrow=True,
+            legacy_pandas=False,
+            golden_file=f"{self.prefix}_with_arrow",
+            test_name="Arrow Optimized Python UDF",
+        )
 
     def test_python_return_type_coercion_with_arrow_and_pandas(self):
+        self._run_udf_return_type_coercion(
+            use_arrow=True,
+            legacy_pandas=True,
+            golden_file=f"{self.prefix}_with_arrow_and_pandas",
+            test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
+        )
+
+    def _run_udf_return_type_coercion(self, use_arrow, legacy_pandas, golden_file, test_name):
         with self.sql_conf(
             {
-                "spark.sql.execution.pythonUDF.arrow.enabled": True,
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": True,
+                "spark.sql.execution.pythonUDF.arrow.enabled": use_arrow,
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": legacy_pandas,
             }
         ):
-            self.run_tests("with_arrow_and_pandas")
+            self._compare_or_generate_golden(golden_file, test_name)
+
+    def _compare_or_generate_golden(self, golden_file, test_name):
+        generating = self.is_generating_golden()
+
+        golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
+        golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        def work(arg):
+            spark_type, value = arg
+            str_t = self.repr_type(spark_type)
+            str_v = self.repr_value(value)
+
+            try:
+                test_udf = udf(lambda _: value, spark_type)
+                row = self.spark.range(1).select(test_udf("id")).first()
+                result = repr(row[0])
+                # Normalize Java object hash codes to make tests deterministic
+                result = re.sub(r"@[a-fA-F0-9]+", "@<hash>", result)
+                result = result[:40]
+            except Exception:
+                result = "X"
+
+            # Clean up exception message to remove newlines and extra whitespace
+            result = self.clean_result(result)
+
+            err = None
+            if not generating:
+                expected = golden.loc[str_t, str_v]
+                if expected != result:
+                    err = f"{str_v} => {spark_type} expects {expected} but got {result}"
+
+            return (str_t, str_v, result, err)
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(
+                executor.map(
+                    work,
+                    itertools.product(self.test_types, self.test_data),
+                )
+            )
+
+        if not generating:
+            errs = []
+            for _, _, _, err in results:
+                if err is not None:
+                    errs.append(err)
+            self.assertTrue(len(errs) == 0, "\n" + "\n".join(errs) + "\n")
+
+        else:
+            index = pd.Index(
+                [self.repr_type(t) for t in self.test_types],
+                name="SQL Type \\ Pandas Value(Type)",
+            )
+            new_golden = pd.DataFrame({}, index=index)
+            for v in self.test_data:
+                str_v = self.repr_value(v)
+                new_golden[str_v] = "?"
+
+            for str_t, str_v, res, _ in results:
+                new_golden.loc[str_t, str_v] = res
+
+            self.save_golden(new_golden, golden_csv, golden_md)
 
 
 if __name__ == "__main__":
