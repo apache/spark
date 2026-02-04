@@ -259,10 +259,8 @@ case class MaxMinByK(
       mutableAggBuffer.getBinary(mutableAggBufferOffset + 2))
 
     val newSize = insertIntoHeap(value, ord, valuesArr, orderingsArr, heapIndices, heapSize)
-    if (newSize != heapSize) {
-      mutableAggBuffer.update(
-        mutableAggBufferOffset + 2, serializeHeapIndices(heapIndices, newSize))
-    }
+    mutableAggBuffer.update(
+      mutableAggBufferOffset + 2, serializeHeapIndices(heapIndices, newSize))
   }
 
   override def merge(mutableAggBuffer: InternalRow, inputAggBuffer: InternalRow): Unit = {
