@@ -64,4 +64,48 @@ class PivotParserSuite extends AnalysisTest {
         .select(star())
     )
   }
+
+  test("pivot - alias with qualified column references") {
+    Seq(
+      "SELECT pv.x, pv.y FROM t PIVOT (sum(a) FOR b IN (1, 2)) pv",
+      "SELECT pv.x, pv.y FROM t PIVOT (sum(a) FOR b IN (1, 2)) AS pv"
+    ).foreach { sql =>
+      withClue(sql) {
+        assertEqual(
+          sql,
+          Pivot(
+            None,
+            UnresolvedAttribute("b"),
+            Seq(Literal(1), Literal(2)),
+            Seq(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false)),
+            table("t"))
+            .subquery("pv")
+            .select($"pv.x", $"pv.y")
+        )
+      }
+    }
+  }
+
+  test("pivot - alias with multiple aggregations") {
+    Seq(
+      "SELECT pv.* FROM t PIVOT (sum(a) s, avg(a) v FOR b IN (1, 2)) pv",
+      "SELECT pv.* FROM t PIVOT (sum(a) s, avg(a) v FOR b IN (1, 2)) AS pv"
+    ).foreach { sql =>
+      withClue(sql) {
+        assertEqual(
+          sql,
+          Pivot(
+            None,
+            UnresolvedAttribute("b"),
+            Seq(Literal(1), Literal(2)),
+            Seq(
+              UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false).as("s"),
+              UnresolvedFunction("avg", Seq(UnresolvedAttribute("a")), isDistinct = false).as("v")),
+            table("t"))
+            .subquery("pv")
+            .select(star("pv"))
+        )
+      }
+    }
+  }
 }
