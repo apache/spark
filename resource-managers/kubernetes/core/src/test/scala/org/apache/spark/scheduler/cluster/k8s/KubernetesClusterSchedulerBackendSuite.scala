@@ -301,4 +301,57 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     endpoint.receiveAndReply(context).apply(GenerateExecID("cheeseBurger"))
     verify(context).reply("1")
   }
+
+  test("doRemoveExecutor handles OOM by creating profile with half CPUs") {
+    val oomConf = new SparkConf(false).set("spark.task.cpus", "4")
+    val rpm = new ResourceProfileManager(oomConf, listenerBus)
+    when(sc.resourceProfileManager).thenReturn(rpm)
+
+    schedulerBackendUnderTest.start()
+
+    val reason = new org.apache.spark.scheduler.ExecutorExited(137, false, "OOM Error")
+    schedulerBackendUnderTest.doRemoveExecutor("1", reason)
+
+    val captor = ArgumentCaptor.forClass(classOf[Map[ResourceProfile, Int]])
+    val totalExecs = Map(defaultProfile -> 2)
+    schedulerBackendUnderTest.doRequestTotalExecutors(totalExecs)
+
+    verify(podAllocator, atLeastOnce()).setTotalExpectedExecutors(captor.capture())
+
+    val invocations = captor.getAllValues.asScala
+    val newProfileMap = invocations.last
+
+    assert(newProfileMap.size == 2)
+    assert(newProfileMap(defaultProfile) == 1)
+    val newProfile = newProfileMap.find(_._1 != defaultProfile).get._1
+    assert(newProfileMap(newProfile) == 1)
+    assert(newProfile.taskResources("cpus").amount.toInt == 2)
+  }
+
+  test("doRemoveExecutor handles OOM with 1 CPU default by keeping 1 CPU") {
+    val oomConf = new SparkConf(false).set("spark.task.cpus", "1")
+    val rpm = new ResourceProfileManager(oomConf, listenerBus)
+    when(sc.resourceProfileManager).thenReturn(rpm)
+
+    schedulerBackendUnderTest.start()
+
+    val reason = new org.apache.spark.scheduler.ExecutorExited(137, false, "OOM Error")
+    schedulerBackendUnderTest.doRemoveExecutor("1", reason)
+
+    val captor = ArgumentCaptor.forClass(classOf[Map[ResourceProfile, Int]])
+    val totalExecs = Map(defaultProfile -> 3)
+    schedulerBackendUnderTest.doRequestTotalExecutors(totalExecs)
+
+    verify(podAllocator, atLeastOnce()).setTotalExpectedExecutors(captor.capture())
+
+    val invocations = captor.getAllValues.asScala
+    val newProfileMap = invocations.last
+
+    assert(newProfileMap.size == 2)
+    assert(newProfileMap(defaultProfile) == 2)
+    val newProfile = newProfileMap.find(_._1 != defaultProfile).get._1
+    assert(newProfileMap(newProfile) == 1)
+    assert(newProfile.taskResources("cpus").amount.toInt == 1)
+  }
+
 }

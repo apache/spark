@@ -35,7 +35,7 @@ import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource._
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
   TaskSchedulerImpl}
@@ -71,9 +71,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
+  // A flag to be `true` if and only if any executor pod terminates with exit code 137.
+  private var isOOMKilled = false
+  private val isRecoveryProfileEnabled = conf.get(KUBERNETES_RECOVERY_PROFILE)
+
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
+    if (!isOOMKilled && reason.message.contains("OOM")) {
+      logInfo("OOM is detected.")
+      isOOMKilled = true
+    }
   }
 
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
@@ -180,9 +188,55 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
+  private def createOOMRecoveryProfile(): ResourceProfile = {
+    val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
+    val taskReq = new TaskResourceRequests()
+    val execReq = new ExecutorResourceRequests()
+
+    defaultProfile.taskResources.foreach { case (k, v) =>
+      if (k == "cpus") {
+        taskReq.cpus(math.max(1, (v.amount / 2).toInt))
+      } else {
+        taskReq.resource(v.resourceName, v.amount)
+      }
+    }
+    if (!defaultProfile.taskResources.contains("cpus")) {
+      taskReq.cpus(1)
+    }
+
+    defaultProfile.executorResources.foreach { case (_, v) =>
+      execReq.resource(v.resourceName, v.amount, v.discoveryScript, v.vendor)
+    }
+
+    new ResourceProfileBuilder()
+      .require(taskReq)
+      .require(execReq)
+      .build()
+  }
+
+  private def getAdjustedTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Map[ResourceProfile, Int] = {
+    logInfo("isRecoveryProfileEnabled = $isRecoveryProfileEnabled.")
+    logInfo("isOOMKilled = $isOOMKilled.")
+    if (isRecoveryProfileEnabled && isOOMKilled) {
+      val oomRecoveryProfile = createOOMRecoveryProfile()
+      var count = 0
+      val updatedMap = resourceProfileToTotalExecs.transform { (k, v) =>
+        count += 1
+        v - 1
+      }
+      logInfo("Request $count executors with the recovery profile, $oomRecoveryProfile.")
+      updatedMap ++ Map(oomRecoveryProfile -> count)
+    } else {
+      resourceProfileToTotalExecs
+    }
+  }
+
   override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
+    logInfo("doRequestTotalExecutors")
+    podAllocator.setTotalExpectedExecutors(
+      getAdjustedTotalExecutors(resourceProfileToTotalExecs))
     Future.successful(true)
   }
 

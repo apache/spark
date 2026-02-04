@@ -818,6 +818,13 @@ private[spark] object Config extends Logging {
         "Maximum number of pending pods per rp id should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_RECOVERY_PROFILE =
+    ConfigBuilder("spark.kubernetes.allocation.recoveryProfile.enabled")
+      .doc("If set to true, Spark will introduce an additional resource profile in case of OOM.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
       .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
