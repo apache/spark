@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+import io
 import os
 import platform
 import tempfile
@@ -26,6 +28,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
+from pyspark.profiler import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -1259,6 +1262,47 @@ class BasePythonDataSourceTestsMixin:
                         ]
                     ],
                 )
+
+    def test_data_source_perf_profiler(self):
+        with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "perf"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="perf")
+            self.spark.profile.clear()
+            stdout = stdout_io.getvalue()
+            self.assertIn("Profile of create_data_source", stdout)
+            self.assertIn("Profile of plan_data_source_read", stdout)
+            self.assertIn("ncalls", stdout)
+            self.assertIn("tottime", stdout)
+            # We should also found UDF profile results for data source read
+            self.assertIn("UDF<id=", stdout)
+
+    @unittest.skipIf(
+        "COVERAGE_PROCESS_START" in os.environ, "Fails with coverage enabled, skipping for now."
+    )
+    @unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
+    def test_data_source_memory_profiler(self):
+        with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "memory"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="memory")
+            self.spark.profile.clear()
+            stdout = stdout_io.getvalue()
+            self.assertIn("Profile of create_data_source", stdout)
+            self.assertIn("Profile of plan_data_source_read", stdout)
+            self.assertIn("Mem usage", stdout)
+            # We should also found UDF profile results for data source read
+            self.assertIn("UDF<id=", stdout)
+
+    def test_data_source_read_with_udf_perf_profiler(self):
+        """udf profiler config should not enable data source profiling"""
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            self.test_custom_json_data_source_read()
+            with contextlib.redirect_stdout(io.StringIO()) as stdout_io:
+                self.spark.profile.show(type="perf")
+            self.spark.profile.clear()
+            stdout = stdout_io.getvalue()
+            self.assertEqual(stdout, "")
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
