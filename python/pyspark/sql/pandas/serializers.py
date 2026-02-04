@@ -716,8 +716,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         Parameters
         ----------
         iterator : iterator
-            Iterator yielding tuples of (data, arrow_type, spark_type) for single UDF
-            or list of tuples for multiple UDFs in a projection
+            Iterator yielding tuple of (data, arrow_type, spark_type) tuples.
+            Single UDF: ((results, arrow_type, spark_type),)
+            Multiple UDFs: ((r1, t1, s1), (r2, t2, s2), ...)
         stream : object
             Output stream to write the Arrow record batches
 
@@ -742,9 +743,11 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
         def py_to_batch():
             for packed in iterator:
-                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
+                # packed is always a tuple of (results, arrow_type, spark_type) tuples
+                if len(packed) == 1:
                     # single array UDF in a projection
-                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
+                    t = packed[0]
+                    yield create_array(t[0], t[1], t[2]), t[1]
                 else:
                     # multiple array UDFs in a projection
                     yield [(create_array(*t), t[1]) for t in packed]
