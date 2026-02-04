@@ -1012,6 +1012,29 @@ class ArrowTimestampConversion:
             assert False, f"Need converter for {pa_type} but failed to find one."
 
 
+def _contains_conversion_type(data_type: DataType) -> bool:
+    """
+    Check if data type tree contains types that require post-processing conversion.
+
+    Returns True if the type contains UserDefinedType, VariantType, GeographyType,
+    or GeometryType at any nesting level.
+    """
+    if isinstance(
+        data_type,
+        (UserDefinedType, VariantType, GeographyType, GeometryType),
+    ):
+        return True
+    elif isinstance(data_type, ArrayType):
+        return _contains_conversion_type(data_type.elementType)
+    elif isinstance(data_type, MapType):
+        return _contains_conversion_type(data_type.keyType) or _contains_conversion_type(
+            data_type.valueType
+        )
+    elif isinstance(data_type, StructType):
+        return any(_contains_conversion_type(f.dataType) for f in data_type.fields)
+    return False
+
+
 class ArrowArrayToPandasConversion:
     """
     Conversion utilities for converting PyArrow Arrays and ChunkedArrays to pandas.
@@ -1060,12 +1083,11 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
-        if cls._prefer_convert_numpy(target_type, df_for_struct):
+        if cls._prefer_convert_numpy(target_type, df_for_struct, ndarray_as_list, struct_in_pandas):
             return cls.convert_numpy(
                 arrow_column,
                 target_type,
                 timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
                 df_for_struct=df_for_struct,
             )
@@ -1183,6 +1205,8 @@ class ArrowArrayToPandasConversion:
         cls,
         spark_type: DataType,
         df_for_struct: bool,
+        ndarray_as_list: bool = False,
+        struct_in_pandas: Optional[str] = None,
     ) -> bool:
         supported_types = (
             NullType,
@@ -1197,8 +1221,17 @@ class ArrowArrayToPandasConversion:
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
+        elif isinstance(spark_type, supported_types):
+            return True
+        elif isinstance(spark_type, (ArrayType, MapType, StructType)):
+            # Complex types can use convert_numpy if they don't need post-processing
+            if ndarray_as_list:
+                return False  # PyArrow doesn't support ndarray_as_list natively
+            if struct_in_pandas == "row":
+                return False  # PyArrow doesn't support Row conversion natively
+            return not _contains_conversion_type(spark_type)
         else:
-            return isinstance(spark_type, supported_types)
+            return False
 
     @classmethod
     def convert_numpy(
@@ -1207,7 +1240,6 @@ class ArrowArrayToPandasConversion:
         spark_type: DataType,
         *,
         timezone: Optional[str] = None,
-        struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
@@ -1227,7 +1259,6 @@ class ArrowArrayToPandasConversion:
                     field_arr,
                     spark_type=field.dataType,
                     timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
                     ndarray_as_list=ndarray_as_list,
                     df_for_struct=False,  # always False for child fields
                 )
@@ -1315,18 +1346,13 @@ class ArrowArrayToPandasConversion:
                 "coerce_temporal_nanoseconds": True,
             }
             return arr.to_pandas(**pandas_options)
-        # elif isinstance(
-        #     spark_type,
-        #     (
-        #         ArrayType,
-        #         MapType,
-        #         StructType,
-        #         UserDefinedType,
-        #         VariantType,
-        #         GeographyType,
-        #         GeometryType,
-        #     ),
-        # ):
-        # TODO(SPARK-55324): Support complex types
+        elif isinstance(spark_type, (ArrayType, MapType, StructType)):
+            # Use native Arrow conversion with maps_as_pydicts for efficient map→dict conversion
+            pandas_options = {
+                "maps_as_pydicts": "strict",
+                "date_as_object": True,
+                "coerce_temporal_nanoseconds": True,
+            }
+            return arr.to_pandas(**pandas_options)
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
