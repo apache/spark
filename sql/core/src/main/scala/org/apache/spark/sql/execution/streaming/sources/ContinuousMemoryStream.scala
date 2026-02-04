@@ -132,7 +132,7 @@ object ContinuousMemoryStream {
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   /** Creates a ContinuousMemoryStream with specified partitions (SparkSession). */
-  def apply[A: Encoder](numPartitions: Int, sparkSession: SparkSession): ContinuousMemoryStream[A] =
+  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): ContinuousMemoryStream[A] =
     new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
 
   /** Creates a single partition ContinuousMemoryStream (SQLContext). */

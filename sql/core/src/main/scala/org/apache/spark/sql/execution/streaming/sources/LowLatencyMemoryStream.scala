@@ -203,7 +203,7 @@ object LowLatencyMemoryStream {
     new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   /** Creates a LowLatencyMemoryStream with specified partitions (SparkSession). */
-  def apply[A: Encoder](numPartitions: Int, sparkSession: SparkSession): LowLatencyMemoryStream[A] =
+  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): LowLatencyMemoryStream[A] =
     new LowLatencyMemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sparkSession,
