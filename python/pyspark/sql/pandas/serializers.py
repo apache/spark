@@ -56,7 +56,6 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    import pandas as pd
     import pyarrow as pa
 
 
@@ -633,54 +632,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         )
         self._assign_cols_by_name = assign_cols_by_name
 
-    def _create_struct_array(
-        self,
-        df: "pd.DataFrame",
-        return_type: StructType,
-        *,
-        prefers_large_types: bool = False,
-    ):
-        """
-        Create an Arrow StructArray from the given pandas.DataFrame and Spark StructType.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            A pandas DataFrame
-        return_type : StructType
-            The Spark return type (StructType) to use
-        prefers_large_types : bool, optional
-            Whether to prefer large Arrow types (e.g., large_string instead of string).
-
-        Returns
-        -------
-        pyarrow.Array
-        """
-        import pyarrow as pa
-
-        # Derive arrow_struct_type from return_type
-        arrow_struct_type = to_arrow_type(
-            return_type, timezone=self._timezone, prefers_large_types=prefers_large_types
-        )
-
-        if len(df.columns) == 0:
-            return pa.array([{}] * len(df), arrow_struct_type)
-
-        # Use PandasBatchTransformer.to_arrow to convert DataFrame to RecordBatch,
-        # then wrap into a struct and extract the struct column
-        arrow_schema = pa.schema(list(arrow_struct_type))
-        return ArrowBatchTransformer.wrap_struct(
-            PandasBatchTransformer.to_arrow(
-                df,
-                arrow_schema,
-                timezone=self._timezone,
-                safecheck=self._safecheck,
-                arrow_cast=self._arrow_cast,
-                assign_cols_by_name=self._assign_cols_by_name,
-                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
-            )
-        ).column(0)
-
     def _create_batch(
         self, series, *, arrow_cast=False, prefers_large_types=False, struct_in_pandas="dict"
     ):
@@ -746,16 +697,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                         "pandas.DataFrame when the specified return type is StructType."
                     )
                 arrs.append(
-                    self._create_struct_array(
-                        s, spark_type, prefers_large_types=prefers_large_types
-                    )
+                    ArrowBatchTransformer.wrap_struct(
+                        PandasBatchTransformer.to_arrow(
+                            s,
+                            pa.schema(list(arrow_type)),
+                            timezone=self._timezone,
+                            safecheck=self._safecheck,
+                            arrow_cast=self._arrow_cast,
+                            assign_cols_by_name=self._assign_cols_by_name,
+                            int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                        )
+                    ).column(0)
                 )
             elif isinstance(s, pd.DataFrame):
-                # If data is a DataFrame (e.g., from df_for_struct), use _create_struct_array
+                # If data is a DataFrame (e.g., from df_for_struct),
                 arrs.append(
-                    self._create_struct_array(
-                        s, spark_type, prefers_large_types=prefers_large_types
-                    )
+                    ArrowBatchTransformer.wrap_struct(
+                        PandasBatchTransformer.to_arrow(
+                            s,
+                            pa.schema(list(arrow_type)),
+                            timezone=self._timezone,
+                            safecheck=self._safecheck,
+                            arrow_cast=self._arrow_cast,
+                            assign_cols_by_name=self._assign_cols_by_name,
+                            int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                        )
+                    ).column(0)
                 )
             else:
                 arrs.append(
@@ -1027,8 +994,21 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                     f"a pandas.DataFrame but got: {type(s)}"
                 )
 
+            arrow_type = to_arrow_type(
+                spark_type, timezone=self._timezone, prefers_large_types=prefers_large_types
+            )
             arrs.append(
-                self._create_struct_array(s, spark_type, prefers_large_types=prefers_large_types)
+                ArrowBatchTransformer.wrap_struct(
+                    PandasBatchTransformer.to_arrow(
+                        s,
+                        pa.schema(list(arrow_type)),
+                        timezone=self._timezone,
+                        safecheck=self._safecheck,
+                        arrow_cast=self._arrow_cast,
+                        assign_cols_by_name=self._assign_cols_by_name,
+                        int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                    )
+                ).column(0)
             )
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
@@ -1971,15 +1951,15 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     assert not (bool(init_state_series) and bool(input_data_series))
 
                     if bool(input_data_series):
-                        for row in PandasBatchTransformer.wrap_series(
-                            input_data_series
-                        ).itertuples(index=False):
+                        for row in PandasBatchTransformer.wrap_series(input_data_series).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
                     elif bool(init_state_series):
-                        for row in PandasBatchTransformer.wrap_series(
-                            init_state_series
-                        ).itertuples(index=False):
+                        for row in PandasBatchTransformer.wrap_series(init_state_series).itertuples(
+                            index=False
+                        ):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 

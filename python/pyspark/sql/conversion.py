@@ -184,6 +184,12 @@ class PandasBatchTransformer:
         from pyspark.errors import PySparkTypeError, PySparkValueError
         from pyspark.sql.pandas.types import from_arrow_type, _create_converter_from_pandas
 
+        # Handle empty DataFrame (0 columns)
+        # Return a RecordBatch with no columns but correct row count
+        # wrap_struct will convert this to a struct array of empty dicts
+        if len(df.columns) == 0:
+            return pa.RecordBatch.from_pylist([{}] * len(df), schema=pa.schema([]))
+
         # Reorder columns by name if needed
         if assign_cols_by_name and any(isinstance(c, str) for c in df.columns):
             df = PandasBatchTransformer.reorder_columns(df, schema)
