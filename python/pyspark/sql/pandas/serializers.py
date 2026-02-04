@@ -44,6 +44,7 @@ from pyspark.sql.pandas.types import (
     to_arrow_type,
 )
 from pyspark.sql.types import (
+    DataType,
     StringType,
     StructType,
     BinaryType,
@@ -55,8 +56,6 @@ from pyspark.sql.types import (
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
-
-    from pyspark.sql.types import DataType
 
 
 class SpecialLengths:
@@ -533,11 +532,11 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         import pyarrow as pa
 
         def create_batch(
-            series_with_types: Iterable[Tuple[Union["pd.Series", "pd.DataFrame"], "DataType"]],
+            series_tuples: Iterable[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]],
         ) -> "pa.RecordBatch":
-            """Create batch from list of (data, ret_type) tuples."""
+            """Create batch from iterable of (data, spark_type) tuples."""
             arrs = []
-            for s, ret_type in series_with_types:
+            for s, ret_type in series_tuples:
                 # Check for struct type using Spark type (not Arrow type)
                 # to avoid false positives with complex types like geo types
                 is_struct_type = self._struct_in_pandas == "dict" and isinstance(

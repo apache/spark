@@ -3307,13 +3307,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     else:
 
         def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
+            # Always return iterable of (data, spark_type) tuples for consistent serializer handling
+            return (f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
 
     def func(_, it):
         return map(mapper, it)
