@@ -27,7 +27,7 @@ The `PIVOT` clause is used for data perspective. We can get the aggregated value
 
 ```sql
 PIVOT ( { aggregate_expression [ AS aggregate_expression_alias ] } [ , ... ]
-    FOR column_list IN ( expression_list ) )
+    FOR column_list IN ( expression_list ) ) [[AS] alias]
 ```
 
 ### Parameters
@@ -47,7 +47,11 @@ PIVOT ( { aggregate_expression [ AS aggregate_expression_alias ] } [ , ... ]
 * **expression_list**
 
     Specifies new columns, which are used to match values in `column_list` as the aggregating condition. We can also add aliases for them.
-    
+
+* **alias**
+
+    Specifies an alias for the pivot result, which can be used to reference the pivot columns in the query.
+
 ### Examples
 
 ```sql
@@ -85,6 +89,21 @@ SELECT * FROM person
 | 300  | Street 3  | NULL  | NULL  | NULL  | NULL  |
 | 400  | Street 4  | NULL  | NULL  | NULL  | NULL  |
 +------+-----------+-------+-------+-------+-------+
+
+-- pivot result can be referenced via its alias
+SELECT pv.* FROM person
+    PIVOT (
+        SUM(age) AS a
+        FOR name IN ('John' AS john, 'Mike' AS mike)
+    ) AS pv;
++------+-----------+---------+---------+
+|  id  |  address  | john_a  | mike_a  |
++------+-----------+---------+---------+
+| 200  | Street 2  | NULL    | NULL    |
+| 100  | Street 1  | 30      | NULL    |
+| 300  | Street 3  | NULL    | 80      |
+| 400  | Street 4  | NULL    | NULL    |
++------+-----------+---------+---------+
 ```
 
 ### Related Statements
