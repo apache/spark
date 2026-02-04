@@ -1134,6 +1134,103 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
+  test("max_by and min_by with k") {
+    // Basic: string values, integer ordering
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 2), min_by(x, y, 2)
+             FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"""),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // DataFrame API
+    checkAnswer(
+      spark.sql("SELECT * FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)")
+        .agg(max_by(col("x"), col("y"), 2), min_by(col("x"), col("y"), 2)),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // k larger than available rows
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 5), min_by(x, y, 5)
+             FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"""),
+      Row(Seq("b", "c", "a"), Seq("a", "c", "b")) :: Nil
+    )
+
+    // k = 1
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 1), min_by(x, y, 1)
+             FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"""),
+      Row(Seq("b"), Seq("a")) :: Nil
+    )
+
+    // NULL orderings are skipped
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 2), min_by(x, y, 2)
+             FROM VALUES (('a', 10)), (('b', null)), (('c', 20)) AS tab(x, y)"""),
+      Row(Seq("c", "a"), Seq("a", "c")) :: Nil
+    )
+
+    // All NULL orderings yields empty array
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 2), min_by(x, y, 2)
+             FROM VALUES (('a', null)), (('b', null)) AS tab(x, y)"""),
+      Row(Seq(), Seq()) :: Nil
+    )
+
+    // Integer values, integer ordering
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 2), min_by(x, y, 2)
+             FROM VALUES ((1, 100)), ((2, 200)), ((3, 150)) AS tab(x, y)"""),
+      Row(Seq(2, 3), Seq(1, 3)) :: Nil
+    )
+
+    // Struct ordering
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 2), min_by(x, y, 2)
+             FROM VALUES (('a', (10, 20))), (('b', (10, 50))), (('c', (10, 60))) AS tab(x, y)"""),
+      Row(Seq("c", "b"), Seq("a", "b")) :: Nil
+    )
+
+    // GROUP BY
+    checkAnswer(
+      sql("""
+        SELECT course, max_by(year, earnings, 2), min_by(year, earnings, 2)
+        FROM VALUES
+          (('Java', 2012, 20000)), (('Java', 2013, 30000)),
+          (('dotNET', 2012, 15000)), (('dotNET', 2013, 48000))
+        AS tab(course, year, earnings)
+        GROUP BY course
+        ORDER BY course
+      """),
+      Row("Java", Seq(2013, 2012), Seq(2012, 2013)) ::
+        Row("dotNET", Seq(2013, 2012), Seq(2012, 2013)) :: Nil
+    )
+
+    // Error: k must be positive
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 0) FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      assert(error.getMessage.contains("VALUE_OUT_OF_RANGE") ||
+        error.getMessage.contains("positive"))
+    }
+
+    // Error: non-orderable type (MAP)
+    withTempView("tempView") {
+      Seq((0, "a"), (1, "b"), (2, "c"))
+        .toDF("x", "y")
+        .select($"x", map($"x", $"y").as("y"))
+        .createOrReplaceTempView("tempView")
+      Seq("max_by", "min_by").foreach { fn =>
+        val mapError = intercept[AnalysisException] {
+          sql(s"SELECT $fn(x, y, 2) FROM tempView").collect()
+        }
+        assert(mapError.getMessage.contains("INVALID_ORDERING_TYPE") ||
+          mapError.getMessage.contains("not orderable"))
+      }
+    }
+  }
+
   test("percentile_like") {
     // percentile
     checkAnswer(
