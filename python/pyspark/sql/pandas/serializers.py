@@ -443,10 +443,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         def create_batch(
             series_tuples: Iterable[Tuple["pd.Series", "DataType"]],
         ) -> "pa.RecordBatch":
-            series_list = list(series_tuples)
-            schema = StructType([StructField(f"_{i}", t) for i, (_, t) in enumerate(series_list)])
+            series_data, types = map(list, list(zip(*series_tuples)) or [[], []])
+            schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
             return PandasToArrowConversion.dataframe_to_batch(
-                [s for s, _ in series_list],
+                series_data,
                 schema,
                 timezone=self._timezone,
                 safecheck=self._safecheck,
