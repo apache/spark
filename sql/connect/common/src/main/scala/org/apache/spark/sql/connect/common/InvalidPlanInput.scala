@@ -46,11 +46,13 @@ object InvalidPlanInput {
     InvalidPlanInput(
       errorCondition = "INTERNAL_ERROR",
       messageParameters = Map("message" -> message),
-      causeOpt = None)
+      causeOpt = None,
+      sqlState = Some("56K00"))
 
   def apply(errorCondition: String, messageParameters: Map[String, String]): InvalidPlanInput =
     InvalidPlanInput(
       errorCondition = errorCondition,
       messageParameters = messageParameters,
-      causeOpt = None)
+      causeOpt = None,
+      sqlState = Some("56K00"))
 }

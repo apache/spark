@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.connect.{proto => sc}
 import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
-import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
+import org.apache.spark.sql.connect.{IllegalStateErrors, SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, StorageRootMixin}
@@ -90,7 +90,7 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with St
     if (iter.hasNext) {
       iter.next()
     } else {
-      throw new IllegalStateException(s"Invalid response: $iter")
+      throw IllegalStateErrors.noBatchesAvailable(iter.toString)
     }
   }
 

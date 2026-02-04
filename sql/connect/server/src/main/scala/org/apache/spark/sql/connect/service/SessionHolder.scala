@@ -35,6 +35,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.MLCache
@@ -175,7 +176,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     activeOperationIds.synchronized {
       if (activeOperationIds.contains(operationId)) {
-        throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
+        throw IllegalStateErrors.executeHolderAlreadyExists(operationId)
       }
       activeOperationIds.add(operationId)
     }
@@ -368,7 +369,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // called only once, since removing the session from SparkConnectSessionManager.sessionStore is
     // synchronized and guaranteed to happen only once.
     if (closedTimeMs.isDefined) {
-      throw new IllegalStateException(s"Session $key is already closed.")
+      throw IllegalStateErrors.sessionAlreadyClosed(key.toString)
     }
     logInfo(
       log"Closing session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
@@ -532,9 +533,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       graphId,
       (_, existing) => {
         if (Option(existing).isDefined) {
-          throw new IllegalStateException(
-            s"Pipeline execution for graph ID $graphId already exists. " +
-              s"Stop the existing execution before starting a new one.")
+          throw IllegalStateErrors.executeHolderAlreadyExistsGraphId(graphId)
         }
 
         pipelineUpdateContext
