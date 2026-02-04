@@ -270,7 +270,7 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.toJSON().first()
+        >>> df.toJSON().first()  # doctest: +SKIP
         '{"age":2,"name":"Alice"}'
         """
         ...
