@@ -19,12 +19,8 @@ from typing import Any, Optional, TYPE_CHECKING
 import os
 import time
 
-from pyspark.testing.utils import have_pandas, have_numpy
-
-if have_pandas:
-    import pandas as pd
-if have_numpy:
-    import numpy as np
+import numpy as np
+import pandas as pd
 
 if TYPE_CHECKING:
     from pyspark.sql.types import DataType
@@ -236,15 +232,15 @@ class GoldenFileTestMixin:
         str
             String representation in format "value@type[dtype]".
         """
-        if have_pandas and isinstance(value, pd.DataFrame):
+        if isinstance(value, pd.DataFrame):
             v_str = value.to_json()
         else:
             v_str = str(value)
         v_str = v_str.replace("\n", " ")[:max_len]
 
-        if have_numpy and isinstance(value, np.ndarray):
+        if isinstance(value, np.ndarray):
             return f"{v_str}@ndarray[{value.dtype.name}]"
-        elif have_pandas and isinstance(value, pd.DataFrame):
+        elif isinstance(value, pd.DataFrame):
             simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
             return f"{v_str}@Dataframe[{simple_schema}]"
         return f"{v_str}@{type(value).__name__}"
