@@ -3307,8 +3307,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     else:
 
         def mapper(a):
-            # Always return iterable of (data, spark_type) tuples for consistent serializer handling
-            return (f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+            # Always return tuple of (data, spark_type) tuples for consistent serializer handling
+            return tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
 
     def func(_, it):
         return map(mapper, it)
