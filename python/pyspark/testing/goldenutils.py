@@ -15,15 +15,18 @@
 # limitations under the License.
 #
 
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional
 import os
 import time
 
-import numpy as np
 import pandas as pd
 
-if TYPE_CHECKING:
-    from pyspark.sql.types import DataType
+try:
+    import numpy as np
+
+    have_numpy = True
+except ImportError:
+    have_numpy = False
 
 
 class GoldenFileTestMixin:
@@ -238,7 +241,7 @@ class GoldenFileTestMixin:
             v_str = str(value)
         v_str = v_str.replace("\n", " ")[:max_len]
 
-        if isinstance(value, np.ndarray):
+        if have_numpy and isinstance(value, np.ndarray):
             return f"{v_str}@ndarray[{value.dtype.name}]"
         elif isinstance(value, pd.DataFrame):
             simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
