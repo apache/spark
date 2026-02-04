@@ -543,32 +543,20 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     else None
                 )
 
-                # Struct type handling (exclude Variant types)
-                if (
+                # Struct type validation: must return DataFrame for struct types
+                is_struct_type = (
                     self._struct_in_pandas == "dict"
                     and arrow_type is not None
                     and pa.types.is_struct(arrow_type)
                     and not is_variant(arrow_type)
-                ):
-                    if not isinstance(s, pd.DataFrame):
-                        raise PySparkValueError(
-                            "Invalid return type. Please make sure that the UDF returns a "
-                            "pandas.DataFrame when the specified return type is StructType."
-                        )
-                    arrs.append(
-                        ArrowBatchTransformer.wrap_struct(
-                            PandasToArrowConversion.dataframe_to_batch(
-                                s,
-                                spark_type,
-                                timezone=self._timezone,
-                                safecheck=self._safecheck,
-                                arrow_cast=self._arrow_cast,
-                                assign_cols_by_name=self._assign_cols_by_name,
-                                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
-                            )
-                        ).column(0)
+                )
+                if is_struct_type and not isinstance(s, pd.DataFrame):
+                    raise PySparkValueError(
+                        "Invalid return type. Please make sure that the UDF returns a "
+                        "pandas.DataFrame when the specified return type is StructType."
                     )
-                elif isinstance(s, pd.DataFrame):
+
+                if isinstance(s, pd.DataFrame):
                     arrs.append(
                         ArrowBatchTransformer.wrap_struct(
                             PandasToArrowConversion.dataframe_to_batch(
