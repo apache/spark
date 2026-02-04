@@ -105,6 +105,7 @@ class TransformWithStateInPySparkPythonRunner(
       true
     } else {
       pandasWriter.finalizeCurrentArrowBatch()
+      super[PythonArrowInput].close()
       false
     }
     val deltaData = dataOut.size() - startData
@@ -200,6 +201,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       if (pandasWriter.getTotalNumRowsForBatch > 0) {
         pandasWriter.finalizeCurrentArrowBatch()
       }
+      super[PythonArrowInput].close()
       false
     }
 

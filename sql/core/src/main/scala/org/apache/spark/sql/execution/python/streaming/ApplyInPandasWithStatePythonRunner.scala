@@ -163,6 +163,7 @@ class ApplyInPandasWithStatePythonRunner(
       true
     } else {
       pandasWriter.finalizeData()
+      super[PythonArrowInput].close()
       false
     }
   }
