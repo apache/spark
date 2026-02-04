@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260127
+ENV FULL_REFRESH_DATE=20260203
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y \
 
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
 
 # Install Python 3.14 packages
@@ -64,5 +64,5 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14t
 # TODO: Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS when it supports Python 3.14 free threaded
 # TODO: Add lxml, grpcio, grpcio-status back when they support Python 3.14 free threaded
 RUN python3.14t -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
-RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib openpyxl jinja2 && \
+RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' 'pystack>=1.6.0' scipy coverage matplotlib openpyxl jinja2 psutil && \
     python3.14t -m pip cache purge

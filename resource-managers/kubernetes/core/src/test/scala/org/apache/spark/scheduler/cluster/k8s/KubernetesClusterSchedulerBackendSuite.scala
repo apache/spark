@@ -97,7 +97,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var podAllocator: ExecutorPodsAllocator = _
 
   @Mock
-  private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
+  private var lifecycleManager: ExecutorPodsLifecycleManager = _
 
   @Mock
   private var watchEvents: ExecutorPodsWatchSnapshotSource = _
@@ -141,7 +141,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       schedulerExecutorService,
       eventQueue,
       podAllocator,
-      lifecycleEventHandler,
+      lifecycleManager,
       watchEvents,
       pollEvents)
   }
@@ -154,7 +154,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     schedulerBackendUnderTest.start()
     verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))
     verify(podAllocator).start(TEST_SPARK_APP_ID, schedulerBackendUnderTest)
-    verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
+    verify(lifecycleManager).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
     verify(configMapResource).create()
