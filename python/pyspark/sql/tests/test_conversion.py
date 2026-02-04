@@ -179,7 +179,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(result.num_rows, 0)
 
         # Empty schema (0 columns)
-        # Note: PyArrow cannot preserve row count with 0 columns
+        # TODO(SPARK-55350): Pandas - > PyArrow should preserve row count with 0 columns. It is a bug.
         result = PandasToArrowConversion.dataframe_to_batch(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
         self.assertEqual(result.num_rows, 0)
