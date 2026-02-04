@@ -505,7 +505,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")  # doctest: +SKIP
+        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="YE")  # doctest: +SKIP
         >>> idx.is_leap_year  # doctest: +SKIP
         Index([True, False, False], dtype='bool')
         """

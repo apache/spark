@@ -324,7 +324,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         #   ]
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
-        #   pdf.resample('3Y').max()
+        #   pdf.resample('3YE').max()
         #                 A
         #   2012-12-31  2.0
         #   2015-12-31  NaN

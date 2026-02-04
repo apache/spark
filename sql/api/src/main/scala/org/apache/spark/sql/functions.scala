@@ -9686,6 +9686,24 @@ object functions {
     Column.fn("st_geomfromwkb", wkb)
 
   /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_geomfromwkb(wkb: Column, srid: Column): Column =
+    Column.fn("st_geomfromwkb", wkb, srid)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_geomfromwkb(wkb: Column, srid: Int): Column =
+    Column.fn("st_geomfromwkb", wkb, lit(srid))
+
+  /**
    * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
    *
    * @group st_funcs

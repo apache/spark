@@ -50,7 +50,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
-    lifecycleEventHandler: ExecutorPodsLifecycleManager,
+    lifecycleManager: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
@@ -77,7 +77,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   // order of the value of this annotation, ascending.
   private val podDeletionCostAnnotation = "controller.kubernetes.io/pod-deletion-cost"
 
-  // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
+  // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
   }
@@ -113,7 +113,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator.start(applicationId(), this)
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
-    lifecycleEventHandler.start(this)
+    lifecycleManager.start(this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
