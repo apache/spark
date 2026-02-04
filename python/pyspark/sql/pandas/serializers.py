@@ -742,6 +742,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
         def py_to_batch():
             for packed in iterator:
+                # Convert generator to tuple if needed for len() check
+                packed = tuple(packed) if not isinstance(packed, (list, tuple)) else packed
                 if len(packed) == 3 and isinstance(packed[1], pa.DataType):
                     # single array UDF in a projection
                     yield create_array(packed[0], packed[1], packed[2]), packed[1]
