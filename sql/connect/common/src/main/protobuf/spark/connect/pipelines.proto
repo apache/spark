@@ -167,7 +167,7 @@ message PipelineCommand {
     }
   }
 
-  // Request to execute all flows for a single table remotely.
+  // Request to execute all flows for a single output (dataset or sink)  remotely.
   message ExecuteOutput {
 
     // The output (table or materialized view) definition.
@@ -179,19 +179,11 @@ message PipelineCommand {
     // Whether to perform a full refresh instead of an incremental update.
     optional bool full_refresh = 3;
 
-    // The catalog to use for execution.
-    optional string catalog = 4;
-
-    // The database to use for execution.
-    optional string database = 5;
-
-    // SQL configurations for this execution.
-    map<string, string> sql_conf = 7;
-
     // Storage location for pipeline checkpoints and metadata.
-    optional string storage = 8;
+    optional string storage = 4;
 
-    google.protobuf.Any extension = 999;
+    // Reserved field for protocol extensions.
+    repeated google.protobuf.Any extension = 999;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
@@ -252,7 +244,6 @@ message PipelineCommand {
     optional spark.connect.Relation relation = 3;
   }
 }
-
 
 // Dispatch object for pipelines command results.
 message PipelineCommandResult {
