@@ -18,12 +18,15 @@
 package org.apache.spark.storage
 
 import java.io.FileNotFoundException
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{atLeast => least, mock, never, times, verify, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 
@@ -267,6 +270,60 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
         mc.any(), mc.any(), mc.any(), mc.isNull())
     verify(blockTransferService, times(1))
+      .uploadBlock(mc.any(), mc.any(), mc.eq(exe2.executorId),
+        mc.any(), mc.any(), mc.any(), mc.isNull())
+  }
+
+  test("SPARK-54796: block decom manager handles ShuffleManagerNotInitializedException " +
+    "with retry") {
+    // Set up the mocks so we return one shuffle block
+    val conf = sparkConf
+      .clone
+      .set(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK, 1)
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    val exe1 = BlockManagerId("exec1", "host1", 12345)
+    val exe2 = BlockManagerId("exec2", "host2", 12345)
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(exe1), Seq(exe1), Seq(exe2))
+
+    val blockTransferService = mock(classOf[BlockTransferService])
+    val uploadAttempts = new AtomicLong(0)
+    // Simulate ShuffleManagerNotInitializedException on first attempt to exe1,
+    // then succeed on retry to exe2
+    when(blockTransferService.uploadBlock(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      .thenAnswer(new Answer[Future[Unit]] {
+        override def answer(invocation: InvocationOnMock): Future[Unit] = {
+          val execId = invocation.getArgument[String](2)
+          val attempt = uploadAttempts.incrementAndGet()
+          if (attempt == 1 && execId == exe1.executorId) {
+            // First attempt to exe1 fails with ShuffleManagerNotInitializedException
+            Future.failed(new RuntimeException("ShuffleManagerNotInitializedException"))
+          } else {
+            // Subsequent attempts succeed
+            Future.successful(())
+          }
+        }
+      })
+    when(blockTransferService.uploadBlockSync(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      .thenCallRealMethod()
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+
+    // Verify the decom manager handles this correctly
+    val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
+    validateDecommissionTimestampsOnManager(bmDecomManager, numShuffles = Some(1))
+    verify(blockTransferService, times(1))
+      .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
+        mc.any(), mc.any(), mc.any(), mc.isNull())
+    // Called twice for data and index blocks
+    verify(blockTransferService, times(2))
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe2.executorId),
         mc.any(), mc.any(), mc.any(), mc.isNull())
   }

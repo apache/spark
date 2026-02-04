@@ -45,6 +45,8 @@ private[storage] class BlockManagerDecommissioner(
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
   private val blockSavedOnDecommissionedBlockManagerException =
     classOf[BlockSavedOnDecommissionedBlockManagerException].getSimpleName
+  private val shuffleManagerNotInitializedException =
+    classOf[ShuffleManagerNotInitializedException].getSimpleName
 
   // Used for tracking if our migrations are complete. Readable for testing
   @volatile private[storage] var lastRDDMigrationTime: Long = 0
@@ -106,6 +108,7 @@ private[storage] class BlockManagerDecommissioner(
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
           var isTargetDecommissioned = false
+          var isTargetShuffleManagerNotInitialized = false
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
             logInfo(log"Ignore deleted shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
@@ -157,6 +160,17 @@ private[storage] class BlockManagerDecommissioner(
                   .contains(blockSavedOnDecommissionedBlockManagerException)) {
                   isTargetDecommissioned = true
                   keepRunning = false
+                } else if (e.getCause != null && e.getCause.getMessage != null
+                  && e.getCause.getMessage
+                  .contains(shuffleManagerNotInitializedException)) {
+                  // Target executor's ShuffleManager is not yet initialized.
+                  // This can happen if the target executor was just started and hasn't
+                  // finished initializing its ShuffleManager. Allow retry without
+                  // incrementing failure count.
+                  logWarning(log"Target executor's ShuffleManager not initialized for " +
+                    log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}. Will retry.")
+                  isTargetShuffleManagerNotInitialized = true
+                  keepRunning = false
                 } else {
                   logError(log"Error occurred during migrating " +
                     log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)
@@ -173,7 +187,11 @@ private[storage] class BlockManagerDecommissioner(
           } else {
             logWarning(log"Stop migrating shuffle blocks to ${MDC(PEER, peer)}")
 
-            val newRetryCount = if (isTargetDecommissioned) {
+            // Don't increment retry count for transient conditions:
+            // - Target executor is decommissioned
+            // - Target executor's ShuffleManager not yet initialized
+            val newRetryCount = if (isTargetDecommissioned ||
+                isTargetShuffleManagerNotInitialized) {
               retryCount
             } else {
               retryCount + 1

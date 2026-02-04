@@ -314,6 +314,35 @@ private[spark] class BlockManager(
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
+  // Timeout waiting for ShuffleManager initialization when receiving shuffle migration requests
+  private val shuffleManagerInitWaitingTimeoutMs =
+    conf.get(config.STORAGE_SHUFFLE_MANAGER_INIT_WAITING_TIMEOUT)
+
+  /**
+   * Wait for the ShuffleManager to be initialized before handling shuffle migration requests.
+   * This is necessary because BlockManager is registered with the driver before ShuffleManager
+   * is initialized in Executor, which could cause NPE if shuffle migration requests are received
+   * before ShuffleManager is ready.
+   *
+   * @param blockId The shuffle block ID being processed
+   * @throws ShuffleManagerNotInitializedException if ShuffleManager is not initialized within
+   *         the configured timeout
+   */
+  private def waitForShuffleManagerInit(blockId: BlockId): Unit = {
+    if (!SparkEnv.get.isShuffleManagerInitialized) {
+      logInfo(log"Waiting for ShuffleManager initialization before handling shuffle block " +
+        log"${MDC(BLOCK_ID, blockId)}")
+
+      if (!SparkEnv.get.waitForShuffleManagerInit(shuffleManagerInitWaitingTimeoutMs)) {
+        logWarning(log"ShuffleManager not initialized within " +
+          log"${MDC(TIMEOUT, shuffleManagerInitWaitingTimeoutMs)}ms " +
+          log"while handling shuffle block ${MDC(BLOCK_ID, blockId)}")
+        throw new ShuffleManagerNotInitializedException(
+          blockId, shuffleManagerInitWaitingTimeoutMs)
+      }
+    }
+  }
+
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
   /**
@@ -773,6 +802,10 @@ private[spark] class BlockManager(
 
     if (blockId.isShuffle) {
       logDebug(s"Putting shuffle block ${blockId}")
+      // Wait for ShuffleManager to be initialized before handling shuffle migration requests.
+      // This can happen when an executor receives migration requests before its ShuffleManager
+      // is fully initialized.
+      waitForShuffleManagerInit(blockId)
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {

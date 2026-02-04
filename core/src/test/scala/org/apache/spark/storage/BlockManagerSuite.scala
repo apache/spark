@@ -2030,6 +2030,35 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(exception.getMessage.contains("unsupported shuffle resolver"))
   }
 
+  test("SPARK-54796: putBlockDataAsStream throws ShuffleManagerNotInitializedException " +
+    "on timeout") {
+    val sortShuffleMgr = makeSortShuffleManager(Some(conf))
+    val bm = makeBlockManager(1000, "exec2", testConf = Some(conf),
+      shuffleManager = sortShuffleMgr)
+    sortShuffleMgr.shuffleBlockResolver._blockManager = bm
+
+    // Create a shuffle block ID
+    val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
+
+    // Mock SparkEnv to simulate uninitialized ShuffleManager
+    val originalEnv = SparkEnv.get
+    val mockEnv = mock(classOf[SparkEnv])
+    when(mockEnv.isShuffleManagerInitialized).thenReturn(false)
+    when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(false)
+    SparkEnv.set(mockEnv)
+
+    try {
+      val exception = intercept[ShuffleManagerNotInitializedException] {
+        bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(classOf[String]))
+      }
+      assert(exception.getMessage.contains("ShuffleManager not initialized"))
+      assert(exception.getMessage.contains(shuffleBlockId.toString))
+    } finally {
+      // Restore original SparkEnv
+      SparkEnv.set(originalEnv)
+    }
+  }
+
   test("test decommission block manager should not be part of peers") {
     val exec1 = "exec1"
     val exec2 = "exec2"
