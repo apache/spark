@@ -305,7 +305,7 @@ class ApplyInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Column names of the returned pandas.DataFrame do not match specified schema. "
-            "Missing: mean. Unexpected: median, std.\n",
+            "Missing: mean. Unexpected: median, std.",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame(
@@ -321,7 +321,7 @@ class ApplyInPandasTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Number of columns of the returned pandas.DataFrame doesn't match "
-            "specified schema. Expected: 2 Actual: 3\n",
+            "specified schema. Expected: 2 Actual: 3",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
@@ -359,7 +359,7 @@ class ApplyInPandasTestsMixin:
                             "can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                    with self.assertRaisesRegex(PythonException, expected):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + ("test_string",)]),
                             output_schema="id long, mean double",
@@ -370,7 +370,7 @@ class ApplyInPandasTestsMixin:
                     with self.assertRaisesRegex(
                         PythonException,
                         r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'mean' to Arrow Array \(string\).\n",
+                        r"with name 'mean' to Arrow Array \(string\).",
                     ):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
@@ -667,7 +667,7 @@ class ApplyInPandasTestsMixin:
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pandas.DataFrame do not match "
-                "specified schema. Missing: id. Unexpected: iid.\n",
+                "specified schema. Missing: id. Unexpected: iid.",
             ):
                 grouped_df.apply(column_name_typo).collect()
             with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):

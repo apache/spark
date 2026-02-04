@@ -3837,7 +3837,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
         >>> psdf
                              A
