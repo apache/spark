@@ -29,15 +29,19 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    DecimalType,
+    DoubleType,
     GeographyType,
     GeometryType,
     IntegerType,
+    LongType,
     MapType,
     NullType,
     Row,
     StringType,
     StructField,
     StructType,
+    TimestampType,
     UserDefinedType,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
@@ -152,8 +156,6 @@ class PandasToArrowConversionTests(unittest.TestCase):
         import pandas as pd
         import pyarrow as pa
 
-        from pyspark.sql.types import IntegerType, DoubleType, StructType, StructField
-
         # Basic DataFrame conversion
         df = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
@@ -188,8 +190,6 @@ class PandasToArrowConversionTests(unittest.TestCase):
         """Test assign_cols_by_name reorders columns to match schema."""
         import pandas as pd
 
-        from pyspark.sql.types import IntegerType, DoubleType, StringType, StructType, StructField
-
         # DataFrame columns in different order than schema
         df = pd.DataFrame({"b": ["x", "y", "z"], "a": [1, 2, 3]})
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
@@ -210,8 +210,6 @@ class PandasToArrowConversionTests(unittest.TestCase):
         """Test timezone handling for timestamp conversion."""
         import pandas as pd
 
-        from pyspark.sql.types import TimestampType, StructType, StructField
-
         # Create DataFrame with timezone-naive timestamps
         df = pd.DataFrame({"ts": pd.to_datetime(["2023-01-01 12:00:00", "2023-01-02 12:00:00"])})
         schema = StructType([StructField("ts", TimestampType())])
@@ -225,8 +223,6 @@ class PandasToArrowConversionTests(unittest.TestCase):
         """Test arrow_cast allows type coercion on mismatch."""
         import pandas as pd
 
-        from pyspark.sql.types import LongType, StructType, StructField
-
         # DataFrame with int32, schema expects int64
         df = pd.DataFrame({"a": pd.array([1, 2, 3], dtype="int32")})
         schema = StructType([StructField("a", LongType())])
@@ -239,8 +235,6 @@ class PandasToArrowConversionTests(unittest.TestCase):
         """Test int to decimal coercion."""
         import pandas as pd
         from decimal import Decimal
-
-        from pyspark.sql.types import DecimalType, StructType, StructField
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})

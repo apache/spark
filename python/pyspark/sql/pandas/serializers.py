@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Tuple, Union
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -41,7 +41,6 @@ from pyspark.sql.conversion import (
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
-    is_variant,
     to_arrow_type,
 )
 from pyspark.sql.types import (
@@ -54,7 +53,10 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
+    import pandas as pd
     import pyarrow as pa
+
+    from pyspark.sql.types import DataType
 
 
 class SpecialLengths:
@@ -437,9 +439,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         Make ArrowRecordBatches from Pandas Series and serialize.
         Each element in iterator is an iterable of (series, spark_type) tuples.
         """
-        from pyspark.sql.types import StructType, StructField
 
-        def create_batch(series_tuples):
+        def create_batch(
+            series_tuples: Iterable[Tuple["pd.Series", "DataType"]],
+        ) -> "pa.RecordBatch":
             series_list = list(series_tuples)
             schema = StructType([StructField(f"_{i}", t) for i, (_, t) in enumerate(series_list)])
             return PandasToArrowConversion.dataframe_to_batch(
@@ -503,7 +506,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         int_to_decimal_coercion_enabled: bool = False,
         prefers_large_types: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        error_class: Optional[str] = None,
+        error_class: Optional[str] = None,  # for overriding custom error, e.g., for UDTF
     ):
         super().__init__(
             timezone,
@@ -529,26 +532,16 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         import pandas as pd
         import pyarrow as pa
 
-        def create_batch(series_with_types):
-            """Create batch from list of (data, spark_type) tuples."""
+        def create_batch(
+            series_with_types: Iterable[Tuple[Union["pd.Series", "pd.DataFrame"], "DataType"]],
+        ) -> "pa.RecordBatch":
+            """Create batch from list of (data, ret_type) tuples."""
             arrs = []
-            for s, spark_type in series_with_types:
-                arrow_type = (
-                    to_arrow_type(
-                        spark_type,
-                        timezone=self._timezone,
-                        prefers_large_types=self._prefers_large_types,
-                    )
-                    if spark_type is not None
-                    else None
-                )
-
-                # Struct type validation: must return DataFrame for struct types
-                is_struct_type = (
-                    self._struct_in_pandas == "dict"
-                    and arrow_type is not None
-                    and pa.types.is_struct(arrow_type)
-                    and not is_variant(arrow_type)
+            for s, ret_type in series_with_types:
+                # Check for struct type using Spark type (not Arrow type)
+                # to avoid false positives with complex types like geo types
+                is_struct_type = self._struct_in_pandas == "dict" and isinstance(
+                    ret_type, StructType
                 )
                 if is_struct_type and not isinstance(s, pd.DataFrame):
                     raise PySparkValueError(
@@ -561,7 +554,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                         ArrowBatchTransformer.wrap_struct(
                             PandasToArrowConversion.dataframe_to_batch(
                                 s,
-                                spark_type,
+                                ret_type,
                                 timezone=self._timezone,
                                 safecheck=self._safecheck,
                                 arrow_cast=self._arrow_cast,
@@ -574,7 +567,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                     arrs.append(
                         PandasToArrowConversion.series_to_array(
                             s,
-                            spark_type,
+                            ret_type,
                             timezone=self._timezone,
                             safecheck=self._safecheck,
                             arrow_cast=self._arrow_cast,

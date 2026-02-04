@@ -211,9 +211,14 @@ class PandasToArrowConversion:
         import pyarrow as pa
 
         # Handle empty schema (0 columns)
-        # Return a RecordBatch with correct row count but no columns
+        # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
         if len(schema.fields) == 0:
-            return pa.RecordBatch.from_arrays([], [])
+            if isinstance(data, list):
+                num_rows = len(data[0]) if data else 0
+            else:
+                num_rows = len(data)
+            dummy_batch = pa.RecordBatch.from_pydict({"_": [None] * num_rows})
+            return dummy_batch.select([])
 
         # Normalize input: reorder DataFrame columns if needed
         if not isinstance(data, list):
@@ -246,7 +251,7 @@ class PandasToArrowConversion:
     def series_to_array(
         cls,
         series: "pd.Series",
-        spark_type: DataType,
+        ret_type: DataType,
         *,
         timezone: Optional[str] = None,
         safecheck: bool = True,
@@ -263,8 +268,8 @@ class PandasToArrowConversion:
         ----------
         series : pd.Series
             Input Series
-        spark_type : DataType
-            Spark type for conversion
+        ret_type : DataType
+            Spark return type for conversion
         timezone : str, optional
             Timezone for timestamp conversion
         safecheck : bool
@@ -294,14 +299,14 @@ class PandasToArrowConversion:
         if isinstance(series.dtype, pd.CategoricalDtype):
             series = series.astype(series.dtype.categories.dtype)
 
-        # Derive arrow_type from spark_type
+        # Derive arrow_type from ret_type
         arrow_type = to_arrow_type(
-            spark_type, timezone=timezone, prefers_large_types=prefers_large_types
+            ret_type, timezone=timezone, prefers_large_types=prefers_large_types
         )
 
         # Apply type converter
         conv = _create_converter_from_pandas(
-            spark_type,
+            ret_type,
             timezone=timezone,
             error_on_duplicated_field_names=False,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
