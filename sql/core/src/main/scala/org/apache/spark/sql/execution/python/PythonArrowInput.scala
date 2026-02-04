@@ -53,6 +53,10 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
+  /**
+   * Writes input batch to the stream connected to the Python worker.
+   * Returns true if any data was written to the stream, false if the input is exhausted.
+   */
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -60,15 +64,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       inputIterator: Iterator[IN]): Boolean
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
-
-  protected lazy val allocator: BufferAllocator =
-    ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
-
-  protected lazy val root: VectorSchemaRoot = {
-    val arrowSchema = ArrowUtils.toArrowSchema(
-      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-    VectorSchemaRoot.create(arrowSchema, allocator)
-  }
 
   // Create compression codec based on config
   protected def codec: CompressionCodec = SQLConf.get.arrowCompressionCodec match {
@@ -87,20 +82,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
         s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
   }
 
-  protected var writer: ArrowStreamWriter = _
-
-  protected def close(): Unit = {
-    Utils.tryWithSafeFinally {
-      // end writes footer to the output stream and doesn't clean any resources.
-      // It could throw exception if the output stream is closed, so it should be
-      // in the try block.
-      writer.end()
-    } {
-      root.close()
-      allocator.close()
-    }
-  }
-
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -108,20 +89,45 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       partitionIndex: Int,
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
+      private val arrowSchema = ArrowUtils.toArrowSchema(
+        schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+      private val allocator: BufferAllocator = ArrowUtils.rootAllocator
+        .newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
+      private val root: VectorSchemaRoot = VectorSchemaRoot.create(arrowSchema, allocator)
+      private var writer: ArrowStreamWriter = _
+
+      context.addTaskCompletionListener[Unit] { _ => this.terminate() }
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         writeUDF(dataOut)
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
-
         if (writer == null) {
           writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
         }
 
         assert(writer != null)
-        writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+        val hasInput = writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+        if (!hasInput) {
+          this.terminate()
+        }
+        hasInput
+      }
+
+      private def terminate(): Unit = {
+        Utils.tryWithSafeFinally {
+          // end writes footer to the output stream and doesn't clean any resources.
+          // It could throw exception if the output stream is closed, so it should be
+          // in the try block.
+          if (writer != null) {
+            writer.end()
+          }
+        } {
+          root.close()
+          allocator.close()
+        }
       }
     }
   }
@@ -129,9 +135,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  protected lazy val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
-  protected lazy val unloader = new VectorUnloader(root, true, codec, true)
-
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
     if (v > 0) v else Int.MaxValue
@@ -139,11 +142,18 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
 
   protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 
+  protected var arrowWriter: arrow.ArrowWriter = _
+  protected var unloader: VectorUnloader = _
+
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+    if (arrowWriter == null && unloader == null) {
+      arrowWriter = ArrowWriter.create(root)
+      unloader = new VectorUnloader(root, true, codec, true)
+    }
 
     if (inputIterator.hasNext) {
       val startData = dataOut.size()
@@ -167,7 +177,6 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
-      super[PythonArrowInput].close()
       false
     }
   }
@@ -184,6 +193,11 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+    if (arrowWriter == null && unloader == null) {
+      arrowWriter = ArrowWriter.create(root)
+      unloader = new VectorUnloader(root, true, codec, true)
+    }
+
     if (!nextBatchStart.hasNext) {
       if (inputIterator.hasNext) {
         nextBatchStart = inputIterator.next()
@@ -201,7 +215,6 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
-      super[BasicPythonArrowInput].close()
       false
     }
   }
