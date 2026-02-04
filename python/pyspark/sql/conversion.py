@@ -105,72 +105,102 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
+    # TODO: This is not a true transformer because the input is not a batch.
+    # In the future, this should be reorganized into an "enforce schema" pattern.
+    @classmethod
+    def cast_array(
+        cls,
+        arr: "pa.Array",
+        target_type: "pa.DataType",
+        *,
+        safe: bool = True,
+        allow_cast: bool = True,
+        error_class: Optional[str] = None,
+    ) -> "pa.Array":
+        """
+        Cast an Arrow Array to a target type.
 
-class PandasBatchTransformer:
+        Parameters
+        ----------
+        arr : pa.Array
+            Input Arrow array
+        target_type : pa.DataType
+            Target Arrow type
+        safe : bool
+            Whether to use safe casting (default True)
+        allow_cast : bool
+            Whether to allow casting when types don't match (default True)
+        error_class : str, optional
+            Custom error class for type mismatch errors
+
+        Returns
+        -------
+        pa.Array
+        """
+        import pyarrow as pa
+
+        from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+
+        if arr.type == target_type:
+            return arr
+
+        if not allow_cast:
+            raise PySparkTypeError(
+                "Arrow UDFs require the return type to match the expected Arrow type. "
+                f"Expected: {target_type}, but got: {arr.type}."
+            )
+
+        try:
+            return arr.cast(target_type=target_type, safe=safe)
+        except (pa.ArrowInvalid, pa.ArrowTypeError):
+            if error_class:
+                raise PySparkRuntimeError(
+                    errorClass=error_class,
+                    messageParameters={
+                        "expected": str(target_type),
+                        "actual": str(arr.type),
+                    },
+                )
+            raise
+
+
+class PandasToArrowConversion:
     """
-    Pure functions that transform batch-like pandas structures.
-
-    A "batch" in PySpark's pandas UDF execution can be represented as:
-    - List[pd.Series]: each Series corresponds to one column
-    - pd.DataFrame: a single DataFrame with multiple columns
-
-    These methods convert between different batch representations.
-    They should have no side effects (no I/O, no writing to streams).
+    Conversion utilities from pandas data to Arrow.
     """
 
-    @staticmethod
-    def wrap_series(series_list: List["pd.Series"]) -> "pd.DataFrame":
-        """
-        Combine multiple Series into a DataFrame (columns).
-
-        Used by:
-            - wrap_grouped_map_pandas_udf
-            - wrap_cogrouped_map_pandas_udf
-            - wrap_grouped_map_pandas_iter_udf
-        """
-        import pandas as pd
-
-        if not series_list:
-            return pd.DataFrame()
-        return pd.concat(series_list, axis=1)
-
-    @staticmethod
-    def reorder_columns(df: "pd.DataFrame", schema: "pa.Schema") -> "pd.DataFrame":
-        """
-        Reorder a DataFrame's columns to match the schema field order by name.
-
-        Used by: PandasBatchTransformer.to_arrow
-        """
-        return df[[field.name for field in schema]]
-
-    @staticmethod
-    def to_arrow(
-        df: "pd.DataFrame",
-        schema: "pa.Schema",
+    @classmethod
+    def dataframe_to_batch(
+        cls,
+        data: Union["pd.DataFrame", List["pd.Series"]],
+        schema: StructType,
         *,
         timezone: Optional[str] = None,
         safecheck: bool = True,
         arrow_cast: bool = False,
+        prefers_large_types: bool = False,
         assign_cols_by_name: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> "pa.RecordBatch":
         """
-        Convert a pandas DataFrame to an Arrow RecordBatch.
+        Convert a pandas DataFrame or list of Series to an Arrow RecordBatch.
 
         Parameters
         ----------
-        df : pd.DataFrame
-            Input DataFrame
-        schema : pa.Schema
-            Target Arrow schema
+        data : pd.DataFrame or list of pd.Series
+            Input data - either a DataFrame or a list of Series
+        schema : StructType
+            Spark schema defining the types for each column
         timezone : str, optional
             Timezone for timestamp conversion
         safecheck : bool
             Whether to use safe Arrow conversion (default True)
         arrow_cast : bool
             Whether to allow Arrow casting on type mismatch (default False)
+        prefers_large_types : bool
+            Whether to prefer large Arrow types (default False)
         assign_cols_by_name : bool
-            Whether to reorder columns by name to match schema (default False)
+            Whether to reorder DataFrame columns by name to match schema (default False)
         int_to_decimal_coercion_enabled : bool
             Whether to enable int to decimal coercion (default False)
 
@@ -179,81 +209,156 @@ class PandasBatchTransformer:
         pa.RecordBatch
         """
         import pyarrow as pa
+
+        # Handle empty schema (0 columns)
+        # Return a RecordBatch with correct row count but no columns
+        if len(schema.fields) == 0:
+            if isinstance(data, list):
+                num_rows = len(data[0]) if data else 0
+            else:
+                num_rows = len(data)
+            return pa.RecordBatch.from_pylist([{}] * num_rows, schema=pa.schema([]))
+
+        # Normalize input: reorder DataFrame columns if needed
+        if not isinstance(data, list):
+            if assign_cols_by_name and any(isinstance(c, str) for c in data.columns):
+                field_names = [field.name for field in schema.fields]
+                data = data[field_names]
+
+        def get_series(i: int) -> "pd.Series":
+            if isinstance(data, list):
+                return data[i]
+            else:
+                return data.iloc[:, i]
+
+        arrays = [
+            cls.series_to_array(
+                get_series(i),
+                field.dataType,
+                timezone=timezone,
+                safecheck=safecheck,
+                arrow_cast=arrow_cast,
+                prefers_large_types=prefers_large_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            )
+            for i, field in enumerate(schema.fields)
+        ]
+
+        return pa.RecordBatch.from_arrays(arrays, ["_%d" % i for i in range(len(arrays))])
+
+    @classmethod
+    def series_to_array(
+        cls,
+        series: "pd.Series",
+        spark_type: DataType,
+        *,
+        timezone: Optional[str] = None,
+        safecheck: bool = True,
+        arrow_cast: bool = False,
+        prefers_large_types: bool = False,
+        int_to_decimal_coercion_enabled: bool = False,
+        ignore_unexpected_complex_type_values: bool = False,
+        error_class: Optional[str] = None,
+    ) -> "pa.Array":
+        """
+        Convert a pandas Series to an Arrow Array.
+
+        Parameters
+        ----------
+        series : pd.Series
+            Input Series
+        spark_type : DataType
+            Spark type for conversion
+        timezone : str, optional
+            Timezone for timestamp conversion
+        safecheck : bool
+            Whether to use safe Arrow conversion (default True)
+        arrow_cast : bool
+            Whether to allow Arrow casting on type mismatch (default False)
+        prefers_large_types : bool
+            Whether to prefer large Arrow types (default False)
+        int_to_decimal_coercion_enabled : bool
+            Whether to enable int to decimal coercion (default False)
+        ignore_unexpected_complex_type_values : bool
+            Whether to ignore unexpected complex type values in converter (default False)
+        error_class : str, optional
+            Custom error class for specialized error handling (e.g., "UDTF_ARROW_TYPE_CAST_ERROR")
+
+        Returns
+        -------
+        pa.Array
+        """
+        import pyarrow as pa
         import pandas as pd
 
-        from pyspark.errors import PySparkTypeError, PySparkValueError
-        from pyspark.sql.pandas.types import from_arrow_type, _create_converter_from_pandas
+        from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
+        from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
 
-        # Handle empty DataFrame (0 columns)
-        # Return a RecordBatch with no columns but correct row count
-        # wrap_struct will convert this to a struct array of empty dicts
-        if len(df.columns) == 0:
-            return pa.RecordBatch.from_pylist([{}] * len(df), schema=pa.schema([]))
+        # Handle categorical dtype
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype(series.dtype.categories.dtype)
 
-        # Reorder columns by name if needed
-        if assign_cols_by_name and any(isinstance(c, str) for c in df.columns):
-            df = PandasBatchTransformer.reorder_columns(df, schema)
+        # Derive arrow_type from spark_type
+        arrow_type = to_arrow_type(
+            spark_type, timezone=timezone, prefers_large_types=prefers_large_types
+        )
 
-        arrays = []
-        for i, field in enumerate(schema):
-            series = df.iloc[:, i]
-            arrow_type = field.type
+        # Apply type converter
+        conv = _create_converter_from_pandas(
+            spark_type,
+            timezone=timezone,
+            error_on_duplicated_field_names=False,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+        )
+        series = conv(series)
 
-            # Handle categorical dtype
-            if isinstance(series.dtype, pd.CategoricalDtype):
-                series = series.astype(series.dtype.categories.dtype)
+        # Determine mask for null handling
+        if hasattr(series.array, "__arrow_array__"):
+            mask = None
+        else:
+            mask = series.isnull()
 
-            # Apply type converter if arrow_type specified
-            if arrow_type is not None:
-                spark_type = from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-                conv = _create_converter_from_pandas(
-                    spark_type,
-                    timezone=timezone,
-                    error_on_duplicated_field_names=False,
-                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-                )
-                series = conv(series)
-
-            # Determine mask for null handling
-            if hasattr(series.array, "__arrow_array__"):
-                mask = None
-            else:
-                mask = series.isnull()
-
-            # Convert to Arrow array
+        # Convert to Arrow array
+        try:
             try:
-                try:
-                    arr = pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-                except pa.lib.ArrowInvalid:
-                    if arrow_cast:
-                        arr = pa.Array.from_pandas(series, mask=mask).cast(
-                            target_type=arrow_type, safe=safecheck
-                        )
-                    else:
-                        raise
-            except TypeError as e:
-                raise PySparkTypeError(
-                    f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                    f"with name '{series.name}' to Arrow Array ({arrow_type})."
-                ) from e
-            except ValueError as e:
-                error_msg = (
-                    f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                    f"with name '{series.name}' to Arrow Array ({arrow_type})."
-                )
-                if safecheck:
-                    error_msg += (
-                        " It can be caused by overflows or other unsafe conversions "
-                        "warned by Arrow. Arrow safe type check can be disabled by using "
-                        "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+            except pa.lib.ArrowInvalid:
+                if arrow_cast:
+                    return pa.Array.from_pandas(series, mask=mask).cast(
+                        target_type=arrow_type, safe=safecheck
                     )
-                raise PySparkValueError(error_msg) from e
-
-            arrays.append(arr)
-
-        # Convert Schema for RecordBatch
-        arrow_schema = pa.schema(list(schema))
-        return pa.RecordBatch.from_arrays(arrays, schema=arrow_schema)
+                else:
+                    raise
+        except pa.lib.ArrowException:
+            # Custom error handling for specialized cases (e.g., UDTF)
+            if error_class:
+                raise PySparkRuntimeError(
+                    errorClass=error_class,
+                    messageParameters={
+                        "col_name": str(series.name),
+                        "col_type": str(series.dtype),
+                        "arrow_type": str(arrow_type),
+                    },
+                ) from None
+            raise
+        except TypeError as e:
+            raise PySparkTypeError(
+                f"Exception thrown when converting pandas.Series ({series.dtype}) "
+                f"with name '{series.name}' to Arrow Array ({arrow_type})."
+            ) from e
+        except ValueError as e:
+            error_msg = (
+                f"Exception thrown when converting pandas.Series ({series.dtype}) "
+                f"with name '{series.name}' to Arrow Array ({arrow_type})."
+            )
+            if safecheck:
+                error_msg += (
+                    " It can be caused by overflows or other unsafe conversions "
+                    "warned by Arrow. Arrow safe type check can be disabled by using "
+                    "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                )
+            raise PySparkValueError(error_msg) from e
 
 
 class LocalDataToArrowConversion:

@@ -24,7 +24,7 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTimestampConversion,
     ArrowBatchTransformer,
-    PandasBatchTransformer,
+    PandasToArrowConversion,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -146,96 +146,55 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class PandasBatchTransformerTests(unittest.TestCase):
-    def test_wrap_series_basic(self):
-        """Test combining multiple Series into a DataFrame."""
-        import pandas as pd
-
-        series_list = [
-            pd.Series([1, 2, 3], name="a"),
-            pd.Series(["x", "y", "z"], name="b"),
-        ]
-
-        result = PandasBatchTransformer.wrap_series(series_list)
-
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(list(result.columns), ["a", "b"])
-        self.assertEqual(result["a"].tolist(), [1, 2, 3])
-        self.assertEqual(result["b"].tolist(), ["x", "y", "z"])
-
-    def test_wrap_series_empty(self):
-        """Test wrapping empty series list."""
-        import pandas as pd
-
-        result = PandasBatchTransformer.wrap_series([])
-
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result.columns), 0)
-
-    def test_reorder_columns(self):
-        """Test reordering DataFrame columns by schema field names."""
+class PandasToArrowConversionTests(unittest.TestCase):
+    def test_dataframe_to_batch(self):
+        """Test converting DataFrame + Spark schema to Arrow RecordBatch."""
         import pandas as pd
         import pyarrow as pa
 
-        df = pd.DataFrame({"x": [1, 2], "y": ["a", "b"], "z": [1.0, 2.0]})
-        schema = pa.schema([("z", pa.float64()), ("x", pa.int64())])
-
-        result = PandasBatchTransformer.reorder_columns(df, schema)
-
-        self.assertEqual(list(result.columns), ["z", "x"])
-        self.assertEqual(result["z"].tolist(), [1.0, 2.0])
-        self.assertEqual(result["x"].tolist(), [1, 2])
-
-    def test_to_arrow(self):
-        """Test converting DataFrame to Arrow RecordBatch."""
-        import pandas as pd
-        import pyarrow as pa
+        from pyspark.sql.types import IntegerType, DoubleType, StructType, StructField
 
         # Basic conversion
         df = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
-        schema = pa.schema([("a", pa.int64()), ("b", pa.float64())])
-        result = PandasBatchTransformer.to_arrow(df, schema)
+        schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
+        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
         self.assertIsInstance(result, pa.RecordBatch)
         self.assertEqual(result.num_rows, 3)
         self.assertEqual(result.num_columns, 2)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
         self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, 3.0])
-
-        # With column reordering (columns in different order than schema)
-        df = pd.DataFrame({"b": [1.0, 2.0], "a": [1, 2]})
-        schema = pa.schema([("a", pa.int64()), ("b", pa.float64())])
-        result = PandasBatchTransformer.to_arrow(df, schema, assign_cols_by_name=True)
-        self.assertEqual(result.column(0).to_pylist(), [1, 2])  # 'a' first
-        self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0])  # 'b' second
+        # Column names should be _0, _1, etc.
+        self.assertEqual(result.schema.names, ["_0", "_1"])
 
         # Empty DataFrame (0 rows)
-        df = pd.DataFrame({"a": [], "b": []})
-        schema = pa.schema([("a", pa.int64()), ("b", pa.float64())])
-        result = PandasBatchTransformer.to_arrow(df, schema)
+        df = pd.DataFrame({"a": pd.Series([], dtype=int), "b": pd.Series([], dtype=float)})
+        schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
+        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
         self.assertEqual(result.num_rows, 0)
         self.assertEqual(result.num_columns, 2)
 
         # Single column
         df = pd.DataFrame({"x": [1, 2, 3]})
-        schema = pa.schema([("x", pa.int64())])
-        result = PandasBatchTransformer.to_arrow(df, schema)
+        schema = StructType([StructField("x", IntegerType())])
+        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
         self.assertEqual(result.num_columns, 1)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
 
         # With nulls
         df = pd.DataFrame({"a": [1, None, 3], "b": [1.0, 2.0, None]})
-        schema = pa.schema([("a", pa.int64()), ("b", pa.float64())])
-        result = PandasBatchTransformer.to_arrow(df, schema)
+        schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
+        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
         self.assertEqual(result.column(0).to_pylist(), [1, None, 3])
         self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, None])
 
-        # Integer column names (no reorder)
-        df = pd.DataFrame({0: [1, 2], 1: [3.0, 4.0]})
-        schema = pa.schema([("a", pa.int64()), ("b", pa.float64())])
-        result = PandasBatchTransformer.to_arrow(df, schema, assign_cols_by_name=True)
-        # Integer names won't match, so no reorder - process by position
-        self.assertEqual(result.column(0).to_pylist(), [1, 2])
-        self.assertEqual(result.column(1).to_pylist(), [3.0, 4.0])
+        # List of Series input
+        series_list = [pd.Series([1, 2, 3]), pd.Series([1.0, 2.0, 3.0])]
+        schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
+        result = PandasToArrowConversion.dataframe_to_batch(series_list, schema)
+        self.assertEqual(result.num_rows, 3)
+        self.assertEqual(result.num_columns, 2)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, 3.0])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
