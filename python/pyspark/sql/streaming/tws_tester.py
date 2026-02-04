@@ -16,9 +16,7 @@
 #
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator, Optional, Union, cast
-
-import pandas as pd
+from typing import Any, Callable, cast, Iterator, Optional, TYPE_CHECKING, Union
 
 from pyspark.sql.streaming.stateful_processor import (
     ExpiredTimerInfo,
@@ -32,6 +30,9 @@ from pyspark.sql.streaming.stateful_processor import (
 from pyspark.sql.types import Row, StructType
 from pyspark.errors import PySparkValueError, PySparkAssertionError
 from pyspark.errors.exceptions.base import IllegalArgumentException
+
+if TYPE_CHECKING:
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["TwsTester"]
 
@@ -298,12 +299,17 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
             )
 
 
-def _as_row_list(x: Any) -> list[Row]:
+def _asRowList(x: list[Any]) -> list[Row]:
     return cast(list[Row], x)
 
 
-def _as_df_list(x: Any) -> list[pd.DataFrame]:
-    return cast(list[pd.DataFrame], x)
+def _asPandasDataFrame(x: list[Any]) -> "PandasDataFrameLike":
+    import pandas
+
+    if len(x) == 0:
+        return pandas.DataFrame()
+    else:
+        return pandas.concat(cast(list[pandas.DataFrame], x), ignore_index=True)
 
 
 class TwsTester:
@@ -376,9 +382,9 @@ class TwsTester:
 
     >>> processor = RunningCountStatefulProcessorFactory().pandas()
     >>> tester = TwsTester(processor)
-    >>> input_df = pd.DataFrame({"value": ["a", "b"]})
+    >>> input_df = DataFrame({"value": ["a", "b"]})
     >>> result = tester.testInPandas("key1", input_df)
-    >>> # Result: pd.DataFrame({"key": ["key1"], "count": [2]})
+    >>> # Result: DataFrame({"key": ["key1"], "count": [2]})
 
     **Example 3: Testing with initial state**
 
@@ -406,7 +412,7 @@ class TwsTester:
         self,
         processor: StatefulProcessor,
         initialStateRow: Optional[list[tuple[Any, Row]]] = None,
-        initialStatePandas: Optional[list[tuple[Any, pd.DataFrame]]] = None,
+        initialStatePandas: Optional[list[tuple[Any, "PandasDataFrameLike"]]] = None,
         timeMode: str = "None",
         outputMode: str = "Append",
         eventTimeExtractor: Optional[Callable[[Any], int]] = None,
@@ -415,6 +421,7 @@ class TwsTester:
         self._timeMode = timeMode.lower()
         self._outputMode = outputMode
         self._eventTimeExtractor = eventTimeExtractor
+        self._usingPandas = False
 
         # Timer-related state
         self._currentProcessingTimeMs: int = 0
@@ -441,6 +448,7 @@ class TwsTester:
                 self.handle.setGroupingKey(key)
                 self.processor.handleInitialState((key,), row, self._getTimerValues())
         elif initialStatePandas is not None:
+            self._usingPandas = True
             for key, df in initialStatePandas:
                 self.handle.setGroupingKey(key)
                 self.processor.handleInitialState((key,), df, self._getTimerValues())
@@ -468,15 +476,16 @@ class TwsTester:
         list of :class:`Row`
             All output rows produced by the processor for this key.
         """
+        self._usingPandas = False
         self.handle.setGroupingKey(key)
         filtered_input = self._filterLateEventsRow(input)
         result_iter = self.processor.handleInputRows(
             (key,), iter(filtered_input), self._getTimerValues()
         )
-        result: list[Row] = _as_row_list(list(result_iter))
+        result: list[Row] = _asRowList(list(result_iter))
         return result
 
-    def testInPandas(self, key: Any, input: pd.DataFrame) -> pd.DataFrame:
+    def testInPandas(self, key: Any, input: "PandasDataFrameLike") -> "PandasDataFrameLike":
         """
         Processes input data for a single key through the stateful processor.
 
@@ -502,17 +511,13 @@ class TwsTester:
         :class:`pandas.DataFrame`
             All output data produced by the processor for this key.
         """
+        self._usingPandas = True
         self.handle.setGroupingKey(key)
         filtered_input = self._filterLateEventsPandas(input)
         result_iter = self.processor.handleInputRows(
             (key,), iter([filtered_input]), self._getTimerValues()
         )
-        result_dfs: list[pd.DataFrame] = _as_df_list(list(result_iter))
-
-        if result_dfs:
-            return pd.concat(result_dfs, ignore_index=True)
-        else:
-            return pd.DataFrame()
+        return _asPandasDataFrame(list(result_iter))
 
     def updateValueState(self, stateName: str, key: Any, value: tuple) -> None:
         """Sets the value state for a given key."""
@@ -573,7 +578,7 @@ class TwsTester:
         else:  # EventTime
             return TimerValues(self._currentProcessingTimeMs, self._currentWatermarkMs)
 
-    def _handleExpiredTimers(self) -> list[Row] | pd.DataFrame:
+    def _handleExpiredTimers(self) -> list[Row] | "PandasDataFrameLike":
         """Handles expired timers and returns emitted rows."""
         if self._timeMode == "none":
             return []
@@ -598,10 +603,10 @@ class TwsTester:
                 result.extend(list(output_iter))
                 self.handle._timers.deleteTimer(key, timer_expiry_ms)
 
-        if len(result) > 0 and isinstance(result[0], pd.DataFrame):
-            return pd.concat(_as_df_list(result), ignore_index=True)
+        if self._usingPandas:
+            return _asPandasDataFrame(result)
         else:
-            return _as_row_list(result)
+            return _asRowList(result)
 
     def _filterLateEventsRow(self, values: list[Row]) -> list[Row]:
         """Filters out late events based on watermark and eventTimeExtractor."""
@@ -609,7 +614,7 @@ class TwsTester:
             return values
         return [v for v in values if self._eventTimeExtractor(v) > self._currentWatermarkMs]
 
-    def _filterLateEventsPandas(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _filterLateEventsPandas(self, df: "PandasDataFrameLike") -> "PandasDataFrameLike":
         """Filters out late events based on watermark and eventTimeExtractor."""
         if self._timeMode != "eventtime" or self._eventTimeExtractor is None:
             return df
@@ -617,7 +622,7 @@ class TwsTester:
         mask = df.apply(lambda row: extractor(row) > self._currentWatermarkMs, axis=1)
         return df[mask].reset_index(drop=True)
 
-    def setProcessingTime(self, currentTimeMs: int) -> list[Row] | pd.DataFrame:
+    def setProcessingTime(self, currentTimeMs: int) -> list[Row] | "PandasDataFrameLike":
         """
         Sets the simulated processing time and fires all expired timers.
 
@@ -651,7 +656,7 @@ class TwsTester:
         self._currentProcessingTimeMs = currentTimeMs
         return self._handleExpiredTimers()
 
-    def setWatermark(self, currentWatermarkMs: int) -> list[Row] | pd.DataFrame:
+    def setWatermark(self, currentWatermarkMs: int) -> list[Row] | "PandasDataFrameLike":
         """
         Sets the watermark and fires all expired event-time timers.
 
