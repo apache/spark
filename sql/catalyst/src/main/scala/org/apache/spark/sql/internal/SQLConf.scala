@@ -5146,6 +5146,7 @@ object SQLConf {
         "StorageLevel name (e.g., MEMORY_AND_DISK_SER, DISK_ONLY, MEMORY_ONLY, etc.).")
       .version("4.2.0")
       .stringConf
+      .checkValue(v => Try(StorageLevel.fromString(v)).isSuccess, "Invalid StorageLevel")
       .createWithDefault("MEMORY_AND_DISK_SER")
 
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
