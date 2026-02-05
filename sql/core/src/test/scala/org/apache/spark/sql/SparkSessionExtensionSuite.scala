@@ -172,11 +172,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       extensions.injectFunction(MyExtensions.myFunction)
     }
     withSession(extensions) { session =>
-      // Extension functions are registered with database="extension" to enable security
-      // (extension functions resolve before built-ins, which resolve before session temp functions)
-      val qualifiedIdent = FunctionIdentifier(
-        MyExtensions.myFunction._1.funcName,
-        Some("extension"))
+      // Extension functions are treated as built-ins (unqualified)
+      val qualifiedIdent = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
     }
   }
@@ -384,9 +381,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.analyzer.extendedCheckRules.contains(MyCheckRule(session)))
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
       assert(session.sessionState.sqlParser.isInstanceOf[MyParser])
-      // Extension functions are registered with database="extension"
-      val qualifiedIdent = FunctionIdentifier(
-        MyExtensions.myFunction._1.funcName, Some("extension"))
+      // Extension functions are treated as built-ins (unqualified)
+      val qualifiedIdent = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
@@ -414,11 +410,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).filter(orderedRules.contains)
         .containsSlice(orderedRules ++ orderedRules)) // The optimizer rules are duplicated
       assert(session.sessionState.sqlParser === parser)
-      // Extension functions are registered with database="extension"
-      val qualifiedIdent1 = FunctionIdentifier(
-        MyExtensions.myFunction._1.funcName, Some("extension"))
-      val qualifiedIdent2 = FunctionIdentifier(
-        MyExtensions2.myFunction._1.funcName, Some("extension"))
+      // Extension functions are treated as built-ins (unqualified)
+      val qualifiedIdent1 = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
+      val qualifiedIdent2 = FunctionIdentifier(MyExtensions2.myFunction._1.funcName)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent1).isDefined)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent2).isDefined)
     } finally {
@@ -446,9 +440,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       val outerParser = session.sessionState.sqlParser
       assert(outerParser.isInstanceOf[MyParser])
       assert(outerParser.asInstanceOf[MyParser].delegate.isInstanceOf[MyParser])
-      // Extension functions are registered with database="extension"
-      val qualifiedIdent = FunctionIdentifier(
-        MyExtensions.myFunction._1.funcName, Some("extension"))
+      // Extension functions are treated as built-ins (unqualified)
+      val qualifiedIdent = FunctionIdentifier(MyExtensions.myFunction._1.funcName)
       assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
     } finally {
       stop(session)
@@ -463,9 +456,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
       .getOrCreate()
     try {
-      // Extension functions are registered with database="extension"
+      // Extension functions are treated as built-ins (unqualified)
       val lastRegistered = session.sessionState.functionRegistry
-        .lookupFunction(FunctionIdentifier("myFunction2", Some("extension")))
+        .lookupFunction(FunctionIdentifier("myFunction2"))
       assert(lastRegistered.isDefined)
       assert(lastRegistered.get !== MyExtensions2.myFunction._2)
       assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._2)

@@ -89,7 +89,7 @@ class SessionCatalog(
    * Database qualifier used to store temporary functions in the function registry.
    * Temporary functions use composite keys to coexist with builtin functions of the same name:
    * - Builtin functions: FunctionIdentifier(name, None)
-   * - Extension functions: FunctionIdentifier(name, Some(CatalogManager.EXTENSION_NAMESPACE))
+   * - Extension functions: FunctionIdentifier(name, None, None) (Treated as builtin)
    * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
    * This allows all three to exist in the same registry without conflicts.
    */
@@ -212,7 +212,7 @@ class SessionCatalog(
    *
    * Storage conventions:
    * - Builtin functions: FunctionIdentifier(name, None, None)
-   * - Extension functions: FunctionIdentifier(name, Some("extension"), None)
+   * - Extension functions: FunctionIdentifier(name, None, None) (Treated as builtin)
    * - Temp functions: FunctionIdentifier(name, Some("session"), None)
    * - Other: FunctionIdentifier(name, namespace.database, namespace.catalog)
    *
