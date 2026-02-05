@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.data_type_ops.test_num_ops import NumOpsTestsMixin
+from pyspark.pandas.tests.data_type_ops.test_num_ops import (
+    NumOpsTestsMixin,
+    IntegralExtensionOpsTestsMixin,
+    FractionalExtensionOpsTestsMixin,
+)
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -24,6 +28,22 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class NumOpsParityTests(
     NumOpsTestsMixin,
     PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
+):
+    pass
+
+
+class IntegralExtensionOpsParityTests(
+    IntegralExtensionOpsTestsMixin,
+    OpsTestBase,
+    ReusedConnectTestCase,
+):
+    pass
+
+
+class FractionalExtensionOpsParityTests(
+    FractionalExtensionOpsTestsMixin,
     OpsTestBase,
     ReusedConnectTestCase,
 ):
