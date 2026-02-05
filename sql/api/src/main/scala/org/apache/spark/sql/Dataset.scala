@@ -2011,7 +2011,7 @@ abstract class Dataset[T] extends Serializable {
   def exceptAll(other: Dataset[T]): Dataset[T]
 
   /**
-   * Returns a new [[Dataset]] by appending a column containing consecutive 0-based Long indices,
+   * Returns a new `Dataset` by appending a column containing consecutive 0-based Long indices,
    * similar to `RDD.zipWithIndex()`.
    *
    * The index column is appended as the last column of the resulting [[DataFrame]].
