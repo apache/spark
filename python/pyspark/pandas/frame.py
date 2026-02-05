@@ -12177,6 +12177,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c    2
         dtype: int64
 
+        For axis=1, return the column label of the maximum value in each row:
+
+        >>> psdf.idxmax(axis=1)
+        0    c
+        1    c
+        2    c
+        3    c
+        dtype: object
+
         For Multi-column Index
 
         >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
@@ -12196,15 +12205,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b  y    0
         c  z    2
         dtype: int64
-
-        For axis=1, return the column label of the maximum value in each row:
-
-        >>> psdf.idxmax(axis=1)
-        0    c
-        1    c
-        2    c
-        3    c
-        dtype: object
         """
         axis = validate_axis(axis)
         if axis == 0:
@@ -12239,9 +12239,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
             max_value = F.greatest(
-                *[F.coalesce(self._internal.spark_column_for(label), F.lit(float('-inf')))
-                  for label in column_labels],
-                F.lit(float('-inf'))
+                *[
+                    F.coalesce(self._internal.spark_column_for(label), F.lit(float("-inf")))
+                    for label in column_labels
+                ],
+                F.lit(float("-inf")),
             )
 
             result = None
@@ -12250,10 +12252,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 label_value = label[0] if len(label) == 1 else label
                 condition = (scol == max_value) & scol.isNotNull()
 
-                result = (F.when(condition, F.lit(label_value)) if result is None
-                          else F.when(condition, F.lit(label_value)).otherwise(result))
+                result = (
+                    F.when(condition, F.lit(label_value))
+                    if result is None
+                    else F.when(condition, F.lit(label_value)).otherwise(result)
+                )
 
-            result = F.when(max_value == float('-inf'), F.lit(None)).otherwise(result)
+            result = F.when(max_value == float("-inf"), F.lit(None)).otherwise(result)
 
             sdf = self._internal.spark_frame.select(
                 *self._internal_frame.index_spark_columns,
