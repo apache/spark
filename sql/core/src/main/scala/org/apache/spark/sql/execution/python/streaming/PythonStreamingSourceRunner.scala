@@ -92,6 +92,7 @@ class PythonStreamingSourceRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)

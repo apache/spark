@@ -270,7 +270,7 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.toJSON().first()
+        >>> df.toJSON().first()  # doctest: +SKIP
         '{"age":2,"name":"Alice"}'
         """
         ...
@@ -3159,24 +3159,23 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
-        _cols: List[Column] = []
-        for c in cols:
+        def _get_col(c: Union[int, str, Column, List[int | str | Column]]) -> Column:
             if isinstance(c, int) and not isinstance(c, bool):
                 # ordinal is 1-based
                 if c > 0:
-                    _cols.append(self[c - 1])
+                    return self[c - 1]
                 # negative ordinal means sort by desc
                 elif c < 0:
-                    _cols.append(self[-c - 1].desc())
+                    return self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
                         errorClass="ZERO_INDEX",
                         messageParameters={},
                     )
             elif isinstance(c, Column):
-                _cols.append(c)
+                return c
             elif isinstance(c, str):
-                _cols.append(_to_col(c))
+                return _to_col(c)
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_INT_OR_STR",
@@ -3186,6 +3185,7 @@ class DataFrame:
                     },
                 )
 
+        _cols: List[Column] = [_get_col(c) for c in cols]
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:

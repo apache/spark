@@ -81,7 +81,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             if cls._release_thread_pool_instance is not None:
                 thread_pool = cls._release_thread_pool_instance
                 cls._release_thread_pool_instance = None
-                thread_pool.shutdown()
+                # This method could be called within the thread pool so don't wait for the
+                # shutdown to complete. Otherwise it could deadlock.
+                thread_pool.shutdown(wait=False)
 
     def __init__(
         self,
