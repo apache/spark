@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+
 class ReadLimit:
     """
     Specifies limits on how much data to read from a streaming source when
@@ -54,6 +55,7 @@ class ReadMinRows(ReadLimit):
     may end up waiting forever for more data to arrive. It is the source's responsibility to
     handle this case properly.
     """
+
     min_rows: int
 
 
@@ -63,6 +65,7 @@ class ReadMaxRows(ReadLimit):
     A :class:`ReadLimit` that indicates to read maximum N rows. The source should not read more
     than N rows when determining the latest offset.
     """
+
     max_rows: int
 
 
@@ -72,6 +75,7 @@ class ReadMaxFiles(ReadLimit):
     A :class:`ReadLimit` that indicates to read maximum N files. The source should not read more
     than N files when determining the latest offset.
     """
+
     max_files: int
 
 
@@ -81,6 +85,7 @@ class ReadMaxBytes(ReadLimit):
     A :class:`ReadLimit` that indicates to read maximum N bytes. The source should not read more
     than N bytes when determining the latest offset.
     """
+
     max_bytes: int
 
 
