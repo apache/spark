@@ -5551,6 +5551,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION" : {
+    "message" : [
+      "Stateful operations are not supported as direct children of SequentialUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialUnion."
+    ],
+    "sqlState" : "42601"
+  },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
       "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."

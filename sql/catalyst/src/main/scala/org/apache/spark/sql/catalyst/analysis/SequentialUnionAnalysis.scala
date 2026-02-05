@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SequentialUnion}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -27,7 +28,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 object FlattenSequentialUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.UNION)) {
+    _.containsPattern(TreePattern.UNION)) {
     case SequentialUnion(children, byName, allowMissingCol) =>
       val flattened = SequentialUnion.flatten(children)
       SequentialUnion(flattened, byName, allowMissingCol)
@@ -39,6 +40,7 @@ object FlattenSequentialUnion extends Rule[LogicalPlan] {
  * - Minimum 2 children
  * - All children must be streaming relations
  * - No nested SequentialUnions (should be flattened first)
+ * - No stateful operations in any child subtrees
  */
 object ValidateSequentialUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -47,6 +49,7 @@ object ValidateSequentialUnion extends Rule[LogicalPlan] {
         validateMinimumChildren(su)
         validateAllStreaming(su)
         validateNoNesting(su)
+        validateNoStatefulDescendants(su)
       case _ =>
     }
     plan
@@ -70,6 +73,14 @@ object ValidateSequentialUnion extends Rule[LogicalPlan] {
     su.children.foreach { child =>
       if (child.exists(_.isInstanceOf[SequentialUnion])) {
         throw QueryCompilationErrors.nestedSequentialUnionError()
+      }
+    }
+  }
+
+  private def validateNoStatefulDescendants(su: SequentialUnion): Unit = {
+    su.children.foreach { child =>
+      if (child.exists(UnsupportedOperationChecker.isStatefulOperation)) {
+        throw QueryCompilationErrors.statefulChildrenNotSupportedInSequentialUnionError()
       }
     }
   }

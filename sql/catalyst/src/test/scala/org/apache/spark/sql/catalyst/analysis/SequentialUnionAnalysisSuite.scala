@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, SequentialUnion}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, SequentialUnion}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 
 class SequentialUnionAnalysisSuite extends AnalysisTest with DataTypeErrorsBase {
@@ -104,6 +104,21 @@ class SequentialUnionAnalysisSuite extends AnalysisTest with DataTypeErrorsBase 
     ValidateSequentialUnion(union)
   }
 
+  test("ValidateSequentialUnion - rejects insufficient children") {
+    val streamingRelation1 = testRelation1.copy(isStreaming = true)
+    val union = SequentialUnion(Seq(streamingRelation1))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ValidateSequentialUnion(union)
+      },
+      condition = "INVALID_NUMBER_OF_CHILDREN_FOR_UNION",
+      parameters = Map(
+        "operator" -> "SequentialUnion",
+        "actual" -> "1",
+        "minimum" -> "2"))
+  }
+
   test("ValidateSequentialUnion - rejects non-streaming children") {
     // Non-streaming relations
     val union = SequentialUnion(testRelation1, testRelation2)
@@ -161,5 +176,44 @@ class SequentialUnionAnalysisSuite extends AnalysisTest with DataTypeErrorsBase 
 
     // Should not throw exception
     ValidateSequentialUnion(union)
+  }
+
+  test("ValidateSequentialUnion - rejects stateful children") {
+    import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+    val streamingRelation1 = testRelation1.copy(isStreaming = true)
+    val streamingRelation2 = testRelation2.copy(isStreaming = true)
+
+    // Create an aggregation (stateful operation) as a child
+    val agg = Aggregate(Seq($"a"), Seq($"a", Count($"b").toAggregateExpression().as("count")),
+      streamingRelation2)
+
+    val union = SequentialUnion(streamingRelation1, agg)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ValidateSequentialUnion(union)
+      },
+      condition = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION",
+      parameters = Map.empty)
+  }
+
+  test("ValidateSequentialUnion - rejects indirect stateful descendants") {
+    import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+    val streamingRelation1 = testRelation1.copy(isStreaming = true)
+    val streamingRelation2 = testRelation2.copy(isStreaming = true)
+
+    // Create an aggregation wrapped in a Project (indirect stateful descendant)
+    val agg = Aggregate(Seq($"a"), Seq($"a", Count($"b").toAggregateExpression().as("count")),
+      streamingRelation2)
+    val projectOverAgg = Project(Seq($"a"), agg)
+
+    val union = SequentialUnion(streamingRelation1, projectOverAgg)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ValidateSequentialUnion(union)
+      },
+      condition = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION",
+      parameters = Map.empty)
   }
 }

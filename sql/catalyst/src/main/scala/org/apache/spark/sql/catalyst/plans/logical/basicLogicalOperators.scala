@@ -645,19 +645,26 @@ case class Union(
  * 3. And so on...
  *
  * Requirements:
+ * - Minimum 2 children required
  * - All children must be streaming sources
  * - All non-final children must support bounded execution (SupportsTriggerAvailableNow)
  * - All children must have explicit names when used in streaming queries
+ * - Children cannot contain stateful operations (aggregations, joins, etc.)
  * - Schema compatibility is enforced via UnionBase
  *
- * State preservation: All stateful operators (aggregations, watermarks, deduplication, joins)
- * preserve their state across source transitions, enabling seamless backfill-to-live scenarios.
+ * State preservation: Stateful operators applied AFTER SequentialUnion (aggregations,
+ * watermarks, deduplication, joins) preserve their state across source transitions,
+ * enabling seamless backfill-to-live scenarios.
  *
  * Example:
  * {{{
  *   val historical = spark.readStream.format("delta").name("historical").load("/data")
  *   val live = spark.readStream.format("kafka").name("live").load()
- *   historical.followedBy(live) // Creates SequentialUnion
+ *   // Correct: stateful operations after SequentialUnion
+ *   historical.followedBy(live).groupBy("key").count()
+ *
+ *   // Incorrect: stateful operations before SequentialUnion
+ *   // historical.groupBy("key").count().followedBy(live.groupBy("key").count()) // Not allowed
  * }}}
  *
  * @param children        The logical plans to union sequentially (must be streaming sources)
@@ -668,9 +675,6 @@ case class SequentialUnion(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
     allowMissingCol: Boolean = false) extends UnionBase {
-
-  assert(children.length >= 2,
-    "SequentialUnion requires at least 2 children")
   assert(!allowMissingCol || byName,
     "`allowMissingCol` can be true only if `byName` is true.")
 

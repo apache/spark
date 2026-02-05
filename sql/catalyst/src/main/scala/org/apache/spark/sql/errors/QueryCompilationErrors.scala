@@ -4564,4 +4564,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "NOT_STREAMING_DATASET",
       messageParameters = Map("operator" -> operator))
   }
+
+  def statefulChildrenNotSupportedInSequentialUnionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION",
+      messageParameters = Map.empty)
+  }
 }
