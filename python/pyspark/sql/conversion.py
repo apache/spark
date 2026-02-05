@@ -1348,11 +1348,10 @@ class ArrowArrayToPandasConversion:
             return arr.to_pandas(**pandas_options)
         elif isinstance(spark_type, (ArrayType, MapType, StructType)):
             # Use native Arrow conversion with maps_as_pydicts for efficient map→dict conversion
-            pandas_options = {
-                "maps_as_pydicts": "strict",
-                "date_as_object": True,
-                "coerce_temporal_nanoseconds": True,
-            }
-            return arr.to_pandas(**pandas_options)
+            return arr.to_pandas(
+                maps_as_pydicts="strict",
+                date_as_object=True,
+                coerce_temporal_nanoseconds=True,
+            )
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
