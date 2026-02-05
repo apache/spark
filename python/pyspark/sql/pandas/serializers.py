@@ -1251,6 +1251,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         """
 
         import pandas as pd
+        import pyarrow as pa
 
         def construct_state_pdf(state):
             """
