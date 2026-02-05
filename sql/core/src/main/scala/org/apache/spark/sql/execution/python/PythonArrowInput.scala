@@ -63,7 +63,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
 
   protected lazy val root: VectorSchemaRoot = {
-    ArrowUtils.failDuplicateFieldNames(schema)
+    ArrowUtils.failDuplicatedFieldNames(schema)
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
     VectorSchemaRoot.create(arrowSchema, allocator)
   }

@@ -43,7 +43,7 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[IN]
   with PythonArrowOutput[OUT] {
-  ArrowUtils.failDuplicateFieldNames(schema)
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)

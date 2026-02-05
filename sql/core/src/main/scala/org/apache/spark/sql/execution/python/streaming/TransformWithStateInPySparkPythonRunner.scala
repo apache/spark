@@ -234,7 +234,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   with BasicPythonArrowOutput
   with TransformWithStateInPySparkPythonRunnerUtils
   with Logging {
-  ArrowUtils.failDuplicateFieldNames(schema)
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch

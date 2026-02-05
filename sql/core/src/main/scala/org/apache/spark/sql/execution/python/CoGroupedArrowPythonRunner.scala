@@ -54,8 +54,8 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
-  ArrowUtils.failDuplicateFieldNames(leftSchema)
-  ArrowUtils.failDuplicateFieldNames(rightSchema)
+  ArrowUtils.failDuplicatedFieldNames(leftSchema)
+  ArrowUtils.failDuplicatedFieldNames(rightSchema)
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 

@@ -49,7 +49,7 @@ class ArrowPythonUDTFRunner(
       jobArtifactUUID, pythonMetrics)
   with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
-  ArrowUtils.failDuplicateFieldNames(schema)
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 

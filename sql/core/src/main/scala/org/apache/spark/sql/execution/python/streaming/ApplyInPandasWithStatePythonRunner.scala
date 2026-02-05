@@ -70,7 +70,7 @@ class ApplyInPandasWithStatePythonRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
-  ArrowUtils.failDuplicateFieldNames(inputSchema)
+  ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(

@@ -342,21 +342,21 @@ private[sql] object ArrowUtils {
   /**
    * Check the schema and fail once a struct type contains duplicated field names.
    */
-  def failDuplicateFieldNames(dt: DataType): Unit = {
+  def failDuplicatedFieldNames(dt: DataType): Unit = {
     dt match {
       case st: StructType =>
         if (st.names.toSet.size != st.names.length) {
           throw ExecutionErrors.duplicatedFieldNameInArrowStructError(
             st.names.toImmutableArraySeq)
         }
-        st.fields.foreach { field => failDuplicateFieldNames(field.dataType) }
+        st.fields.foreach { field => failDuplicatedFieldNames(field.dataType) }
       case arr: ArrayType =>
-        failDuplicateFieldNames(arr.elementType)
+        failDuplicatedFieldNames(arr.elementType)
       case map: MapType =>
-        failDuplicateFieldNames(map.keyType)
-        failDuplicateFieldNames(map.valueType)
+        failDuplicatedFieldNames(map.keyType)
+        failDuplicatedFieldNames(map.valueType)
       case udt: UserDefinedType[_] =>
-        failDuplicateFieldNames(udt.sqlType)
+        failDuplicatedFieldNames(udt.sqlType)
       case _ =>
     }
   }
