@@ -105,59 +105,6 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
-    @classmethod
-    def to_pandas(
-        cls,
-        batch: Union["pa.RecordBatch", "pa.Table"],
-        timezone: str,
-        schema: Optional["StructType"] = None,
-        struct_in_pandas: str = "dict",
-        ndarray_as_list: bool = False,
-        df_for_struct: bool = False,
-    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
-        """
-        Convert a RecordBatch or Table to a list of pandas Series.
-
-        Parameters
-        ----------
-        batch : pa.RecordBatch or pa.Table
-            The Arrow RecordBatch or Table to convert.
-        timezone : str
-            Timezone for timestamp conversion.
-        schema : StructType, optional
-            Spark schema for type conversion. If None, types are inferred from Arrow.
-        struct_in_pandas : str
-            How to represent struct in pandas ("dict", "row", etc.)
-        ndarray_as_list : bool
-            Whether to convert ndarray as list.
-        df_for_struct : bool
-            If True, convert struct columns to DataFrame instead of Series.
-
-        Returns
-        -------
-        List[Union[pd.Series, pd.DataFrame]]
-            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
-        """
-        import pandas as pd
-
-        import pyspark
-        from pyspark.sql.pandas.types import from_arrow_type
-
-        if batch.num_columns == 0:
-            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
-
-        return [
-            ArrowArrayToPandasConversion.convert(
-                batch.column(i),
-                schema[i].dataType if schema is not None else from_arrow_type(batch.column(i).type),
-                timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
-                ndarray_as_list=ndarray_as_list,
-                df_for_struct=df_for_struct,
-            )
-            for i in range(batch.num_columns)
-        ]
-
 
 class LocalDataToArrowConversion:
     """
