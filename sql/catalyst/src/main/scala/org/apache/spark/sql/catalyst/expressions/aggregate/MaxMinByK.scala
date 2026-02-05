@@ -107,6 +107,7 @@ case class MaxMinByK(
 
   override def prettyName: String = if (reverse) "min_by" else "max_by"
 
+  // The default aggregation result is an empty array, which is not nullable.
   override def nullable: Boolean = false
 
   override def dataType: DataType = ArrayType(valueExpr.dataType, containsNull = true)
