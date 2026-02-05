@@ -25,9 +25,10 @@ import sys
 from typing import Any, IO, Optional
 import warnings
 
-assert (
-    os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
-), "This module can only be imported in python woker"
+if "SPARK_TESTING" in os.environ:
+    assert (
+        os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
+    ), "This module can only be imported in python woker"
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
