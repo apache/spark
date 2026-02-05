@@ -19,6 +19,7 @@ import os
 import sys
 import json
 from typing import IO, Iterator, Tuple
+import dataclasses
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError
@@ -73,7 +74,7 @@ PREFETCHED_RECORDS_NOT_FOUND = 0
 NON_EMPTY_PYARROW_RECORD_BATCHES = 1
 EMPTY_PYARROW_RECORD_BATCHES = 2
 
-SUPPORTS_ADMISSION_CONTROL = 1
+SUPPORTS_ADMISSION_CONTROL = 1 << 0
 SUPPORTS_TRIGGER_AVAILABLE_NOW = 1 << 1
 
 READ_LIMIT_REGISTRY = ReadLimitRegistry()
@@ -186,7 +187,7 @@ def latest_offset_admission_control_func(
     start_offset_dict = json.loads(utf8_deserializer.loads(infile))
 
     limit = json.loads(utf8_deserializer.loads(infile))
-    limit_obj = READ_LIMIT_REGISTRY.get(limit["type"], limit)
+    limit_obj = READ_LIMIT_REGISTRY.get(limit["_type"], limit)
 
     offset = reader.latestOffset(start_offset_dict, limit_obj)
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
@@ -194,7 +195,8 @@ def latest_offset_admission_control_func(
 
 def get_default_read_limit_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     limit = reader.getDefaultReadLimit()
-    write_with_length(json.dumps(limit.dump()).encode("utf-8"), outfile)
+    limit_as_dict = dataclasses.asdict(limit) | {"_type": limit.__class__.__name__}
+    write_with_length(json.dumps(limit_as_dict).encode("utf-8"), outfile)
 
 
 def report_latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:

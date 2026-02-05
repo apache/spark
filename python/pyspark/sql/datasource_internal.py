@@ -148,24 +148,27 @@ class ReadLimitRegistry:
     def __init__(self) -> None:
         self._registry: Dict[str, Type[ReadLimit]] = {}
         # Register built-in ReadLimit types
-        self.__register(ReadAllAvailable.type_name(), ReadAllAvailable)
-        self.__register(ReadMinRows.type_name(), ReadMinRows)
-        self.__register(ReadMaxRows.type_name(), ReadMaxRows)
-        self.__register(ReadMaxFiles.type_name(), ReadMaxFiles)
-        self.__register(ReadMaxBytes.type_name(), ReadMaxBytes)
+        self.__register(ReadAllAvailable)
+        self.__register(ReadMinRows)
+        self.__register(ReadMaxRows)
+        self.__register(ReadMaxFiles)
+        self.__register(ReadMaxBytes)
 
-    def __register(self, type_name: str, read_limit_type: Type["ReadLimit"]) -> None:
-        if type_name in self._registry:
-            raise PySparkException(f"ReadLimit type '{type_name}' is already registered.")
+    def __register(self, read_limit_type: Type["ReadLimit"]) -> None:
+        name = read_limit_type.__name__
+        if name in self._registry:
+            raise PySparkException(f"ReadLimit type '{name}' is already registered.")
+        self._registry[name] = read_limit_type
 
-        self._registry[type_name] = read_limit_type
+    def get(self, params_with_type: dict) -> ReadLimit:
+        type_name = params_with_type["_type"]
+        if type_name is None:
+            raise PySparkException("ReadLimit type name is missing.")
 
-    def get(self, type_name: str, params: dict) -> ReadLimit:
         read_limit_type = self._registry.get(type_name)
         if read_limit_type is None:
-            raise PySparkException("type_name '{}' is not registered.".format(type_name))
+            raise PySparkException("name '{}' is not registered.".format(type_name))
 
-        params_without_type = params.copy()
-        if "type" in params_without_type:
-            del params_without_type["type"]
-        return read_limit_type.load(params_without_type)
+        params_without_type = params_with_type.copy()
+        del params_without_type["_type"]
+        return read_limit_type(**params_without_type)

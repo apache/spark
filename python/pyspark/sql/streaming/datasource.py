@@ -16,9 +16,10 @@
 #
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import ClassVar
 
-
-class ReadLimit(ABC):
+class ReadLimit:
     """
     Specifies limits on how much data to read from a streaming source when
     determining the latest offset.
@@ -33,87 +34,16 @@ class ReadLimit(ABC):
     - :class:`ReadMaxBytes`
     """
 
-    @classmethod
-    @abstractmethod
-    def type_name(cls) -> str:
-        """
-        The name of this :class:`ReadLimit` type. This is used to register the type into registry.
 
-        Returns
-        -------
-        str
-            The name of this :class:`ReadLimit` type.
-        """
-        pass
-
-    @classmethod
-    @abstractmethod
-    def load(cls, params: dict) -> "ReadLimit":
-        """
-        Create an instance of :class:`ReadLimit` from parameters.
-
-        Parameter
-        ---------
-        params : dict
-            The parameters to create the :class:`ReadLimit`. type name isn't included.
-
-        Returns
-        -------
-        ReadLimit
-            The created :class:`ReadLimit` instance.
-        """
-        pass
-
-    def dump(self) -> dict:
-        """
-        Method to serialize this :class:`ReadLimit` instance. Implementations of :class:`ReadLimit`
-        are expected to not implement this method directly and rather implement the
-        :meth:`_dump()` method.
-
-        Returns
-        -------
-        dict
-            A dictionary containing the serialized parameters of this :class:`ReadLimit`,
-            including the type name.
-        """
-        params = self._dump()
-        params.update({"type": self.type_name()})
-        return params
-
-    @abstractmethod
-    def _dump(self) -> dict:
-        """
-        Method to serialize this :class:`ReadLimit` instance. Implementations of :class:`ReadLimit`
-        are expected to implement this method to handle their specific parameters. type name will
-        be handled in the :meth:`dump()` method.
-
-        Returns
-        -------
-        dict
-            A dictionary containing the serialized parameters of this :class:`ReadLimit`,
-            excluding the type name.
-        """
-        pass
-
-
+@dataclass
 class ReadAllAvailable(ReadLimit):
     """
     A :class:`ReadLimit` that indicates to read all available data, regardless of the given source
     options.
     """
 
-    @classmethod
-    def type_name(cls) -> str:
-        return "ReadAllAvailable"
 
-    @classmethod
-    def load(cls, params: dict) -> "ReadAllAvailable":
-        return ReadAllAvailable()
-
-    def _dump(self) -> dict:
-        return {}
-
-
+@dataclass
 class ReadMinRows(ReadLimit):
     """
     A :class:`ReadLimit` that indicates to read minimum N rows. If there is less than N rows
@@ -124,83 +54,34 @@ class ReadMinRows(ReadLimit):
     may end up waiting forever for more data to arrive. It is the source's responsibility to
     handle this case properly.
     """
-
-    def __init__(self, min_rows: int) -> None:
-        self.min_rows = min_rows
-
-    @classmethod
-    def type_name(cls) -> str:
-        return "ReadMinRows"
-
-    @classmethod
-    def load(cls, params: dict) -> "ReadMinRows":
-        return ReadMinRows(params["min_rows"])
-
-    def _dump(self) -> dict:
-        return {"min_rows": self.min_rows}
+    min_rows: int
 
 
+@dataclass
 class ReadMaxRows(ReadLimit):
     """
     A :class:`ReadLimit` that indicates to read maximum N rows. The source should not read more
     than N rows when determining the latest offset.
     """
-
-    def __init__(self, max_rows: int) -> None:
-        self.max_rows = max_rows
-
-    @classmethod
-    def type_name(cls) -> str:
-        return "ReadMaxRows"
-
-    @classmethod
-    def load(cls, params: dict) -> "ReadMaxRows":
-        return ReadMaxRows(params["max_rows"])
-
-    def _dump(self) -> dict:
-        return {"max_rows": self.max_rows}
+    max_rows: int
 
 
+@dataclass
 class ReadMaxFiles(ReadLimit):
     """
     A :class:`ReadLimit` that indicates to read maximum N files. The source should not read more
     than N files when determining the latest offset.
     """
-
-    def __init__(self, max_files: int) -> None:
-        self.max_files = max_files
-
-    @classmethod
-    def type_name(cls) -> str:
-        return "ReadMaxFiles"
-
-    @classmethod
-    def load(cls, params: dict) -> "ReadMaxFiles":
-        return ReadMaxFiles(params["max_files"])
-
-    def _dump(self) -> dict:
-        return {"max_files": self.max_files}
+    max_files: int
 
 
+@dataclass
 class ReadMaxBytes(ReadLimit):
     """
     A :class:`ReadLimit` that indicates to read maximum N bytes. The source should not read more
     than N bytes when determining the latest offset.
     """
-
-    def __init__(self, max_bytes: int) -> None:
-        self.max_bytes = max_bytes
-
-    @classmethod
-    def type_name(cls) -> str:
-        return "ReadMaxBytes"
-
-    @classmethod
-    def load(cls, params: dict) -> "ReadMaxBytes":
-        return ReadMaxBytes(params["max_bytes"])
-
-    def _dump(self) -> dict:
-        return {"max_bytes": self.max_bytes}
+    max_bytes: int
 
 
 class SupportsTriggerAvailableNow(ABC):
