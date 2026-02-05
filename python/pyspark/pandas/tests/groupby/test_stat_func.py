@@ -19,6 +19,7 @@
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
 
@@ -43,6 +44,12 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
         self._test_stat_func(
             lambda groupby_obj: groupby_obj.var(numeric_only=True), check_exact=False
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.var(numeric_only=None),
+                expected_error=self.expected_error_numeric_only,
+            )
 
         pdf, psdf = self.pdf, self.psdf
 
@@ -54,10 +61,16 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             psdf.groupby("A").median().sort_index(),
             expected,
         )
-        self.assert_eq(
-            psdf.groupby("A").median(numeric_only=None).sort_index(),
-            expected,
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.median(numeric_only=None),
+                expected_error=self.expected_error_numeric_only,
+            )
+        else:
+            self.assert_eq(
+                psdf.groupby("A").median(numeric_only=None).sort_index(),
+                expected,
+            )
         self.assert_eq(
             psdf.groupby("A").median(numeric_only=False).sort_index(),
             expected,
@@ -96,6 +109,12 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             pdf.groupby("A").sum().sort_index(),
             check_exact=False,
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.sum(numeric_only=None),
+                expected_error=self.expected_error_numeric_only,
+            )
 
 
 class FuncTests(

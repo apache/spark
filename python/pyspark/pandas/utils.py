@@ -47,6 +47,7 @@ from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, S
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import (
     Axis,
@@ -813,6 +814,11 @@ def validate_mode(mode: str) -> str:
             "['w', 'a', 'w+', 'a+', 'overwrite', 'append', 'ignore', 'error', 'errorifexists']",
         )
     return mode
+
+
+def validate_numeric_only(numeric_only: Optional[bool]) -> None:
+    if LooseVersion(pd.__version__) >= LooseVersion("3.0") and not isinstance(numeric_only, bool):
+        raise ValueError("numeric_only accepts only Boolean values")
 
 
 @overload

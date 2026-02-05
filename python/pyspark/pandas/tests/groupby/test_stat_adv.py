@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
@@ -84,7 +85,10 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
 
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.first(numeric_only=None),
+            expected_error=self.expected_error_numeric_only,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
 
         pdf = pd.DataFrame(
@@ -108,7 +112,10 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
 
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.last(numeric_only=None),
+            expected_error=self.expected_error_numeric_only,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
 
         pdf = pd.DataFrame(

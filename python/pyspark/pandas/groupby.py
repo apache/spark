@@ -92,6 +92,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     same_anchor,
     scol_for,
+    validate_numeric_only,
     verify_temp_column_name,
     log_advice,
 )
@@ -492,6 +493,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  1.0  True  3.0
         b  NaN  None  NaN
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -562,6 +564,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  2.0  True  4.0
         b  NaN  None  NaN
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -626,6 +629,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  2.0  True  4.0
         b  NaN  None  NaN
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -672,6 +676,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  3.0  1.333333  0.333333
         2  4.0  1.500000  1.000000
         """
+        validate_numeric_only(numeric_only)
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
         return self._reduce_for_stat_function(
@@ -802,6 +807,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  1.0  False  3.0
         b  NaN   None  NaN
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -919,6 +925,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        validate_numeric_only(numeric_only)
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -980,6 +987,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
@@ -1248,6 +1256,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  NaN  2.0  0.0
         2  NaN NaN  NaN
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -3495,6 +3504,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3.0    7.0
         Name: b, dtype: float64
         """
+        validate_numeric_only(numeric_only)
         if not isinstance(accuracy, int):
             raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
@@ -4053,6 +4063,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         2 B  1.000000       NaN
           C       NaN  1.000000
         """
+        validate_numeric_only(numeric_only)
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
 
