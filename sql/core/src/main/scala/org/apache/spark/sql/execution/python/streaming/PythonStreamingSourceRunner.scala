@@ -58,7 +58,7 @@ object PythonStreamingSourceRunner {
   val PREFETCHED_RECORDS_NOT_FOUND = 0
   val NON_EMPTY_PYARROW_RECORD_BATCHES = 1
   val EMPTY_PYARROW_RECORD_BATCHES = 2
-  val READ_ALL_AVAILABLE_JSON = """{"type": "ReadAllAvailable"}"""
+  val READ_ALL_AVAILABLE_JSON = """{"_type": "ReadAllAvailable"}"""
 
   case class SupportedFeatures(admissionControl: Boolean, triggerAvailableNow: Boolean)
 }

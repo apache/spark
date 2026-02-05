@@ -187,7 +187,7 @@ def latest_offset_admission_control_func(
     start_offset_dict = json.loads(utf8_deserializer.loads(infile))
 
     limit = json.loads(utf8_deserializer.loads(infile))
-    limit_obj = READ_LIMIT_REGISTRY.get(limit["_type"], limit)
+    limit_obj = READ_LIMIT_REGISTRY.get(limit)
 
     offset = reader.latestOffset(start_offset_dict, limit_obj)
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
