@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For Pandas API
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260127
+ENV FULL_REFRESH_DATE=20260204
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     pkg-config \
     python3.10 \
+    python3.10-venv \
     python3-psutil \
     tzdata \
     software-properties-common \

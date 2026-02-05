@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260127
+ENV FULL_REFRESH_DATE=20260204
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -53,6 +53,7 @@ RUN apt-get update && apt-get install -y \
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
     python3.12 \
+    python3.12-venv \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
