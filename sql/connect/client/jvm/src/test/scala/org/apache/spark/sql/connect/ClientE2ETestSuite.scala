@@ -1616,7 +1616,7 @@ class ClientE2ETestSuite
       assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
 
-  test("SPARK-55150: observation errors leads to empty result in connect mode") {
+  test("SPARK-55150: observation errors are propagated to client in connect mode") {
     val observation = Observation("test_observation")
     val observed_df = spark
       .range(10)
@@ -1627,7 +1627,11 @@ class ClientE2ETestSuite
 
     observed_df.collect()
 
-    assert(observation.get.isEmpty)
+    val exception = intercept[SparkException] {
+      observation.get
+    }
+
+    assert(exception.getCause.getMessage.contains("test error"))
   }
 
   test("SPARK-48852: trim function on a string column returns correct results") {
