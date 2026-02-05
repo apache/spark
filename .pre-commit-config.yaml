@@ -14,3 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+repos:
+  - repo: local
+    hooks:
+      - id: format-python
+        name: Format Python code
+        entry: ./dev/reformat-python
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: ruff
+        name: Lint Python code with Ruff
+        entry: ./dev/lint-python --ruff
+        language: system
+        types: [python]
+        pass_filenames: false

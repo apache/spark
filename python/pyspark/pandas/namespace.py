@@ -1879,7 +1879,7 @@ def date_range(
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -2087,7 +2087,7 @@ def timedelta_range(
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
-    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],
@@ -2958,7 +2958,7 @@ def merge(
     ----------
     right: Object to merge with.
     how: Type of merge to be performed.
-        {'left', 'right', 'outer', 'inner'}, default 'inner'
+        {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'
 
         left: use only keys from left frame, like a SQL left outer join; preserve key
             order.
@@ -2968,6 +2968,8 @@ def merge(
             lexicographically.
         inner: use intersection of keys from both frames, like a SQL inner join;
             preserve the order of the left keys.
+        cross: creates the cartesian product from both frames, preserves the order
+            of the left keys.
     on: Column or index level names to join on. These must be found in both DataFrames. If on
         is None and not merging on indexes then this defaults to the intersection of the
         columns in both DataFrames.

@@ -427,13 +427,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = namespace match {
-    case Array(db) if !catalog.databaseExists(db) =>
+    case Array(db) =>
       catalog.createDatabase(
         toCatalogDatabase(db, metadata, defaultLocation = Some(catalog.getDefaultDBPath(db))),
         ignoreIfExists = false)
-
-    case Array(_) =>
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
       throw QueryExecutionErrors.invalidNamespaceNameError(namespace)

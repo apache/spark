@@ -551,6 +551,10 @@ object FunctionRegistry {
     expression[VectorCosineSimilarity]("vector_cosine_similarity"),
     expression[VectorInnerProduct]("vector_inner_product"),
     expression[VectorL2Distance]("vector_l2_distance"),
+    expression[VectorNorm]("vector_norm"),
+    expression[VectorNormalize]("vector_normalize"),
+    expression[VectorAvg]("vector_avg"),
+    expression[VectorSum]("vector_sum"),
 
     // string functions
     expression[Ascii]("ascii"),

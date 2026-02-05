@@ -3837,7 +3837,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
         >>> psdf
                              A
@@ -8546,7 +8546,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         right: Object to merge with.
         how: Type of merge to be performed.
-            {'left', 'right', 'outer', 'inner'}, default 'inner'
+            {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'
 
             left: use only keys from left frame, like a SQL left outer join; not preserve
                 key order unlike pandas.
@@ -8556,6 +8556,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 lexicographically.
             inner: use intersection of keys from both frames, like a SQL inner join;
                 not preserve the order of the left keys unlike pandas.
+            cross: creates the cartesian product from both frames, preserves the order
+                of the left keys.
         on: Column or index level names to join on. These must be found in both DataFrames. If on
             is None and not merging on indexes then this defaults to the intersection of the
             columns in both DataFrames.
@@ -8661,7 +8663,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(right, ps.Series):
             right = right.to_frame()
 
-        if on:
+        if how == "cross":
+            if on or left_on or right_on:
+                raise ValueError("Can not pass on, left_on, or right_on to merge with how='cross'.")
+            if left_index or right_index:
+                raise ValueError(
+                    "Can not pass left_index=True or right_index=True to merge with how='cross'."
+                )
+            left_key_names: List[str] = []
+            right_key_names: List[str] = []
+        elif on:
             if left_on or right_on:
                 raise ValueError(
                     'Can only pass argument "on" OR "left_on" and "right_on", '
@@ -8741,12 +8752,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         left_key_columns = [scol_for(left_table, label) for label in left_key_names]
         right_key_columns = [scol_for(right_table, label) for label in right_key_names]
 
-        join_condition = reduce(
-            lambda x, y: x & y,
-            [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
-        )
-
-        joined_table = left_table.join(right_table, join_condition, how=how)
+        if how == "cross":
+            joined_table = left_table.crossJoin(right_table)
+        else:
+            join_condition = reduce(
+                lambda x, y: x & y,
+                [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
+            )
+            joined_table = left_table.join(right_table, join_condition, how=how)
 
         # Unpack suffixes tuple for convenience
         left_suffix = suffixes[0]
@@ -11037,10 +11050,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO(SPARK-46165): axis and **kwargs should be implemented.
     def all(
-        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
-    ) -> "Series":
+        self,
+        axis: Optional[Axis] = 0,
+        bool_only: Optional[bool] = None,
+        skipna: bool = True,
+    ) -> Union["Series", bool]:
         """
         Return whether all elements are True.
 
@@ -11049,13 +11064,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : {0, 'index', 1, or 'columns'}, default 0
+        axis : {0, 'index', 1, 'columns', or None}, default 0
             Indicate which axis or axes should be reduced.
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
             * 1 / 'columns' : reduce the columns, return a Series whose index is the
               original index.
+            * None : reduce all dimensions, return a single boolean value.
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
@@ -11110,7 +11126,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col2    False
         dtype: bool
         """
-        axis = validate_axis(axis)
+        if axis is not None:
+            axis = validate_axis(axis)
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
@@ -11162,7 +11179,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
+            return self.all(axis=1, bool_only=bool_only, skipna=skipna).all()
 
     def any(
         self,

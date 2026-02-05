@@ -46,10 +46,12 @@ class STUtilsSuite {
   private final int testGeometrySrid = 0;
   private final byte[] testGeometryBytes;
 
+  // Common constants used in geo value construction.
+  private final ByteOrder end = Geo.DEFAULT_ENDIANNESS;
+  private final int sridLen = Geo.HEADER_SIZE;
+
   {
     // Initialize headers.
-    ByteOrder end = Geo.DEFAULT_ENDIANNESS;
-    int sridLen = Geo.HEADER_SIZE;
     byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeographySrid).array();
     byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeometrySrid).array();
     // Initialize GEOGRAPHY.
@@ -102,10 +104,39 @@ class STUtilsSuite {
 
   // ST_GeomFromWKB
   @Test
-  void testStGeomFromWKB() {
+  void testStGeomFromWKBNoSrid() {
     GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  @Test
+  void testStGeomFromWKBWithDefaultSrid() {
+    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb, testGeometrySrid);
+    assertNotNull(geometryVal);
+    assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  @Test
+  void testStGeomFromWKBWithValidSrid() {
+    int srid = 4326;
+    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb, srid);
+    assertNotNull(geometryVal);
+    byte[] testGeometryBytes = new byte[testWkb.length + sridLen];
+    byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(srid).array();
+    System.arraycopy(geomSrid, 0, testGeometryBytes, 0, sridLen);
+    System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, testWkb.length);
+    assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  @Test
+  void testStGeomFromWKBWithInvalidSrid() {
+    for (int invalidGeometrySrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+              () -> STUtils.stGeomFromWKB(testWkb, invalidGeometrySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeometrySrid + "."));
+    }
   }
 
   // ST_Srid

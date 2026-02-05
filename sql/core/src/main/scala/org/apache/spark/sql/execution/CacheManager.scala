@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -137,7 +137,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       storageLevel: StorageLevel): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
-    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData]) {
+    } else if (unnormalizedPlan.isInstanceOf[Command]) {
       logWarning(
         log"Asked to cache a plan that is inapplicable for caching: " +
         log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
@@ -495,7 +495,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
-      case command: IgnoreCachedData => command
+      case command: Command => command
 
       case currentFragment =>
         lookupCachedDataInternal(currentFragment).map { cached =>

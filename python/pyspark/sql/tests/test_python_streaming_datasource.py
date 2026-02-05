@@ -35,6 +35,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing import assertDataFrameEqual
+from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -399,41 +400,45 @@ class BasePythonStreamingDataSourceTestsMixin:
                 .start()
             )
 
-            # Wait a bit for data to be processed, then stop
-            time.sleep(6)  # Allow a few batches to run
+            @eventually(
+                timeout=20,
+                interval=2.0,
+                catch_assertions=True,
+                expected_exceptions=(json.JSONDecodeError,),
+            )
+            def check():
+                # Since we're writing actual JSON files, verify commit metadata and written files
+                commit_files = [f for f in os.listdir(temp_dir) if f.startswith("commit_")]
+                self.assertTrue(len(commit_files) > 0, "No commit files were created")
+
+                # Read and verify commit metadata - check all commits for any with data
+                total_committed_rows = 0
+                total_committed_batches = 0
+
+                for commit_file in commit_files:
+                    with open(os.path.join(temp_dir, commit_file), "r") as f:
+                        commit_data = json.load(f)
+                        total_committed_rows += commit_data.get("total_rows", 0)
+                        total_committed_batches += commit_data.get("total_batches", 0)
+
+                self.assertTrue(
+                    total_committed_rows > 0,
+                    f"Expected committed data but got {total_committed_rows} rows",
+                )
+
+            check()
+
             query.stop()
             query.awaitTermination()
 
-            # Since we're writing actual JSON files, verify commit metadata and written files
-            commit_files = [f for f in os.listdir(temp_dir) if f.startswith("commit_")]
-            self.assertTrue(len(commit_files) > 0, "No commit files were created")
-
-            # Read and verify commit metadata - check all commits for any with data
-            total_committed_rows = 0
-            total_committed_batches = 0
-
-            for commit_file in commit_files:
-                with open(os.path.join(temp_dir, commit_file), "r") as f:
-                    commit_data = json.load(f)
-                    total_committed_rows += commit_data.get("total_rows", 0)
-                    total_committed_batches += commit_data.get("total_batches", 0)
-
-            # We should have both committed data AND JSON files written
             json_files = [
                 f
                 for f in os.listdir(temp_dir)
                 if f.startswith("partition_") and f.endswith(".json")
             ]
 
-            # Verify that we have both committed data AND JSON files
-            has_committed_data = total_committed_rows > 0
-            has_json_files = len(json_files) > 0
-
             self.assertTrue(
-                has_committed_data, f"Expected committed data but got {total_committed_rows} rows"
-            )
-            self.assertTrue(
-                has_json_files, f"Expected JSON files but found {len(json_files)} files"
+                len(json_files) > 0, f"Expected JSON files but found {len(json_files)} files"
             )
 
             # Verify JSON files contain valid data

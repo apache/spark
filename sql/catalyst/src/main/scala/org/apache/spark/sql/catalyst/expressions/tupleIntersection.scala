@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 1, 4.0D), (2, 2.0D, 2, 5.0D), (3, 3.0D, 4, 6.0D) tab(col1, val1, col2, val2);
        2.0
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionDouble(first: Expression, second: Expression, third: Expression)
@@ -84,7 +84,7 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (1, 1, 1, 4), (2, 2, 2, 5), (3, 3, 4, 6) tab(col1, val1, col2, val2);
        2.0
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionInteger(first: Expression, second: Expression, third: Expression)
