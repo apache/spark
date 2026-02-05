@@ -20,7 +20,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.connect.Dataset",
+              "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "zipWithIndex",
               "fileName": "Dataset.scala"
             }, {
@@ -44,7 +44,7 @@
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                  "declaringClass": "org.apache.spark.sql.Dataset",
                   "methodName": "zipWithIndex",
                   "fileName": "Dataset.scala"
                 }, {
@@ -64,7 +64,7 @@
           "jvmOrigin": {
             "stackTrace": [{
               "classLoaderName": "app",
-              "declaringClass": "org.apache.spark.sql.connect.Dataset",
+              "declaringClass": "org.apache.spark.sql.Dataset",
               "methodName": "zipWithIndex",
               "fileName": "Dataset.scala"
             }, {
