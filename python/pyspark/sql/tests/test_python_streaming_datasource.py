@@ -46,6 +46,42 @@ from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
+def wait_for_condition(query, condition_fn, timeout_sec=30):
+    """
+    Wait for a condition on a streaming query to be met, with timeout and error context.
+
+    :param query: StreamingQuery object
+    :param condition_fn: Function that takes query and returns True when condition is met
+    :param timeout_sec: Timeout in seconds (default 30)
+    :raises TimeoutError: If condition is not met within timeout, with query context
+    """
+    start_time = time.time()
+    sleep_interval = 0.2
+
+    while not condition_fn(query):
+        elapsed = time.time() - start_time
+        if elapsed >= timeout_sec:
+            # Collect context for debugging
+            exception_info = query.exception()
+            recent_progresses = query.recentProgress
+            
+            error_msg = (
+                f"Timeout after {timeout_sec} seconds waiting for condition. "
+                f"Query exception: {exception_info}. "
+                f"Recent progress count: {len(recent_progresses)}. "
+            )
+            
+            if recent_progresses:
+                error_msg += f"Last progress: {recent_progresses[-1]}. "
+                error_msg += f"All recent progresses: {recent_progresses}"
+            else:
+                error_msg += "No progress recorded."
+            
+            raise TimeoutError(error_msg)
+        
+        time.sleep(sleep_interval)
+
+
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonStreamingDataSourceTestsMixin:
     def test_basic_streaming_data_source_class(self):
@@ -273,8 +309,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while len(q.recentProgress) < 10:
-            time.sleep(0.2)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
@@ -329,8 +364,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             .option("checkpointLocation", checkpoint_dir.name)
             .start(output_dir.name)
         )
-        while not q.recentProgress:
-            time.sleep(0.2)
+        wait_for_condition(q, lambda query: len(query.recentProgress) > 0)
         q.stop()
         q.awaitTermination()
 
@@ -370,8 +404,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while len(q.recentProgress) < 10:
-            time.sleep(0.2)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
@@ -427,8 +460,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while len(q.recentProgress) < 10:
-            time.sleep(0.2)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
@@ -493,8 +525,7 @@ class BasePythonStreamingDataSourceTestsMixin:
                 .option("checkpointLocation", checkpoint_dir.name)
                 .start(output_dir.name)
             )
-            while not q.recentProgress:
-                time.sleep(0.2)
+            wait_for_condition(q, lambda query: len(query.recentProgress) > 0)
 
             # Test stream writer write and commit.
             # The first microbatch contain 30 rows and 2 partitions.
@@ -508,8 +539,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             # Test StreamWriter write and abort.
             # When row id > 50, write tasks throw exception and fail.
             # 1.txt is written by StreamWriter.abort() to record the failure.
-            while q.exception() is None:
-                time.sleep(0.2)
+            wait_for_condition(q, lambda query: query.exception() is not None)
             assertDataFrameEqual(
                 self.spark.read.text(os.path.join(output_dir.name, "1.txt")),
                 [Row("failed in batch 1")],
