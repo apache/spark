@@ -212,7 +212,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
         eventually(timeout(30.seconds)) {
           assert(q.recentProgress.length >= 5,
             s"Expected at least 5 progress updates but got ${q.recentProgress.length}. " +
-            s"Query exception: ${q.exception()}. " +
+            s"Query exception: ${q.exception}. " +
             s"Recent progress: ${q.recentProgress.mkString(", ")}")
         }
         q.stop()
