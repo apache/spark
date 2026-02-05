@@ -109,14 +109,17 @@ object CrossJoinArrayContainsToInnerJoinBenchmark extends SqlBasedBenchmark {
    * This is the scenario where the optimization might NOT be beneficial.
    * When array_size >> right_table_size, exploding creates more rows than cross join.
    *
-   * Cost comparison:
-   * - Cross join + filter: O(left_rows * right_rows) = 1000 * 50 = 50,000
-   * - Explode + join: O(left_rows * array_size) = 1000 * 500 = 500,000
+   * Using same cross-product size as standard case for fair comparison:
+   * - Cross join + filter: O(left_rows * right_rows) = 10000 * 1000 = 10,000,000
+   * - Explode + join: O(left_rows * array_size) = 10000 * 1000 = 10,000,000
+   *
+   * The difference is that exploded rows join with only 100 items (small table),
+   * while in standard case they join with 1000 items.
    */
   private def runLargeArraySmallTableBenchmark(): Unit = {
-    val numOrders = 1000
-    val numItems = 50       // Small right table
-    val arraySize = 500     // Large arrays (10x right table)
+    val numOrders = 10000     // Same as standard case
+    val numItems = 100        // Small right table (10x smaller than standard)
+    val arraySize = 1000      // Large arrays (10x larger than standard)
 
     runBenchmark("CrossJoinArrayContainsToInnerJoin - Large Arrays (potential regression)") {
       val benchmark = new Benchmark(
