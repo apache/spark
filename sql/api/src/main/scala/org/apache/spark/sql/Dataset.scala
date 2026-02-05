@@ -2030,7 +2030,7 @@ abstract class Dataset[T] extends Serializable {
    * @note
    *   If a column with `indexColName` already exists in the schema, the resulting `DataFrame`
    *   will have duplicate column names. Selecting the duplicate column by name will throw
-   *   `AMBIGUOUS_REFERENCE`, and writing the [[DataFrame]] will throw `COLUMN_ALREADY_EXISTS`.
+   *   `AMBIGUOUS_REFERENCE`, and writing the `DataFrame` will throw `COLUMN_ALREADY_EXISTS`.
    *
    * @param indexColName
    *   The name of the index column to append.
