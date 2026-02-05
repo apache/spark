@@ -27,7 +27,7 @@ mypy==1.8.0
 pytest-mypy-plugins==1.9.3
 # See SPARK-38680.
 pandas-stubs>=2.2.0
-scipy-stubs; python_version>='3.10'
+scipy-stubs;
 types-PyYAML
 
 # Documentation (SQL)
