@@ -19,7 +19,13 @@ package org.apache.spark
 
 import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{
+  ConcurrentHashMap,
+  ConcurrentLinkedQueue,
+  LinkedBlockingQueue,
+  ThreadPoolExecutor,
+  TimeUnit
+}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
@@ -45,6 +51,12 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, Shuffl
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
+
+/**
+ * Represents a pending map output update that will be applied later.
+ * This allows addMapOutput to return quickly without blocking.
+ */
+private case class PendingMapOutput(mapIndex: Int, status: MapStatus)
 
 /**
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
@@ -102,8 +114,10 @@ private class ShuffleStatus(
   /**
    * Keep the indices of the Map tasks whose checksums are different across retries.
    * Exposed for testing.
+   * Uses a thread-safe concurrent set to allow lock-free updates from addMapOutput.
    */
-  private[spark] val checksumMismatchIndices: Set[Int] = Set()
+  private[spark] val checksumMismatchIndices: java.util.Set[Int] =
+    ConcurrentHashMap.newKeySet[Int]()
 
   /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
@@ -163,42 +177,114 @@ private class ShuffleStatus(
    */
   private[spark] val mapIdToMapIndex = new HashMap[Long, Int]()
 
+  /** Queue of pending map output updates. This allows addMapOutput to return
+    * quickly without blocking on the write lock. Other methods drain this queue
+    * before accessing the map statuses.
+    */
+  private val pendingMapOutputs = new ConcurrentLinkedQueue[PendingMapOutput]()
+
+  /** Tracks the last MapStatus seen by addMapOutput for each mapIndex. Used for
+    * checksum comparison to detect nondeterminism between consecutive pending
+    * writes. Only accessed by addMapOutput (assumed single-threaded).
+    */
+  private val lastSeenMapStatus = new Array[MapStatus](numPartitions)
+
   /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location. Returns true if the checksum in the new MapStatus is
    * different from a previous registered MapStatus. Otherwise, returns false.
+   *
+   * This method is lock-free: it enqueues the update and returns immediately.
+   * The actual state mutation happens when other methods drain the pending queue.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Boolean = withWriteLock {
-    var isChecksumMismatch: Boolean = false
-    val currentMapStatus = mapStatuses(mapIndex)
-    if (currentMapStatus == null) {
-      _numAvailableMapOutputs += 1
-      invalidateSerializedMapOutputStatusCache()
-    } else {
-      mapIdToMapIndex.remove(currentMapStatus.mapId)
+  def addMapOutput(mapIndex: Int, status: MapStatus): Boolean = {
+    // Get previous status for checksum comparison.
+    // First check lastSeenMapStatus (tracks pending writes), then fall back to committed state.
+    val preStatus = {
+      val lastSeen = lastSeenMapStatus(mapIndex)
+      if (lastSeen != null) {
+        lastSeen
+      } else {
+        // First call for this mapIndex, check committed state (atomic array reads)
+        val current = mapStatuses(mapIndex)
+        if (current != null) current else mapStatusesDeleted(mapIndex)
+      }
     }
-    logDebug(s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}")
 
-    val preStatus =
-      if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
-    if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
-      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
-        s"${status.checksumValue} for task ${status.mapId}.")
-      checksumMismatchIndices.add(mapIndex)
-      isChecksumMismatch = true
-    }
-    mapStatuses(mapIndex) = status
-    mapIdToMapIndex(status.mapId) = mapIndex
+    val isChecksumMismatch =
+      if (
+        preStatus != null &&
+        preStatus.checksumValue != status.checksumValue
+      ) {
+        logInfo(
+          s"Checksum of map output changes from ${preStatus.checksumValue} to " +
+            s"${status.checksumValue} for task ${status.mapId}."
+        )
+        checksumMismatchIndices.add(mapIndex)
+        true
+      } else {
+        false
+      }
+
+    logDebug(
+      s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}"
+    )
+
+    // Update lastSeenMapStatus for next comparison (single-threaded, no sync needed)
+    lastSeenMapStatus(mapIndex) = status
+
+    // Enqueue the pending update (lock-free)
+    pendingMapOutputs.offer(PendingMapOutput(mapIndex, status))
+
     isChecksumMismatch
+  }
+
+  /** Drain all pending map output updates and apply them to the actual state.
+    * This must be called under the write lock by methods that need up-to-date
+    * state.
+    */
+  private def applyPendingMapOutputs(): Unit = {
+    var pending = pendingMapOutputs.poll()
+    while (pending != null) {
+      val mapIndex = pending.mapIndex
+      val status = pending.status
+      val currentMapStatus = mapStatuses(mapIndex)
+
+      if (currentMapStatus == null) {
+        _numAvailableMapOutputs += 1
+      } else {
+        mapIdToMapIndex.remove(currentMapStatus.mapId)
+      }
+
+      invalidateSerializedMapOutputStatusCache()
+      mapStatuses(mapIndex) = status
+      mapIdToMapIndex(status.mapId) = mapIndex
+
+      pending = pendingMapOutputs.poll()
+    }
+  }
+
+  /** Drain pending map outputs under write lock. Call this before accessing map
+    * state.
+    */
+  private def drainPendingMapOutputs(): Unit = {
+    if (!pendingMapOutputs.isEmpty) {
+      withWriteLock {
+        applyPendingMapOutputs()
+      }
+    }
   }
 
   /**
    * Get the map output that corresponding to a given mapId.
    */
-  def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
-    mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
-      case Some(null) => None
-      case m => m
+  def getMapStatus(mapId: Long): Option[MapStatus] = {
+    drainPendingMapOutputs()
+    withReadLock {
+      mapIdToMapIndex.get(mapId).map(mapStatuses(_)) match {
+        case Some(null) => None
+        case m          => m
+      }
     }
   }
 
@@ -206,6 +292,7 @@ private class ShuffleStatus(
    * Update the map output location (e.g. during migration).
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
+      applyPendingMapOutputs()
     try {
       val mapIndex = mapIdToMapIndex.get(mapId)
       val mapStatusOpt = mapIndex.map(mapStatuses(_)).flatMap(Option(_))
@@ -244,6 +331,7 @@ private class ShuffleStatus(
    * different block manager.
    */
   def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
+      applyPendingMapOutputs()
     logDebug(s"Removing existing map output ${mapIndex} ${bmAddress}")
     val currentMapStatus = mapStatuses(mapIndex)
     if (currentMapStatus != null && currentMapStatus.location == bmAddress) {
@@ -294,9 +382,10 @@ private class ShuffleStatus(
    * outputs which are served by an external shuffle server (if one exists).
    */
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
+    applyPendingMapOutputs()
     logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.host == host)
-    removeMergeResultsByFilter(x => x.host == host)
+    removeOutputsByFilterInternal(x => x.host == host)
+    removeMergeResultsByFilterInternal(x => x.host == host)
   }
 
   /**
@@ -305,8 +394,9 @@ private class ShuffleStatus(
    * still registered with that execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
+    applyPendingMapOutputs()
     logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.executorId == execId)
+    removeOutputsByFilterInternal(x => x.executorId == execId)
   }
 
   /**
@@ -314,6 +404,16 @@ private class ShuffleStatus(
    * remove outputs which are served by an external shuffle server (if one exists).
    */
   def removeOutputsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+      applyPendingMapOutputs()
+      removeOutputsByFilterInternal(f)
+    }
+
+  /** Internal method to remove outputs by filter. Assumes write lock is already
+    * held and pending outputs have been drained.
+    */
+  private def removeOutputsByFilterInternal(
+      f: BlockManagerId => Boolean
+  ): Unit = {
     for (mapIndex <- mapStatuses.indices) {
       val currentMapStatus = mapStatuses(mapIndex)
       if (currentMapStatus != null && f(currentMapStatus.location)) {
@@ -330,6 +430,15 @@ private class ShuffleStatus(
    * Removes all shuffle merge result which satisfies the filter.
    */
   def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+      removeMergeResultsByFilterInternal(f)
+    }
+
+  /** Internal method to remove merge results by filter. Assumes write lock is
+    * already held.
+    */
+  private def removeMergeResultsByFilterInternal(
+      f: BlockManagerId => Boolean
+  ): Unit = {
     for (reduceId <- mergeStatuses.indices) {
       if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
         _numAvailableMergeResults -= 1
@@ -342,8 +451,11 @@ private class ShuffleStatus(
   /**
    * Number of partitions that have shuffle map outputs.
    */
-  def numAvailableMapOutputs: Int = withReadLock {
-    _numAvailableMapOutputs
+  def numAvailableMapOutputs: Int = {
+    drainPendingMapOutputs()
+    withReadLock {
+      _numAvailableMapOutputs
+    }
   }
 
   /**
@@ -357,11 +469,17 @@ private class ShuffleStatus(
   /**
    * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
    */
-  def findMissingPartitions(): Seq[Int] = withReadLock {
-    val missing = (0 until numPartitions).filter(id => mapStatuses(id) == null)
-    assert(missing.size == numPartitions - _numAvailableMapOutputs,
-      s"${missing.size} missing, expected ${numPartitions - _numAvailableMapOutputs}")
-    missing
+  def findMissingPartitions(): Seq[Int] = {
+    drainPendingMapOutputs()
+    withReadLock {
+      val missing =
+        (0 until numPartitions).filter(id => mapStatuses(id) == null)
+      assert(
+        missing.size == numPartitions - _numAvailableMapOutputs,
+        s"${missing.size} missing, expected ${numPartitions - _numAvailableMapOutputs}"
+      )
+      missing
+    }
   }
 
   /**
@@ -378,6 +496,9 @@ private class ShuffleStatus(
       isLocal: Boolean,
       minBroadcastSize: Int,
       conf: SparkConf): Array[Byte] = {
+    // Drain pending updates first to ensure we serialize the latest state
+    drainPendingMapOutputs()
+
     var result: Array[Byte] = null
     withReadLock {
       if (cachedSerializedMapStatus != null) {
@@ -449,8 +570,11 @@ private class ShuffleStatus(
    * Helper function which provides thread-safe access to the mapStatuses array.
    * The function should NOT mutate the array.
    */
-  def withMapStatuses[T](f: Array[MapStatus] => T): T = withReadLock {
-    f(mapStatuses)
+  def withMapStatuses[T](f: Array[MapStatus] => T): T = {
+    drainPendingMapOutputs()
+    withReadLock {
+      f(mapStatuses)
+    }
   }
 
   def withMergeStatuses[T](f: Array[MergeStatus] => T): T = withReadLock {
