@@ -736,9 +736,7 @@ class DataSourceStreamReader(ABC):
         engine; e.g. if the readLimit is :class:`ReadAllAvailable`, the source must ignore the read
         limit configured through options.
 
-        NOTE: Previous Spark versions didn't have start offset and read limit parameters for this
-        method. While Spark will ensure the backward compatibility for existing data sources, the
-        new data sources are strongly encouraged to implement this new method signature.
+        .. versionadded:: 4.2.0
 
         Parameters
         ----------
@@ -763,6 +761,9 @@ class DataSourceStreamReader(ABC):
         ...     else:  # e.g., limit is ReadMaxRows(5)
         ...        return {"index": start["index"] + min(10, limit.maxRows)}
         """
+        # NOTE: Previous Spark versions didn't have start offset and read limit parameters for this
+        # method. While Spark will ensure the backward compatibility for existing data sources, the
+        # new data sources are strongly encouraged to implement this new method signature.
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={"feature": "latestOffset"},
@@ -776,6 +777,8 @@ class DataSourceStreamReader(ABC):
 
         Implementing this method is optional. By default, it returns :class:`ReadAllAvailable`,
         which means there is no limit on the amount of data returned by :meth:`latestOffset()`.
+
+        .. versionadded:: 4.2.0
         """
         return ReadAllAvailable()
 
@@ -785,6 +788,8 @@ class DataSourceStreamReader(ABC):
         offset in the streaming query status.
         The source can return `None`, if there is no data to process or the source does not support
         to this method.
+
+        .. versionadded:: 4.2.0
 
         Returns
         -------

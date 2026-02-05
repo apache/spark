@@ -22,6 +22,15 @@ class ReadLimit(ABC):
     """
     Specifies limits on how much data to read from a streaming source when
     determining the latest offset.
+
+    As of Spark 4.2.0, only built-in implementations of :class:`ReadLimit` are supported. Please
+    refer to the following classes for the supported types:
+
+    - :class:`ReadAllAvailable`
+    - :class:`ReadMinRows`
+    - :class:`ReadMaxRows`
+    - :class:`ReadMaxFiles`
+    - :class:`ReadMaxBytes`
     """
 
     @classmethod
