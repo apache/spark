@@ -749,9 +749,12 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
 
         def py_to_batch():
             for packed in iterator:
-                # packed is always a tuple of (results, arrow_type, spark_type) tuples
-                # Convert to tuple of (array, arrow_type) tuples for parent serializer
-                yield tuple((create_array(t[0], t[1], t[2]), t[1]) for t in packed)
+                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
+                else:
+                    # multiple array UDFs in a projection
+                    yield [(create_array(*t), t[1]) for t in packed]
 
         return super().dump_stream(py_to_batch(), stream)
 
@@ -1491,7 +1494,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             def row_stream():
                 for batch in batches:
                     self._update_batch_size_stats(batch)
-                    series = [
+                    data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             from_arrow_type(c.type),
@@ -1502,7 +1505,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                         )
                         for c in pa.Table.from_batches([batch]).itercolumns()
                     ]
-                    for row in pd.concat(series, axis=1).itertuples(index=False):
+                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                         batch_key = tuple(row[s] for s in self.key_offsets)
                         yield (batch_key, row)
 
@@ -1628,7 +1631,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     self._update_batch_size_stats(batch)
 
                     flatten_state_table = flatten_columns(batch, "inputData")
-                    input_data_series = [
+                    data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             self._input_type[i].dataType
@@ -1643,7 +1646,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     ]
 
                     flatten_init_table = flatten_columns(batch, "initState")
-                    init_state_series = [
+                    init_data_pandas = [
                         ArrowArrayToPandasConversion.convert(
                             c,
                             self._input_type[i].dataType
@@ -1657,14 +1660,14 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
-                    assert not (bool(init_state_series) and bool(input_data_series))
+                    assert not (bool(init_data_pandas) and bool(data_pandas))
 
-                    if bool(input_data_series):
-                        for row in pd.concat(input_data_series, axis=1).itertuples(index=False):
+                    if bool(data_pandas):
+                        for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    elif bool(init_state_series):
-                        for row in pd.concat(init_state_series, axis=1).itertuples(index=False):
+                    elif bool(init_data_pandas):
+                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 
