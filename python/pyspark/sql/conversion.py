@@ -1129,6 +1129,39 @@ class ArrowArrayConversion:
             convert=convert_func,
         )
 
+    @classmethod
+    def preprocess_time(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
+        """
+        1, always drop the timezone for TimestampType;
+        2, coerce_temporal_nanoseconds: coerce timestamp time units to nanoseconds
+        """
+        import pyarrow as pa
+        import pyarrow.types as types
+        import pyarrow.compute as pc
+
+        def check_type_func(pa_type: pa.DataType) -> bool:
+            return types.is_timestamp(pa_type) and (pa_type.unit != "ns" or pa_type.tz is not None)
+
+        def convert_func(arr: pa.Array) -> pa.Array:
+            assert isinstance(arr, pa.TimestampArray)
+
+            pa_type = arr.type
+
+            if pa_type.tz is not None:
+                arr = pc.local_timestamp(arr)
+            if pa_type.unit != "ns":
+                arr = pc.cast(arr, target_type=pa.timestamp("ns", tz=None))
+            return arr
+
+        return cls.convert(
+            arr,
+            check_type=check_type_func,
+            convert=convert_func,
+        )
+
 
 class ArrowArrayToPandasConversion:
     """
@@ -1312,6 +1345,8 @@ class ArrowArrayToPandasConversion:
             ShortType,
             IntegerType,
             LongType,
+            TimestampType,
+            TimestampNTZType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1355,7 +1390,7 @@ class ArrowArrayToPandasConversion:
             pdf.columns = spark_type.names  # type: ignore[assignment]
             return pdf
 
-        arr = ArrowArrayConversion.localize_tz(arr)
+        arr = ArrowArrayConversion.preprocess_time(arr)
 
         # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
         # 1, benchmark a nullable integral array
@@ -1423,14 +1458,11 @@ class ArrowArrayToPandasConversion:
             ),
         ):
             # TODO(SPARK-55333): Revisit date_as_object in arrow->pandas conversion
-            # TODO(SPARK-55334): Implement coerce_temporal_nanoseconds
             # If the given column is a date type column, creates a series of datetime.date directly
             # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
             # datetime64[ns] type handling.
-            # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
             pandas_options = {
                 "date_as_object": True,
-                "coerce_temporal_nanoseconds": True,
             }
             return arr.to_pandas(**pandas_options)
         # elif isinstance(
