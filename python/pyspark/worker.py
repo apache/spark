@@ -2865,8 +2865,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     raise PySparkRuntimeError(
                         errorClass="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                     )
-                # Wrap as tuple of (result, type) tuples to match serializer expectation
-                yield ((result_batch, result_type),)
+                yield (result_batch, result_type)
 
             if is_scalar_iter:
                 try:

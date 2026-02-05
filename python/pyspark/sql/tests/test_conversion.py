@@ -151,7 +151,7 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class PandasToArrowConversionTests(unittest.TestCase):
-    def test_dataframe_to_batch(self):
+    def test_to_arrow(self):
         """Test basic DataFrame/Series to Arrow RecordBatch conversion."""
         import pandas as pd
         import pyarrow as pa
@@ -159,34 +159,34 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # Basic DataFrame conversion
         df = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
+        result = PandasToArrowConversion.to_arrow(df, schema)
         self.assertIsInstance(result, pa.RecordBatch)
         self.assertEqual(result.num_rows, 3)
         self.assertEqual(result.num_columns, 2)
-        self.assertEqual(result.schema.names, ["_0", "_1"])
+        self.assertEqual(result.schema.names, ["a", "b"])
 
         # List of Series input
         series_list = [pd.Series([1, 2, 3]), pd.Series([1.0, 2.0, 3.0])]
-        result = PandasToArrowConversion.dataframe_to_batch(series_list, schema)
+        result = PandasToArrowConversion.to_arrow(series_list, schema)
         self.assertEqual(result.num_rows, 3)
 
         # With nulls
         df = pd.DataFrame({"a": [1, None, 3], "b": [1.0, 2.0, None]})
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
+        result = PandasToArrowConversion.to_arrow(df, schema)
         self.assertEqual(result.column(0).to_pylist(), [1, None, 3])
 
         # Empty DataFrame (0 rows)
         df = pd.DataFrame({"a": pd.Series([], dtype=int), "b": pd.Series([], dtype=float)})
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema)
+        result = PandasToArrowConversion.to_arrow(df, schema)
         self.assertEqual(result.num_rows, 0)
 
         # Empty schema (0 columns)
         # TODO(SPARK-55350): Pandas - > PyArrow should preserve row count with 0 columns. It is a bug.
-        result = PandasToArrowConversion.dataframe_to_batch(df, StructType([]))
+        result = PandasToArrowConversion.to_arrow(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
         self.assertEqual(result.num_rows, 0)
 
-    def test_dataframe_to_batch_assign_cols_by_name(self):
+    def test_to_arrow_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""
         import pandas as pd
 
@@ -195,18 +195,18 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
 
         # With assign_cols_by_name=True - reorders columns to match schema field names
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema, assign_cols_by_name=True)
+        result = PandasToArrowConversion.to_arrow(df, schema, assign_cols_by_name=True)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])  # a
         self.assertEqual(result.column(1).to_pylist(), ["x", "y", "z"])  # b
 
         # Without assign_cols_by_name - uses positional order (b first, a second)
         df = pd.DataFrame({"b": [10, 20, 30], "a": [1.0, 2.0, 3.0]})
         schema = StructType([StructField("x", IntegerType()), StructField("y", DoubleType())])
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema, assign_cols_by_name=False)
+        result = PandasToArrowConversion.to_arrow(df, schema, assign_cols_by_name=False)
         self.assertEqual(result.column(0).to_pylist(), [10, 20, 30])  # positional: b -> x
         self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, 3.0])  # positional: a -> y
 
-    def test_dataframe_to_batch_timezone(self):
+    def test_to_arrow_timezone(self):
         """Test timezone handling for timestamp conversion."""
         import pandas as pd
 
@@ -215,11 +215,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("ts", TimestampType())])
 
         # Convert with timezone
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema, timezone="UTC")
+        result = PandasToArrowConversion.to_arrow(df, schema, timezone="UTC")
         self.assertEqual(result.num_rows, 2)
         self.assertEqual(result.num_columns, 1)
 
-    def test_dataframe_to_batch_arrow_cast(self):
+    def test_to_arrow_arrow_cast(self):
         """Test arrow_cast allows type coercion on mismatch."""
         import pandas as pd
 
@@ -228,10 +228,10 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", LongType())])
 
         # With arrow_cast=True, should allow the conversion
-        result = PandasToArrowConversion.dataframe_to_batch(df, schema, arrow_cast=True)
+        result = PandasToArrowConversion.to_arrow(df, schema, arrow_cast=True)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
 
-    def test_dataframe_to_batch_decimal(self):
+    def test_to_arrow_decimal(self):
         """Test int to decimal coercion."""
         import pandas as pd
         from decimal import Decimal
@@ -241,9 +241,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", DecimalType(10, 2))])
 
         # With int_to_decimal_coercion_enabled=True
-        result = PandasToArrowConversion.dataframe_to_batch(
-            df, schema, int_to_decimal_coercion_enabled=True
-        )
+        result = PandasToArrowConversion.to_arrow(df, schema, int_to_decimal_coercion_enabled=True)
         self.assertEqual(result.num_rows, 3)
         # Values should be converted to decimal
         values = result.column(0).to_pylist()

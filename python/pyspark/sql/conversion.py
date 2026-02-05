@@ -170,9 +170,9 @@ class PandasToArrowConversion:
     """
 
     @classmethod
-    def dataframe_to_batch(
+    def to_arrow(
         cls,
-        data: Union["pd.DataFrame", List["pd.Series"]],
+        data: Union["pd.DataFrame", List[Union["pd.Series", "pd.DataFrame"]]],
         schema: StructType,
         *,
         timezone: Optional[str] = None,
@@ -181,14 +181,16 @@ class PandasToArrowConversion:
         prefers_large_types: bool = False,
         assign_cols_by_name: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
+        ignore_unexpected_complex_type_values: bool = False,
+        error_class: Optional[str] = None,
     ) -> "pa.RecordBatch":
         """
-        Convert a pandas DataFrame or list of Series to an Arrow RecordBatch.
+        Convert a pandas DataFrame or list of Series/DataFrames to an Arrow RecordBatch.
 
         Parameters
         ----------
-        data : pd.DataFrame or list of pd.Series
-            Input data - either a DataFrame or a list of Series
+        data : pd.DataFrame or list of pd.Series/pd.DataFrame
+            Input data - either a DataFrame or a list of Series/DataFrames.
         schema : StructType
             Spark schema defining the types for each column
         timezone : str, optional
@@ -203,12 +205,19 @@ class PandasToArrowConversion:
             Whether to reorder DataFrame columns by name to match schema (default False)
         int_to_decimal_coercion_enabled : bool
             Whether to enable int to decimal coercion (default False)
+        ignore_unexpected_complex_type_values : bool
+            Whether to ignore unexpected complex type values in converter (default False)
+        error_class : str, optional
+            Custom error class for specialized error handling (e.g., "UDTF_ARROW_TYPE_CAST_ERROR")
 
         Returns
         -------
         pa.RecordBatch
         """
         import pyarrow as pa
+        import pandas as pd
+
+        from pyspark.sql.pandas.types import to_arrow_type
 
         # Handle empty schema (0 columns)
         # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
@@ -220,35 +229,65 @@ class PandasToArrowConversion:
             dummy_batch = pa.RecordBatch.from_pydict({"_": [None] * num_rows})
             return dummy_batch.select([])
 
+        # Handle empty DataFrame (0 columns) with non-empty schema
+        # This happens when user returns pd.DataFrame() for struct types
+        if isinstance(data, pd.DataFrame) and len(data.columns) == 0:
+            arrow_type = to_arrow_type(
+                schema, timezone=timezone, prefers_large_types=prefers_large_types
+            )
+            # Create array of empty structs, then convert to batch with correct schema
+            empty_struct_arr = pa.array([{}] * len(data), arrow_type)
+            return pa.RecordBatch.from_struct_array(empty_struct_arr)
+
         # Normalize input: reorder DataFrame columns if needed
         if not isinstance(data, list):
             if assign_cols_by_name and any(isinstance(c, str) for c in data.columns):
                 field_names = [field.name for field in schema.fields]
                 data = data[field_names]
 
-        def get_series(i: int) -> "pd.Series":
+        def get_column_data(i: int) -> Union["pd.Series", "pd.DataFrame"]:
             if isinstance(data, list):
                 return data[i]
             else:
                 return data.iloc[:, i]
 
-        arrays = [
-            cls.series_to_array(
-                get_series(i),
-                field.dataType,
-                timezone=timezone,
-                safecheck=safecheck,
-                arrow_cast=arrow_cast,
-                prefers_large_types=prefers_large_types,
-                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-            )
-            for i, field in enumerate(schema.fields)
-        ]
+        arrays = []
+        for i, field in enumerate(schema.fields):
+            col_data = get_column_data(i)
+
+            if isinstance(col_data, pd.DataFrame):
+                # DataFrame column (for struct types)
+                nested_batch = cls.to_arrow(
+                    col_data,
+                    field.dataType,
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    arrow_cast=arrow_cast,
+                    assign_cols_by_name=assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                    ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+                    error_class=error_class,
+                )
+                arr = ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
+            else:
+                # Regular Series conversion
+                arr = cls._series_to_array(
+                    col_data,
+                    field.dataType,
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    arrow_cast=arrow_cast,
+                    prefers_large_types=prefers_large_types,
+                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                    ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+                    error_class=error_class,
+                )
+            arrays.append(arr)
 
         return pa.RecordBatch.from_arrays(arrays, [field.name for field in schema.fields])
 
     @classmethod
-    def series_to_array(
+    def _series_to_array(
         cls,
         series: "pd.Series",
         ret_type: DataType,
@@ -262,7 +301,7 @@ class PandasToArrowConversion:
         error_class: Optional[str] = None,
     ) -> "pa.Array":
         """
-        Convert a pandas Series to an Arrow Array.
+        Convert a pandas Series to an Arrow Array. Internal method.
 
         Parameters
         ----------
