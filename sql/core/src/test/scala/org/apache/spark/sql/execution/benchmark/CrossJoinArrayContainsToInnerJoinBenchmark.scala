@@ -36,15 +36,24 @@ object CrossJoinArrayContainsToInnerJoinBenchmark extends SqlBasedBenchmark {
     "org.apache.spark.sql.catalyst.optimizer.CrossJoinArrayContainsToInnerJoin"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runStandardBenchmark()
+    runLargeArraySmallTableBenchmark()
+  }
+
+  /**
+   * Standard benchmark: small arrays, large right table.
+   * This is the scenario where the optimization provides significant benefit.
+   */
+  private def runStandardBenchmark(): Unit = {
     // Use larger dataset to show the optimization benefit
     // 10000 orders with 10-element arrays, 1000 items
     val numOrders = 10000
     val numItems = 1000
     val arraySize = 10
 
-    runBenchmark("CrossJoinArrayContainsToInnerJoin") {
+    runBenchmark("CrossJoinArrayContainsToInnerJoin - Standard Case") {
       val benchmark = new Benchmark(
-        s"array_contains optimization ($numOrders x $numItems, array=$arraySize)",
+        s"small arrays ($numOrders orders x $numItems items, array=$arraySize)",
         numOrders.toLong * numItems,
         output = output
       )
@@ -83,6 +92,70 @@ object CrossJoinArrayContainsToInnerJoinBenchmark extends SqlBasedBenchmark {
 
       // Case 2: With our rule - uses explode + hash join
       // This is the efficient O(N*arraySize + M) approach
+      benchmark.addCase("inner join + explode (rule on)", 3) { _ =>
+        withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+          spark.sql(query).noop()
+        }
+      }
+
+      benchmark.run()
+
+      spark.catalog.clearCache()
+    }
+  }
+
+  /**
+   * Large array benchmark: large arrays, small right table.
+   * This is the scenario where the optimization might NOT be beneficial.
+   * When array_size >> right_table_size, exploding creates more rows than cross join.
+   *
+   * Cost comparison:
+   * - Cross join + filter: O(left_rows * right_rows) = 1000 * 50 = 50,000
+   * - Explode + join: O(left_rows * array_size) = 1000 * 500 = 500,000
+   */
+  private def runLargeArraySmallTableBenchmark(): Unit = {
+    val numOrders = 1000
+    val numItems = 50       // Small right table
+    val arraySize = 500     // Large arrays (10x right table)
+
+    runBenchmark("CrossJoinArrayContainsToInnerJoin - Large Arrays (potential regression)") {
+      val benchmark = new Benchmark(
+        s"large arrays ($numOrders orders x $numItems items, array=$arraySize)",
+        numOrders.toLong * numItems,
+        output = output
+      )
+
+      // Create test data with large arrays
+      val arrExpr = s"transform(sequence(0, $arraySize - 1), " +
+        s"x -> cast((id + x) % ($numItems * 10) as int))"
+      spark.range(numOrders)
+        .selectExpr("id as order_id", s"$arrExpr as arr")
+        .cache()
+        .createOrReplaceTempView("orders_large_arr")
+
+      spark.range(numItems)
+        .selectExpr("cast(id as int) as item_id", "concat('item_', id) as name")
+        .cache()
+        .createOrReplaceTempView("items_small")
+
+      // Force cache materialization
+      spark.sql("SELECT count(*) FROM orders_large_arr").collect()
+      spark.sql("SELECT count(*) FROM items_small").collect()
+
+      val query = "SELECT o.order_id, i.item_id FROM orders_large_arr o, items_small i " +
+        "WHERE array_contains(o.arr, i.item_id)"
+
+      // Case 1: Without our rule - cross join might be faster here
+      benchmark.addCase("cross join + array_contains (rule off)", 3) { _ =>
+        withSQLConf(
+          SQLConf.CROSS_JOINS_ENABLED.key -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName,
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          spark.sql(query).noop()
+        }
+      }
+
+      // Case 2: With our rule - explode might be slower here
       benchmark.addCase("inner join + explode (rule on)", 3) { _ =>
         withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
           spark.sql(query).noop()
