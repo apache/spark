@@ -35,7 +35,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{MapOutputTracker, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
@@ -321,8 +321,6 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         ShuffleBlockFetcherIterator.this.synchronized {
-          logError(log"Failed to get block(s) from " +
-            log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)
           e match {
             // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
             // tasks) to true as early as possible. The pending fetch requests won't be sent
@@ -343,6 +341,8 @@ final class ShuffleBlockFetcherIterator(
             // We can get rid of it when we find a way to manage Netty's memory precisely.
             case _: OutOfDirectMemoryError
                 if blockOOMRetryCounts.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
+              logError(log"Failed to get block(s) from " +
+                log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)
               if (!isZombie) {
                 val failureTimes = blockOOMRetryCounts(blockId)
                 blockOOMRetryCounts(blockId) += 1
@@ -360,6 +360,8 @@ final class ShuffleBlockFetcherIterator(
             case _ =>
               val block = BlockId(blockId)
               if (block.isShuffleChunk) {
+                logError(log"Failed to get block(s) from " +
+                  log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)
                 remainingBlocks -= blockId
                 updateMergedReqsDuration(wasReqForMergedChunks = true)
                 results.put(FallbackOnPushMergedFailureResult(
@@ -985,8 +987,7 @@ final class ShuffleBlockFetcherIterator(
               log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
             logError(logMessage)
             errorMsg = logMessage.message
-          } else if (
-            SparkEnv.get.conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+          } else if (FallbackStorage.isConfigured(SparkEnv.get.conf)) {
             try {
               val buf = FallbackStorage.read(SparkEnv.get.conf, blockId)
               results.put(SuccessFetchResult(blockId, mapIndex, address, buf.size(), buf,
@@ -995,7 +996,24 @@ final class ShuffleBlockFetcherIterator(
               error = null
             } catch {
               case t: Throwable =>
-                logInfo(s"Failed to read block from fallback storage: $blockId", t)
+                // in reliable proactive shuffle replication to fallback storage,
+                // failing to read from fallback storage is severe
+                // as we would expect to be able to recover from exception `e`
+                if (FallbackStorage.isReliable(SparkEnv.get.conf)) {
+                  logError(s"Failed to read block $blockId from fallback storage. " +
+                    s"This was an attempt to recover from failure when fetching block(s) from " +
+                    log"${MDC(HOST, address.host)}:${MDC(PORT, address.port)} " +
+                    log"(${MDC(MESSAGE, e.getMessage)})", t)
+                } else {
+                  // logging this error has been deferred from onBlockFetchFailure
+                  logError(log"Failed to get block(s) from " +
+                    log"${MDC(HOST, address.host)}:${MDC(PORT, address.port)}", e)
+                  if (FallbackStorage.isProactive(SparkEnv.get.conf)) {
+                    logInfo(s"Failed to read block from proactive fallback storage: $blockId", t)
+                  } else {
+                    logDebug(s"Failed to read block from fallback storage: $blockId", t)
+                  }
+                }
             }
           }
           if (error != null) {
