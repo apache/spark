@@ -1375,22 +1375,32 @@ class ArrowArrayToPandasConversion:
             assert types.is_struct(arr.type)
             assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
 
-            series = [
-                cls.convert_numpy(
-                    field_arr,
-                    spark_type=field.dataType,
-                    timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    ndarray_as_list=ndarray_as_list,
-                    df_for_struct=False,  # always False for child fields
-                )
-                for field_arr, field in zip(arr.flatten(), spark_type)
-            ]
-            pdf = pd.concat(series, axis=1)
+            pdf: pd.DataFrame = pd.concat(
+                [
+                    cls.convert_numpy(
+                        field_arr,
+                        spark_type=field.dataType,
+                        timezone=timezone,
+                        struct_in_pandas=struct_in_pandas,
+                        ndarray_as_list=ndarray_as_list,
+                        df_for_struct=False,  # always False for child fields
+                    )
+                    for field_arr, field in zip(arr.flatten(), spark_type)
+                ],
+                axis=1,
+            )
             pdf.columns = spark_type.names  # type: ignore[assignment]
             return pdf
 
+        # Arrow array from batch.column(idx) contains name,
+        # and this name will be used to rename the pandas series
+        # returned by array.to_pandas().
+        # Right now, the name is dropped in arrow conversions.
+        # TODO: should make convert_numpy explicitly pass the expected series name.
+        name = arr._name
         arr = ArrowArrayConversion.preprocess_time(arr)
+
+        series: pd.Series
 
         # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
         # 1, benchmark a nullable integral array
@@ -1421,24 +1431,24 @@ class ArrowArrayToPandasConversion:
         # 19.1 μs ± 242 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
         if isinstance(spark_type, ByteType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, ShortType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, IntegerType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, LongType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(
             spark_type,
             (
@@ -1464,7 +1474,7 @@ class ArrowArrayToPandasConversion:
             pandas_options = {
                 "date_as_object": True,
             }
-            return arr.to_pandas(**pandas_options)
+            series = arr.to_pandas(**pandas_options)
         # elif isinstance(
         #     spark_type,
         #     (
@@ -1480,3 +1490,5 @@ class ArrowArrayToPandasConversion:
         # TODO(SPARK-55324): Support complex types
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
+
+        return series.rename(name)
