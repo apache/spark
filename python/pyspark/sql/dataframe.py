@@ -3155,7 +3155,7 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
-        def _get_col(c: Union[int, str, Column]) -> Column:
+        def _get_col(c: Union[int, str, Column, List[int | str | Column]]) -> Column:
             if isinstance(c, int) and not isinstance(c, bool):
                 # ordinal is 1-based
                 if c > 0:
