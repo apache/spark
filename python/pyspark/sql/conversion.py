@@ -903,29 +903,121 @@ class ArrowTableToRowsConversion:
                 return [_create_row(fields, tuple())] * table.num_rows
 
 
-class ArrowTimestampConversion:
+class ArrowArrayConversion:
     @classmethod
-    def _need_localization(cls, at: "pa.DataType") -> bool:
+    def check_conversion(
+        cls,
+        pa_type: "pa.DataType",
+        check_type: Callable[["pa.DataType"], bool],
+    ) -> bool:
         import pyarrow.types as types
 
-        if types.is_timestamp(at) and at.tz is not None:
+        if check_type(pa_type):
             return True
         elif (
-            types.is_list(at)
-            or types.is_large_list(at)
-            or types.is_fixed_size_list(at)
-            or types.is_dictionary(at)
+            types.is_list(pa_type)
+            or types.is_large_list(pa_type)
+            or types.is_fixed_size_list(pa_type)
+            or types.is_dictionary(pa_type)
         ):
-            return cls._need_localization(at.value_type)
-        elif types.is_map(at):
-            return any(cls._need_localization(dt) for dt in [at.key_type, at.item_type])
-        elif types.is_struct(at):
-            return any(cls._need_localization(field.type) for field in at)
+            return cls.check_conversion(pa_type.value_type, check_type)
+        elif types.is_map(pa_type):
+            return any(
+                cls.check_conversion(at, check_type)
+                for at in [
+                    pa_type.key_type,
+                    pa_type.item_type,
+                ]
+            )
+        elif types.is_struct(pa_type):
+            return any(cls.check_conversion(field.type, check_type) for field in pa_type)
         else:
             return False
 
-    @staticmethod
-    def localize_tz(arr: "pa.Array") -> "pa.Array":
+    @classmethod
+    def convert_array(
+        cls,
+        arr: "pa.Array",
+        check_type: Callable[["pa.DataType"], bool],
+        convert: Callable[["pa.Array"], "pa.Array"],
+    ) -> "pa.Array":
+        import pyarrow as pa
+        import pyarrow.types as types
+
+        assert isinstance(arr, pa.Array)
+
+        pa_type = arr.type
+        # fastpath
+        if not cls.check_conversion(pa_type, check_type):
+            return arr
+
+        if check_type(pa_type):
+            converted = convert(arr)
+            assert len(converted) == len(arr), f"array length changed: {arr} -> {converted}"
+            return converted
+        elif types.is_list(pa_type):
+            return pa.ListArray.from_arrays(
+                offsets=arr.offsets,
+                values=cls.convert_array(arr.values, check_type, convert),
+            )
+        elif types.is_large_list(pa_type):
+            return pa.LargeListType.from_arrays(
+                offsets=arr.offsets,
+                values=cls.convert_array(arr.values, check_type, convert),
+            )
+        elif types.is_fixed_size_list(pa_type):
+            return pa.FixedSizeListArray.from_arrays(
+                values=cls.convert_array(arr.values, check_type, convert),
+            )
+        elif types.is_dictionary(pa_type):
+            return pa.DictionaryArray.from_arrays(
+                indices=arr.indices,
+                dictionary=cls.convert_array(arr.dictionary, check_type, convert),
+            )
+        elif types.is_map(pa_type):
+            return pa.MapArray.from_arrays(
+                offsets=arr.offsets,
+                keys=cls.convert_array(arr.keys, check_type, convert),
+                items=cls.convert_array(arr.items, check_type, convert),
+            )
+        elif types.is_struct(pa_type):
+            return pa.StructArray.from_arrays(
+                arrays=[
+                    cls.convert_array(arr.field(i), check_type, convert)
+                    for i in range(len(arr.type))
+                ],
+                names=arr.type.names,
+            )
+        else:  # pragma: no cover
+            assert False, f"Need converter for {pa_type} but failed to find one."
+
+    @classmethod
+    def convert(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        check_type: Callable[["pa.DataType"], bool],
+        convert: Callable[["pa.Array"], "pa.Array"],
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
+        import pyarrow as pa
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        # fastpath
+        if not cls.check_conversion(arr.type, check_type):
+            return arr
+
+        if isinstance(arr, pa.Array):
+            return cls.convert_array(arr, check_type, convert)
+        else:
+            return pa.chunked_array(
+                (cls.convert_array(a, check_type, convert) for a in arr.iterchunks())
+            )
+
+    @classmethod
+    def localize_tz(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
         """
         Convert Arrow timezone-aware timestamps to timezone-naive in the specified timezone.
         This function works on Arrow Arrays, and it recurses to convert nested types.
@@ -960,11 +1052,13 @@ class ArrowTimestampConversion:
         import pyarrow.types as types
         import pyarrow.compute as pc
 
-        pa_type = arr.type
-        if not ArrowTimestampConversion._need_localization(pa_type):
-            return arr
+        def check_type_func(pa_type: pa.DataType) -> bool:
+            # match timezone-aware TimestampType
+            return types.is_timestamp(pa_type) and pa_type.tz is not None
 
-        if types.is_timestamp(pa_type) and pa_type.tz is not None:
+        def convert_func(arr: pa.Array) -> pa.Array:
+            assert isinstance(arr, pa.TimestampArray)
+
             # import datetime
             # from zoneinfo import ZoneInfo
             # ts = datetime.datetime(2022, 1, 5, 15, 0, 1, tzinfo=ZoneInfo('Asia/Singapore'))
@@ -974,42 +1068,13 @@ class ArrowTimestampConversion:
             # arr = pc.local_timestamp(arr)
             # arr[0]
             # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000'>
-
             return pc.local_timestamp(arr)
-        elif types.is_list(pa_type):
-            return pa.ListArray.from_arrays(
-                offsets=arr.offsets,
-                values=ArrowTimestampConversion.localize_tz(arr.values),
-            )
-        elif types.is_large_list(pa_type):
-            return pa.LargeListType.from_arrays(
-                offsets=arr.offsets,
-                values=ArrowTimestampConversion.localize_tz(arr.values),
-            )
-        elif types.is_fixed_size_list(pa_type):
-            return pa.FixedSizeListArray.from_arrays(
-                values=ArrowTimestampConversion.localize_tz(arr.values),
-            )
-        elif types.is_dictionary(pa_type):
-            return pa.DictionaryArray.from_arrays(
-                indices=arr.indices,
-                dictionary=ArrowTimestampConversion.localize_tz(arr.dictionary),
-            )
-        elif types.is_map(pa_type):
-            return pa.MapArray.from_arrays(
-                offsets=arr.offsets,
-                keys=ArrowTimestampConversion.localize_tz(arr.keys),
-                items=ArrowTimestampConversion.localize_tz(arr.items),
-            )
-        elif types.is_struct(pa_type):
-            return pa.StructArray.from_arrays(
-                arrays=[
-                    ArrowTimestampConversion.localize_tz(arr.field(i)) for i in range(len(arr.type))
-                ],
-                names=arr.type.names,
-            )
-        else:  # pragma: no cover
-            assert False, f"Need converter for {pa_type} but failed to find one."
+
+        return cls.convert(
+            arr,
+            check_type=check_type_func,
+            convert=convert_func,
+        )
 
 
 class ArrowArrayToPandasConversion:
@@ -1237,7 +1302,7 @@ class ArrowArrayToPandasConversion:
             pdf.columns = spark_type.names
             return pdf
 
-        arr = ArrowTimestampConversion.localize_tz(arr)
+        arr = ArrowArrayConversion.localize_tz(arr)
 
         # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
         # 1, benchmark a nullable integral array
