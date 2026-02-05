@@ -1330,7 +1330,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 arrow_cast=self._arrow_cast,
                 assign_cols_by_name=self._assign_cols_by_name,
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
-                struct_in_pandas="dict",
             )
 
         def serialize_batches():
