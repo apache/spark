@@ -370,7 +370,13 @@ class PandasToArrowConversion:
                     )
                 else:
                     raise
-        except pa.lib.ArrowException:
+        except TypeError as e:
+            raise PySparkTypeError(
+                f"Exception thrown when converting pandas.Series ({series.dtype}) "
+                f"with name '{series.name}' to Arrow Array ({arrow_type})."
+            ) from e
+        except ValueError as e:
+            # Note: pa.lib.ArrowInvalid inherits from both ValueError and ArrowException
             # Custom error handling for specialized cases (e.g., UDTF)
             if error_class:
                 raise PySparkRuntimeError(
@@ -381,13 +387,6 @@ class PandasToArrowConversion:
                         "arrow_type": str(arrow_type),
                     },
                 ) from None
-            raise
-        except TypeError as e:
-            raise PySparkTypeError(
-                f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                f"with name '{series.name}' to Arrow Array ({arrow_type})."
-            ) from e
-        except ValueError as e:
             error_msg = (
                 f"Exception thrown when converting pandas.Series ({series.dtype}) "
                 f"with name '{series.name}' to Arrow Array ({arrow_type})."
