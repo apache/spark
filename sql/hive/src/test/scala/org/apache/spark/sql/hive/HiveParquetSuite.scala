@@ -22,11 +22,12 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.hadoop.ParquetFileReader
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.util.HadoopInputFile
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetTest}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader, ParquetTest}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -214,7 +215,8 @@ class HiveParquetSuite extends QueryTest
 
       val conf = spark.sessionState.newHadoopConf()
       val file = parquetFiles.head
-      val footer = ParquetFileReader.readFooter(conf, new Path(file.getAbsolutePath))
+      val inputFile = HadoopInputFile.fromPath(new Path(file.getAbsolutePath), conf)
+      val footer = ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
 
       val codec = footer.getBlocks.get(0).getColumns.get(0).getCodec.name()
       assert(codec.equalsIgnoreCase(ParquetCompressionCodec.SNAPPY.lowerCaseName()),

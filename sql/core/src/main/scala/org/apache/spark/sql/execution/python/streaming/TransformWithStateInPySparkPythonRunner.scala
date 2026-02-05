@@ -28,7 +28,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorkerUtils, StreamingPythonRunner}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -49,9 +49,9 @@ class TransformWithStateInPySparkPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
+    schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -59,7 +59,7 @@ class TransformWithStateInPySparkPythonRunner(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[InType](
-    funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
+    funcs, evalType, argOffsets, schema, processorHandle, timeZoneId,
     initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[InType] {
@@ -125,7 +125,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     dataSchema: StructType,
     initStateSchema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -133,12 +133,12 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
-    funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
+    funcs, evalType, argOffsets, dataSchema, processorHandle, timeZoneId,
     initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[GroupedInType] {
 
-  override protected lazy val schema: StructType = new StructType()
+  override protected val schema: StructType = new StructType()
     .add("inputData", dataSchema)
     .add("initState", initStateSchema)
 
@@ -218,9 +218,9 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    _schema: StructType,
+    override protected val schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
-    _timeZoneId: String,
+    override protected val timeZoneId: String,
     initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -244,24 +244,15 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
     )
 
-  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
-  // constructor.
-  override protected lazy val schema: StructType = _schema
-  override protected lazy val timeZoneId: String = _timeZoneId
+  override protected def evalConf: Map[String, String] =
+    super.evalConf ++ Map(
+      "grouping_key_schema" -> groupingKeySchema.json,
+      "state_server_socket_port" ->
+        (if (isUnixDomainSock) stateServerSocketPath else stateServerSocketPort.toString)
+    )
+
   override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
-
-  override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    super.handleMetadataBeforeExec(stream)
-    // Write the port/path number for state server
-    if (isUnixDomainSock) {
-      stream.writeInt(-1)
-      PythonWorkerUtils.writeUTF(stateServerSocketPath, stream)
-    } else {
-      stream.writeInt(stateServerSocketPort)
-    }
-    PythonRDD.writeUTF(groupingKeySchema.json, stream)
-  }
 
   override def compute(
       inputIterator: Iterator[I],

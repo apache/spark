@@ -723,13 +723,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
-      ctx)
-  }
-
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION", ctx)
   }
@@ -851,5 +844,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
+  }
+
+  /**
+   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
+   * label.cursor Invalid: a.b.cursor
+   *
+   * @param cursorName
+   *   The fully qualified cursor name with multiple qualifiers
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def cursorInvalidQualifierError(cursorName: String): Throwable = {
+    new ParseException(
+      errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
+      messageParameters = Map("cursorName" -> toSQLId(cursorName)),
+      ctx = null)
   }
 }

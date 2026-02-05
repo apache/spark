@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
@@ -190,7 +191,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-34923: propagate metadata columns through SubqueryAlias if child is leaf node") {
+  test("SPARK-34923: propagate metadata columns through SubqueryAlias") {
     val sbq = "sbq"
     withTable(tbl) {
       prepareTable()
@@ -203,12 +204,43 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
       }
 
-      assertThrows[AnalysisException] {
-        sql(s"SELECT $sbq.index FROM (SELECT id FROM $tbl) $sbq")
+      // Metadata columns are propagated through SubqueryAlias even if child is not a leaf node.
+      checkAnswer(
+        sql(s"SELECT $sbq.index FROM (SELECT id FROM $tbl) $sbq"),
+        Seq(Row(0), Row(0), Row(0))
+      )
+      checkAnswer(
+        spark.table(tbl).select($"id").as(sbq).select(s"$sbq.index"),
+        Seq(Row(0), Row(0), Row(0))
+      )
+    }
+  }
+
+  test("ambiguous metadata columns after join with SubqueryAlias") {
+    val tbl2 = "testcat.t2"
+    withTable(tbl, tbl2) {
+      prepareTable()
+      sql(s"CREATE TABLE $tbl2 (id2 bigint, value string) PARTITIONED BY (bucket(4, id2), id2)")
+      sql(s"INSERT INTO $tbl2 VALUES (1, 'x'), (2, 'y'), (3, 'z')")
+
+      // Both tables have 'index' metadata column. When joined and aliased,
+      // accessing 'j.index' is ambiguous.
+      val ambiguousError = intercept[AnalysisException] {
+        sql(s"SELECT j.index FROM ($tbl JOIN $tbl2 ON $tbl.id = $tbl2.id2) AS j")
       }
-      assertThrows[AnalysisException] {
-        spark.table(tbl).select($"id").as(sbq).select(s"$sbq.index")
-      }
+      assert(ambiguousError.getMessage.contains("ambiguous"))
+
+      // Accessing with the original table qualifier works without alias.
+      checkAnswer(
+        sql(s"SELECT t.index, t2.index FROM $tbl AS t JOIN $tbl2 AS t2 ON t.id = t2.id2"),
+        Seq(Row(0, 0), Row(0, 0), Row(0, 0))
+      )
+
+      // Accessing non-ambiguous columns through SubqueryAlias works fine
+      checkAnswer(
+        sql(s"SELECT j.data, j.value FROM ($tbl JOIN $tbl2 ON $tbl.id = $tbl2.id2) AS j"),
+        Seq(Row("a", "x"), Row("b", "y"), Row("c", "z"))
+      )
     }
   }
 
@@ -354,6 +386,33 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       assert(cols.head.name() == "index")
       assert(cols.head.dataType() == IntegerType)
       assert(cols.head.metadataInJSON() == null)
+    }
+  }
+
+  test("SPARK-49110: Project a metadata column while reading a padded char column") {
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl (id bigint, data char(1)) PARTITIONED BY (bucket(4, id), id)")
+        sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+        val expected = Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+
+        // Unqualified column access
+        checkAnswer(sql(s"SELECT id, data, index, _partition FROM $tbl"), expected)
+        checkAnswer(spark.table(tbl).select("id", "data", "index", "_partition"), expected)
+
+        // Qualified column access without table alias (using full table path)
+        checkAnswer(
+          sql(s"SELECT $tbl.id, $tbl.data, $tbl.index, $tbl._partition FROM $tbl"),
+          expected)
+
+        // Qualified column access with table alias
+        checkAnswer(
+          sql(s"SELECT t.id, t.data, t.index, t._partition FROM $tbl AS t"),
+          expected)
+        checkAnswer(
+          spark.table(tbl).as("t").select("t.id", "t.data", "t.index", "t._partition"),
+          expected)
+      }
     }
   }
 }

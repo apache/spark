@@ -181,6 +181,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> toSQLId(condition)))
   }
 
+  def cursorDeclarationNotAtStartOfCompound(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_CURSOR_DECLARATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,
@@ -226,6 +234,14 @@ private[sql] object SqlScriptingErrors {
     new SqlScriptingException(
       origin = origin,
       errorClass = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
+  def cursorNotSupported(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_CURSOR",
       cause = null,
       messageParameters = Map.empty)
   }
