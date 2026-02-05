@@ -198,8 +198,7 @@ case class ArrowAggregatePythonExec(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        sessionUUID,
-        conf.pythonUDFProfiler) with GroupedPythonArrowInput
+        sessionUUID) with GroupedPythonArrowInput
 
       val columnarBatchIter = runner.compute(projectedRowIter, context.partitionId(), context)
 

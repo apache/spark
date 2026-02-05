@@ -28,7 +28,6 @@ import scala.reflect.classTag
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row}
@@ -51,7 +50,7 @@ import org.apache.spark.util.{MaybeNull, SparkStringUtils}
 /**
  * Tests for encoding external data to and from arrow.
  */
-class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class ArrowEncoderSuite extends ConnectFunSuite {
   private val allocator = new RootAllocator()
 
   private def newAllocator(name: String): BufferAllocator = {

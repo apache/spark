@@ -45,7 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
+import org.apache.spark.sql.{AnalysisException, Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
@@ -122,6 +122,7 @@ class SparkSession private[sql] (
         val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
         val maxBatchOfChunksSize =
           conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+        val localRelationSizeLimit = conf.get("spark.sql.session.localRelationSizeLimit").toLong
 
         // Serialize with chunking support
         val it = ArrowSerializer.serialize(
@@ -149,6 +150,14 @@ class SparkSession private[sql] (
             val chunkSize = chunk.length
             totalChunks += 1
             totalSize += chunkSize
+
+            if (totalSize > localRelationSizeLimit) {
+              throw new AnalysisException(
+                errorClass = "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+                messageParameters = Map(
+                  "actualSize" -> totalSize.toString,
+                  "sizeLimit" -> localRelationSizeLimit.toString))
+            }
 
             // Check if adding this chunk would exceed batch size
             if (currentBatchSize + chunkSize > maxBatchOfChunksSize) {
@@ -738,7 +747,8 @@ class SparkSession private[sql] (
       // All metrics, whether registered or not, will be collected by `SparkResult`.
       val observationOrNull = observationRegistry.remove(metric.getPlanId)
       if (observationOrNull != null) {
-        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
+        val metricsResult = Try(SparkResult.transformObservedMetrics(metric))
+        observationOrNull.setMetricsAndNotify(metricsResult)
       }
     }
   }

@@ -238,7 +238,21 @@ object SQLExecution extends Logging {
               event.duration = endTime - startTime
               event.qe = queryExecution
               event.executionFailure = ex
+              if (Utils.isTesting) {
+                import scala.jdk.CollectionConverters._
+                event.jobIds = Option(sc.dagScheduler.activeQueryToJobs.get(executionId))
+                  .map(_.asScala.map(_.jobId).toSet)
+                  .getOrElse(Set.empty)
+              }
+
+              // Clean up jobs tracked by DAGScheduler for this query execution.
+              sc.dagScheduler.cleanupQueryJobs(executionId)
+
               sc.listenerBus.post(event)
+
+              // Observation.tryComplete is called here to ensure the observation is completed,
+              // but it is not high priority, so it is fine to call it later.
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }

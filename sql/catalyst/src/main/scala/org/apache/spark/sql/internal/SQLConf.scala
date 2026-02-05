@@ -281,6 +281,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS =
+    buildConf("spark.sql.analyzer.subqueryAliasAlwaysPropagateMetadataColumns")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, SubqueryAlias always propagates metadata columns from its child. " +
+        "When false, SubqueryAlias only propagates metadata columns if the child is a " +
+        "LeafNode or another SubqueryAlias (legacy behavior).")
+      .booleanConf
+      .createWithDefault(true)
+
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
       .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
@@ -916,6 +927,17 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enableQueryLevelRollbackOnMismatch")
+      .internal()
+      .doc("Whether to rollback all the consumer stages from the same query executor " +
+        "when we detect checksum mismatches with its producer stages, including cancel " +
+        "running shuffle map stages and resubmit, clean up all the shuffle data written " +
+        "for available shuffle map stages and abort the running result stages.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
@@ -2148,6 +2170,13 @@ object SQLConf {
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
+  val DROP_TABLE_VIEW_ENABLED =
+    buildConf("spark.sql.dropTableOnView.enabled")
+      .doc("When true, DROP TABLE command will work on VIEW as well.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
@@ -2925,6 +2954,37 @@ object SQLConf {
         "empty when first starting a streaming query. This prevents prevents sharing checkpoint " +
         "directories between different queries.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_STREAMING_SOURCE_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
+      .internal()
+      .doc("When true, enforces that all streaming sources must be explicitly named via " +
+        "the .name() API. This enables streaming source evolution, allowing sources to be " +
+        "added, removed, or reordered without losing state.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART =
+    buildConf("spark.sql.streaming.checkUnfinishedRepartitionOnRestart")
+      .internal()
+      .doc("When true, checks if the latest batch is for an unfinished state repartitioning " +
+        "operation, on query restart. If so, it will fail the query and require the " +
+        "repartitioning to be complete before restarting the query.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_CHECKPOINT_VERIFY_METADATA_EXISTS =
+    buildConf("spark.sql.streaming.checkpoint.verifyMetadataExists.enabled")
+      .internal()
+      .doc("When true, validates that the checkpoint metadata file exists when offset " +
+        "or commit logs contain data. This prevents generating a new query ID when " +
+        "checkpoint data already exists, which would cause data duplication in " +
+        "exactly-once sinks.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4008,6 +4068,13 @@ object SQLConf {
       .checkValue(_ >= 0, "This value must be equal to or greater than 0.")
       .createWithDefaultString("48MB")
 
+  val PYSPARK_TOJSON_RETURN_DATAFRAME =
+    buildConf("spark.sql.pyspark.toJSON.returnDataFrame")
+      .doc("When true, DataFrame.toJSON in PySpark Classic returns a Dataframe instead of RDD.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -4018,6 +4085,17 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(Utils.isTesting)
+
+  val PYTHON_DATA_SOURCE_PROFILER =
+    buildConf("spark.sql.pyspark.dataSource.profiler")
+      .doc("Configure the Python Data Source profiler by enabling or disabling it " +
+        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "or unsetting the config disables the profiler. This is disabled by default.")
+      .version("4.2.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("perf", "memory"))
+      .createOptional
 
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
@@ -4474,11 +4552,18 @@ object SQLConf {
   val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
     buildConf("spark.sql.scripting.continueHandlerEnabled")
       .internal()
-      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
-        "is under development and still not working as intended. This feature switch is intended " +
-        "to be used internally for development and testing, not by end users. " +
-        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .doc("SQL Scripting CONTINUE HANDLER feature enables CONTINUE exception handlers " +
+        "which are essential for cursor iteration with NOT FOUND conditions.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SQL_SCRIPTING_CURSOR_ENABLED =
+    buildConf("spark.sql.scripting.cursorEnabled")
+      .internal()
+      .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
+        "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -5053,6 +5138,16 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL =
+    buildConf("spark.sql.artifact.cacheStorageLevel")
+      .internal()
+      .doc("Storage level for cached blocks in artifact manager. Valid values are any " +
+        "StorageLevel name (e.g., MEMORY_AND_DISK_SER, DISK_ONLY, MEMORY_ONLY, etc.).")
+      .version("4.2.0")
+      .stringConf
+      .checkValue(v => Try(StorageLevel.fromString(v)).isSuccess, "Invalid StorageLevel")
+      .createWithDefault("MEMORY_AND_DISK_SER")
 
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
@@ -6231,6 +6326,16 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(1024 * 1024)
 
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The local relation size in bytes must be positive")
+      .createWithDefault(3L * 1024 * 1024 * 1024)
+
   val LOCAL_RELATION_CHUNK_SIZE_ROWS =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
       .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
@@ -6263,15 +6368,6 @@ object SQLConf {
       .version("4.1.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2000MB")
-
-  val LOCAL_RELATION_SIZE_LIMIT =
-    buildConf("spark.sql.session.localRelationSizeLimit")
-      .internal()
-      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
-        "If the limit is exceeded, an exception is thrown.")
-      .version("4.1.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("3GB")
 
   val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
@@ -7148,6 +7244,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def shuffleChecksumMismatchFullRetryEnabled: Boolean =
     getConf(SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
 
+  def shuffleChecksumMismatchQueryLevelRollbackEnabled: Boolean =
+    getConf(SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED)
+
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
@@ -7197,6 +7296,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingStateSchemaFilesThreshold: Int =
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
+
+  def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
+    getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
@@ -7515,6 +7619,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def dataframeCacheLogLevel: Level = getConf(DATAFRAME_CACHE_LOG_LEVEL)
 
+  def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
+
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
@@ -7628,9 +7734,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
+  def pysparkToJSONReturnDataFrame: Boolean = getConf(PYSPARK_TOJSON_RETURN_DATAFRAME)
+
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
+  def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 

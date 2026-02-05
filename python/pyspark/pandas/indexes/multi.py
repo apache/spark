@@ -19,7 +19,7 @@ from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_hashable, is_list_like
 
 from pyspark.sql import functions as F, Column as PySparkColumn, Window
 from pyspark.sql.types import DataType

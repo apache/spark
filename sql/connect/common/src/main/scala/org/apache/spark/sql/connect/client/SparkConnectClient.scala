@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connect.client
 
 import java.net.URI
-import java.util.{Locale, UUID}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.Executor
 
 import scala.collection.mutable
@@ -1093,6 +1094,24 @@ object SparkConnectClient {
    */
   private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
       extends ClientInterceptor {
+
+    // Sealed trait for pre-processed metadata entries
+    private sealed trait MetadataEntry
+    private case class AsciiEntry(key: Metadata.Key[String], value: String) extends MetadataEntry
+    private case class BinaryEntry(key: Metadata.Key[Array[Byte]], value: Array[Byte])
+        extends MetadataEntry
+
+    // Pre-process metadata at construction time
+    private val entries: Seq[MetadataEntry] = metadata.map { case (key, value) =>
+      assert(key != null && value != null)
+      if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
+        BinaryEntry(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
+      } else {
+        AsciiEntry(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+      }
+    }.toSeq
+
     override def interceptCall[ReqT, RespT](
         method: MethodDescriptor[ReqT, RespT],
         callOptions: CallOptions,
@@ -1102,8 +1121,9 @@ object SparkConnectClient {
         override def start(
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
-          metadata.foreach { case (key, value) =>
-            headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+          entries.foreach {
+            case AsciiEntry(key, value) => headers.put(key, value)
+            case BinaryEntry(key, value) => headers.put(key, value)
           }
           super.start(responseListener, headers)
         }

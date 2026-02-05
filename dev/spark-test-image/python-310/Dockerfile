@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20251224
+ENV FULL_REFRESH_DATE=20260203
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -36,17 +36,9 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     git \
     gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
     libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
     liblapack-dev \
     libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
     libssl-dev \
     libtiff5-dev \
     libwebp-dev \
@@ -64,9 +56,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
 # Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10

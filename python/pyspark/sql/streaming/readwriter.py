@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import re
 import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
@@ -239,6 +240,52 @@ class DataStreamReader(OptionUtils):
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
+        return self
+
+    def name(self, source_name: str) -> "DataStreamReader":
+        """Specifies a name for the streaming source.
+
+        This name is used to identify the source in checkpoint metadata and enables
+        stable checkpoint locations for source evolution.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        source_name : str
+            the name to assign to this streaming source. Must contain only ASCII letters,
+            digits, and underscores.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
+        <...streaming.readwriter.DataStreamReader object ...>
+        """
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._jreader = self._jreader.name(source_name)
         return self
 
     def load(
@@ -1243,6 +1290,7 @@ class DataStreamWriter:
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
         availableNow: Optional[bool] = None,
+        realTime: Optional[str] = None,
     ) -> "DataStreamWriter":
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
@@ -1268,6 +1316,10 @@ class DataStreamWriter:
         availableNow : bool, optional
             if set to True, set a trigger that processes all available data in multiple
             batches then terminates the query. Only one trigger can be set.
+        realTime : str, optional
+            a batch duration as a string, e.g. '5 seconds', '1 minute'.
+            Set a trigger that runs a real time mode query with
+            batch at the specified duration. Only one trigger can be set.
 
         Notes
         -----
@@ -1291,15 +1343,20 @@ class DataStreamWriter:
 
         >>> df.writeStream.trigger(availableNow=True)
         <...streaming.readwriter.DataStreamWriter object ...>
-        """
-        params = [processingTime, once, continuous, availableNow]
 
-        if params.count(None) == 4:
+        Trigger the query for real time mode execution every 5 seconds.
+
+        >>> df.writeStream.trigger(realTime='5 seconds')
+        <...streaming.readwriter.DataStreamWriter object ...>
+        """
+        params = [processingTime, once, continuous, availableNow, realTime]
+
+        if params.count(None) == 5:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
             )
-        elif params.count(None) < 3:
+        elif params.count(None) < 4:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
@@ -1342,6 +1399,16 @@ class DataStreamWriter:
             jTrigger = getattr(
                 self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
             ).Continuous(interval)
+        elif realTime is not None:
+            if type(realTime) != str or len(realTime.strip()) == 0:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},
+                )
+            batch_duration = realTime.strip()
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).RealTime(batch_duration)
         else:
             if availableNow is not True:
                 raise PySparkValueError(

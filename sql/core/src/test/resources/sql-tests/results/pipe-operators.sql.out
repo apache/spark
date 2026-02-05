@@ -1022,6 +1022,54 @@ struct<x:int,y:string>
 
 
 -- !query
+table st
+|> drop col.i1
+-- !query schema
+struct<x:int,col:struct<i2:int>>
+-- !query output
+1	{"i2":3}
+
+
+-- !query
+table st
+|> drop col.i1, col.i2
+-- !query schema
+struct<x:int,col:struct<>>
+-- !query output
+1	{}
+
+
+-- !query
+table t
+|> as u
+|> drop u.x
+-- !query schema
+struct<y:string>
+-- !query output
+abc
+def
+
+
+-- !query
+select 1 as x, named_struct('x', 2, 'y', 3) as col
+|> as col
+|> drop col.x
+-- !query schema
+struct<col:struct<x:int,y:int>>
+-- !query output
+{"x":2,"y":3}
+
+
+-- !query
+select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
+|> drop outer.middle.inner
+-- !query schema
+struct<x:int,outer:struct<middle:struct<>>>
+-- !query output
+1	{"middle":{}}
+
+
+-- !query
 table t
 |> drop z
 -- !query schema
@@ -1047,18 +1095,25 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table st
-|> drop col.i1
+|> drop col.nonexistent
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "FIELD_NOT_FOUND",
+  "sqlState" : "42704",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "fieldName" : "`nonexistent`",
+    "fields" : "`i1`, `i2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "table st\n|> drop col.nonexistent"
+  } ]
 }
 
 

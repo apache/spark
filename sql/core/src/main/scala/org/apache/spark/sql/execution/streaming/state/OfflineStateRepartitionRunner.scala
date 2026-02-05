@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
-import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.runtime.{StreamingCheckpointConstants, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * Runs repartitioning for the state stores used by a streaming query.
@@ -78,12 +82,25 @@ class OfflineStateRepartitionRunner(
 
         val newBatchId = createNewBatchIfNeeded(lastBatchId, lastCommittedBatchId)
 
-        // todo(SPARK-54365): Do the repartitioning here, in subsequent PR
+        val stateRepartitionFunc = (stateDf: DataFrame) => {
+          // Repartition the state by the partition key
+          stateDf.repartition(numPartitions, col("partition_key"))
+        }
+        val rewriter = new StateRewriter(
+          sparkSession,
+          readBatchId = lastCommittedBatchId,
+          writeBatchId = newBatchId,
+          resolvedCpLocation,
+          hadoopConf,
+          transformFunc = Some(stateRepartitionFunc),
+          writeCheckpointMetadata = Some(checkpointMetadata)
+        )
+        val operatorToCkptIds = rewriter.run()
 
-        // todo(SPARK-54365): update operator metadata in subsequent PR.
+        updateNumPartitionsInOperatorMetadata(newBatchId, readBatchId = lastCommittedBatchId)
 
         // Commit the repartition batch
-        commitBatch(newBatchId, lastCommittedBatchId)
+        commitBatch(newBatchId, lastCommittedBatchId, operatorToCkptIds)
         newBatchId
       }
 
@@ -125,7 +142,7 @@ class OfflineStateRepartitionRunner(
       createNewBatchFromLastCommitted(lastBatchId, lastCommittedBatchId)
     } else {
       // Means there are uncommitted batches.
-      if (isRepartitionBatch(lastBatchId, checkpointMetadata.offsetLog, checkpointLocation)) {
+      if (isRepartitionBatch(lastBatchId, checkpointMetadata.offsetLog)) {
         // If it is a failed repartition batch, lets check if the shuffle partitions
         // is the same as the requested. If same, then we can retry the batch.
         val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
@@ -229,60 +246,58 @@ class OfflineStateRepartitionRunner(
     newBatchId
   }
 
-  private def commitBatch(newBatchId: Long, lastCommittedBatchId: Long): Unit = {
-    val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
+  private def updateNumPartitionsInOperatorMetadata(
+      newBatchId: Long,
+      readBatchId: Long): Unit = {
+    val stateMetadataReader = new StateMetadataPartitionReader(
+      resolvedCpLocation,
+      new SerializableConfiguration(hadoopConf),
+      readBatchId)
 
-    // todo: For checkpoint v2, we need to update the stateUniqueIds based on the
-    //  newly created state commit. Will be done in subsequent PR.
-    if (!checkpointMetadata.commitLog.add(newBatchId, latestCommit)) {
+    val allOperatorsMetadata = stateMetadataReader.allOperatorStateMetadata
+    assert(allOperatorsMetadata.nonEmpty, "Operator metadata shouldn't be empty")
+
+    val stateRootLocation = new Path(
+      resolvedCpLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
+
+    allOperatorsMetadata.foreach { opMetadata =>
+      opMetadata match {
+        // We would only update shuffle partitions for v2 op metadata since it is versioned.
+        // For v1, we wouldn't update it since there is only one metadata file.
+        case v2: OperatorStateMetadataV2 =>
+          // update for each state store
+          val updatedStoreInfo = v2.stateStoreInfo.map { stateStore =>
+            stateStore.copy(numPartitions = numPartitions)
+          }
+          val updatedMetadata = v2.copy(stateStoreInfo = updatedStoreInfo)
+          // write the updated metadata
+          val metadataWriter = OperatorStateMetadataWriter.createWriter(
+            new Path(stateRootLocation, updatedMetadata.operatorInfo.operatorId.toString),
+            hadoopConf,
+            updatedMetadata.version,
+            Some(newBatchId))
+          metadataWriter.write(updatedMetadata)
+
+          logInfo(log"Updated operator metadata for " +
+            log"operator=${MDC(OP_TYPE, updatedMetadata.operatorInfo.operatorName)}, " +
+            log"numStateStores=${MDC(COUNT, updatedMetadata.stateStoreInfo.length)}")
+        case v =>
+          logInfo(log"Skipping operator metadata update for " +
+            log"operator=${MDC(OP_TYPE, v.operatorInfo.operatorName)}, " +
+            log"since metadata version(${MDC(FILE_VERSION, v.version)}) is not versioned")
+      }
+    }
+  }
+
+  private def commitBatch(
+      newBatchId: Long,
+      lastCommittedBatchId: Long,
+      opIdToStateStoreCkptInfo: Option[Map[Long, Array[Array[String]]]]): Unit = {
+    val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
+    val commitMetadata = latestCommit.copy(stateUniqueIds = opIdToStateStoreCkptInfo)
+
+    if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
     }
-  }
-}
-
-object OfflineStateRepartitionUtils {
-  def isRepartitionBatch(
-      batchId: Long, offsetLog: OffsetSeqLog, checkpointLocation: String): Boolean = {
-    assert(batchId >= 0, "Batch ID must be non-negative")
-    batchId match {
-      // first batch can never be a repartition batch since we require at least one committed batch
-      case 0 => false
-      case _ =>
-        // A repartition batch is a batch where the number of shuffle partitions changed
-        // compared to the previous batch.
-        val batch = offsetLog.get(batchId).getOrElse(throw OfflineStateRepartitionErrors
-          .offsetSeqNotFoundError(checkpointLocation, batchId))
-        val prevBatchId = batchId - 1
-        val previousBatch = offsetLog.get(prevBatchId).getOrElse(
-          throw OfflineStateRepartitionErrors
-            .offsetSeqNotFoundError(checkpointLocation, prevBatchId))
-
-        // Determine version from the batch type
-        val batchVersion = batch match {
-          case _: OffsetSeq => 1
-          case _: OffsetMap => 2
-          case _ => -1
-        }
-        val batchMetadata = batch.metadataOpt.getOrElse(
-          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
-            checkpointLocation, version = batchVersion, batchId = batchId))
-        val shufflePartitions = getShufflePartitions(batchMetadata).get
-
-        val prevBatchVersion = previousBatch match {
-          case _: OffsetSeq => 1
-          case _: OffsetMap => 2
-          case _ => -1
-        }
-        val previousBatchMetadata = previousBatch.metadataOpt.getOrElse(
-          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
-            checkpointLocation, version = prevBatchVersion, batchId = prevBatchId))
-        val previousShufflePartitions = getShufflePartitions(previousBatchMetadata).get
-
-        previousShufflePartitions != shufflePartitions
-    }
-  }
-
-  def getShufflePartitions(metadata: OffsetSeqMetadataBase): Option[Int] = {
-    metadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).map(_.toInt)
   }
 }
