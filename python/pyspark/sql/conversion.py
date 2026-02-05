@@ -245,15 +245,19 @@ class PandasToArrowConversion:
                 field_names = [field.name for field in schema.fields]
                 data = data[field_names]
 
-        def get_column_data(i: int) -> Union["pd.Series", "pd.DataFrame"]:
+        def get_column_data(i: int, field_name: str) -> Union["pd.Series", "pd.DataFrame"]:
             if isinstance(data, list):
-                return data[i]
+                col = data[i]
             else:
-                return data.iloc[:, i]
+                col = data.iloc[:, i]
+            # Rename series to schema field name for better error messages
+            if isinstance(col, pd.Series):
+                col = col.rename(field_name)
+            return col
 
         arrays = []
         for i, field in enumerate(schema.fields):
-            col_data = get_column_data(i)
+            col_data = get_column_data(i, field.name)
 
             if isinstance(col_data, pd.DataFrame):
                 # DataFrame column (for struct types)
