@@ -78,7 +78,7 @@ if __name__ == "__main__":
         .transform(lambda rdd: word_sentiments.join(rdd)) \
         .map(lambda word_tuples: (word_tuples[0], float(word_tuples[1][0]) * word_tuples[1][1])) \
         .map(lambda word_happiness: (word_happiness[1], word_happiness[0])) \
-        .transform(lambda rdd: rdd.sortByKey(False))  # type: ignore[call-overload]
+        .transform(lambda rdd: rdd.sortByKey(False))
 
     happiest_words.foreachRDD(print_happiest_words)
 

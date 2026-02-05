@@ -35,7 +35,7 @@ if __name__ == "__main__":
     lines = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])
     sortedCount: RDD[Tuple[int, int]] = lines.flatMap(lambda x: x.split(' ')) \
         .map(lambda x: (int(x), 1)) \
-        .sortByKey()  # type: ignore[call-overload]
+        .sortByKey()
     # This is just a demo on how to bring all the sorted data back to a single node.
     # In reality, we wouldn't want to collect all the data to the driver node.
     output = sortedCount.collect()
