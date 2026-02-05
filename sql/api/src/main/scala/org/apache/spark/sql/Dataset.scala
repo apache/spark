@@ -2022,7 +2022,7 @@ abstract class Dataset[T] extends Serializable {
   def zipWithIndex(): DataFrame = zipWithIndex("index")
 
   /**
-   * Returns a new [[Dataset]] by appending a column containing consecutive 0-based Long indices,
+   * Returns a new `Dataset` by appending a column containing consecutive 0-based Long indices,
    * similar to `RDD.zipWithIndex()`.
    *
    * The index column is appended as the last column of the resulting `DataFrame`.
