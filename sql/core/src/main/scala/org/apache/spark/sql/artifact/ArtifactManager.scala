@@ -194,9 +194,11 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         // (e.g., after clone), we should replace it.
         val existingBlock = hashToCachedIdMap.get(hash)
         if (existingBlock == null || existingBlock.id != blockId) {
+          val storageLevel = StorageLevel.fromString(
+            session.conf.get(SQLConf.ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL))
           val updater = blockManager.TempFileBasedBlockStoreUpdater(
             blockId = blockId,
-            level = StorageLevel.MEMORY_AND_DISK_SER,
+            level = storageLevel,
             classTag = implicitly[ClassTag[Array[Byte]]],
             tmpFile = tmpFile,
             blockSize = tmpFile.length(),

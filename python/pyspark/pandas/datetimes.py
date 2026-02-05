@@ -517,7 +517,7 @@ class DatetimeMethods:
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="Y"))
+        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="YE"))
         >>> dates_series
         0   2012-12-31
         1   2013-12-31
@@ -700,7 +700,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.round("H")
+        >>> series.dt.round("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
@@ -755,7 +755,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.floor("H")
+        >>> series.dt.floor("h")
         0   2018-01-01 11:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
@@ -810,7 +810,7 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.ceil("H")
+        >>> series.dt.ceil("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 13:00:00

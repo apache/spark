@@ -132,9 +132,9 @@ class ResampleFrameMixin:
         self._test_resample(self.pdf6, self.psdf6, ["29s", "10min", "3h"], "left", "right", "var")
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            self._test_resample(self.pdf2, self.psdf2, ["3A", "11ME", "D"], None, "left", "max")
+            self._test_resample(self.pdf2, self.psdf2, ["3YE", "11ME", "D"], None, "left", "max")
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            self._test_resample(self.pdf1, self.psdf1, ["3Y", "9ME", "17D"], None, None, "min")
+            self._test_resample(self.pdf1, self.psdf1, ["3YE", "9ME", "17D"], None, None, "min")
 
 
 class ResampleFrameTests(ResampleFrameMixin, PandasOnSparkTestCase, TestUtils):

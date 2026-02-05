@@ -4086,6 +4086,17 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(Utils.isTesting)
 
+  val PYTHON_DATA_SOURCE_PROFILER =
+    buildConf("spark.sql.pyspark.dataSource.profiler")
+      .doc("Configure the Python Data Source profiler by enabling or disabling it " +
+        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "or unsetting the config disables the profiler. This is disabled by default.")
+      .version("4.2.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("perf", "memory"))
+      .createOptional
+
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
       .doc("Configure the Python/Pandas UDF profiler by enabling or disabling it " +
@@ -5127,6 +5138,16 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL =
+    buildConf("spark.sql.artifact.cacheStorageLevel")
+      .internal()
+      .doc("Storage level for cached blocks in artifact manager. Valid values are any " +
+        "StorageLevel name (e.g., MEMORY_AND_DISK_SER, DISK_ONLY, MEMORY_ONLY, etc.).")
+      .version("4.2.0")
+      .stringConf
+      .checkValue(v => Try(StorageLevel.fromString(v)).isSuccess, "Invalid StorageLevel")
+      .createWithDefault("MEMORY_AND_DISK_SER")
 
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
@@ -7718,6 +7739,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
+  def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 

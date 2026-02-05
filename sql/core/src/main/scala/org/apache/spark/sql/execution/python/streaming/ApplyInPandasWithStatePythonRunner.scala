@@ -116,22 +116,17 @@ class ApplyInPandasWithStatePythonRunner(
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
     )
 
+  override protected def evalConf: Map[String, String] =
+    super.evalConf ++ Map(
+      "state_value_schema" -> stateValueSchema.json
+    )
+
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 
-  /**
-   * This method sends out the additional metadata before sending out actual data.
-   *
-   * Specifically, this class overrides this method to also write the schema for state value.
-   */
-  override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    super.handleMetadataBeforeExec(stream)
-    // Also write the schema for state value
-    PythonRDD.writeUTF(stateValueSchema.json, stream)
-  }
   private var pandasWriter: ApplyInPandasWithStateWriter = _
   /**
    * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and

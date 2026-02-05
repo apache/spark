@@ -368,7 +368,7 @@ jobs:
     - name: Install Python packages (Python 3.12)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'zstandard==0.25.0'
+        python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
     # Run the tests.
     - name: Run tests
@@ -637,6 +637,8 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
+        activate-environment: ""
+        auto-activate: false
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -818,7 +820,7 @@ jobs:
         python-version: '3.12'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.12 -m pip install 'black==23.12.1' 'protobuf==6.33.0' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.12 -m pip install 'black==23.12.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.12 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'

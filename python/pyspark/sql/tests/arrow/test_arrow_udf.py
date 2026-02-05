@@ -109,7 +109,6 @@ class ArrowUDFTestsMixin:
             "America/Los_Angeles",
             "Pacific/Honolulu",
             "Europe/Amsterdam",
-            "US/Pacific",
         ]:
             with self.sql_conf({"spark.sql.session.timeZone": tz}):
                 # There is a time-zone conversion in df.collect:
