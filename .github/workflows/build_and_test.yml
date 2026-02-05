@@ -632,20 +632,12 @@ jobs:
           $py -m pip list
           echo ""
         done
-    - name: Install Conda for pip packaging test
-      if: contains(matrix.modules, 'pyspark-errors')
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        miniforge-version: latest
-        activate-environment: ""
-        auto-activate: false
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$CONDA/bin:$PATH
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
