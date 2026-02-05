@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260127
+ENV FULL_REFRESH_DATE=20260203
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -64,5 +64,5 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14t
 # TODO: Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS when it supports Python 3.14 free threaded
 # TODO: Add lxml, grpcio, grpcio-status back when they support Python 3.14 free threaded
 RUN python3.14t -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
-RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib openpyxl jinja2 && \
+RUN python3.14t -m pip install 'numpy>=2.1' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.3.3' 'pystack>=1.6.0' scipy coverage matplotlib openpyxl jinja2 psutil && \
     python3.14t -m pip cache purge
