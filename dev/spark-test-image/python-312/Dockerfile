@@ -43,7 +43,6 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     python3.12 \
     python3-pip \
-    python3-psutil \
     python3-venv \
     pkg-config \
     tzdata \
