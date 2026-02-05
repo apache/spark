@@ -43,13 +43,22 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
-if ! hash python3 2>/dev/null; then
-  echo "Python3 not installed on system, skipping pip installability tests"
+
+if [ -z "${PYTHON_TO_TEST}" ]; then
+  PYTHON_EXECUTABLE="python3"
+else
+  PYTHON_EXECUTABLE="${PYTHON_TO_TEST}"
+fi
+
+if ! hash "$PYTHON_EXECUTABLE" 2>/dev/null; then
+  echo "Python executable $PYTHON_EXECUTABLE not installed on system, skipping pip installability tests"
   exit 0
 fi
 
+echo "Using Python executable: $PYTHON_EXECUTABLE"
+
 # Determine which version of PySpark we are building for archive name
-PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
+PYSPARK_VERSION=$($PYTHON_EXECUTABLE -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
 PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall --use-pep517"
@@ -66,7 +75,7 @@ for install_command in "${PIP_COMMANDS[@]}"; do
   echo "Using $VIRTUALENV_BASE for virtualenv"
   VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
   rm -rf "$VIRTUALENV_PATH"
-  python3 -m venv "$VIRTUALENV_PATH"
+  $PYTHON_EXECUTABLE -m venv "$VIRTUALENV_PATH"
   source "$VIRTUALENV_PATH"/bin/activate
   pip install --upgrade pip wheel numpy setuptools
 
