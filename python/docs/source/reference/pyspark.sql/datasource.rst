@@ -31,6 +31,7 @@ Python Data Source
     DataSource.streamReader
     DataSource.writer
     DataSourceReader.partitions
+    DataSourceReader.pushFilters
     DataSourceReader.read
     DataSourceRegistration.register
     DataSourceStreamReader.commit
