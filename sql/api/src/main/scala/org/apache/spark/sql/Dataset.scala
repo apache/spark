@@ -2025,7 +2025,7 @@ abstract class Dataset[T] extends Serializable {
    * Returns a new [[Dataset]] by appending a column containing consecutive 0-based Long indices,
    * similar to `RDD.zipWithIndex()`.
    *
-   * The index column is appended as the last column of the resulting [[DataFrame]].
+   * The index column is appended as the last column of the resulting `DataFrame`.
    *
    * @note
    *   If a column with `indexColName` already exists in the schema, the resulting `DataFrame`
