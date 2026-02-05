@@ -129,6 +129,8 @@ class RocksDB(
   rocksDbOptions.setAvoidFlushDuringShutdown(true)
   // Set merge operator based on version for backward compatibility
   // Version 1: comma delimiter ",", Version 2: empty string ""
+  // NOTE: RocksDB does not document about the behavior of an empty string delimiter,
+  // only the PR description explains this - https://github.com/facebook/rocksdb/pull/8536
   val mergeDelimiter = conf.mergeOperatorVersion match {
     case 1 => ","
     case 2 => ""

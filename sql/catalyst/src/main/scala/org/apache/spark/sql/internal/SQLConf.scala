@@ -3053,8 +3053,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.rocksdb.mergeOperatorVersion")
       .internal()
       .doc("Set the RocksDB merge operator version. This will be stored in the checkpoint when " +
-        "starting a streaming query. The checkpoint will use this merge operator version in the " +
-        "entire lifetime of the query.")
+        "starting a streaming query. The checkpoint will use this merge operator version for " +
+        "the entire lifetime of the query.")
       .version("4.2.0")
       .intConf
       .checkValue(v => v == 1 || v == 2, "Must be 1 or 2")
