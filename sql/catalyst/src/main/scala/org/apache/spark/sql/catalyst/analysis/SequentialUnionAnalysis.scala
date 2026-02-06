@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(UNION)) {
+    _.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
     case SequentialStreamingUnion(children, byName, allowMissingCol) =>
       val flattened = SequentialStreamingUnion.flatten(children)
       SequentialStreamingUnion(flattened, byName, allowMissingCol)
@@ -64,7 +64,7 @@ object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
 
   private def validateNoNesting(su: SequentialStreamingUnion): Unit = {
     su.children.foreach { child =>
-      if (child.exists(_.isInstanceOf[SequentialStreamingUnion])) {
+      if (child.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
         throw QueryCompilationErrors.nestedSequentialStreamingUnionError()
       }
     }

@@ -72,7 +72,7 @@ case class SequentialStreamingUnion(
   assert(!allowMissingCol || byName,
     "`allowMissingCol` can be true only if `byName` is true.")
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+  final override val nodePatterns: Seq[TreePattern] = Seq(SEQUENTIAL_STREAMING_UNION)
 
   /**
    * This node is considered resolved when:
