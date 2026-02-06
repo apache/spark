@@ -667,12 +667,139 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def columnPruning(): Unit = {
+    val numRows = 5000000 // 5M rows
+    runBenchmark("Cache with column pruning (select 1 of 20 columns)") {
+      val benchmark = new Benchmark(
+        "Cache 5M rows, select 1 column", numRows, output = output)
+
+      // Run Default cache benchmark (with compression - default)
+      benchmark.addCase("Default cache - select 1 of 20 columns") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+        try {
+          // Create DataFrame with 20 columns
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count() // Materialize cache
+
+          // Select only first column and count
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Default cache without compression
+      benchmark.addCase("Default cache - select 1 of 20 (uncompressed)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+        try {
+          spark.conf.set("spark.sql.inMemoryColumnarStorage.compressed", "false")
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count()
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache (no compression)
+      benchmark.addCase("Arrow cache - select 1 of 20") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
+        try {
+          spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count()
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache with zstd compression level -1
+      benchmark.addCase("Arrow cache - select 1 of 20 (zstd level -1)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
+        try {
+          spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count()
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache with zstd compression level 1
+      benchmark.addCase("Arrow cache - select 1 of 20 (zstd level 1)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
+        try {
+          spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count()
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      // Run Arrow cache with zstd compression level 3
+      benchmark.addCase("Arrow cache - select 1 of 20 (zstd level 3)") { _ =>
+        val spark = createFreshSession(
+          "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
+        try {
+          spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
+          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set("spark.sql.execution.arrow.compression.level", "3")
+          val df = spark.range(numRows).selectExpr(
+            (0 until 20).map(i => s"id + $i as col$i"): _*
+          )
+          df.cache()
+          df.count()
+          df.select("col0").write.format("noop").mode("overwrite").save()
+          df.unpersist(blocking = true)
+        } finally {
+          spark.stop()
+        }
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Arrow Cache vs Default Cache") {
       cachePrimitiveTypes()
       cacheWithFilters()
       cacheColumnarInput()
       recacheArrowData()
+      columnPruning()
     }
   }
 }
