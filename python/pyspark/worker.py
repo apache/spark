@@ -217,20 +217,22 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def verify_result(expected_type: type) -> Callable[[Any], Any]:
+def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
     """
-    Create a verifier. Returns a function that verifies a single element is an instance of
-    ``expected_type`` and returns it unchanged, or raises :class:`PySparkTypeError`.
+    Create a result verifier that checks both iterability and element types.
+
+    Returns a function that takes a UDF result, verifies it is iterable,
+    and lazily type-checks each element via map.
 
     Parameters
     ----------
     expected_type : type
         The expected Python/PyArrow type for each element
-        (e.g. ``pa.RecordBatch``, ``pa.Array``).
+        (e.g. pa.RecordBatch, pa.Array).
     """
     label: str = "{}.{}".format(expected_type.__module__.split(".")[0], expected_type.__name__)
 
-    def check(element: Any) -> Any:
+    def check_element(element: Any) -> Any:
         if not isinstance(element, expected_type):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
@@ -240,6 +242,17 @@ def verify_result(expected_type: type) -> Callable[[Any], Any]:
                 },
             )
         return element
+
+    def check(result: Any) -> Iterator:
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": "iterator of {}".format(label),
+                    "actual": type(result).__name__,
+                },
+            )
+        return map(check_element, result)
 
     return check
 
@@ -2828,13 +2841,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             )
 
             # invoke the UDF
-            output_batches: Iterator[pa.RecordBatch] = udf_func(input_batches)
+            output_batches = udf_func(input_batches)
 
             # Post-processing
-            verified_batches: Iterator[pa.RecordBatch] = map(
-                verify_result(pa.RecordBatch), output_batches
-            )
-            yield from map(ArrowBatchTransformer.wrap_struct, verified_batches)
+            verified: Iterator[pa.RecordBatch] = verify_result(pa.RecordBatch)(output_batches)
+            yield from map(ArrowBatchTransformer.wrap_struct, verified)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
