@@ -37,6 +37,28 @@
         "expr": {
           "unresolvedFunction": {
             "functionName": "distributed_sequence_id",
+            "arguments": [{
+              "literal": {
+                "string": "NONE"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Dataset",
+                      "methodName": "zipWithIndex",
+                      "fileName": "Dataset.scala"
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "~~trimmed~anonfun~~",
+                      "fileName": "PlanGenerationTestSuite.scala"
+                    }]
+                  }
+                }
+              }
+            }],
             "isInternal": true
           },
           "common": {
