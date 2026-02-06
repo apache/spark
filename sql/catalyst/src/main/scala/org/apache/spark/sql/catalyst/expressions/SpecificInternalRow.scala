@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -196,6 +198,9 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
 
   @tailrec
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
+    // Types Framework: delegate to PhyTypeOps for supported types when enabled
+    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dataType) =>
+      PhyTypeOps(dataType).getMutableValue
     // We use INT for DATE and YearMonthIntervalType internally
     case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
     // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
