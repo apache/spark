@@ -121,8 +121,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     @property
     def _release_thread_pool(self) -> ThreadPoolExecutor:
-        if self._release_thread_pool_instance is not None:
-            return self._release_thread_pool_instance
         with self._lock:
             if self._release_thread_pool_instance is None:
                 self._release_thread_pool_instance = ThreadPoolExecutor(
