@@ -460,7 +460,7 @@ class ColumnPruningSuite extends PlanTest {
 
   test("SPARK-36559 Prune and drop distributed-sequence if the produced column is not referred") {
     val input = LocalRelation($"a".int, $"b".int, $"c".int)
-    val plan1 = AttachDistributedSequence($"d".int, input).select($"a")
+    val plan1 = AttachDistributedSequence($"d".int, input, "NONE").select($"a")
     val correctAnswer1 = Project(Seq($"a"), input).analyze
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
