@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types.DataType
@@ -24,40 +26,45 @@ import org.apache.spark.sql.types.DataType
 /**
  * Helper for MaxMinByK aggregate providing heap operations.
  * Heap operates on indices to avoid copying large values.
- * heapArr layout: [size, idx0, idx1, ..., idx(k-1)]
  *
- * Note: heapArr is Array[Any] containing boxed Integers because GenericArrayData
- * uses Array[Any] internally.
+ * Binary heap layout: [size (4 bytes), idx0 (4 bytes), idx1 (4 bytes), ..., idx(k-1) (4 bytes)]
+ * Total size: (k + 1) * 4 bytes
+ *
+ * All integers are stored in little-endian byte order for direct binary manipulation.
  */
 object MaxMinByKHeap {
 
-  def getSize(heapArr: Array[Any]): Int = heapArr(0).asInstanceOf[Int]
+  def getSize(heap: Array[Byte]): Int =
+    ByteBuffer.wrap(heap, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt
 
-  def setSize(heapArr: Array[Any], size: Int): Unit = heapArr(0) = size
+  def setSize(heap: Array[Byte], size: Int): Unit =
+    ByteBuffer.wrap(heap, 0, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(size)
 
-  def getIdx(heapArr: Array[Any], pos: Int): Int = heapArr(pos + 1).asInstanceOf[Int]
+  def getIdx(heap: Array[Byte], pos: Int): Int =
+    ByteBuffer.wrap(heap, (pos + 1) * 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt
 
-  def setIdx(heapArr: Array[Any], pos: Int, idx: Int): Unit = heapArr(pos + 1) = idx
+  def setIdx(heap: Array[Byte], pos: Int, idx: Int): Unit =
+    ByteBuffer.wrap(heap, (pos + 1) * 4, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(idx)
 
-  def swap(heapArr: Array[Any], i: Int, j: Int): Unit = {
-    val tmp = getIdx(heapArr, i)
-    setIdx(heapArr, i, getIdx(heapArr, j))
-    setIdx(heapArr, j, tmp)
+  def swap(heap: Array[Byte], i: Int, j: Int): Unit = {
+    val tmp = getIdx(heap, i)
+    setIdx(heap, i, getIdx(heap, j))
+    setIdx(heap, j, tmp)
   }
 
   def siftUp(
-      heapArr: Array[Any],
+      heap: Array[Byte],
       pos: Int,
       orderings: Array[Any],
       compare: (Any, Any) => Int): Unit = {
     var current = pos
     while (current > 0) {
       val parent = (current - 1) / 2
-      val curOrd = orderings(getIdx(heapArr, current))
-      val parOrd = orderings(getIdx(heapArr, parent))
+      val curOrd = orderings(getIdx(heap, current))
+      val parOrd = orderings(getIdx(heap, parent))
 
       if (compare(curOrd, parOrd) < 0) {
-        swap(heapArr, current, parent)
+        swap(heap, current, parent)
         current = parent
       } else {
         return
@@ -66,7 +73,7 @@ object MaxMinByKHeap {
   }
 
   def siftDown(
-      heapArr: Array[Any],
+      heap: Array[Byte],
       pos: Int,
       size: Int,
       orderings: Array[Any],
@@ -75,21 +82,22 @@ object MaxMinByKHeap {
     while (2 * current + 1 < size) {
       val left = 2 * current + 1
       val right = left + 1
-      val leftOrd = orderings(getIdx(heapArr, left))
+      val leftOrd = orderings(getIdx(heap, left))
+
       val preferred = if (right < size) {
-        val rightOrd = orderings(getIdx(heapArr, right))
+        val rightOrd = orderings(getIdx(heap, right))
         if (compare(rightOrd, leftOrd) < 0) right else left
       } else {
         left
       }
 
-      val curOrd = orderings(getIdx(heapArr, current))
-      val prefOrd = orderings(getIdx(heapArr, preferred))
+      val curOrd = orderings(getIdx(heap, current))
+      val prefOrd = orderings(getIdx(heap, preferred))
       if (compare(curOrd, prefOrd) <= 0) {
         return
       }
 
-      swap(heapArr, current, preferred)
+      swap(heap, current, preferred)
       current = preferred
     }
   }
@@ -103,20 +111,22 @@ object MaxMinByKHeap {
       k: Int,
       valuesArr: Array[Any],
       orderingsArr: Array[Any],
-      heapArr: Array[Any],
+      heap: Array[Byte],
       compare: (Any, Any) => Int): Unit = {
-    val size = getSize(heapArr)
+    val size = getSize(heap)
     if (size < k) {
       valuesArr(size) = InternalRow.copyValue(value)
       orderingsArr(size) = InternalRow.copyValue(ord)
-      setIdx(heapArr, size, size)
-      siftUp(heapArr, size, orderingsArr, compare)
-      setSize(heapArr, size + 1)
-    } else if (compare(ord, orderingsArr(getIdx(heapArr, 0))) > 0) {
-      val idx = getIdx(heapArr, 0)
+
+      setIdx(heap, size, size)
+      siftUp(heap, size, orderingsArr, compare)
+      setSize(heap, size + 1)
+    } else if (compare(ord, orderingsArr(getIdx(heap, 0))) > 0) {
+      val idx = getIdx(heap, 0)
       valuesArr(idx) = InternalRow.copyValue(value)
       orderingsArr(idx) = InternalRow.copyValue(ord)
-      siftDown(heapArr, 0, size, orderingsArr, compare)
+
+      siftDown(heap, 0, size, orderingsArr, compare)
     }
   }
 
@@ -131,15 +141,25 @@ object MaxMinByKHeap {
       case other =>
         val size = other.numElements()
         val newArr = new Array[Any](size)
+
         for (i <- 0 until size) {
           if (!other.isNullAt(i)) {
             newArr(i) = InternalRow.copyValue(other.get(i, elementType))
           }
         }
+
         val newArrayData = new GenericArrayData(newArr)
         buffer.update(offset, newArrayData)
         newArr
     }
+  }
+
+  /**
+   * Get mutable heap binary buffer from buffer for in-place updates.
+   * Copies the binary data if needed (e.g., after spill to UnsafeRow).
+   */
+  def getMutableHeap(buffer: InternalRow, offset: Int): Array[Byte] = {
+    buffer.getBinary(offset)
   }
 
   /** Read-only view of array data, used during merge to read input buffer. */
