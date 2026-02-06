@@ -64,21 +64,21 @@ def wait_for_condition(query, condition_fn, timeout_sec=30):
             # Collect context for debugging
             exception_info = query.exception()
             recent_progresses = query.recentProgress
-            
+
             error_msg = (
                 f"Timeout after {timeout_sec} seconds waiting for condition. "
                 f"Query exception: {exception_info}. "
                 f"Recent progress count: {len(recent_progresses)}. "
             )
-            
+
             if recent_progresses:
                 error_msg += f"Last progress: {recent_progresses[-1]}. "
                 error_msg += f"All recent progresses: {recent_progresses}"
             else:
                 error_msg += "No progress recorded."
-            
+
             raise TimeoutError(error_msg)
-        
+
         time.sleep(sleep_interval)
 
 

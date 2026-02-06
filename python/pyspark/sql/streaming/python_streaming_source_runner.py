@@ -195,7 +195,9 @@ def latest_offset_admission_control_func(
 
 def get_default_read_limit_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     limit = reader.getDefaultReadLimit()
-    limit_as_dict = dataclasses.asdict(limit) | {"_type": limit.__class__.__name__}
+    limit_as_dict = dataclasses.asdict(limit) | {  # type: ignore[call-overload]
+        "_type": limit.__class__.__name__
+    }
     write_with_length(json.dumps(limit_as_dict).encode("utf-8"), outfile)
 
 
