@@ -159,6 +159,7 @@ case class BroadcastExchangeExec(
                   s"type: ${relation.getClass.getName}")
             }
 
+            longMetric("dataSize") += dataSize
             val maxBroadcastTableSizeInBytes = conf.maxBroadcastTableSizeInBytes
             if (dataSize >= maxBroadcastTableSizeInBytes) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(

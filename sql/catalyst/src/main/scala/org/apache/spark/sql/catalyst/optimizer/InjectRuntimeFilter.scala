@@ -121,14 +121,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideExp: Expression): Option[LogicalPlan] = {
-    @tailrec
+      filterCreationSideExp: Expression): Option[(Expression, LogicalPlan)] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
         hasHitSelectiveFilter: Boolean,
-        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
+        currentPlan: LogicalPlan,
+        targetKey: Expression): Option[(Expression, LogicalPlan)] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -139,41 +139,78 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
             hasHitFilter,
             hasHitSelectiveFilter,
-            currentPlan)
+            currentPlan,
+            targetKey)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
+        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan,
+          targetKey)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
-          currentPlan)
-      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
+          currentPlan,
+          targetKey)
+      case ExtractEquiJoinKeys(joinType, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
-        if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(left, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
-        } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(right, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
+        // We assume other rules have already pushed predicates through join if possible.
+        // So the predicate references won't pass on anymore.
+        if (left.output.exists(_.semanticEquals(targetKey))) {
+          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = left, targetKey = targetKey).orElse {
+            // We can also extract from the right side if the join keys are transitive, and
+            // the right side always produces a superset output of join left keys.
+            // Let's look at an example
+            //     left table: 1, 2, 3
+            //     right table, 3, 4
+            //     left outer join output: (1, null), (2, null), (3, 3)
+            //     left key output: 1, 2, 3
+            // Any join side always produce a superset output of its corresponding
+            // join keys, but for transitive join keys we need to check the join type.
+            if (canPruneLeft(joinType)) {
+              lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(right, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
+          }
+        } else if (right.output.exists(_.semanticEquals(targetKey))) {
+          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = right, targetKey = targetKey).orElse {
+            // We can also extract from the left side if the join keys are transitive.
+            if (canPruneRight(joinType)) {
+              rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+                .flatMap { newTargetKey =>
+                  extract(left, AttributeSet.empty,
+                    hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                    targetKey = newTargetKey)
+                }
+            } else {
+              None
+            }
+          }
         } else {
           None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
-        Some(currentPlan)
+        Some((targetKey, currentPlan))
       case _ => None
     }
 
     if (!plan.isStreaming) {
-      extract(plan, AttributeSet.empty,
-        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
+      extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+        currentPlan = plan, targetKey = filterCreationSideExp)
     } else {
       None
     }
@@ -229,19 +266,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
-   * - The current join is a shuffle join or a broadcast join that has a shuffle below it
    * - The max filterApplicationSide scan size is greater than a configurable threshold
    */
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
-      filterCreationSideExp: Expression,
-      hint: JoinHint): Option[LogicalPlan] = {
+      filterCreationSideExp: Expression): Option[(Expression, LogicalPlan)] = {
     if (findExpressionAndTrackLineageDown(
       filterApplicationSideExp, filterApplicationSide).isDefined &&
-      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
-        probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
       extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp)
     } else {
@@ -326,17 +359,24 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType)) {
-              extractBeneficialFilterCreatePlan(left, right, l, r, hint).foreach {
-                filterCreationSidePlan =>
-                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
+            // Check if the current join is a shuffle join or a broadcast join that
+            // has a shuffle below it
+            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
+            if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left))) {
+              extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
+                case (filterCreationSideExp, filterCreationSidePlan) =>
+                  newLeft = injectFilter(l, newLeft, filterCreationSideExp, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
-            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType)) {
-              extractBeneficialFilterCreatePlan(right, left, r, l, hint).foreach {
-                filterCreationSidePlan =>
-                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
+            // Check if the current join is a shuffle join or a broadcast join that
+            // has a shuffle below it.
+            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
+              (hasShuffle || probablyHasShuffle(right))) {
+              extractBeneficialFilterCreatePlan(right, left, r, l).foreach {
+                case (filterCreationSideExp, filterCreationSidePlan) =>
+                  newRight = injectFilter(
+                    r, newRight, filterCreationSideExp, filterCreationSidePlan)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
