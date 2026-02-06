@@ -28,6 +28,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import concurrent.futures
 import logging
 import threading
 import os
@@ -38,6 +39,7 @@ import uuid
 import sys
 import time
 import traceback
+import weakref
 from typing import (
     Iterable,
     Iterator,
@@ -751,6 +753,8 @@ class SparkConnectClient(object):
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
+        self._release_futures = weakref.WeakSet()
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
@@ -1272,7 +1276,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        ExecutePlanResponseReattachableIterator.shutdown()
+        concurrent.futures.wait(self._release_futures)
         self._channel.close()
         self._closed = True
 
@@ -1487,6 +1491,7 @@ class SparkConnectClient(object):
                         handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1687,6 +1692,7 @@ class SparkConnectClient(object):
                         yield from handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
