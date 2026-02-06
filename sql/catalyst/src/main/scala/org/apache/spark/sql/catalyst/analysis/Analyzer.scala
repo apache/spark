@@ -496,8 +496,8 @@ class Analyzer(
       ResolveBinaryArithmetic ::
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
-      FlattenSequentialUnion ::
-      ValidateSequentialUnion ::
+      FlattenSequentialStreamingUnion ::
+      ValidateSequentialStreamingUnion ::
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::

@@ -3531,12 +3531,6 @@
     ],
     "sqlState" : "42K0E"
   },
-  "INVALID_NUMBER_OF_CHILDREN_FOR_UNION" : {
-    "message" : [
-      "<operator> requires at least <minimum> children, but only <actual> were provided."
-    ],
-    "sqlState" : "42601"
-  },
   "INVALID_NUMERIC_LITERAL_RANGE" : {
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
@@ -4716,9 +4710,12 @@
     ],
     "sqlState" : "07501"
   },
-  "NESTED_SEQUENTIAL_UNION" : {
+  "NESTED_SEQUENTIAL_STREAMING_UNION" : {
     "message" : [
-      "Nested SequentialUnion is not supported. <hint>"
+      "Nested SequentialStreamingUnion is not supported. <hint>",
+      "SequentialStreamingUnion can only be used at the top level of a streaming query.",
+      "Each source in followedBy() should be a base streaming source or simple transformations,",
+      "not another followedBy() result wrapped in other operators."
     ],
     "sqlState" : "42601"
   },
@@ -4886,7 +4883,10 @@
   },
   "NOT_STREAMING_DATASET" : {
     "message" : [
-      "All sources in <operator> must be streaming relations."
+      "All sources in <operator> must be streaming relations.",
+      "Ensure all DataFrames are created using spark.readStream() rather than spark.read().",
+      "Example: df1 = spark.readStream.format(\"delta\").load(...); df2 = spark.readStream.format(\"kafka\").load(...)",
+      "Then use: df1.followedBy(df2)"
     ],
     "sqlState" : "42K0A"
   },
@@ -5551,9 +5551,12 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION" : {
+  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION" : {
     "message" : [
-      "Stateful operations are not supported as direct children of SequentialUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialUnion."
+      "Stateful operations are not supported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
+      "Incorrect: historical.groupBy(\"key\").count().followedBy(live.groupBy(\"key\").count())",
+      "Correct: historical.followedBy(live).groupBy(\"key\").count()",
+      "This ensures state is preserved across source transitions from historical to live data."
     ],
     "sqlState" : "42601"
   },

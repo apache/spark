@@ -4540,23 +4540,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def nestedSequentialUnionError(): Throwable = {
+  def nestedSequentialStreamingUnionError(): Throwable = {
     new AnalysisException(
-      errorClass = "NESTED_SEQUENTIAL_UNION",
+      errorClass = "NESTED_SEQUENTIAL_STREAMING_UNION",
       messageParameters = Map(
         "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
-  }
-
-  def invalidNumberOfChildrenForUnionError(
-      operator: String,
-      actual: Int,
-      minimum: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_NUMBER_OF_CHILDREN_FOR_UNION",
-      messageParameters = Map(
-        "operator" -> operator,
-        "actual" -> actual.toString,
-        "minimum" -> minimum.toString))
   }
 
   def notStreamingDatasetError(operator: String): Throwable = {
@@ -4565,9 +4553,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("operator" -> operator))
   }
 
-  def statefulChildrenNotSupportedInSequentialUnionError(): Throwable = {
+  def statefulChildrenNotSupportedInSequentialStreamingUnionError(): Throwable = {
     new AnalysisException(
-      errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_UNION",
+      errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION",
       messageParameters = Map.empty)
   }
 }

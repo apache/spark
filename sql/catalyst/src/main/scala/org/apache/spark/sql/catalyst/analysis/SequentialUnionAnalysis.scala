@@ -17,36 +17,36 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SequentialUnion}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SequentialStreamingUnion}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Flattens nested SequentialUnion nodes into a single level.
+ * Flattens nested SequentialStreamingUnion nodes into a single level.
  * This allows chaining: df1.followedBy(df2).followedBy(df3)
  */
-object FlattenSequentialUnion extends Rule[LogicalPlan] {
+object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(TreePattern.UNION)) {
-    case SequentialUnion(children, byName, allowMissingCol) =>
-      val flattened = SequentialUnion.flatten(children)
-      SequentialUnion(flattened, byName, allowMissingCol)
+    _.containsPattern(UNION)) {
+    case SequentialStreamingUnion(children, byName, allowMissingCol) =>
+      val flattened = SequentialStreamingUnion.flatten(children)
+      SequentialStreamingUnion(flattened, byName, allowMissingCol)
   }
 }
 
 /**
- * Validates SequentialUnion constraints:
- * - Minimum 2 children
+ * Validates SequentialStreamingUnion constraints:
  * - All children must be streaming relations
- * - No nested SequentialUnions (should be flattened first)
+ * - No nested SequentialStreamingUnions (should be flattened first)
  * - No stateful operations in any child subtrees
+ *
+ * Note: Minimum 2 children is enforced by the resolved property, not explicit validation.
  */
-object ValidateSequentialUnion extends Rule[LogicalPlan] {
+object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.foreach {
-      case su: SequentialUnion =>
-        validateMinimumChildren(su)
+      case su: SequentialStreamingUnion =>
         validateAllStreaming(su)
         validateNoNesting(su)
         validateNoStatefulDescendants(su)
@@ -55,32 +55,25 @@ object ValidateSequentialUnion extends Rule[LogicalPlan] {
     plan
   }
 
-  private def validateMinimumChildren(su: SequentialUnion): Unit = {
-    if (su.children.length < 2) {
-      throw QueryCompilationErrors.invalidNumberOfChildrenForUnionError(
-        su.getClass.getSimpleName, su.children.length, 2)
-    }
-  }
-
-  private def validateAllStreaming(su: SequentialUnion): Unit = {
+  private def validateAllStreaming(su: SequentialStreamingUnion): Unit = {
     val nonStreamingChildren = su.children.filterNot(_.isStreaming)
     if (nonStreamingChildren.nonEmpty) {
-      throw QueryCompilationErrors.notStreamingDatasetError("SequentialUnion")
+      throw QueryCompilationErrors.notStreamingDatasetError("SequentialStreamingUnion")
     }
   }
 
-  private def validateNoNesting(su: SequentialUnion): Unit = {
+  private def validateNoNesting(su: SequentialStreamingUnion): Unit = {
     su.children.foreach { child =>
-      if (child.exists(_.isInstanceOf[SequentialUnion])) {
-        throw QueryCompilationErrors.nestedSequentialUnionError()
+      if (child.exists(_.isInstanceOf[SequentialStreamingUnion])) {
+        throw QueryCompilationErrors.nestedSequentialStreamingUnionError()
       }
     }
   }
 
-  private def validateNoStatefulDescendants(su: SequentialUnion): Unit = {
+  private def validateNoStatefulDescendants(su: SequentialStreamingUnion): Unit = {
     su.children.foreach { child =>
       if (child.exists(UnsupportedOperationChecker.isStatefulOperation)) {
-        throw QueryCompilationErrors.statefulChildrenNotSupportedInSequentialUnionError()
+        throw QueryCompilationErrors.statefulChildrenNotSupportedInSequentialStreamingUnionError()
       }
     }
   }
