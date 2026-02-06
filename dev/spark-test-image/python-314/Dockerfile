@@ -50,8 +50,6 @@ RUN apt-get update && apt-get install -y \
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
     python3.14 \
-    python3.14-pip \
-    python3.14-venv \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -62,9 +60,10 @@ ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 goog
 
 # Install Python 3.14 packages
 ENV VIRTUAL_ENV=/opt/spark-venv
-RUN python3.14 -m venv $VIRTUAL_ENV
+RUN python3.14 -m venv --without-pip $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14
 RUN python3.14 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
     python3.14 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.14 -m pip install torcheval && \
