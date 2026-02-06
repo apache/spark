@@ -669,13 +669,12 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
-      env:
-        CODECOV_TOKEN: ${{ secrets.codecov_token }}
       with:
         report_type: 'test_results'
         files: '**/target/test-reports/*.xml'
         flags: ${{ env.PYTHON_TO_TEST }}-${{ inputs.branch }}
         name: PySpark-Test-Results
+        token: ${{ secrets.codecov_token }}
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
