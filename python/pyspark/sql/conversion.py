@@ -105,63 +105,60 @@ class ArrowBatchTransformer:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
 
-    # TODO: This is not a true transformer because the input is not a batch.
-    # In the future, this should be reorganized into an "enforce schema" pattern.
-    @classmethod
-    def cast_array(
-        cls,
-        arr: "pa.Array",
-        target_type: "pa.DataType",
-        *,
-        safe: bool = True,
-        allow_cast: bool = True,
-        error_class: Optional[str] = None,
-    ) -> "pa.Array":
-        """
-        Cast an Arrow Array to a target type.
 
-        Parameters
-        ----------
-        arr : pa.Array
-            Input Arrow array
-        target_type : pa.DataType
-            Target Arrow type
-        safe : bool
-            Whether to use safe casting (default True)
-        allow_cast : bool
-            Whether to allow casting when types don't match (default True)
-        error_class : str, optional
-            Custom error class for type mismatch errors
+def cast_arrow_array(
+    arr: "pa.Array",
+    target_type: "pa.DataType",
+    *,
+    safe: bool = True,
+    allow_cast: bool = True,
+    error_class: Optional[str] = None,
+) -> "pa.Array":
+    """
+    Cast an Arrow Array to a target type.
 
-        Returns
-        -------
-        pa.Array
-        """
-        import pyarrow as pa
+    Parameters
+    ----------
+    arr : pa.Array
+        Input Arrow array
+    target_type : pa.DataType
+        Target Arrow type
+    safe : bool
+        Whether to use safe casting (default True)
+    allow_cast : bool
+        Whether to allow casting when types don't match (default True)
+    error_class : str, optional
+        Custom error class for type mismatch errors
 
-        from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+    Returns
+    -------
+    pa.Array
+    """
+    import pyarrow as pa
 
-        if arr.type == target_type:
-            return arr
+    from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
-        if not allow_cast:
-            raise PySparkTypeError(
-                "Arrow UDFs require the return type to match the expected Arrow type. "
-                f"Expected: {target_type}, but got: {arr.type}."
+    if arr.type == target_type:
+        return arr
+
+    if not allow_cast:
+        raise PySparkTypeError(
+            "Arrow UDFs require the return type to match the expected Arrow type. "
+            f"Expected: {target_type}, but got: {arr.type}."
+        )
+
+    try:
+        return arr.cast(target_type=target_type, safe=safe)
+    except (pa.ArrowInvalid, pa.ArrowTypeError):
+        if error_class:
+            raise PySparkRuntimeError(
+                errorClass=error_class,
+                messageParameters={
+                    "expected": str(target_type),
+                    "actual": str(arr.type),
+                },
             )
-
-        try:
-            return arr.cast(target_type=target_type, safe=safe)
-        except (pa.ArrowInvalid, pa.ArrowTypeError):
-            if error_class:
-                raise PySparkRuntimeError(
-                    errorClass=error_class,
-                    messageParameters={
-                        "expected": str(target_type),
-                        "actual": str(arr.type),
-                    },
-                )
-            raise
+        raise
 
 
 class PandasToArrowConversion:
@@ -170,7 +167,7 @@ class PandasToArrowConversion:
     """
 
     @classmethod
-    def to_arrow(
+    def convert(
         cls,
         data: Union["pd.DataFrame", List[Union["pd.Series", "pd.DataFrame"]]],
         schema: StructType,
@@ -261,12 +258,13 @@ class PandasToArrowConversion:
 
             if isinstance(col_data, pd.DataFrame):
                 # DataFrame column (for struct types)
-                nested_batch = cls.to_arrow(
+                nested_batch = cls.convert(
                     col_data,
                     field.dataType,
                     timezone=timezone,
                     safecheck=safecheck,
                     arrow_cast=arrow_cast,
+                    prefers_large_types=prefers_large_types,
                     assign_cols_by_name=assign_cols_by_name,
                     int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                     ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,

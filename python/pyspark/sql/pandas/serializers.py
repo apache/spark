@@ -38,6 +38,7 @@ from pyspark.sql.conversion import (
     ArrowArrayToPandasConversion,
     ArrowBatchTransformer,
     PandasToArrowConversion,
+    cast_arrow_array,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -295,7 +296,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                         )
 
                     coerced_arrays = [
-                        ArrowBatchTransformer.cast_array(
+                        cast_arrow_array(
                             batch.column(i),
                             field.type,
                             safe=True,
@@ -461,7 +462,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
             series_data, types = map(list, list(zip(*series_tuples)) or [[], []])
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
-            return PandasToArrowConversion.to_arrow(
+            return PandasToArrowConversion.convert(
                 series_data,
                 schema,
                 timezone=self._timezone,
@@ -580,7 +581,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
             series_data, types = map(list, list(zip(*series_tuples)) or [[], []])
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
-            return PandasToArrowConversion.to_arrow(
+            return PandasToArrowConversion.convert(
                 series_data,
                 schema,
                 timezone=self._timezone,
@@ -632,7 +633,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
                     packed = [packed]
 
                 arrs = [
-                    ArrowBatchTransformer.cast_array(
+                    cast_arrow_array(
                         arr,
                         arrow_type,
                         safe=self._safecheck,
@@ -1325,7 +1326,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     StructField("_2", self.result_state_df_type),
                 ]
             )
-            return PandasToArrowConversion.to_arrow(
+            return PandasToArrowConversion.convert(
                 data,
                 schema,
                 timezone=self._timezone,
