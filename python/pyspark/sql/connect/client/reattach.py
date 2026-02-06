@@ -212,7 +212,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                logger.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
@@ -239,7 +239,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                logger.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:

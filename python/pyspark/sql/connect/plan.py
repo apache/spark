@@ -733,7 +733,7 @@ class CachedRemoteRelation(LogicalPlan):
                         metadata = session.client._builder.metadata()
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
-                logger.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
+                logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
 
 class Hint(LogicalPlan):
