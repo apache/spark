@@ -168,11 +168,6 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
     def _load_group_dataframes(self, stream, num_dfs: int = 1) -> Iterator:
         """
         Yield groups of dataframes from the stream using the group-count protocol.
-
-        For num_dfs=0, plain batch stream, handled by parent.
-        For num_dfs=1, yields a single-element tuple containing a lazy iterator.
-        For num_dfs=2, yields a tuple of eagerly loaded lists to ensure correct
-        stream position when reading both dataframes sequentially.
         """
         dataframes_in_group = None
 
@@ -181,9 +176,11 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
 
             if dataframes_in_group == num_dfs:
                 if num_dfs == 1:
+                    # Single dataframe: can use lazy iterator
                     yield (ArrowStreamSerializer.load_stream(self, stream),)
                 else:
-                    # Eagerly load to maintain correct stream position
+                    # Multiple dataframes: must eagerly load sequentially
+                    # to maintain correct stream position
                     yield tuple(
                         list(ArrowStreamSerializer.load_stream(self, stream))
                         for _ in range(num_dfs)
@@ -221,6 +218,12 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
         if self._write_start_stream:
             iterator = self._write_stream_start(iterator, stream)
         return super().dump_stream(iterator, stream)
+
+    def __repr__(self) -> str:
+        return "ArrowStreamGroupSerializer(num_dfs=%d, write_start_stream=%s)" % (
+            self._num_dfs,
+            self._write_start_stream,
+        )
 
 
 class ArrowStreamUDFSerializer(ArrowStreamGroupSerializer):
