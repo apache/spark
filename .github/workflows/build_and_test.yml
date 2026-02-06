@@ -105,6 +105,8 @@ jobs:
             buf=true
             ui=true
             docs=true
+            java17=true
+            java25=true
           else
             pyspark_install=false
             pandas=false
@@ -116,6 +118,8 @@ jobs:
             buf=false
             ui=false
             docs=false
+            java17=false
+            java25=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           precondition="
@@ -128,8 +132,8 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
-              \"java17\" : \"$build\",
-              \"java25\" : \"$build\",
+              \"java17\" : \"$java17\",
+              \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
@@ -645,7 +649,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$CONDA/condabin:$PATH
+          export PATH=$CONDA/bin:$PATH
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi

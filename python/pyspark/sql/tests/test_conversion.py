@@ -22,7 +22,7 @@ from pyspark.errors import PySparkValueError
 from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowTimestampConversion,
+    ArrowArrayConversion,
     ArrowBatchTransformer,
 )
 from pyspark.sql.types import (
@@ -304,7 +304,7 @@ class ConversionTests(unittest.TestCase):
             pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["x", "y"])], names=["a", "b"]),
             pa.array([{1: None, 2: "x"}], type=pa.map_(pa.int32(), pa.string())),
         ]:
-            output = ArrowTimestampConversion.localize_tz(arr)
+            output = ArrowArrayConversion.localize_tz(arr)
             self.assertTrue(output is arr, f"MUST not generate a new array {output.tolist()}")
 
         # timestampe types
@@ -372,7 +372,7 @@ class ConversionTests(unittest.TestCase):
                 ),
             ),  # map<int, array<ts-ltz>>
         ]:
-            output = ArrowTimestampConversion.localize_tz(arr)
+            output = ArrowArrayConversion.localize_tz(arr)
             self.assertEqual(output, expected, f"{output.tolist()} != {expected.tolist()}")
 
 
