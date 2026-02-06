@@ -65,7 +65,7 @@ class ProdTestsMixin(GroupbyStatTestingFuncMixin):
                 psdf.groupby("A").prod(min_count=n).sort_index(),
                 almost=True,
             )
-            if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+            if LooseVersion(pd.__version__) >= "3.0.0":
                 # pandas < 3 raises an error when numeric_only is False or None
                 self._test_stat_func(
                     lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n),

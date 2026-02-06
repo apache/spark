@@ -817,8 +817,9 @@ def validate_mode(mode: str) -> str:
 
 
 def validate_numeric_only(numeric_only: Optional[bool]) -> None:
-    if LooseVersion(pd.__version__) >= LooseVersion("3.0") and not isinstance(numeric_only, bool):
-        raise ValueError("numeric_only accepts only Boolean values")
+    if LooseVersion(pd.__version__) >= "3.0.0":
+        if not isinstance(numeric_only, bool):
+            raise ValueError("numeric_only accepts only Boolean values")
 
 
 @overload

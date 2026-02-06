@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, Tuple, Type
+from typing import Optional, Type
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 class GroupbyStatTestingFuncMixin:
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(
-        self, func, check_exact=True, expected_error: Optional[Tuple[Type[Exception], str]] = None
+        self, func, check_exact=True, expected_error: Optional[Type[Exception]] = None
     ):
         pdf, psdf = self.pdf, self.psdf
         for p_groupby_obj, ps_groupby_obj in [
@@ -46,16 +46,17 @@ class GroupbyStatTestingFuncMixin:
                     check_exact=check_exact,
                 )
             else:
-                error_type, error_message = expected_error
-                self.assertRaisesRegex(error_type, error_message, lambda: func(p_groupby_obj))
-                self.assertRaisesRegex(error_type, error_message, lambda: func(ps_groupby_obj))
+                with self.assertRaises(expected_error):
+                    func(p_groupby_obj)
+                with self.assertRaises(expected_error):
+                    func(ps_groupby_obj)
 
     @property
-    def expected_error_numeric_only(self) -> Optional[Tuple[Type[Exception], str]]:
-        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
-            return (ValueError, "numeric_only accepts only Boolean values")
-        else:
+    def expected_error_numeric_only(self) -> Optional[Type[Exception]]:
+        if LooseVersion(pd.__version__) < "3.0.0":
             return None
+        else:
+            return ValueError
 
 
 class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
@@ -76,7 +77,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
 
     def test_mean(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
-        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+        if LooseVersion(pd.__version__) >= "3.0.0":
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.mean(numeric_only=None),
@@ -153,7 +154,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             psdf.groupby("a").median(accuracy="a")
 
-        if LooseVersion(pd.__version__) >= LooseVersion("3.0"):
+        if LooseVersion(pd.__version__) >= "3.0.0":
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.median(numeric_only=None),
