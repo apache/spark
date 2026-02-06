@@ -59,6 +59,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     _lock: ClassVar[RLock] = RLock()
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
+    _instances: ClassVar[weakref.WeakSet["ExecutePlanResponseReattachableIterator"]] = weakref.WeakSet()
+
+    def __new__(cls, *args, **kwargs) -> "ExecutePlanResponseReattachableIterator":
+        instance =  super().__new__(cls)
+        cls._instances.add(instance)
+        return instance
 
     def __init__(
         self,
@@ -69,7 +75,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ):
         self._request = request
         self._retrying = retrying
-        self._release_futures = weakref.WeakSet()
+        self._release_futures: weakref.WeakSet[Future] = weakref.WeakSet()
         if request.operation_id:
             self._operation_id = request.operation_id
         else:
@@ -119,6 +125,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
             if self._release_thread_pool_instance is None:
                 self._release_thread_pool_instance = ThreadPoolExecutor(max_workers=os.cpu_count() or 8)
             return self._release_thread_pool_instance
+
+    @classmethod
+    def shutdown_threadpool_if_idle(cls) -> None:
+        with cls._lock:
+            if not cls._instances and cls._release_thread_pool_instance is not None:
+                cls._release_thread_pool_instance.shutdown()
+                cls._release_thread_pool_instance = None
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
         # will trigger reattach in case the stream completed without result_complete

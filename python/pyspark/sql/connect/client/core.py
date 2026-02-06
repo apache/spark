@@ -753,7 +753,7 @@ class SparkConnectClient(object):
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
-        self._release_futures = weakref.WeakSet()
+        self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
 
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
@@ -1277,6 +1277,7 @@ class SparkConnectClient(object):
         Close the channel.
         """
         concurrent.futures.wait(self._release_futures)
+        ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
 
