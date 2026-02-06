@@ -353,10 +353,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
             kubernetesClient.pods()
               .inNamespace(namespace)
               .withName(x.podName)
-              .edit({p: Pod => new PodBuilder(p).editMetadata()
+              .patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
                 .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
                 .endMetadata()
-                .build()})
+                .build())
           }
         }
         executorService.execute(labelTask)
