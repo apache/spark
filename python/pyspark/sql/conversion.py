@@ -324,10 +324,12 @@ class PandasToArrowConversion:
                             target_type=arrow_type, safe=safecheck
                         )
                     raise
-            except (TypeError, ValueError) as e:
-                # pa.lib.ArrowTypeError inherits from TypeError;
-                # pa.lib.ArrowInvalid inherits from ValueError.
-                # Both should route through error_class when set (e.g., UDTF).
+            except (TypeError, ValueError, pa.lib.ArrowException) as e:
+                # Catches all Arrow-related exceptions:
+                #   ArrowTypeError  (TypeError)
+                #   ArrowInvalid    (ValueError)
+                #   ArrowNotImplementedError (NotImplementedError) — via ArrowException
+                # When error_class is set (UDTF path), convert to PySparkRuntimeError.
                 if error_class:
                     raise PySparkRuntimeError(
                         errorClass=error_class,
@@ -342,17 +344,19 @@ class PandasToArrowConversion:
                         f"Exception thrown when converting pandas.Series ({series.dtype}) "
                         f"with name '{field_name}' to Arrow Array ({arrow_type})."
                     ) from e
-                error_msg = (
-                    f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                    f"with name '{field_name}' to Arrow Array ({arrow_type})."
-                )
-                if safecheck:
-                    error_msg += (
-                        " It can be caused by overflows or other unsafe conversions "
-                        "warned by Arrow. Arrow safe type check can be disabled by using "
-                        "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                if isinstance(e, ValueError):
+                    error_msg = (
+                        f"Exception thrown when converting pandas.Series ({series.dtype}) "
+                        f"with name '{field_name}' to Arrow Array ({arrow_type})."
                     )
-                raise PySparkValueError(error_msg) from e
+                    if safecheck:
+                        error_msg += (
+                            " It can be caused by overflows or other unsafe conversions "
+                            "warned by Arrow. Arrow safe type check can be disabled by using "
+                            "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                        )
+                    raise PySparkValueError(error_msg) from e
+                raise
 
         def convert_column(
             col: Union["pd.Series", "pd.DataFrame"], field: StructField
