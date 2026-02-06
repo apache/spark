@@ -290,8 +290,8 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # Error message should reference the schema field name, not the positional index
         self.assertIn("age", str(ctx.exception))
 
-    def test_convert_error_class(self):
-        """Test error_class produces PySparkRuntimeError with custom error class."""
+    def test_convert_is_udtf(self):
+        """Test is_udtf=True produces PySparkRuntimeError with UDTF_ARROW_TYPE_CAST_ERROR."""
         import pandas as pd
 
         schema = StructType([StructField("val", DoubleType())])
@@ -299,7 +299,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
         # ValueError path (string -> double)
         with self.assertRaises(PySparkRuntimeError) as ctx:
-            PandasToArrowConversion.convert(data, schema, error_class="UDTF_ARROW_TYPE_CAST_ERROR")
+            PandasToArrowConversion.convert(data, schema, is_udtf=True)
         self.assertIn("UDTF_ARROW_TYPE_CAST_ERROR", str(ctx.exception))
 
         # TypeError path (int -> struct): ArrowTypeError inherits from TypeError.
@@ -313,7 +313,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
             PandasToArrowConversion.convert(
                 data,
                 struct_schema,
-                error_class="UDTF_ARROW_TYPE_CAST_ERROR",
+                is_udtf=True,
                 ignore_unexpected_complex_type_values=True,
             )
         self.assertIn("UDTF_ARROW_TYPE_CAST_ERROR", str(ctx.exception))
