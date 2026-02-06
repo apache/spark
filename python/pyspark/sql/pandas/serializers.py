@@ -214,6 +214,12 @@ class ArrowStreamSerializer(Serializer):
             self._num_dfs,
         )
 
+    def __repr__(self) -> str:
+        return "ArrowStreamGroupSerializer(num_dfs=%d, write_start_stream=%s)" % (
+            self._num_dfs,
+            self._write_start_stream,
+        )
+
 
 class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     """
