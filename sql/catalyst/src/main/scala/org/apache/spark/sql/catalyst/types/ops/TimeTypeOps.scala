@@ -21,8 +21,7 @@ import java.time.LocalTime
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
-import org.apache.spark.sql.catalyst.types.PhysicalLongType
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DataType, TimeType}
 import org.apache.spark.sql.types.ops.TimeTypeApiOps
@@ -61,7 +60,7 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * @param t The TimeType with precision information
  * @since 4.1.0
  */
-case class TimeTypeOps(t: TimeType)
+case class TimeTypeOps(override val t: TimeType)
     extends TimeTypeApiOps(t)
     with TypeOps
     with PhyTypeOps
