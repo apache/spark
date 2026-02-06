@@ -1097,9 +1097,10 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |
          |    def latestOffset(self, start, limit):
          |        self.call_count += 1
-         |        # For odd call counts, return the same offset (simulating no new data)
-         |        # For even call counts, advance the offset by 2
-         |        if self.call_count % 2 == 1:
+         |        # For odd batches (call count - 1 is odd), return the same offset
+         |        # (simulating no new data)
+         |        # For even batches, advance the offset by 2
+         |        if (self.call_count - 1) % 2 == 1:
          |            # Return current offset without advancing
          |            return start
          |        else:
