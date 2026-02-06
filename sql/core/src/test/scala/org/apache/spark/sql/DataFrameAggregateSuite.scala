@@ -1288,6 +1288,13 @@ class DataFrameAggregateSuite extends QueryTest
       assert(error.getMessage.contains("VALUE_OUT_OF_RANGE") ||
         error.getMessage.contains("100000"))
     }
+
+    // Large k
+    checkAnswer(
+      sql("""SELECT max_by(x, y, 100000), min_by(x, y, 100000)
+             FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"""),
+      Row(Seq("b", "c", "a"), Seq("a", "c", "b")) :: Nil
+    )
   }
 
   test("percentile_like") {
