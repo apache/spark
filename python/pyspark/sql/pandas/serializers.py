@@ -135,6 +135,41 @@ class ArrowStreamSerializer(Serializer):
         for batch in reader:
             yield batch
 
+    def __repr__(self):
+        return "ArrowStreamSerializer"
+
+
+class ArrowStreamGroupSerializer(ArrowStreamSerializer):
+    """
+    Configurable Arrow stream serializer for UDF execution.
+
+    Extends :class:`ArrowStreamSerializer` with grouped-loading and ``START_ARROW_STREAM``
+    support.  All UDF / UDTF serializers should inherit from this class.
+
+    Parameters
+    ----------
+    num_dataframes : int
+        Number of dataframes per group in the input stream.
+
+        * ``0`` — a single IPC stream of raw ``pa.RecordBatch`` (no grouping protocol).
+          Each batch is yielded directly.
+        * ``1`` — grouped loading via the group-count protocol
+          (see :meth:`_load_group_dataframes`).
+          Yields ``(Iterator[pa.RecordBatch],)`` per group.
+        * ``2+`` — cogrouped loading. Yields
+          ``(list[pa.RecordBatch], list[pa.RecordBatch], ...)`` per group.
+
+    write_start_stream : bool
+        If ``True``, writes ``START_ARROW_STREAM`` marker before the first output batch.
+        Required for all UDF types so the JVM knows when to start reading Arrow data.
+        Default is ``False`` so subclasses that override ``dump_stream`` are not affected.
+    """
+
+    def __init__(self, num_dataframes=0, write_start_stream=False):
+        super().__init__()
+        self._num_dataframes = num_dataframes
+        self._write_start_stream = write_start_stream
+
     def _load_group_dataframes(self, stream, num_dfs: int = 1):
         """
         Load groups with specified number of dataframes from stream.
@@ -208,11 +243,19 @@ class ArrowStreamSerializer(Serializer):
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
         yield from itertools.chain([first], batch_iterator)
 
-    def __repr__(self):
-        return "ArrowStreamSerializer"
+    def load_stream(self, stream):
+        if self._num_dataframes == 0:
+            yield from super().load_stream(stream)
+        else:
+            yield from self._load_group_dataframes(stream, num_dfs=self._num_dataframes)
+
+    def dump_stream(self, iterator, stream):
+        if self._write_start_stream:
+            iterator = self._write_stream_start(iterator, stream)
+        return super().dump_stream(iterator, stream)
 
 
-class ArrowStreamUDFSerializer(ArrowStreamSerializer):
+class ArrowStreamUDFSerializer(ArrowStreamGroupSerializer):
     """
     Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
@@ -393,7 +436,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         super().dump_stream(batch_iter, stream)
 
 
-class ArrowStreamPandasSerializer(ArrowStreamSerializer):
+class ArrowStreamPandasSerializer(ArrowStreamGroupSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
 
@@ -791,7 +834,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
+class ArrowStreamArrowUDFSerializer(ArrowStreamGroupSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
     """
