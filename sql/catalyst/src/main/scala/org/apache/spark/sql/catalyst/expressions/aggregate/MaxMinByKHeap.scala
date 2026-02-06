@@ -88,7 +88,7 @@ object MaxMinByKHeap {
       if (compare(curOrd, prefOrd) <= 0) {
         return
       }
-  
+
       swap(heapArr, current, preferred)
       current = preferred
     }

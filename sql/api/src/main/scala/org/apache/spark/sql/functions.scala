@@ -1005,7 +1005,8 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
-   * Aggregate function: returns an array of values associated with the bottom `k` values of `ord`.
+   * Aggregate function: returns an array of values associated with the bottom `k` values of
+   * `ord`.
    *
    * The result array contains values in ascending order by their associated ordering values.
    *

@@ -30,32 +30,8 @@ import org.apache.spark.sql.types._
 /**
  * Returns top/bottom K values ordered by orderingExpr.
  * Uses a heap (min-heap for max_by, max-heap for min_by) to efficiently maintain K elements.
+ * This is the internal implementation used by max_by(x, y, k) and min_by(x, y, k).
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
-    maximum/minimum values of `y`. Use max_by for maximum, min_by for minimum.
-  """,
-  examples = """
-    Examples:
-      > SELECT max_by(x, y, 2) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
-       ["b","c"]
-      > SELECT min_by(x, y, 2) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
-       ["a","c"]
-  """,
-  arguments = """
-    Arguments:
-      * x - the value expression to collect
-      * y - the ordering expression (must be orderable)
-      * k - the number of values to return (must be a positive integer literal)
-  """,
-  note = """
-    The function is non-deterministic because the order of collected results depends
-    on the order of the rows which may be non-deterministic after a shuffle when there
-    are ties in the ordering expression.
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
 case class MaxMinByK(
     valueExpr: Expression,
     orderingExpr: Expression,
@@ -275,6 +251,27 @@ case class MaxMinByK(
     copy(valueExpr = newFirst, orderingExpr = newSecond, kExpr = newThird)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.
+    _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
+    maximum values of `y` (since 4.2.0).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
+       b
+      > SELECT _FUNC_(x, y, 2) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
+       ["b","c"]
+  """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
+  """,
+  group = "agg_funcs",
+  since = "3.0.0")
+// scalastyle:on line.size.limit
 object MaxByBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions.length match {
@@ -286,6 +283,27 @@ object MaxByBuilder extends ExpressionBuilder {
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.
+    _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
+    minimum values of `y` (since 4.2.0).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
+       a
+      > SELECT _FUNC_(x, y, 2) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
+       ["a","c"]
+  """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
+  """,
+  group = "agg_funcs",
+  since = "3.0.0")
+// scalastyle:on line.size.limit
 object MinByBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions.length match {
