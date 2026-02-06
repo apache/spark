@@ -1742,7 +1742,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testMergeWithOperatorVersions(
     "validate rocksdb values iterator correctness - put then merge") { _ =>
-
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
         useMultipleValuesPerKey = true)) { provider =>
