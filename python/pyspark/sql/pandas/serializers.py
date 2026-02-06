@@ -148,7 +148,7 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
 
     Parameters
     ----------
-    num_dataframes : int
+    num_dfs : int
         Number of dataframes per group in the input stream.
 
         * ``0`` — a single IPC stream of raw ``pa.RecordBatch`` (no grouping protocol).
@@ -165,9 +165,9 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
         Default is ``False`` so subclasses that override ``dump_stream`` are not affected.
     """
 
-    def __init__(self, num_dataframes=0, write_start_stream=False):
+    def __init__(self, num_dfs=0, write_start_stream=False):
         super().__init__()
-        self._num_dataframes = num_dataframes
+        self._num_dfs = num_dfs
         self._write_start_stream = write_start_stream
 
     def _load_group_dataframes(self, stream, num_dfs: int = 1):
@@ -244,10 +244,10 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
         yield from itertools.chain([first], batch_iterator)
 
     def load_stream(self, stream):
-        if self._num_dataframes == 0:
+        if self._num_dfs == 0:
             yield from super().load_stream(stream)
         else:
-            yield from self._load_group_dataframes(stream, num_dfs=self._num_dataframes)
+            yield from self._load_group_dataframes(stream, num_dfs=self._num_dfs)
 
     def dump_stream(self, iterator, stream):
         if self._write_start_stream:
