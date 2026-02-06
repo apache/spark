@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from typing import Any, Optional
+from typing import Any, Callable, List, Optional
+import inspect
 import os
 import time
 
@@ -27,6 +28,17 @@ try:
     have_numpy = True
 except ImportError:
     have_numpy = False
+
+
+# PyArrow uses internal names ("halffloat", "float", "double") that differ from
+# the commonly used names ("float16", "float32", "float64").  This mapping
+# normalises the str() representation of Arrow DataType so that repr_type()
+# returns the more intuitive names.
+_ARROW_FLOAT_ALIASES = {
+    "halffloat": "float16",
+    "float": "float32",
+    "double": "float64",
+}
 
 
 class GoldenFileTestMixin:
@@ -87,14 +99,21 @@ class GoldenFileTestMixin:
     def setup_timezone(cls, tz: str = "America/Los_Angeles") -> None:
         """
         Setup timezone for deterministic test results.
-        Synchronizes timezone between Python and Java.
+
+        Sets the OS-level ``TZ`` environment variable and, when a Spark session
+        is available, synchronises the timezone with the JVM and Spark config.
+        This allows the mixin to be used with both ``ReusedSQLTestCase`` (Spark)
+        and plain ``unittest.TestCase`` (no Spark).
         """
         cls._tz_prev = os.environ.get("TZ", None)
         os.environ["TZ"] = tz
         time.tzset()
 
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        # Sync with Spark / Java if a session is available.
+        if hasattr(cls, "sc"):
+            cls.sc.environment["TZ"] = tz
+        if hasattr(cls, "spark"):
+            cls.spark.conf.set("spark.sql.session.timeZone", tz)
 
     @classmethod
     def teardown_timezone(cls) -> None:
@@ -167,31 +186,39 @@ class GoldenFileTestMixin:
     @staticmethod
     def repr_type(t: Any) -> str:
         """
-        Convert a type to string representation.
+        Convert a type to a readable string representation.
 
         Handles different type representations:
-        - Spark DataType: uses simpleString() (e.g., "int", "string", "array<int>")
-        - Python type: uses __name__ (e.g., "int", "str", "list")
-        - Other: uses str()
+
+        - **Spark DataType**: uses ``simpleString()``
+          (e.g. ``"int"``, ``"string"``, ``"array<int>"``)
+        - **PyArrow DataType**: uses ``str(t)`` with float-name normalisation
+          (e.g. ``"int8"``, ``"float32"``, ``"timestamp[s, tz=UTC]"``)
+        - **Python type**: uses ``__name__``
+          (e.g. ``"int"``, ``"str"``, ``"list"``)
+        - **Other**: falls back to ``str(t)``
 
         Parameters
         ----------
         t : Any
-            The type to represent. Can be Spark DataType or Python type.
+            The type to represent.
 
         Returns
         -------
         str
-            String representation of the type.
+            Human-readable string representation of the type.
         """
-        # Check if it's a Spark DataType (has simpleString method)
+        # Spark DataType
         if hasattr(t, "simpleString"):
             return t.simpleString()
-        # Check if it's a Python type
+        # Python type (class)
         elif isinstance(t, type):
             return t.__name__
         else:
-            return str(t)
+            s = str(t)
+            # Normalise PyArrow float type names to be more intuitive:
+            #   "halffloat" -> "float16", "float" -> "float32", "double" -> "float64"
+            return _ARROW_FLOAT_ALIASES.get(s, s)
 
     @classmethod
     def repr_value(cls, value: Any, max_len: int = 32) -> str:
@@ -252,3 +279,73 @@ class GoldenFileTestMixin:
     def clean_result(result: str) -> str:
         """Clean result string by removing newlines and extra whitespace."""
         return result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+
+    def compare_or_generate_golden_matrix(
+        self,
+        row_names: List[str],
+        col_names: List[str],
+        compute_cell: Callable[[str, str], str],
+        golden_file_prefix: str,
+        index_name: str = "source \\ target",
+    ) -> None:
+        """
+        Run a matrix of computations and compare against (or generate) a golden file.
+
+        This is the standard pattern for golden-file matrix tests:
+
+        1. If ``SPARK_GENERATE_GOLDEN_FILES=1``, compute every cell, build a
+           DataFrame, and save it as the new golden CSV / Markdown file.
+        2. Otherwise, load the existing golden file and assert that every cell
+           matches the freshly computed value.
+
+        Parameters
+        ----------
+        row_names : list[str]
+            Ordered row labels (becomes the DataFrame index).
+        col_names : list[str]
+            Ordered column labels.
+        compute_cell : (row_name, col_name) -> str
+            Function that computes the string result for one cell.
+        golden_file_prefix : str
+            Prefix for the golden CSV/MD files (without extension).
+            Files are placed in the same directory as the concrete test file.
+        index_name : str, default ``"source \\\\ target"``
+            Name for the index column in the golden file.
+        """
+        generating = self.is_generating_golden()
+
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
+        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        errors = []
+        results = {}
+
+        for row_name in row_names:
+            for col_name in col_names:
+                result = compute_cell(row_name, col_name)
+                results[(row_name, col_name)] = result
+
+                if not generating:
+                    expected = golden.loc[row_name, col_name]
+                    if expected != result:
+                        errors.append(
+                            f"{row_name} -> {col_name}: " f"expected '{expected}', got '{result}'"
+                        )
+
+        if generating:
+            index = pd.Index(row_names, name=index_name)
+            df = pd.DataFrame(index=index)
+            for col_name in col_names:
+                df[col_name] = [results[(row, col_name)] for row in row_names]
+            self.save_golden(df, golden_csv, golden_md)
+        else:
+            self.assertEqual(
+                len(errors),
+                0,
+                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
+            )
