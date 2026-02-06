@@ -21,7 +21,7 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 import pyspark
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
@@ -106,6 +106,64 @@ class ArrowBatchTransformer:
         else:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
+
+    @classmethod
+    def enforce_schema(
+        cls,
+        batch: "pa.RecordBatch",
+        arrow_schema: "pa.Schema",
+        safecheck: bool = True,
+    ) -> "pa.RecordBatch":
+        """
+        Enforce target schema on a RecordBatch by reordering columns and coercing types.
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch
+            Input RecordBatch to transform.
+        arrow_schema : pa.Schema
+            Target Arrow schema. Callers should pre-compute this once via
+            to_arrow_schema() to avoid repeated conversion.
+        safecheck : bool, default True
+            If True, use safe casting (fails on overflow/truncation).
+
+        Returns
+        -------
+        pa.RecordBatch
+            RecordBatch with columns reordered and types coerced to match target schema.
+        """
+        import pyarrow as pa
+
+        if batch.num_columns == 0 or len(arrow_schema) == 0:
+            return batch
+
+        # Fast path: schema already matches (ignoring metadata), no work needed
+        if batch.schema.equals(arrow_schema, check_metadata=False):
+            return batch
+
+        # Check if columns are in the same order (by name) as the target schema.
+        # If so, use index-based access (faster than name lookup).
+        batch_names = [batch.schema.field(i).name for i in range(batch.num_columns)]
+        target_names = [field.name for field in arrow_schema]
+        use_index = batch_names == target_names
+
+        coerced_arrays = []
+        for i, field in enumerate(arrow_schema):
+            arr = batch.column(i) if use_index else batch.column(field.name)
+            if arr.type != field.type:
+                try:
+                    arr = arr.cast(target_type=field.type, safe=safecheck)
+                except (pa.ArrowInvalid, pa.ArrowTypeError):
+                    raise PySparkRuntimeError(
+                        errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                        messageParameters={
+                            "expected": str(field.type),
+                            "actual": str(arr.type),
+                        },
+                    )
+            coerced_arrays.append(arr)
+
+        return pa.RecordBatch.from_arrays(coerced_arrays, names=target_names)
 
     @classmethod
     def to_pandas(
