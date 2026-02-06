@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AttachDistributedSequence, L
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DISTRIBUTED_SEQUENCE_ID
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Extracts [[DistributedSequenceID]] in logical plans, and replace it to
@@ -34,8 +35,13 @@ object ExtractDistributedSequenceID extends Rule[LogicalPlan] {
     plan.resolveOperatorsUpWithPruning(_.containsPattern(DISTRIBUTED_SEQUENCE_ID)) {
       case plan: LogicalPlan if plan.resolved &&
           plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
+        val storageLevel = plan.expressions.flatMap(_.collectFirst {
+          case id: DistributedSequenceID =>
+            id.storageLevel.eval().asInstanceOf[UTF8String].toString
+        }).head
         val attr = AttributeReference("distributed_sequence_id", LongType, nullable = false)()
-        val newPlan = plan.withNewChildren(plan.children.map(AttachDistributedSequence(attr, _)))
+        val newPlan = plan.withNewChildren(
+            plan.children.map(AttachDistributedSequence(attr, _, storageLevel)))
           .transformExpressions { case _: DistributedSequenceID => attr }
         Project(plan.output, newPlan)
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.util.Locale
+
 import org.apache.spark.internal.LogKeys.{RDD_ID, SPARK_PLAN_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -24,8 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A physical plan that adds a new long column with `sequenceAttr` that
@@ -34,7 +35,8 @@ import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
  */
 case class AttachDistributedSequenceExec(
     sequenceAttr: Attribute,
-    child: SparkPlan)
+    child: SparkPlan,
+    storageLevel: String)
   extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
@@ -47,34 +49,7 @@ case class AttachDistributedSequenceExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    // before `compute.default_index_cache` is explicitly set via
-    // `ps.set_option`, `SQLConf.get` can not get its value (as well as its default value);
-    // after `ps.set_option`, `SQLConf.get` can get its value:
-    //
-    //    In [1]: import pyspark.pandas as ps
-    //    In [2]: ps.get_option("compute.default_index_cache")
-    //    Out[2]: 'MEMORY_AND_DISK_SER'
-    //    In [3]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
-    //    ...
-    //    Py4JJavaError: An error occurred while calling o40.get.
-    //      : java.util.NoSuchElementException: pandas_on_Spark.compute.distributed_sequence_...
-    //    at org.apache.spark.sql.errors.QueryExecutionErrors$.noSuchElementExceptionError...
-    //    at org.apache.spark.sql.internal.SQLConf.$anonfun$getConfString$3(SQLConf.scala:4766)
-    //    ...
-    //    In [4]: ps.set_option("compute.default_index_cache", "NONE")
-    //    In [5]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
-    //    Out[5]: '"NONE"'
-    //    In [6]: ps.set_option("compute.default_index_cache", "DISK_ONLY")
-    //    In [7]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
-    //    Out[7]: '"DISK_ONLY"'
-
-    // The string is double quoted because of JSON ser/deser for pandas API on Spark
-    val storageLevel = SQLConf.get.getConfString(
-      "pandas_on_Spark.compute.default_index_cache",
-      StorageLevelMapper.MEMORY_AND_DISK_SER.name()
-    ).stripPrefix("\"").stripSuffix("\"")
-
-    val cachedRDD = storageLevel match {
+    val cachedRDD = storageLevel.toUpperCase(Locale.ROOT) match {
       // zipWithIndex launches a Spark job only if #partition > 1
       case _ if childRDD.getNumPartitions <= 1 => childRDD
 
