@@ -19,7 +19,6 @@ import concurrent.futures
 from decimal import Decimal
 import itertools
 import os
-import time
 import unittest
 
 from pyspark.sql.functions import pandas_udf
@@ -51,6 +50,7 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_numpy:
     import numpy as np
@@ -73,36 +73,14 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class PandasUDFReturnTypeTests(ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-
-        super().tearDownClass()
-
+class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     @property
     def prefix(self):
         return "golden_pandas_udf_return_type_coercion"
 
     @property
     def test_data(self):
-        data = [
+        return [
             [None, None],
             [True, False],
             list("ab"),
@@ -131,7 +109,6 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
             pd.Categorical(["A", "B"]),
             pd.DataFrame({"_1": [1, 2]}),
         ]
-        return data
 
     @property
     def test_types(self):
@@ -153,19 +130,9 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
             StructType([StructField("_1", IntegerType())]),
         ]
 
-    def repr_type(self, spark_type):
-        return spark_type.simpleString()
-
     def repr_value(self, value):
-        v_str = value.to_json() if isinstance(value, pd.DataFrame) else str(value)
-        v_str = v_str.replace(chr(10), " ")
-        v_str = v_str[:32]
-        if isinstance(value, np.ndarray):
-            return f"{v_str}@ndarray[{value.dtype.name}]"
-        elif isinstance(value, pd.DataFrame):
-            simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
-            return f"{v_str}@Dataframe[{simple_schema}]"
-        return f"{v_str}@{type(value).__name__}"
+        # Use extended pandas value representation
+        return self.repr_pandas_value(value)
 
     def test_str_repr(self):
         self.assertEqual(
@@ -189,21 +156,14 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
         self._compare_or_generate_golden(golden_file, test_name)
 
     def _compare_or_generate_golden(self, golden_file, test_name):
-        testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
+        generating = self.is_generating_golden()
 
         golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
         golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
 
         golden = None
-        if testing:
-            golden = pd.read_csv(
-                golden_csv,
-                sep="\t",
-                index_col=0,
-                dtype="str",
-                na_filter=False,
-                engine="python",
-            )
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
 
         def work(arg):
             spark_type, value = arg
@@ -231,10 +191,10 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
                 result = "X"
 
             # Clean up exception message to remove newlines and extra whitespace
-            result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+            result = self.clean_result(result)
 
             err = None
-            if testing:
+            if not generating:
                 expected = golden.loc[str_t, str_v]
                 if expected != result:
                     err = f"{str_v} => {spark_type} expects {expected} but got {result}"
@@ -250,7 +210,7 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
                 )
             )
 
-        if testing:
+        if not generating:
             errs = []
             for _, _, _, err in results:
                 if err is not None:
@@ -270,18 +230,7 @@ class PandasUDFReturnTypeTests(ReusedSQLTestCase):
             for str_t, str_v, res, _ in results:
                 new_golden.loc[str_t, str_v] = res
 
-            # generating the CSV file as the golden file
-            new_golden.to_csv(golden_csv, sep="\t", header=True, index=True)
-
-            try:
-                # generating the GitHub flavored Markdown file
-                # package tabulate is required
-                new_golden.to_markdown(golden_md, index=True, tablefmt="github")
-            except Exception as e:
-                print(
-                    f"{test_name} return type coercion: "
-                    f"fail to write the markdown file due to {e}!"
-                )
+            self.save_golden(new_golden, golden_csv, golden_md)
 
 
 if __name__ == "__main__":

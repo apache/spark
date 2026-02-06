@@ -30,8 +30,9 @@ import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
 
-  def noHandlerFoundForExtension(): InvalidPlanInput =
-    InvalidPlanInput("No handler found for extension")
+  def noHandlerFoundForExtension(extensionTypeUrl: String): InvalidPlanInput = {
+    InvalidPlanInput(s"No handler found for extension type: $extensionTypeUrl")
+  }
 
   def invalidSQLWithReferences(query: proto.WithRelations): InvalidPlanInput =
     InvalidPlanInput(s"$query is not a valid relation for SQL with references")
