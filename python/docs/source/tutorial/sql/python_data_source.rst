@@ -512,6 +512,7 @@ The following example demonstrates how to implement a basic Data Source using Ar
 
     from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
     from pyspark.sql import SparkSession
+    from pyspark.sql.pandas.types import to_arrow_schema
     import pyarrow as pa
 
     # Define the ArrowBatchDataSource
@@ -534,14 +535,14 @@ The following example demonstrates how to implement a basic Data Source using Ar
     class ArrowBatchDataSourceReader(DataSourceReader):
         def __init__(self, schema, options):
             self.schema: str = schema
+            self.arrow_schema=to_arrow_schema(self.schema)
             self.options = options
 
         def read(self, partition):
             # Create Arrow Record Batch
             keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
             values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
-            schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
-            record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+            record_batch = pa.RecordBatch.from_arrays([keys, values], schema=self.arrow_schema)
             yield record_batch
 
         def partitions(self):
