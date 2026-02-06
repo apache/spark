@@ -634,7 +634,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         ) -> "pa.RecordBatch":
             # Normalize: single UDF (arr, type) -> [(arr, type)]
             if len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                packed = [packed]
+                packed = [packed]  # type: ignore[list-item]
             arrs = [
                 cast_arrow_array(arr, arrow_type, safe=self._safecheck, allow_cast=self._arrow_cast)
                 for arr, arrow_type in packed
