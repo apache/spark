@@ -12447,7 +12447,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             return first_series(DataFrame(internal))
 
-    # TODO(SPARK-46168): axis = 1
     def idxmin(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of minimum over requested axis.
@@ -12458,8 +12457,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise, 1 or 'columns' for column-wise.
 
         Returns
         -------
@@ -12487,6 +12486,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c    1
         dtype: int64
 
+        For axis=1, return the column label of the minimum value in each row:
+
+        >>> psdf.idxmin(axis=1)
+        0    a
+        1    a
+        2    a
+        3    b
+        dtype: object
+
         For Multi-column Index
 
         >>> psdf = ps.DataFrame({'a': [1, 2, 3, 2],
@@ -12507,17 +12515,70 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c  z    1
         dtype: int64
         """
-        min_cols = map(lambda scol: F.min(scol), self._internal.data_spark_columns)
-        sdf_min = self._internal.spark_frame.select(*min_cols).head()
+        axis = validate_axis(axis)
+        if axis == 0:
+            min_cols = map(lambda scol: F.min(scol), self._internal.data_spark_columns)
+            sdf_min = self._internal.spark_frame.select(*min_cols).head()
 
-        conds = (
-            scol == min_val for scol, min_val in zip(self._internal.data_spark_columns, sdf_min)
-        )
-        cond = reduce(lambda x, y: x | y, conds)
+            conds = (
+                scol == min_val for scol, min_val in zip(self._internal.data_spark_columns, sdf_min)
+            )
+            cond = reduce(lambda x, y: x | y, conds)
 
-        psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
+            psdf: DataFrame = DataFrame(self._internal.with_filter(cond))
 
-        return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
+            return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
+        else:
+            from pyspark.pandas.series import first_series
+
+            column_labels = self._internal.column_labels
+
+            if len(column_labels) == 0:
+                return ps.Series([], dtype=np.int64)
+
+            if self._internal.column_labels_level > 1:
+                raise NotImplementedError(
+                    "idxmin with axis=1 does not support MultiIndex columns yet"
+                )
+
+            min_value = F.least(
+                *[
+                    F.coalesce(self._internal.spark_column_for(label), F.lit(float("inf")))
+                    for label in column_labels
+                ],
+                F.lit(float("inf")),
+            )
+
+            result = None
+            for label in reversed(column_labels):
+                scol = self._internal.spark_column_for(label)
+                label_value = label[0] if len(label) == 1 else label
+                condition = (scol == min_value) & scol.isNotNull()
+
+                result = (
+                    F.when(condition, F.lit(label_value))
+                    if result is None
+                    else F.when(condition, F.lit(label_value)).otherwise(result)
+                )
+
+            result = F.when(min_value == float("inf"), F.lit(None)).otherwise(result)
+
+            sdf = self._internal.spark_frame.select(
+                *self._internal.index_spark_columns,
+                result.alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
 
     def info(
         self,
