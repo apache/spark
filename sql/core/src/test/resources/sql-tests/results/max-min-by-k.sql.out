@@ -237,7 +237,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "currentValue" : "0",
     "exprName" : "`k`",
     "sqlExpr" : "\"max_by(name, score, 0)\"",
-    "valueRange" : "[1, Integer.MAX_VALUE]"
+    "valueRange" : "[1, 100000]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -262,7 +262,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "currentValue" : "-1",
     "exprName" : "`k`",
     "sqlExpr" : "\"max_by(name, score, -1)\"",
-    "valueRange" : "[1, Integer.MAX_VALUE]"
+    "valueRange" : "[1, 100000]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -270,6 +270,31 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 30,
     "fragment" : "max_by(name, score, -1)"
+  } ]
+}
+
+
+-- !query
+SELECT max_by(name, score, 100001) FROM basic_data
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "100001",
+    "exprName" : "`k`",
+    "sqlExpr" : "\"max_by(name, score, 100001)\"",
+    "valueRange" : "[1, 100000]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "max_by(name, score, 100001)"
   } ]
 }
 

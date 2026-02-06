@@ -622,6 +622,16 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 sdf.groupBy("a").agg(sfunc(sdf.b, "c")).orderBy("a").toPandas(),
             )
 
+        # test max_by and min_by with k parameter
+        self.assert_eq(
+            cdf.select(CF.max_by(cdf.b, "c", 2)).toPandas(),
+            sdf.select(SF.max_by(sdf.b, "c", 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.min_by(cdf.b, "c", 2)).toPandas(),
+            sdf.select(SF.min_by(sdf.b, "c", 2)).toPandas(),
+        )
+
         # test grouping
         self.assert_eq(
             cdf.cube("a").agg(CF.grouping("a"), CF.sum("c")).orderBy("a").toPandas(),

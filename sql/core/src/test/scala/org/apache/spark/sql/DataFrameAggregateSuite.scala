@@ -1279,6 +1279,15 @@ class DataFrameAggregateSuite extends QueryTest
           mapError.getMessage.contains("not orderable"))
       }
     }
+
+    // Error: k exceeds maximum limit (100000)
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 100001) FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      assert(error.getMessage.contains("VALUE_OUT_OF_RANGE") ||
+        error.getMessage.contains("100000"))
+    }
   }
 
   test("percentile_like") {

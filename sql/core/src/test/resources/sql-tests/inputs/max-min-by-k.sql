@@ -93,6 +93,9 @@ SELECT max_by(name, score, 0) FROM basic_data;
 -- Error case: k must be positive (negative)
 SELECT max_by(name, score, -1) FROM basic_data;
 
+-- Error case: k exceeds maximum limit (100000)
+SELECT max_by(name, score, 100001) FROM basic_data;
+
 -- Cleanup
 DROP VIEW basic_data;
 DROP VIEW dept_data;
