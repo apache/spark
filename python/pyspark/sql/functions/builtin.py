@@ -1361,7 +1361,8 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
         or the column name as string.
     k : int, optional
         If specified, returns an array of up to `k` values associated with the top `k`
-        maximum ordering values. Must be a positive integer literal <= 100000.
+        maximum ordering values, sorted in descending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------
@@ -1471,7 +1472,8 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
         or the column name as string.
     k : int, optional
         If specified, returns an array of up to `k` values associated with the bottom `k`
-        minimum ordering values. Must be a positive integer literal <= 100000.
+        minimum ordering values, sorted in ascending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------

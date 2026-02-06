@@ -256,7 +256,7 @@ case class MaxMinByK(
   usage = """
     _FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
-    maximum values of `y` (since 4.2.0).
+    maximum values of `y`, sorted in descending order by `y` (since 4.2.0).
   """,
   examples = """
     Examples:
@@ -267,7 +267,7 @@ case class MaxMinByK(
   """,
   note = """
     The function is non-deterministic so the output order can be different for
-    those associated the same values of `x`.
+    those associated the same values of `y`.
   """,
   group = "agg_funcs",
   since = "3.0.0")
@@ -288,7 +288,7 @@ object MaxByBuilder extends ExpressionBuilder {
   usage = """
     _FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
-    minimum values of `y` (since 4.2.0).
+    minimum values of `y`, sorted in ascending order by `y` (since 4.2.0).
   """,
   examples = """
     Examples:
@@ -299,7 +299,7 @@ object MaxByBuilder extends ExpressionBuilder {
   """,
   note = """
     The function is non-deterministic so the output order can be different for
-    those associated the same values of `x`.
+    those associated the same values of `y`.
   """,
   group = "agg_funcs",
   since = "3.0.0")
