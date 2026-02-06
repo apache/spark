@@ -24,6 +24,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series
@@ -94,14 +95,14 @@ class TimedeltaIndex(Index):
     def __new__(
         cls,
         data=None,
-        unit=None,
+        unit=_NoValue,
         freq=_NoValue,
-        closed=None,
+        closed=_NoValue,
         dtype=None,
         copy=False,
         name=None,
     ) -> "TimedeltaIndex":
-        if closed is not None:
+        if closed is not _NoValue:
             warnings.warn(
                 "The 'closed' keyword in TimedeltaIndex construction is deprecated "
                 "and will be removed in a future version.",
@@ -117,14 +118,25 @@ class TimedeltaIndex(Index):
 
         kwargs = dict(
             data=data,
-            unit=unit,
-            closed=closed,
             dtype=dtype,
             copy=copy,
             name=name,
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if unit is not _NoValue:
+                kwargs["unit"] = unit
+
+            if closed is not _NoValue:
+                kwargs["closed"] = closed
+        else:
+            if unit is not _NoValue:
+                raise ValueError("The 'unit' keyword is not supported in pandas 3.0.0 and later.")
+
+            if closed is not _NoValue:
+                raise ValueError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
 
         return cast(TimedeltaIndex, ps.from_pandas(pd.TimedeltaIndex(**kwargs)))
 
