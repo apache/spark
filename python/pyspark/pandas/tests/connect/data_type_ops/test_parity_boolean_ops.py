@@ -35,6 +35,7 @@ class BooleanOpsParityTests(
 
 class BooleanExtensionOpsParityTests(
     BooleanExtensionOpsTestsMixin,
+    PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,
 ):

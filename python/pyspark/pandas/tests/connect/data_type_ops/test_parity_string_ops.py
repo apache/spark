@@ -35,6 +35,7 @@ class StringOpsParityTests(
 
 class StringExtensionOpsParityTests(
     StringExtensionOpsTestsMixin,
+    PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,
 ):

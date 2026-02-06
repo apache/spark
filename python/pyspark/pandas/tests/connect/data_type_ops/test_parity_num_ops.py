@@ -36,6 +36,7 @@ class NumOpsParityTests(
 
 class IntegralExtensionOpsParityTests(
     IntegralExtensionOpsTestsMixin,
+    PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,
 ):
@@ -44,6 +45,7 @@ class IntegralExtensionOpsParityTests(
 
 class FractionalExtensionOpsParityTests(
     FractionalExtensionOpsTestsMixin,
+    PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,
 ):
