@@ -1429,7 +1429,14 @@ class ArrowArrayToPandasConversion:
         # Right now, the name is dropped in arrow conversions.
         # TODO: should make convert_numpy explicitly pass the expected series name.
         name = arr._name
-        arr = ArrowArrayConversion.preprocess_time(arr)
+        if isinstance(spark_type, (ArrayType, MapType, StructType)):
+            # Complex types only need tz localization, not ns coercion.
+            # preprocess_time() coerces to timestamp[ns] which causes PyArrow's
+            # to_pandas(maps_as_pydicts="strict") to return raw integers for
+            # nested timestamps instead of datetime objects.
+            arr = ArrowArrayConversion.localize_tz(arr)
+        else:
+            arr = ArrowArrayConversion.preprocess_time(arr)
 
         series: pd.Series
 
@@ -1508,10 +1515,7 @@ class ArrowArrayToPandasConversion:
             series = arr.to_pandas(**pandas_options)
         elif isinstance(spark_type, (ArrayType, MapType, StructType)):
             # Use native Arrow conversion with maps_as_pydicts for efficient map→dict conversion
-            pandas_options = {
-                "maps_as_pydicts": "strict",  
-                "date_as_object": True
-            }
+            pandas_options = {"maps_as_pydicts": "strict", "date_as_object": True}
             series = arr.to_pandas(**pandas_options)
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
