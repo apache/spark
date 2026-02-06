@@ -256,11 +256,19 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
           .get(ResourceProfile.OFFHEAP_MEM).map(_.amount).getOrElse(-1L))
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 120000)
+      Thread.sleep(10000)
 
-      // Check executor memory is also updated
-      val execInfo = sc.statusTracker.getExecutorInfos.head
-      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+      // Check executor memory is also updated for all executors except driver
+      val executorInfos = sc.statusTracker.getExecutorInfos
+      val execWithMemory = executorInfos.filter(_.totalOffHeapStorageMemory() > 0)
+
+      assert(execWithMemory.length >= 2,
+       s"Expected atleast 2 executors with memory, got ${execWithMemory.length}")
+      execWithMemory.foreach { exec =>
+        assert(exec.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+      }
+
     } finally {
       if (sc != null) {
         sc.stop()

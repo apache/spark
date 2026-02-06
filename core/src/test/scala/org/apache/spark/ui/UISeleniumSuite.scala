@@ -152,7 +152,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   test("effects of unpersist() / persist() should be reflected") {
     // Regression test for SPARK-2527
-    withSpark(newSparkContext()) { sc =>
+    withSpark(newSparkContext(master = "local-cluster[1,1,1024]")) { sc =>
       val ui = sc.ui.get
       val rdd = sc.parallelize(Seq(1, 2, 3))
       rdd.persist(StorageLevels.DISK_ONLY).count()
