@@ -103,7 +103,7 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
     catalogTable: Option[CatalogTable] = None,
-    streamingSourceIdentifyingName: Option[StreamingSourceIdentifyingName] = None)
+    userSpecifiedStreamingSourceName: Option[StreamingSourceIdentifyingName] = None)
   extends SessionStateHelper with Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])

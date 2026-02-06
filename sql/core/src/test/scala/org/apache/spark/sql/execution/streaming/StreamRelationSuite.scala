@@ -146,7 +146,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
             ),
             userSpecifiedSchema = Option(catalogTable.schema),
             catalogTable = Option(catalogTable),
-            streamingSourceIdentifyingName = Some(Unassigned)
+            userSpecifiedStreamingSourceName = Some(Unassigned)
           ),
           sourceName = s"FileSource[${catalogTable.location.toString}]",
           output = Seq(idAttr)

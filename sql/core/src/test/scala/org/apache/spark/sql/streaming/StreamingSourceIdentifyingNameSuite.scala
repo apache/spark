@@ -44,7 +44,7 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
         s"Expected Unassigned but got ${streamingRelation.get.sourceIdentifyingName}")
 
       // Verify the DataSource has the sourceIdentifyingName set
-      val dsSourceName = streamingRelation.get.dataSource.streamingSourceIdentifyingName
+      val dsSourceName = streamingRelation.get.dataSource.userSpecifiedStreamingSourceName
       assert(dsSourceName == Some(Unassigned),
         s"Expected Some(Unassigned) but got $dsSourceName")
     }
