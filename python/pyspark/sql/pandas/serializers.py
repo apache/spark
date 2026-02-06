@@ -461,10 +461,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
             if len(packed) == 2 and isinstance(packed[1], DataType):
                 # single UDF result: wrap in list
-                series_tuples: List[Tuple["pd.Series", DataType]] = [packed]  # type: ignore[list-item]
+                series_tuples: List[Tuple["pd.Series", DataType]] = [packed]
             else:
                 # multiple UDF results: already iterable of tuples
-                series_tuples = list(packed)  # type: ignore[arg-type]
+                series_tuples = list(packed)
 
             series_data, types = map(list, list(zip(*series_tuples)) or [(), ()])
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
@@ -565,10 +565,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
             if len(packed) == 2 and isinstance(packed[1], DataType):
                 # single UDF result: wrap in list
-                series_tuples: List[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]] = [packed]  # type: ignore[list-item]
+                series_tuples: List[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]] = [packed]
             else:
                 # multiple UDF results: already iterable of tuples
-                series_tuples = list(packed)  # type: ignore[arg-type]
+                series_tuples = list(packed)
 
             # When struct_in_pandas="dict", UDF must return DataFrame for struct types
             if self._struct_in_pandas == "dict":
