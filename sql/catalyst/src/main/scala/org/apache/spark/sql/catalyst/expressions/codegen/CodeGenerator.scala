@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1991,6 +1992,9 @@ object CodeGenerator extends Logging {
 
   @tailrec
   def javaClass(dt: DataType): Class[_] = dt match {
+    // Types Framework: delegate to PhyTypeOps for supported types when enabled
+    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
+      PhyTypeOps(dt).getJavaClass
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
