@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.{MAX_BYTES_PER_BATCH, MAX_FILES_PER_BATCH, MAX_RECORDS_PER_BATCH}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
@@ -32,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
 class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
   val waitTimeout = 15.seconds
 
@@ -421,6 +421,33 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        yield (partition.value,)
       |""".stripMargin
 
+  protected def admissionControlDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
+      |
+      |class AdmissionControlDataStreamReader(DataSourceStreamReader):
+      |    def __init__(self, max_rows: int):
+      |        self.max_rows = max_rows
+      |    def initialOffset(self):
+      |        return {"offset": {"partition-1": 0}}
+      |    def latestOffset(self, start=None):
+      |        if start is None:
+      |            start = self.initialOffset()
+      |        start_index = start["offset"]["partition-1"]
+      |        true_latest = {"offset": {"partition-1": start_index + 2}}
+      |        if self.max_rows > 0:
+      |            capped_end = min(start_index + self.max_rows, start_index + 2)
+      |            capped = {"offset": {"partition-1": capped_end}}
+      |            return (capped, true_latest)
+      |        return true_latest
+      |    def partitions(self, start: dict, end: dict):
+      |        start_index = start["offset"]["partition-1"]
+      |        end_index = end["offset"]["partition-1"]
+      |        return [InputPartition(i) for i in range(start_index, end_index)]
+      |    def read(self, partition):
+      |        yield (partition.value,)
+      |""".stripMargin
+
   protected def errorDataStreamReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
@@ -513,6 +540,101 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
+  }
+
+  test("admission control: maxRecordsPerBatch with DataSourceStreamReader") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$admissionControlDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        max_rows = int(self.options.get("${MAX_RECORDS_PER_BATCH}", "0"))
+         |        return AdmissionControlDataStreamReader(max_rows)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    withTempDir { dir =>
+      val checkpointDir = new File(dir.getAbsolutePath, "checkpoint")
+      val df = spark.readStream
+        .format(dataSourceName)
+        .option(MAX_RECORDS_PER_BATCH, "1")
+        .load()
+
+      val stopSignal = new CountDownLatch(1)
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          assert(df.count() <= 1, s"Batch $batchId exceeded maxRecordsPerBatch limit")
+          if (batchId >= 5) stopSignal.countDown()
+        })
+        .trigger(ProcessingTimeTrigger(0))
+        .start()
+
+      assert(
+        stopSignal.await(waitTimeout.toSeconds, java.util.concurrent.TimeUnit.SECONDS),
+        "Query did not process expected batches in time")
+      assert(
+        q.recentProgress.forall(_.numInputRows <= 1),
+        "Some batches exceeded maxRecordsPerBatch=1")
+      q.stop()
+      q.awaitTermination()
+    }
+  }
+
+  test("admission control: maxFilesPerBatch is not supported for Python data sources") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    val e = intercept[IllegalArgumentException] {
+      spark.readStream.format(dataSourceName).option(MAX_FILES_PER_BATCH, "1").load()
+    }
+    assert(e.getMessage.contains(MAX_FILES_PER_BATCH))
+    assert(e.getMessage.contains(MAX_RECORDS_PER_BATCH))
+  }
+
+  test("admission control: maxBytesPerBatch is not supported for Python data sources") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    val e = intercept[IllegalArgumentException] {
+      spark.readStream.format(dataSourceName).option(MAX_BYTES_PER_BATCH, "1").load()
+    }
+    assert(e.getMessage.contains(MAX_BYTES_PER_BATCH))
+    assert(e.getMessage.contains(MAX_RECORDS_PER_BATCH))
   }
 
   // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.

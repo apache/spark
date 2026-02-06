@@ -43,9 +43,9 @@ object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the
   // integers below, it will invoke the corresponding function of StreamReader instance.
   val INITIAL_OFFSET_FUNC_ID = 884
-  val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  val LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890
   // Status code for JVM to decide how to receive prefetched record batches
   // for simple stream reader.
   val PREFETCHED_RECORDS_NOT_FOUND = 0
@@ -131,21 +131,6 @@ class PythonStreamingSourceRunner(
   }
 
   /**
-   * Invokes latestOffset() function of the stream reader and receive the return value.
-   */
-  def latestOffset(): String = {
-    dataOut.writeInt(LATEST_OFFSET_FUNC_ID)
-    dataOut.flush()
-    val len = dataIn.readInt()
-    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
-    }
-    PythonWorkerUtils.readUTF(len, dataIn)
-  }
-
-  /**
    * Invokes initialOffset() function of the stream reader and receive the return value.
    */
   def initialOffset(): String = {
@@ -195,6 +180,42 @@ class PythonStreamingSourceRunner(
           action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
     }
     (pickledPartitions.toArray, iter)
+  }
+
+  /**
+   * Invokes latestOffset(startOffset) and also fetches the true latest offset. This avoids race
+   * conditions by getting both offsets in a single RPC call.
+   *
+   * @param startOffset
+   *   the starting offset JSON string (use "null" to represent no start offset)
+   * @return
+   *   tuple of (capped offset with limit applied, true latest offset)
+   * @since 4.0.0
+   */
+  def latestOffsetWithReport(startOffset: String): (String, String) = {
+    dataOut.writeInt(LATEST_OFFSET_WITH_REPORT_FUNC_ID)
+    PythonWorkerUtils.writeUTF(startOffset, dataOut)
+    dataOut.flush()
+
+    // Read capped offset
+    val cappedLen = dataIn.readInt()
+    if (cappedLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset", msg)
+    }
+    val cappedOffset = PythonWorkerUtils.readUTF(cappedLen, dataIn)
+
+    // Read true latest offset
+    val trueLen = dataIn.readInt()
+    if (trueLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset", msg)
+    }
+    val trueLatest = PythonWorkerUtils.readUTF(trueLen, dataIn)
+
+    (cappedOffset, trueLatest)
   }
 
   /**
