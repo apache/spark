@@ -130,7 +130,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
     def shutdown_threadpool_if_idle(cls) -> None:
         with cls._lock:
             if not cls._instances and cls._release_thread_pool_instance is not None:
-                cls._release_thread_pool_instance.shutdown()
+                cls._release_thread_pool_instance.shutdown(wait=False)
                 cls._release_thread_pool_instance = None
 
     def send(self, value: Any) -> pb2.ExecutePlanResponse:
