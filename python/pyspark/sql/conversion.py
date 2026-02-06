@@ -318,7 +318,7 @@ class PandasToArrowConversion:
             try:
                 try:
                     return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-                except pa.lib.ArrowInvalid:
+                except pa.lib.ArrowException:
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
                             target_type=arrow_type, safe=safecheck
