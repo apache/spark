@@ -460,7 +460,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # multiple UDF results: already iterable of tuples
                 series_tuples = packed
 
-            series_data, types = map(list, list(zip(*series_tuples)) or [[], []])
+            series_data, types = map(list, list(zip(*series_tuples)) or [(), ()])
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
             return PandasToArrowConversion.convert(
                 series_data,
@@ -579,7 +579,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                             "pandas.DataFrame when the specified return type is StructType."
                         )
 
-            series_data, types = map(list, list(zip(*series_tuples)) or [[], []])
+            series_data, types = map(list, list(zip(*series_tuples)) or [(), ()])
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
             return PandasToArrowConversion.convert(
                 series_data,

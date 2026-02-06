@@ -258,6 +258,7 @@ class PandasToArrowConversion:
 
             if isinstance(col_data, pd.DataFrame):
                 # DataFrame column (for struct types)
+                assert isinstance(field.dataType, StructType)
                 nested_batch = cls.convert(
                     col_data,
                     field.dataType,
