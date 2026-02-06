@@ -21,7 +21,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
+from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
 
 
 class FuncTestsMixin(GroupbyStatTestingFuncMixin):
@@ -48,7 +48,7 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.var(numeric_only=None),
-                expected_error=self.expected_error_numeric_only,
+                expected_error=ValueError if using_pandas3 else None,
             )
 
         pdf, psdf = self.pdf, self.psdf
@@ -69,7 +69,7 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
         else:
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.median(numeric_only=None),
-                expected_error=self.expected_error_numeric_only,
+                expected_error=ValueError if using_pandas3 else None,
             )
         self.assert_eq(
             psdf.groupby("A").median(numeric_only=False).sort_index(),
@@ -113,7 +113,7 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.sum(numeric_only=None),
-                expected_error=self.expected_error_numeric_only,
+                expected_error=ValueError if using_pandas3 else None,
             )
 
 

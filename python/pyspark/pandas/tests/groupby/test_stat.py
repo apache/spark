@@ -25,6 +25,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
+using_pandas3 = LooseVersion(pd.__version__) >= "3.0.0"
+
+
 class GroupbyStatTestingFuncMixin:
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(
@@ -51,13 +54,6 @@ class GroupbyStatTestingFuncMixin:
                 with self.assertRaises(expected_error):
                     func(ps_groupby_obj)
 
-    @property
-    def expected_error_numeric_only(self) -> Optional[Type[Exception]]:
-        if LooseVersion(pd.__version__) < "3.0.0":
-            return None
-        else:
-            return ValueError
-
 
 class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
     @property
@@ -81,7 +77,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.mean(numeric_only=None),
-                expected_error=self.expected_error_numeric_only,
+                expected_error=ValueError if using_pandas3 else None,
             )
         psdf = self.psdf
         with self.assertRaises(TypeError):
@@ -92,7 +88,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(min_count=2))
         self._test_stat_func(
             lambda groupby_obj: groupby_obj.min(numeric_only=None),
-            expected_error=self.expected_error_numeric_only,
+            expected_error=ValueError if using_pandas3 else None,
         )
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True, min_count=2))
@@ -102,7 +98,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(min_count=2))
         self._test_stat_func(
             lambda groupby_obj: groupby_obj.max(numeric_only=None),
-            expected_error=self.expected_error_numeric_only,
+            expected_error=ValueError if using_pandas3 else None,
         )
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
@@ -127,7 +123,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
         )
         self._test_stat_func(
             lambda groupby_obj: groupby_obj.sum(numeric_only=None),
-            expected_error=self.expected_error_numeric_only,
+            expected_error=ValueError if using_pandas3 else None,
         )
 
     def test_median(self):
@@ -158,7 +154,7 @@ class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
             # pandas < 3 raises an error when numeric_only is False or None
             self._test_stat_func(
                 lambda groupby_obj: groupby_obj.median(numeric_only=None),
-                expected_error=self.expected_error_numeric_only,
+                expected_error=ValueError if using_pandas3 else None,
             )
 
 
