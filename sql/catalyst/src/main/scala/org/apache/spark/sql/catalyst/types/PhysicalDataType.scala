@@ -21,8 +21,10 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
@@ -35,6 +37,9 @@ sealed abstract class PhysicalDataType {
 
 object PhysicalDataType {
   def apply(dt: DataType): PhysicalDataType = dt match {
+    // Types Framework: delegate to PhyTypeOps for supported types when enabled
+    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
+      PhyTypeOps(dt).getPhysicalType
     case NullType => PhysicalNullType
     case ByteType => PhysicalByteType
     case ShortType => PhysicalShortType
