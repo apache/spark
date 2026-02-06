@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev
 
 # Setup virtual environment
-ENV VIRTUAL_ENV /opt/spark-venv
+ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv --without-pip $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
