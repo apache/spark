@@ -17,10 +17,10 @@ pyyaml>=3.11
 # PySpark test dependencies
 unittest-xml-reporting
 openpyxl
-tabulate
 
 # PySpark test dependencies (optional)
 coverage
+tabulate
 
 # Linter
 ruff==0.14.8
