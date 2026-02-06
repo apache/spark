@@ -1135,7 +1135,7 @@ class ArrowArrayConversion:
         arr: Union["pa.Array", "pa.ChunkedArray"],
     ) -> Union["pa.Array", "pa.ChunkedArray"]:
         """
-        1, always drop the timezone for TimestampType;
+        1, always drop the timezone from TimestampType;
         2, coerce_temporal_nanoseconds: coerce timestamp time units to nanoseconds
         """
         import pyarrow as pa
