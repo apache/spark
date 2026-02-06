@@ -31,7 +31,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.ConfigBuilder
@@ -1627,11 +1627,11 @@ class ClientE2ETestSuite
 
     observed_df.collect()
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[SparkRuntimeException] {
       observation.get
     }
 
-    assert(exception.getCause.getMessage.contains("test error"))
+    assert(exception.getMessage.contains("test error"))
   }
 
   test("SPARK-48852: trim function on a string column returns correct results") {

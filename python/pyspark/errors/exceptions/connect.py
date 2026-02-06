@@ -61,43 +61,89 @@ def convert_exception(
     display_server_stacktrace: bool = False,
     grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
+    raw_classes = info.metadata.get("classes")
+    classes: List[str] = json.loads(raw_classes) if raw_classes else []
+    raw_message_parameters = info.metadata.get("messageParameters")
+    message_parameters: Dict[str, str] = (
+        json.loads(raw_message_parameters) if raw_message_parameters else {}
+    )
+    root_error_idx = (
+        resp.root_error_idx if resp is not None and resp.HasField("root_error_idx") else None
+    )
     converted = _convert_exception(
-        info, truncated_message, resp, display_server_stacktrace, grpc_status_code
+        classes=classes,
+        sql_state=info.metadata.get("sqlState"),
+        error_class=info.metadata.get("errorClass"),
+        reason=info.reason,
+        root_error_idx=root_error_idx,
+        errors=list(resp.errors) if resp is not None else None,
+        truncated_message=truncated_message,
+        truncated_message_parameters=message_parameters,
+        truncated_stacktrace=info.metadata.get("stackTrace"),
+        display_server_stacktrace=display_server_stacktrace,
+        grpc_status_code=grpc_status_code,
     )
     return recover_python_exception(converted)
 
 
+def convert_observation_errors(
+    root_error_idx: int,
+    errors: List["pb2.FetchErrorDetailsResponse.Error"],
+) -> SparkConnectException:
+    """
+    Convert observation error payload (root_error_idx + list of Error from ObservedMetrics)
+    to a SparkConnectException.
+    """
+    if root_error_idx < 0 or root_error_idx >= len(errors):
+        return SparkConnectException("Observation error: invalid root_error_idx")
+
+    if len(errors) == 0:
+        return SparkConnectException("Observation error: no errors")
+
+    root_error = errors[root_error_idx]
+
+    return _convert_exception(
+        classes=list(root_error.error_type_hierarchy),
+        sql_state=root_error.spark_throwable.sql_state
+        if root_error.spark_throwable.HasField("sql_state")
+        else None,
+        error_class=root_error.spark_throwable.error_class
+        if root_error.spark_throwable.HasField("error_class")
+        else None,
+        reason=None,
+        root_error_idx=root_error_idx,
+        errors=errors,
+        truncated_message="",
+        truncated_message_parameters=None,
+        truncated_stacktrace=None,
+    )
+
+
 def _convert_exception(
-    info: "ErrorInfo",
+    classes: List[str],
+    sql_state: Optional[str],
+    error_class: Optional[str],
+    reason: Optional[str],
+    root_error_idx: Optional[int],
+    errors: Optional[List["pb2.FetchErrorDetailsResponse.Error"]],
     truncated_message: str,
-    resp: Optional["pb2.FetchErrorDetailsResponse"],
+    truncated_message_parameters: Optional[Dict[str, str]],
+    truncated_stacktrace: Optional[str],
     display_server_stacktrace: bool = False,
     grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
     import pyspark.sql.connect.proto as pb2
 
-    raw_classes = info.metadata.get("classes")
-    classes: List[str] = json.loads(raw_classes) if raw_classes else []
-    sql_state = info.metadata.get("sqlState")
-    error_class = info.metadata.get("errorClass")
-    raw_message_parameters = info.metadata.get("messageParameters")
-    message_parameters: Dict[str, str] = (
-        json.loads(raw_message_parameters) if raw_message_parameters else {}
-    )
-    stacktrace: Optional[str] = None
-
-    if resp is not None and resp.HasField("root_error_idx"):
-        message = resp.errors[resp.root_error_idx].message
-        stacktrace = _extract_jvm_stacktrace(resp)
-    else:
-        message = truncated_message
-        stacktrace = info.metadata.get("stackTrace")
-        display_server_stacktrace = display_server_stacktrace if stacktrace else False
-
+    message = truncated_message
+    stacktrace = truncated_stacktrace
+    message_parameters = truncated_message_parameters
     contexts = None
     breaking_change_info = None
-    if resp and resp.HasField("root_error_idx"):
-        root_error = resp.errors[resp.root_error_idx]
+
+    if root_error_idx is not None and errors is not None:
+        root_error = errors[root_error_idx]
+        message = root_error.message
+        stacktrace = _extract_jvm_stacktrace(root_error_idx, errors)
         if hasattr(root_error, "spark_throwable"):
             # Extract errorClass from FetchErrorDetailsResponse if not in metadata
             if error_class is None and root_error.spark_throwable.HasField("error_class"):
@@ -123,6 +169,8 @@ def _convert_exception(
                         "key": bci.mitigation_config.key,
                         "value": bci.mitigation_config.value,
                     }
+    else:
+        display_server_stacktrace = display_server_stacktrace if stacktrace else False
 
     if "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
@@ -158,7 +206,7 @@ def _convert_exception(
     # Return UnknownException if there is no matched exception class
     return UnknownException(
         message,
-        reason=info.reason,
+        reason=reason,
         messageParameters=message_parameters,
         errorClass=error_class,
         sql_state=sql_state,
@@ -170,10 +218,9 @@ def _convert_exception(
     )
 
 
-def _extract_jvm_stacktrace(resp: "pb2.FetchErrorDetailsResponse") -> str:
-    if len(resp.errors[resp.root_error_idx].stack_trace) == 0:
-        return ""
-
+def _extract_jvm_stacktrace(
+    root_error_idx: int, errors: List["pb2.FetchErrorDetailsResponse.Error"]
+) -> str:
     lines: List[str] = []
 
     def format_stacktrace(error: "pb2.FetchErrorDetailsResponse.Error") -> None:
@@ -190,9 +237,9 @@ def _extract_jvm_stacktrace(resp: "pb2.FetchErrorDetailsResponse") -> str:
 
         # If this error has a cause, format that recursively
         if error.HasField("cause_idx"):
-            format_stacktrace(resp.errors[error.cause_idx])
+            format_stacktrace(errors[error.cause_idx])
 
-    format_stacktrace(resp.errors[resp.root_error_idx])
+    format_stacktrace(errors[root_error_idx])
 
     return "\n".join(lines)
 
