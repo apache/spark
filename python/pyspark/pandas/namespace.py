@@ -1165,7 +1165,7 @@ def read_excel(
             kwargs["date_parser"] = date_parser
     else:
         if date_parser is not _NoValue:
-            raise ValueError(
+            raise TypeError(
                 "The 'date_parser' keyword is not supported in pandas 3.0.0 and later."
             )
 
