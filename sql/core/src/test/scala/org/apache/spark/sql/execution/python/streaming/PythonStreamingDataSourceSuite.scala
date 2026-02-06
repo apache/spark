@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.duration._
 
@@ -1182,7 +1182,21 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       .trigger(ProcessingTimeTrigger(0))
       .start()
 
-    stopSignal.await()
+    eventually(timeout(waitTimeout)) {
+      assert(
+        stopSignal.await(1, TimeUnit.SECONDS),
+        s"""
+           |Streaming query did not reach specific microbatch in time,
+           |# of batches with data from python stream source: $batchesWithPythonData,
+           |# of batches without data from python stream source: $batchesWithoutPythonData,
+           |recentProgress: ${q.recentProgress.mkString("[", ", ", "]")},
+           |exception (if any): ${q.exception}
+           |""".stripMargin
+      )
+    }
+
+    q.stop()
+    q.awaitTermination()
 
     // Verify that we observed both types of batches
     assert(
@@ -1193,9 +1207,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       batchesWithPythonData >= 4,
       s"Expected at least 4 batches with Python data, got $batchesWithPythonData"
     )
-
-    q.stop()
-    q.awaitTermination()
   }
 }
 
