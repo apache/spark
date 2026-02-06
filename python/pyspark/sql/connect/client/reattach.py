@@ -23,7 +23,7 @@ from threading import RLock
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
-from concurrent.futures import Future,ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 import os
 import weakref
 
@@ -59,10 +59,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     _lock: ClassVar[RLock] = RLock()
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
-    _instances: ClassVar[weakref.WeakSet["ExecutePlanResponseReattachableIterator"]] = weakref.WeakSet()
+    _instances: ClassVar[
+        weakref.WeakSet["ExecutePlanResponseReattachableIterator"]
+    ] = weakref.WeakSet()
 
     def __new__(cls, *args, **kwargs) -> "ExecutePlanResponseReattachableIterator":
-        instance =  super().__new__(cls)
+        instance = super().__new__(cls)
         cls._instances.add(instance)
         return instance
 
@@ -123,7 +125,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             return self._release_thread_pool_instance
         with self._lock:
             if self._release_thread_pool_instance is None:
-                self._release_thread_pool_instance = ThreadPoolExecutor(max_workers=os.cpu_count() or 8)
+                self._release_thread_pool_instance = ThreadPoolExecutor(
+                    max_workers=os.cpu_count() or 8
+                )
             return self._release_thread_pool_instance
 
     @classmethod
