@@ -20,8 +20,6 @@ import inspect
 import os
 import time
 
-import pandas as pd
-
 try:
     import numpy as np
 
@@ -147,6 +145,8 @@ class GoldenFileTestMixin:
         pd.DataFrame
             The loaded golden data with string dtype.
         """
+        import pandas as pd
+
         return pd.read_csv(
             golden_csv,
             sep="\t",
@@ -262,6 +262,8 @@ class GoldenFileTestMixin:
         str
             String representation in format "value@type[dtype]".
         """
+        import pandas as pd
+
         if isinstance(value, pd.DataFrame):
             v_str = value.to_json()
         else:
@@ -338,6 +340,8 @@ class GoldenFileTestMixin:
                         )
 
         if generating:
+            import pandas as pd
+
             index = pd.Index(row_names, name=index_name)
             df = pd.DataFrame(index=index)
             for col_name in col_names:
