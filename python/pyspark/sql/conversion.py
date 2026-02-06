@@ -232,7 +232,7 @@ class PandasToArrowConversion:
         assign_cols_by_name: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        error_class: Optional[str] = None,
+        is_udtf: bool = False,
     ) -> "pa.RecordBatch":
         """
         Convert a pandas DataFrame or list of Series/DataFrames to an Arrow RecordBatch.
@@ -257,8 +257,12 @@ class PandasToArrowConversion:
             Whether to enable int to decimal coercion (default False)
         ignore_unexpected_complex_type_values : bool
             Whether to ignore unexpected complex type values in converter (default False)
-        error_class : str, optional
-            Custom error class for specialized error handling (e.g., "UDTF_ARROW_TYPE_CAST_ERROR")
+        is_udtf : bool
+            Whether this conversion is for a UDTF. UDTFs use broader Arrow exception
+            handling to allow more type coercions (e.g., struct field casting via
+            ArrowTypeError), and convert errors to UDTF_ARROW_TYPE_CAST_ERROR.
+            Regular UDFs only catch ArrowInvalid to preserve legacy behavior where
+            e.g. string→decimal must raise an error. (default False)
 
         Returns
         -------
@@ -315,36 +319,49 @@ class PandasToArrowConversion:
 
             mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
 
-            try:
+            if is_udtf:
+                # UDTF path: broad ArrowException catch so that both ArrowInvalid
+                # AND ArrowTypeError (e.g. dict→struct) trigger the cast fallback.
                 try:
-                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-                except pa.lib.ArrowException:
-                    if arrow_cast:
-                        return pa.Array.from_pandas(series, mask=mask).cast(
-                            target_type=arrow_type, safe=safecheck
+                    try:
+                        return pa.Array.from_pandas(
+                            series, mask=mask, type=arrow_type, safe=safecheck
                         )
-                    raise
-            except (TypeError, ValueError, pa.lib.ArrowException) as e:
-                # Catches all Arrow-related exceptions:
-                #   ArrowTypeError  (TypeError)
-                #   ArrowInvalid    (ValueError)
-                #   ArrowNotImplementedError (NotImplementedError) — via ArrowException
-                # When error_class is set (UDTF path), convert to PySparkRuntimeError.
-                if error_class:
+                    except pa.lib.ArrowException:  # broad: includes ArrowTypeError
+                        if arrow_cast:
+                            return pa.Array.from_pandas(series, mask=mask).cast(
+                                target_type=arrow_type, safe=safecheck
+                            )
+                        raise
+                except pa.lib.ArrowException:  # convert any Arrow error to user-friendly message
                     raise PySparkRuntimeError(
-                        errorClass=error_class,
+                        errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
                         messageParameters={
                             "col_name": field_name,
                             "col_type": str(series.dtype),
                             "arrow_type": str(arrow_type),
                         },
                     ) from None
-                if isinstance(e, TypeError):
+            else:
+                # UDF path: only ArrowInvalid triggers the cast fallback.
+                # ArrowTypeError (e.g. string→decimal) must NOT be silently cast.
+                try:
+                    try:
+                        return pa.Array.from_pandas(
+                            series, mask=mask, type=arrow_type, safe=safecheck
+                        )
+                    except pa.lib.ArrowInvalid:  # narrow: skip ArrowTypeError
+                        if arrow_cast:
+                            return pa.Array.from_pandas(series, mask=mask).cast(
+                                target_type=arrow_type, safe=safecheck
+                            )
+                        raise
+                except TypeError as e:  # includes pa.lib.ArrowTypeError
                     raise PySparkTypeError(
                         f"Exception thrown when converting pandas.Series ({series.dtype}) "
                         f"with name '{field_name}' to Arrow Array ({arrow_type})."
                     ) from e
-                if isinstance(e, ValueError):
+                except ValueError as e:  # includes pa.lib.ArrowInvalid
                     error_msg = (
                         f"Exception thrown when converting pandas.Series ({series.dtype}) "
                         f"with name '{field_name}' to Arrow Array ({arrow_type})."
@@ -356,7 +373,6 @@ class PandasToArrowConversion:
                             "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     raise PySparkValueError(error_msg) from e
-                raise
 
         def convert_column(
             col: Union["pd.Series", "pd.DataFrame"], field: StructField
@@ -374,7 +390,7 @@ class PandasToArrowConversion:
                     assign_cols_by_name=assign_cols_by_name,
                     int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                     ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
-                    error_class=error_class,
+                    is_udtf=is_udtf,
                 )
                 return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
             return series_to_array(col, field.dataType, field.name)
