@@ -1428,11 +1428,11 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
     ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
     ...     schema=("x", "y"))
     >>> df.select(sf.max_by("x", "y", 2)).show()
-    +------------------+
-    |max_by(x, y, 2)   |
-    +------------------+
-    |[b, d]            |
-    +------------------+
+    +---------------+
+    |max_by(x, y, 2)|
+    +---------------+
+    |         [b, d]|
+    +---------------+
     """
     if k is not None:
         return _invoke_function_over_columns("max_by", col, ord, lit(k))
@@ -1539,11 +1539,11 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
     ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
     ...     schema=("x", "y"))
     >>> df.select(sf.min_by("x", "y", 2)).show()
-    +------------------+
-    |min_by(x, y, 2)   |
-    +------------------+
-    |[a, c]            |
-    +------------------+
+    +---------------+
+    |min_by(x, y, 2)|
+    +---------------+
+    |         [a, c]|
+    +---------------+
     """
     if k is not None:
         return _invoke_function_over_columns("min_by", col, ord, lit(k))
