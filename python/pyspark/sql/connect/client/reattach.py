@@ -121,6 +121,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     @property
     def _release_thread_pool(self) -> ThreadPoolExecutor:
+        if self._release_thread_pool_instance is not None:
+            # It's impossible for the thread pool to shutdown when the iterator is still alive
+            # We can safely return the thread pool instance here as long as it is not used
+            # by external objects.
+            return self._release_thread_pool_instance
         with self._lock:
             if self._release_thread_pool_instance is None:
                 self._release_thread_pool_instance = ThreadPoolExecutor(
