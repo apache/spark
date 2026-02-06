@@ -100,10 +100,10 @@ class GoldenFileTestMixin:
         """
         Setup timezone for deterministic test results.
 
-        Sets the OS-level ``TZ`` environment variable and, when a Spark session
+        Sets the OS-level TZ environment variable and, when a Spark session
         is available, synchronises the timezone with the JVM and Spark config.
-        This allows the mixin to be used with both ``ReusedSQLTestCase`` (Spark)
-        and plain ``unittest.TestCase`` (no Spark).
+        This allows the mixin to be used with both ReusedSQLTestCase (Spark)
+        and plain unittest.TestCase (no Spark).
         """
         cls._tz_prev = os.environ.get("TZ", None)
         os.environ["TZ"] = tz
@@ -190,13 +190,13 @@ class GoldenFileTestMixin:
 
         Handles different type representations:
 
-        - **Spark DataType**: uses ``simpleString()``
-          (e.g. ``"int"``, ``"string"``, ``"array<int>"``)
-        - **PyArrow DataType**: uses ``str(t)`` with float-name normalisation
-          (e.g. ``"int8"``, ``"float32"``, ``"timestamp[s, tz=UTC]"``)
-        - **Python type**: uses ``__name__``
-          (e.g. ``"int"``, ``"str"``, ``"list"``)
-        - **Other**: falls back to ``str(t)``
+        - Spark DataType: uses simpleString()
+          (e.g. "int", "string", "array<int>")
+        - PyArrow DataType: uses str(t) with float-name normalisation
+          (e.g. "int8", "float32", "timestamp[s, tz=UTC]")
+        - Python type: uses __name__
+          (e.g. "int", "str", "list")
+        - Other: falls back to str(t)
 
         Parameters
         ----------
@@ -293,7 +293,7 @@ class GoldenFileTestMixin:
 
         This is the standard pattern for golden-file matrix tests:
 
-        1. If ``SPARK_GENERATE_GOLDEN_FILES=1``, compute every cell, build a
+        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
            DataFrame, and save it as the new golden CSV / Markdown file.
         2. Otherwise, load the existing golden file and assert that every cell
            matches the freshly computed value.
@@ -309,7 +309,7 @@ class GoldenFileTestMixin:
         golden_file_prefix : str
             Prefix for the golden CSV/MD files (without extension).
             Files are placed in the same directory as the concrete test file.
-        index_name : str, default ``"source \\\\ target"``
+        index_name : str, default "source \\ target"
             Name for the index column in the golden file.
         """
         generating = self.is_generating_golden()
