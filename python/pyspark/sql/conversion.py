@@ -163,8 +163,8 @@ def cast_arrow_array(
     arr: "pa.Array",
     target_type: "pa.DataType",
     *,
-    safe: bool = True,
-    allow_cast: bool = True,
+    safecheck: bool = True,
+    arrow_cast: bool = True,
     error_class: Optional[str] = None,
 ) -> "pa.Array":
     """
@@ -176,9 +176,9 @@ def cast_arrow_array(
         Input Arrow array
     target_type : pa.DataType
         Target Arrow type
-    safe : bool
+    safecheck : bool
         Whether to use safe casting (default True)
-    allow_cast : bool
+    arrow_cast : bool
         Whether to allow casting when types don't match (default True)
     error_class : str, optional
         Custom error class for type mismatch errors
@@ -194,14 +194,14 @@ def cast_arrow_array(
     if arr.type == target_type:
         return arr
 
-    if not allow_cast:
+    if not arrow_cast:
         raise PySparkTypeError(
             "Arrow UDFs require the return type to match the expected Arrow type. "
             f"Expected: {target_type}, but got: {arr.type}."
         )
 
     try:
-        return arr.cast(target_type=target_type, safe=safe)
+        return arr.cast(target_type=target_type, safe=safecheck)
     except (pa.ArrowInvalid, pa.ArrowTypeError):
         if error_class:
             raise PySparkRuntimeError(

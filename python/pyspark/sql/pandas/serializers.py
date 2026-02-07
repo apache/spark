@@ -300,7 +300,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                         cast_arrow_array(
                             batch.column(i),
                             field.type,
-                            safe=True,
+                            safecheck=True,
                             error_class="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
                         )
                         for i, field in enumerate(arrow_return_type)
@@ -459,14 +459,16 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             """
             # Normalize: iterator UDFs yield (series, spark_type) directly,
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
+            series_tuples: Tuple[Tuple["pd.Series", DataType], ...]
             if len(packed) == 2 and isinstance(packed[1], DataType):
-                # single UDF result: wrap in list
-                series_tuples: List[Tuple["pd.Series", DataType]] = [packed]
+                # single UDF result: wrap in tuple
+                series_tuples = (packed,)
             else:
                 # multiple UDF results: already iterable of tuples
-                series_tuples = list(packed)
+                series_tuples = tuple(packed)
 
-            series_data, types = map(list, list(zip(*series_tuples)) or [(), ()])
+            series_data = [s for s, _ in series_tuples]
+            types = [t for _, t in series_tuples]
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
             return PandasToArrowConversion.convert(
                 series_data,
@@ -563,9 +565,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             """
             # Normalize: iterator UDFs yield (series, spark_type) directly,
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
+            series_tuples: List[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]]
             if len(packed) == 2 and isinstance(packed[1], DataType):
                 # single UDF result: wrap in list
-                series_tuples: List[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]] = [packed]
+                series_tuples = [packed]
             else:
                 # multiple UDF results: already iterable of tuples
                 series_tuples = list(packed)
@@ -579,7 +582,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                             "pandas.DataFrame when the specified return type is StructType."
                         )
 
-            series_data, types = map(list, list(zip(*series_tuples)) or [(), ()])
+            series_data = [s for s, _ in series_tuples]
+            types = [t for _, t in series_tuples]
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
             return PandasToArrowConversion.convert(
                 series_data,
@@ -636,7 +640,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             if len(packed) == 2 and isinstance(packed[1], pa.DataType):
                 packed = [packed]  # type: ignore[list-item]
             arrs = [
-                cast_arrow_array(arr, arrow_type, safe=self._safecheck, allow_cast=self._arrow_cast)
+                cast_arrow_array(arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast)
                 for arr, arrow_type in packed
             ]
             return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
