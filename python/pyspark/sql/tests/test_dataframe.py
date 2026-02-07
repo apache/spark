@@ -1214,6 +1214,30 @@ class DataFrameTestsMixin:
             self.assertIsInstance(df, DataFrame)
             self.assertEqual(df.select("value").count(), 10)
 
+    def test_zip_with_index(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+
+        # Default column name "index"
+        result = df.zipWithIndex()
+        self.assertEqual(result.columns, ["letter", "number", "index"])
+        rows = result.collect()
+        self.assertEqual(len(rows), 3)
+        indices = [row["index"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Custom column name
+        result = df.zipWithIndex("row_id")
+        self.assertEqual(result.columns, ["letter", "number", "row_id"])
+        rows = result.collect()
+        indices = [row["row_id"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Duplicate column name causes AMBIGUOUS_REFERENCE on select
+        result = df.zipWithIndex("letter")
+        with self.assertRaises(AnalysisException) as ctx:
+            result.select("letter").collect()
+        self.assertEqual(ctx.exception.getCondition(), "AMBIGUOUS_REFERENCE")
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     pass
