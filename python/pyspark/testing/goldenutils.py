@@ -312,7 +312,7 @@ class GoldenFileTestMixin:
         str
             "str(value)@class_name"
         """
-        v_str = str(value)
+        v_str = str(value).replace("\n", " ")
         if max_len > 0:
             v_str = v_str[:max_len]
         return f"{v_str}@{type(value).__name__}"
