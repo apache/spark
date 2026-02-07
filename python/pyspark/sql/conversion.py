@@ -20,12 +20,14 @@ import datetime
 import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
+import pyspark
 from pyspark.errors import PySparkValueError
 from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
     _create_converter_to_pandas,
     to_arrow_schema,
+    from_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
@@ -140,16 +142,17 @@ class ArrowBatchTransformer:
         """
         import pandas as pd
 
-        import pyspark
-        from pyspark.sql.pandas.types import from_arrow_type
-
         if batch.num_columns == 0:
             return [pd.Series([pyspark._NoValue] * batch.num_rows)]
+
+        if schema is None:
+            schema = from_arrow_schema(batch.schema)
 
         return [
             ArrowArrayToPandasConversion.convert(
                 batch.column(i),
-                schema[i].dataType if schema is not None else from_arrow_type(batch.column(i).type),
+                schema[i].dataType,
+                ser_name=schema[i].name,
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
@@ -1177,9 +1180,10 @@ class ArrowArrayToPandasConversion:
     @classmethod
     def convert(
         cls,
-        arrow_column: Union["pa.Array", "pa.ChunkedArray"],
-        target_type: DataType,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
         *,
+        ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
@@ -1190,10 +1194,12 @@ class ArrowArrayToPandasConversion:
 
         Parameters
         ----------
-        arrow_column : pa.Array or pa.ChunkedArray
+        arr : pa.Array or pa.ChunkedArray
             The Arrow column to convert.
-        target_type : DataType
+        spark_type : DataType
             The target Spark type for the column to be converted to.
+        ser_name : str
+            The name of returned pd.Series. If not set, will try to get it from arr._name.
         timezone : str, optional
             Timezone for timestamp conversion. Required if the data contains timestamp types.
         struct_in_pandas : str, optional
@@ -1211,10 +1217,11 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
-        if cls._prefer_convert_numpy(target_type, df_for_struct):
+        if cls._prefer_convert_numpy(spark_type, df_for_struct):
             return cls.convert_numpy(
-                arrow_column,
-                target_type,
+                arr,
+                spark_type,
+                ser_name=ser_name,
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
@@ -1222,8 +1229,8 @@ class ArrowArrayToPandasConversion:
             )
 
         return cls.convert_legacy(
-            arrow_column,
-            target_type,
+            arr,
+            spark_type,
             timezone=timezone,
             struct_in_pandas=struct_in_pandas,
             ndarray_as_list=ndarray_as_list,
@@ -1359,6 +1366,7 @@ class ArrowArrayToPandasConversion:
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
         *,
+        ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
         struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
@@ -1392,12 +1400,13 @@ class ArrowArrayToPandasConversion:
             pdf.columns = spark_type.names  # type: ignore[assignment]
             return pdf
 
-        # Arrow array from batch.column(idx) contains name,
-        # and this name will be used to rename the pandas series
-        # returned by array.to_pandas().
-        # Right now, the name is dropped in arrow conversions.
-        # TODO: should make convert_numpy explicitly pass the expected series name.
-        name = arr._name
+        if ser_name is None:
+            # Arrow array from batch.column(idx) contains name,
+            # and this name will be used to rename the pandas series
+            # returned by array.to_pandas().
+            # This name will be dropped after pa.compute functions.
+            ser_name = arr._name
+
         arr = ArrowArrayConversion.preprocess_time(arr)
 
         series: pd.Series
@@ -1491,4 +1500,4 @@ class ArrowArrayToPandasConversion:
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 
-        return series.rename(name)
+        return series.rename(ser_name)
