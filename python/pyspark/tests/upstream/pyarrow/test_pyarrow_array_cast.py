@@ -462,15 +462,15 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
             # PyArrow < 21: scalar.as_py() for float16 returns np.float16,
             # whose str() uses numpy formatting (e.g. "0.1" instead of
             # "0.0999755859375", "3.277e+04" instead of "32768.0").
-            # fmt: off
             F16 = "float16"
-            overrides.update({
-                ("int16:max_min",       F16): "[3.277e+04, -3.277e+04, None]@float16",
-                ("float16:fractional",  F16): "[0.1, 0.9, None]@float16",
-                ("float32:fractional",  F16): "[0.1, 0.9, None]@float16",
-                ("float64:fractional",  F16): "[0.1, 0.9, None]@float16",
-            })
-            # fmt: on
+            overrides.update(
+                {
+                    ("int16:max_min", F16): "[3.277e+04, -3.277e+04, None]@float16",
+                    ("float16:fractional", F16): "[0.1, 0.9, None]@float16",
+                    ("float32:fractional", F16): "[0.1, 0.9, None]@float16",
+                    ("float64:fractional", F16): "[0.1, 0.9, None]@float16",
+                }
+            )
         return overrides
 
     # ----- test method -----
