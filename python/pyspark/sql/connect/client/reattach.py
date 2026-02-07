@@ -63,7 +63,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         weakref.WeakSet["ExecutePlanResponseReattachableIterator"]
     ] = weakref.WeakSet()
 
-    def __new__(cls, *args, **kwargs) -> "ExecutePlanResponseReattachableIterator":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "ExecutePlanResponseReattachableIterator":
         instance = super().__new__(cls)
         cls._instances.add(instance)
         return instance
