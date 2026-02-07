@@ -250,7 +250,8 @@ class GoldenFileTestMixin:
         str
             "[val1, val2, None]@arrow_type"
         """
-        elements = [str(scalar) for scalar in value]
+        # Escape NULL bytes so the value can be safely stored in CSV files.
+        elements = [str(scalar).replace("\x00", "\\0") for scalar in value]
         v_str = "[" + ", ".join(elements) + "]"
         if max_len > 0:
             v_str = v_str[:max_len]
