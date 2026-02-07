@@ -87,6 +87,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.internal import InternalFunction
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.table_arg import TableArg
@@ -1211,6 +1212,11 @@ class DataFrame(ParentDataFrame):
         )
         res._cached_schema = self._merge_cached_schema(other)
         return res
+
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return self.select(
+            F.col("*"), InternalFunction.distributed_sequence_id().alias(indexColName)
+        )
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
