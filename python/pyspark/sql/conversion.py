@@ -1383,11 +1383,12 @@ class ArrowArrayToPandasConversion:
             assert types.is_struct(arr.type)
             assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
 
-            pdf: pd.DataFrame = pd.concat(
+            return pd.concat(
                 [
                     cls.convert_numpy(
                         field_arr,
                         spark_type=field.dataType,
+                        ser_name=field.name,
                         timezone=timezone,
                         struct_in_pandas=struct_in_pandas,
                         ndarray_as_list=ndarray_as_list,
@@ -1397,8 +1398,6 @@ class ArrowArrayToPandasConversion:
                 ],
                 axis=1,
             )
-            pdf.columns = spark_type.names  # type: ignore[assignment]
-            return pdf
 
         if ser_name is None:
             # Arrow array from batch.column(idx) contains name,
