@@ -150,11 +150,11 @@ class DatetimeIndex(Index):
                 kwargs["closed"] = closed
         else:
             if normalize is not _NoValue:
-                raise ValueError(
+                raise TypeError(
                     "The 'normalize' keyword is not supported in pandas 3.0.0 and later."
                 )
             if closed is not _NoValue:
-                raise ValueError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
+                raise TypeError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
 
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")

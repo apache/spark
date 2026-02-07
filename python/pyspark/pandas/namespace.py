@@ -1750,7 +1750,7 @@ def to_datetime(
         )
     else:
         if infer_datetime_format is not _NoValue:
-            raise ValueError(
+            raise TypeError(
                 "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
             )
 
