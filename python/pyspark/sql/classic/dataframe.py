@@ -57,7 +57,6 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
 from pyspark.sql.functions import builtin as F
-from pyspark.sql.internal import InternalFunction
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
@@ -282,9 +281,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.exceptAll(other._jdf), self.sparkSession)
 
     def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
-        return self.select(
-            F.col("*"), InternalFunction.distributed_sequence_id().alias(indexColName)
-        )
+        return DataFrame(self._jdf.zipWithIndex(indexColName), self.sparkSession)
 
     def isLocal(self) -> bool:
         return self._jdf.isLocal()
