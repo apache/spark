@@ -22,7 +22,7 @@ Tests for PyArrow's pa.Array.cast() method using golden file comparison.
 
 Each cell in the golden file uses the value@type format:
 
-- Success: [0, 1, None]@int16 — the Python list result and Arrow type after cast
+- Success: [0, 1, null]@int16 — element values via scalar.as_py() and Arrow type after cast
 - Failure: ERR@ArrowNotImplementedError — the exception class name
 
 ## Regenerating Golden Files
@@ -41,15 +41,19 @@ The golden files capture behavior for a specific PyArrow version.
 Regenerate when upgrading PyArrow, as cast support may change between versions.
 
 Some known version-dependent behaviors:
-| Feature                                 | PyArrow < 19  | PyArrow >= 19 | PyArrow >= 21 |
-|-----------------------------------------|---------------|---------------|---------------|
-| struct cast: field name mismatch        | ArrowTypeError | supported    | supported     |
-| struct cast: field reorder              | ArrowTypeError | ArrowTypeError| supported    |
-| pa.array(floats, pa.float16()) natively | requires numpy | requires numpy| native       |
+| Feature                                 | PyArrow < 19   | PyArrow 19-20  | PyArrow >= 21  |
+|-----------------------------------------|----------------|----------------|----------------|
+| struct cast: field name mismatch        | ArrowTypeError | supported      | supported      |
+| struct cast: field reorder              | ArrowTypeError | ArrowTypeError | supported      |
+| float16 scalar.as_py()                  | np.float16     | np.float16     | Python float   |
+| pa.array(floats, pa.float16()) natively | requires numpy | requires numpy | native         |
 """
 
+import inspect
+import os
 import unittest
 from decimal import Decimal
+from typing import Callable, List, Optional
 
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
@@ -92,20 +96,101 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
         """
         Try casting a source array to target type and return a value@type string.
 
+        Uses repr_value() from GoldenFileTestMixin, which formats PyArrow arrays
+        as "[val1, val2, null]@arrow_type" using each scalar's as_py() value.
+
         Returns
         -------
         str
-            On success: "<to_pylist()>@<arrow_type>"
-                e.g. "[0, 1, -1, 127, -128, None]@int16"
+            On success: "[val1, val2, null]@arrow_type"
+                e.g. "[0, 1, -1, 127, -128, null]@int16"
             On failure: "ERR@<exception_class_name>"
                 e.g. "ERR@ArrowNotImplementedError"
         """
         try:
             result = src_arr.cast(tgt_type, safe=True)
-            v_str = self.clean_result(str(result.to_pylist()))
-            return f"{v_str}@{self.repr_type(result.type)}"
+            return self.repr_value(result, max_len=0)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+
+    def compare_or_generate_golden_matrix(
+        self,
+        row_names: List[str],
+        col_names: List[str],
+        compute_cell: Callable[[str, str], str],
+        golden_file_prefix: str,
+        index_name: str = "source \\ target",
+        overrides: Optional[dict[tuple[str, str], str]] = None,
+    ) -> None:
+        """
+        Run a matrix of computations and compare against (or generate) a golden file.
+
+        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
+           DataFrame, and save it as the new golden CSV / Markdown file.
+        2. Otherwise, load the existing golden file and assert that every cell
+           matches the freshly computed value.
+
+        Parameters
+        ----------
+        row_names : list[str]
+            Ordered row labels (becomes the DataFrame index).
+        col_names : list[str]
+            Ordered column labels.
+        compute_cell : (row_name, col_name) -> str
+            Function that computes the string result for one cell.
+        golden_file_prefix : str
+            Prefix for the golden CSV/MD files (without extension).
+            Files are placed in the same directory as the concrete test file.
+        index_name : str, default "source \\ target"
+            Name for the index column in the golden file.
+        overrides : dict[(row, col) -> str], optional
+            Version-specific expected values that take precedence over the golden
+            file.  Use this to document known behavioral differences across
+            library versions (e.g. PyArrow 18 vs 22) directly in the test code,
+            so that the same golden file works for multiple versions.
+        """
+        generating = self.is_generating_golden()
+
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
+        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        errors = []
+        results = {}
+
+        for row_name in row_names:
+            for col_name in col_names:
+                result = compute_cell(row_name, col_name)
+                results[(row_name, col_name)] = result
+
+                if not generating:
+                    if overrides and (row_name, col_name) in overrides:
+                        expected = overrides[(row_name, col_name)]
+                    else:
+                        expected = golden.loc[row_name, col_name]
+                    if expected != result:
+                        errors.append(
+                            f"{row_name} -> {col_name}: " f"expected '{expected}', got '{result}'"
+                        )
+
+        if generating:
+            import pandas as pd
+
+            index = pd.Index(row_names, name=index_name)
+            df = pd.DataFrame(index=index)
+            for col_name in col_names:
+                df[col_name] = [results[(row, col_name)] for row in row_names]
+            self.save_golden(df, golden_csv, golden_md)
+        else:
+            self.assertEqual(
+                len(errors),
+                0,
+                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
+            )
 
 
 # ============================================================
@@ -361,6 +446,33 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         source_arrays = dict(cases)
         return source_names, source_arrays
 
+    # ----- version overrides -----
+
+    @staticmethod
+    def _version_overrides():
+        """
+        Build overrides for known PyArrow version-dependent behaviors.
+
+        PyArrow < 21: to_pylist() on float16 arrays returns np.float16 objects
+        instead of plain Python floats, so all successful casts to float16
+        produce a different string representation.
+        """
+        overrides = {}
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            # PyArrow < 21: scalar.as_py() for float16 returns np.float16,
+            # whose str() uses numpy formatting (e.g. "0.1" instead of
+            # "0.0999755859375", "3.277e+04" instead of "32768.0").
+            # fmt: off
+            F16 = "float16"
+            overrides.update({
+                ("int16:max_min",       F16): "[3.277e+04, -3.277e+04, None]@float16",
+                ("float16:fractional",  F16): "[0.1, 0.9, None]@float16",
+                ("float32:fractional",  F16): "[0.1, 0.9, None]@float16",
+                ("float64:fractional",  F16): "[0.1, 0.9, None]@float16",
+            })
+            # fmt: on
+        return overrides
+
     # ----- test method -----
 
     def test_scalar_cast_matrix(self):
@@ -375,6 +487,7 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
             col_names=target_names,
             compute_cell=lambda src, tgt: self._try_cast(source_arrays[src], target_lookup[tgt]),
             golden_file_prefix="golden_pyarrow_scalar_cast",
+            overrides=self._version_overrides(),
         )
 
 
@@ -414,10 +527,11 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
             # Map
             pa.map_(pa.string(), pa.int32()),
             pa.map_(pa.string(), pa.int64()),
-            # Struct variants
+            # Struct variants: same names, type change, reorder, name mismatch
             pa.struct([("x", pa.int32()), ("y", pa.string())]),
             pa.struct([("x", pa.int64()), ("y", pa.string())]),
             pa.struct([("y", pa.string()), ("x", pa.int32())]),
+            pa.struct([("a", pa.int32()), ("b", pa.string())]),
             # Scalar types (container -> scalar should fail)
             pa.string(),
             pa.int32(),
@@ -479,6 +593,31 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
 
     # ----- test method -----
 
+    @staticmethod
+    def _version_overrides():
+        """
+        Build overrides for known PyArrow version-dependent behaviors.
+
+        PyArrow < 21: struct field reordering during cast is not supported,
+            raises ArrowTypeError instead.
+        PyArrow < 19: struct field name mismatch during cast is not supported,
+            raises ArrowTypeError instead.
+        """
+        overrides = {}
+        struct_sources = [
+            "struct<x: int32, y: string>:standard",
+            "struct<x: int32, y: string>:null_fields",
+        ]
+        # PyArrow < 21: struct field reorder not supported
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            for src in struct_sources:
+                overrides[(src, "struct<y: string, x: int32>")] = "ERR@ArrowTypeError"
+        # PyArrow < 19: struct field name mismatch not supported
+        if LooseVersion(pa.__version__) < LooseVersion("19.0.0"):
+            for src in struct_sources:
+                overrides[(src, "struct<a: int32, b: string>")] = "ERR@ArrowTypeError"
+        return overrides
+
     def test_nested_cast_matrix(self):
         """Test all nested type cast combinations."""
         source_names, source_arrays = self._get_source_arrays()
@@ -491,6 +630,7 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
             col_names=target_names,
             compute_cell=lambda src, tgt: self._try_cast(source_arrays[src], target_lookup[tgt]),
             golden_file_prefix="golden_pyarrow_nested_cast",
+            overrides=self._version_overrides(),
         )
 
 

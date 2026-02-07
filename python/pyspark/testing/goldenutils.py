@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional
-import inspect
+from typing import Any, Optional
 import os
 import time
 
@@ -26,6 +25,20 @@ try:
     have_numpy = True
 except ImportError:
     have_numpy = False
+
+try:
+    import pandas as pd
+
+    have_pandas = True
+except ImportError:
+    have_pandas = False
+
+try:
+    import pyarrow as pa
+
+    have_pyarrow = True
+except ImportError:
+    have_pyarrow = False
 
 
 # PyArrow uses internal names ("halffloat", "float", "double") that differ from
@@ -145,8 +158,6 @@ class GoldenFileTestMixin:
         pd.DataFrame
             The loaded golden data with string dtype.
         """
-        import pandas as pd
-
         return pd.read_csv(
             golden_csv,
             sep="\t",
@@ -221,135 +232,124 @@ class GoldenFileTestMixin:
             return _ARROW_FLOAT_ALIASES.get(s, s)
 
     @classmethod
+    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a PyArrow Array/ChunkedArray for golden file.
+
+        Each element uses str(scalar) from PyArrow's own scalar formatting.
+
+        Parameters
+        ----------
+        value : pa.Array or pa.ChunkedArray
+            The PyArrow array to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "[val1, val2, None]@arrow_type"
+        """
+        elements = [str(scalar) for scalar in value]
+        v_str = "[" + ", ".join(elements) + "]"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@{cls.repr_type(value.type)}"
+
+    @classmethod
+    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a pandas DataFrame for golden file.
+
+        Parameters
+        ----------
+        value : pd.DataFrame
+            The pandas DataFrame to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "value@Dataframe[schema]"
+        """
+        v_str = value.to_json().replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
+        return f"{v_str}@Dataframe[{simple_schema}]"
+
+    @classmethod
+    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a numpy ndarray for golden file.
+
+        Parameters
+        ----------
+        value : np.ndarray
+            The numpy ndarray to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "value@ndarray[dtype]"
+        """
+        v_str = str(value).replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@ndarray[{value.dtype.name}]"
+
+    @classmethod
+    def repr_python_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a plain Python value for golden file.
+
+        Returns
+        -------
+        str
+            "str(value)@class_name"
+        """
+        v_str = str(value)
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@{type(value).__name__}"
+
+    @classmethod
     def repr_value(cls, value: Any, max_len: int = 32) -> str:
         """
-        Convert Python value to string representation for golden file.
+        Format a value for golden file, dispatching to the appropriate repr
+        based on the value's type.
 
-        Default format: "value_str@type_name"
-        Subclasses can override this method for custom representations.
+        - PyArrow Array/ChunkedArray -> repr_arrow_value
+        - pandas DataFrame -> repr_pandas_value
+        - numpy ndarray -> repr_numpy_value
+        - Everything else -> repr_python_value
 
         Parameters
         ----------
         value : Any
-            The Python value to represent.
+            The value to represent.
         max_len : int, default 32
-            Maximum length for the value string portion.
+            Maximum length for the value string portion.  0 means no limit.
 
         Returns
         -------
         str
             String representation in format "value@type".
         """
-        v_str = str(value)[:max_len]
-        return f"{v_str}@{type(value).__name__}"
+        if have_pyarrow and isinstance(value, (pa.Array, pa.ChunkedArray)):
+            return cls.repr_arrow_value(value, max_len)
 
-    @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
-        """
-        Convert Python/Pandas value to string representation for golden file.
-
-        Extended version that handles pandas DataFrame and numpy ndarray specially.
-
-        Parameters
-        ----------
-        value : Any
-            The Python value to represent.
-        max_len : int, default 32
-            Maximum length for the value string portion.
-
-        Returns
-        -------
-        str
-            String representation in format "value@type[dtype]".
-        """
-        import pandas as pd
-
-        if isinstance(value, pd.DataFrame):
-            v_str = value.to_json()
-        else:
-            v_str = str(value)
-        v_str = v_str.replace("\n", " ")[:max_len]
-
+        if have_pandas and isinstance(value, pd.DataFrame):
+            return cls.repr_pandas_value(value, max_len)
         if have_numpy and isinstance(value, np.ndarray):
-            return f"{v_str}@ndarray[{value.dtype.name}]"
-        elif isinstance(value, pd.DataFrame):
-            simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
-            return f"{v_str}@Dataframe[{simple_schema}]"
-        return f"{v_str}@{type(value).__name__}"
+            return cls.repr_numpy_value(value, max_len)
+
+        return cls.repr_python_value(value, max_len)
 
     @staticmethod
     def clean_result(result: str) -> str:
         """Clean result string by removing newlines and extra whitespace."""
         return result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-
-    def compare_or_generate_golden_matrix(
-        self,
-        row_names: List[str],
-        col_names: List[str],
-        compute_cell: Callable[[str, str], str],
-        golden_file_prefix: str,
-        index_name: str = "source \\ target",
-    ) -> None:
-        """
-        Run a matrix of computations and compare against (or generate) a golden file.
-
-        This is the standard pattern for golden-file matrix tests:
-
-        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
-           DataFrame, and save it as the new golden CSV / Markdown file.
-        2. Otherwise, load the existing golden file and assert that every cell
-           matches the freshly computed value.
-
-        Parameters
-        ----------
-        row_names : list[str]
-            Ordered row labels (becomes the DataFrame index).
-        col_names : list[str]
-            Ordered column labels.
-        compute_cell : (row_name, col_name) -> str
-            Function that computes the string result for one cell.
-        golden_file_prefix : str
-            Prefix for the golden CSV/MD files (without extension).
-            Files are placed in the same directory as the concrete test file.
-        index_name : str, default "source \\ target"
-            Name for the index column in the golden file.
-        """
-        generating = self.is_generating_golden()
-
-        test_dir = os.path.dirname(inspect.getfile(type(self)))
-        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
-        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
-
-        golden = None
-        if not generating:
-            golden = self.load_golden_csv(golden_csv)
-
-        errors = []
-        results = {}
-
-        for row_name in row_names:
-            for col_name in col_names:
-                result = compute_cell(row_name, col_name)
-                results[(row_name, col_name)] = result
-
-                if not generating:
-                    expected = golden.loc[row_name, col_name]
-                    if expected != result:
-                        errors.append(
-                            f"{row_name} -> {col_name}: " f"expected '{expected}', got '{result}'"
-                        )
-
-        if generating:
-            import pandas as pd
-
-            index = pd.Index(row_names, name=index_name)
-            df = pd.DataFrame(index=index)
-            for col_name in col_names:
-                df[col_name] = [results[(row, col_name)] for row in row_names]
-            self.save_golden(df, golden_csv, golden_md)
-        else:
-            self.assertEqual(
-                len(errors),
-                0,
-                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
-            )
