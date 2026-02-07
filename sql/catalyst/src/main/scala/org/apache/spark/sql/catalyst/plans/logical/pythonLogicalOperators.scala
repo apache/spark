@@ -374,7 +374,7 @@ case class ArrowEvalPythonUDTF(
 case class AttachDistributedSequence(
     sequenceAttr: Attribute,
     child: LogicalPlan,
-    storageLevel: String) extends UnaryNode {
+    cache: Boolean = false) extends UnaryNode {
 
   override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
 

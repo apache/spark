@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.Locale
-
 import org.apache.spark.internal.LogKeys.{RDD_ID, SPARK_PLAN_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,17 +24,21 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 
 /**
  * A physical plan that adds a new long column with `sequenceAttr` that
- * increases one by one. This is for 'distributed-sequence' default index
- * in pandas API on Spark.
+ * increases one by one.
+ * This is for 'distributed-sequence' default index in pandas API on Spark,
+ * and 'DataFrame.zipWithIndex'
+ * When cache is true, the underlying RDD will be cached according to
+ * PS config "pandas_on_Spark.compute.default_index_cache".
  */
 case class AttachDistributedSequenceExec(
     sequenceAttr: Attribute,
     child: SparkPlan,
-    storageLevel: String)
+    cache: Boolean)
   extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
@@ -47,24 +49,60 @@ case class AttachDistributedSequenceExec(
 
   @transient private var cached: RDD[InternalRow] = _
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute()
-    val cachedRDD = storageLevel.toUpperCase(Locale.ROOT) match {
-      // zipWithIndex launches a Spark job only if #partition > 1
-      case _ if childRDD.getNumPartitions <= 1 => childRDD
+  // cache the underlying RDD according to
+  // PS config "pandas_on_Spark.compute.default_index_cache"
+  private def cacheRDD(rdd: RDD[InternalRow]): RDD[InternalRow] = {
+    // before `compute.default_index_cache` is explicitly set via
+    // `ps.set_option`, `SQLConf.get` can not get its value (as well as its default value);
+    // after `ps.set_option`, `SQLConf.get` can get its value:
+    //
+    //    In [1]: import pyspark.pandas as ps
+    //    In [2]: ps.get_option("compute.default_index_cache")
+    //    Out[2]: 'MEMORY_AND_DISK_SER'
+    //    In [3]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
+    //    ...
+    //    Py4JJavaError: An error occurred while calling o40.get.
+    //      : java.util.NoSuchElementException: pandas_on_Spark.compute.distributed_sequence_...
+    //    at org.apache.spark.sql.errors.QueryExecutionErrors$.noSuchElementExceptionError...
+    //    at org.apache.spark.sql.internal.SQLConf.$anonfun$getConfString$3(SQLConf.scala:4766)
+    //    ...
+    //    In [4]: ps.set_option("compute.default_index_cache", "NONE")
+    //    In [5]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
+    //    Out[5]: '"NONE"'
+    //    In [6]: ps.set_option("compute.default_index_cache", "DISK_ONLY")
+    //    In [7]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
+    //    Out[7]: '"DISK_ONLY"'
 
-      case "NONE" => childRDD
+    // The string is double quoted because of JSON ser/deser for pandas API on Spark
+    val storageLevel = SQLConf.get.getConfString(
+      "pandas_on_Spark.compute.default_index_cache",
+      StorageLevelMapper.MEMORY_AND_DISK_SER.name()
+    ).stripPrefix("\"").stripSuffix("\"")
+
+    storageLevel match {
+      // zipWithIndex launches a Spark job only if #partition > 1
+      case _ if rdd.getNumPartitions <= 1 => rdd
+
+      case "NONE" => rdd
 
       case "LOCAL_CHECKPOINT" =>
         // localcheckpointing is unreliable so should not eagerly release it in 'cleanupResources'
-        childRDD.map(_.copy()).localCheckpoint()
+        rdd.map(_.copy()).localCheckpoint()
           .setName(s"Temporary RDD locally checkpointed in AttachDistributedSequenceExec($id)")
 
       case _ =>
-        cached = childRDD.map(_.copy()).persist(StorageLevel.fromString(storageLevel))
+        cached = rdd.map(_.copy()).persist(StorageLevel.fromString(storageLevel))
           .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
         cached
     }
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val childRDD: RDD[InternalRow] = child.execute()
+
+    // if cache is true, the underlying rdd is cached according to
+    // PS config "pandas_on_Spark.compute.default_index_cache"
+    val cachedRDD = if (cache) this.cacheRDD(childRDD) else childRDD
 
     cachedRDD.zipWithIndex().mapPartitions { iter =>
       val unsafeProj = UnsafeProjection.create(output, output)
