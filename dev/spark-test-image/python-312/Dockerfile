@@ -45,7 +45,10 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     tzdata \
     software-properties-common \
-    zlib1g-dev
+    zlib1g-dev \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
