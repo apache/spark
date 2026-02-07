@@ -640,7 +640,9 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             if len(packed) == 2 and isinstance(packed[1], pa.DataType):
                 packed = [packed]  # type: ignore[list-item]
             arrs = [
-                cast_arrow_array(arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast)
+                cast_arrow_array(
+                    arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast
+                )
                 for arr, arrow_type in packed
             ]
             return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
