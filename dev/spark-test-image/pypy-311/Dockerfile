@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Install PyPy 3.10
+# Install PyPy 3.11
 RUN mkdir -p /usr/local/pypy/pypy3.11 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.11-v7.3.20-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.11 --strip-components=1 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3.11 && \
