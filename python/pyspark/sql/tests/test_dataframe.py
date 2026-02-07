@@ -1238,6 +1238,12 @@ class DataFrameTestsMixin:
             result.select("letter").collect()
         self.assertEqual(ctx.exception.getCondition(), "AMBIGUOUS_REFERENCE")
 
+        # Duplicate column name causes COLUMN_ALREADY_EXISTS on write
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(AnalysisException) as ctx:
+                result.write.parquet(d)
+            self.assertEqual(ctx.exception.getCondition(), "COLUMN_ALREADY_EXISTS")
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     pass
