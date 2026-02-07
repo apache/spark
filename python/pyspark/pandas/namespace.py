@@ -1165,16 +1165,14 @@ def read_excel(
             kwargs["date_parser"] = date_parser
     else:
         if date_parser is not _NoValue:
-            raise TypeError(
-                "The 'date_parser' keyword is not supported in pandas 3.0.0 and later."
-            )
+            raise TypeError("The 'date_parser' keyword is not supported in pandas 3.0.0 and later.")
 
     def pd_read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
     ) -> pd.DataFrame:
-        return pd.read_excel(  # type: ignore[call-overload, misc]
+        return pd.read_excel(  # type: ignore[return-value]
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
             nrows=nr,
