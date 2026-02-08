@@ -84,7 +84,7 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
-// keep the logic consistent with BucketTransform defined at InMemoryBaseTable.scala
+// the result should be consistent with BucketTransform defined at InMemoryBaseTable.scala
 object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
