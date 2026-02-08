@@ -253,9 +253,9 @@ abstract class InMemoryBaseTable(
             case (v, t) =>
               throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
           }
-          (acc + valueHash) & 0xFFFFFFFFFFFFL
+          acc + valueHash
         }
-        (hash % numBuckets).toInt
+        Math.floorMod(hash, numBuckets)
       case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>

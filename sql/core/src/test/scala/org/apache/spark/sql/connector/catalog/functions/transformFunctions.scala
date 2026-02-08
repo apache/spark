@@ -92,7 +92,7 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
   override def canonicalName(): String = name()
   override def toString: String = name()
   override def produceResult(input: InternalRow): Int = {
-    ((input.getLong(1) & 0xFFFFFFFFFFFFL) % input.getInt(0)).toInt
+    Math.floorMod(input.getLong(1), input.getInt(0))
   }
 
   override def reducer(
