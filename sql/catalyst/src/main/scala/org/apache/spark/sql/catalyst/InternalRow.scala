@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -170,6 +172,8 @@ object InternalRow {
    */
   @scala.annotation.tailrec
   def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
+    case _ if SQLConf.get.typesFrameworkEnabled && PhyTypeOps.supports(dt) =>
+      PhyTypeOps(dt).getRowWriter(ordinal)
     case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
     case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
     case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])

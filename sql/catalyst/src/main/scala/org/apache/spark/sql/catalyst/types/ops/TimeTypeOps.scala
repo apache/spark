@@ -86,6 +86,12 @@ case class TimeTypeOps(override val t: TimeType)
    */
   override def getMutableValue: MutableValue = new MutableLong
 
+  /**
+   * Row writer that uses setLong for TIME's Long physical representation.
+   */
+  override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
+    (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+
   // ==================== LiteralTypeOps ====================
 
   /**
