@@ -294,18 +294,24 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                             f"Expected: {expected_field_names}, but got: {actual_field_names}."
                         )
 
-                    coerced_arrays = [
-                        cast_arrow_array(
-                            batch.column(i),
-                            field.type,
-                            safecheck=True,
-                            error_class="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                    try:
+                        coerced_arrays = [
+                            cast_arrow_array(
+                                batch.column(i),
+                                field.type,
+                                safecheck=True,
+                            )
+                            for i, field in enumerate(arrow_return_type)
+                        ]
+                    except (pa.ArrowInvalid, pa.ArrowTypeError):
+                        raise PySparkRuntimeError(
+                            errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                            messageParameters={
+                                "expected": str(arrow_return_type),
+                                "actual": str(batch.schema),
+                            },
                         )
-                        for i, field in enumerate(arrow_return_type)
-                    ]
-                    coerced_batch = pa.RecordBatch.from_arrays(
-                        coerced_arrays, names=expected_field_names
-                    )
+                    coerced_batch = pa.RecordBatch.from_arrays(coerced_arrays, names=expected_field_names)
                 yield coerced_batch, arrow_return_type
 
         return super().dump_stream(apply_type_coercion(), stream)

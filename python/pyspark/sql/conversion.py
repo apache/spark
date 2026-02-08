@@ -168,7 +168,6 @@ def cast_arrow_array(
     *,
     safecheck: bool = True,
     arrow_cast: bool = True,
-    error_class: Optional[str] = None,
 ) -> "pa.Array":
     """
     Cast an Arrow Array to a target type.
@@ -183,16 +182,13 @@ def cast_arrow_array(
         Whether to use safe casting (default True)
     arrow_cast : bool
         Whether to allow casting when types don't match (default True)
-    error_class : str, optional
-        Custom error class for type mismatch errors
 
     Returns
     -------
     pa.Array
     """
-    import pyarrow as pa
 
-    from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+    from pyspark.errors import PySparkTypeError
 
     if arr.type == target_type:
         return arr
@@ -203,18 +199,7 @@ def cast_arrow_array(
             f"Expected: {target_type}, but got: {arr.type}."
         )
 
-    try:
-        return arr.cast(target_type=target_type, safe=safecheck)
-    except (pa.ArrowInvalid, pa.ArrowTypeError):
-        if error_class:
-            raise PySparkRuntimeError(
-                errorClass=error_class,
-                messageParameters={
-                    "expected": str(target_type),
-                    "actual": str(arr.type),
-                },
-            )
-        raise
+    return arr.cast(target_type=target_type, safe=safecheck)
 
 
 class PandasToArrowConversion:
