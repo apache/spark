@@ -1235,6 +1235,22 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns a StringSearch object for the given pattern string only (with a placeholder target),
+   * under collation rules corresponding to the given collationId. The returned StringSearch can be
+   * reused across multiple target strings by calling setTarget(), avoiding the cost of rebuilding
+   * the collation-aware search object for each row.
+   */
+  public static StringSearch getStringSearchForPattern(
+      final String patternString,
+      final int collationId) {
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
+    // ICU StringSearch requires a non-empty target; use a placeholder that will be replaced
+    // by setTarget() before each search.
+    return new StringSearch(patternString, new StringCharacterIterator(" "),
+        (RuleBasedCollator) collator);
+  }
+
+  /**
    * Returns a collation-unaware StringSearch object for the given pattern and target strings.
    * While this object does not respect collation, it can be used to find occurrences of the pattern
    * in the target string for UTF8_BINARY or UTF8_LCASE (if arguments are lowercased).
