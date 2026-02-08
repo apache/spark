@@ -674,7 +674,7 @@ jobs:
         verbose: true
     - name: Upload test results to Codecov
       env: ${{ fromJSON(inputs.envs) }}
-      if: (!cancelled()) && github.repository == 'apache/spark'
+      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       with:
         report_type: 'test_results'
