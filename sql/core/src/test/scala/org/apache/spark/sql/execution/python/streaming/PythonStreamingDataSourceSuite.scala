@@ -1319,7 +1319,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     val dataSource =
       createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    val inputData = MemoryStream[Int](numPartitions = 3)
+    val inputData = MemoryStream[Int](spark, numPartitions = 3)
     val df = inputData.toDF()
     withTempDir { dir =>
       val path = dir.getAbsolutePath
@@ -1403,7 +1403,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    val inputData = MemoryStream[Int](numPartitions = 3)
+    val inputData = MemoryStream[Int](spark, numPartitions = 3)
     withTempDir { dir =>
       val path = dir.getAbsolutePath
       val checkpointDir = new File(path, "checkpoint")
