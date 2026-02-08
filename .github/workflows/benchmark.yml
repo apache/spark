@@ -136,6 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         split: ${{fromJSON(needs.matrix-gen.outputs.matrix)}}
     env:
