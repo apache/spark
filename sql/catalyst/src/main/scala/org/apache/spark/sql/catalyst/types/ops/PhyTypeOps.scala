@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.MutableValue
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.DataType
@@ -71,6 +72,20 @@ trait PhyTypeOps extends TypeOps {
    * @return MutableValue instance (e.g., MutableLong for TimeType)
    */
   def getMutableValue: MutableValue
+
+  /**
+   * Returns a writer function for setting values in an InternalRow.
+   *
+   * The writer function takes an InternalRow and a value, and sets the value
+   * at the given ordinal using the appropriate type-specific setter (e.g., setLong).
+   *
+   * Used by InternalRow.getWriter() for interpreted aggregation and row mutation.
+   *
+   * @param ordinal The column index to write to
+   * @return Writer function (InternalRow, Any) => Unit
+   * @example TimeType -> (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+   */
+  def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
 }
 
 /**
