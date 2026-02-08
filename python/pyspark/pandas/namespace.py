@@ -52,6 +52,8 @@ from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
@@ -941,7 +943,7 @@ def read_excel(
     keep_default_na: bool = True,
     verbose: bool = False,
     parse_dates: Union[bool, List, Dict] = False,
-    date_parser: Optional[Callable] = None,
+    date_parser: Union[Optional[Callable], _NoValueType] = _NoValue,
     thousands: Optional[str] = None,
     comment: Optional[str] = None,
     skipfooter: int = 0,
@@ -1137,34 +1139,44 @@ def read_excel(
     2     None    NaN
     """
 
+    kwargs = dict(
+        header=header,
+        names=names,
+        index_col=index_col,
+        usecols=usecols,
+        dtype=dtype,
+        engine=engine,
+        converters=converters,
+        true_values=true_values,
+        false_values=false_values,
+        skiprows=skiprows,
+        na_values=na_values,
+        keep_default_na=keep_default_na,
+        verbose=verbose,
+        parse_dates=parse_dates,
+        thousands=thousands,
+        comment=comment,
+        skipfooter=skipfooter,
+        **kwds,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        if date_parser is not _NoValue:
+            kwargs["date_parser"] = date_parser
+    else:
+        if date_parser is not _NoValue:
+            raise TypeError("The 'date_parser' keyword is not supported in pandas 3.0.0 and later.")
+
     def pd_read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
     ) -> pd.DataFrame:
-        return pd.read_excel(  # type: ignore[call-overload, misc]
+        return pd.read_excel(  # type: ignore[return-value]
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
-            header=header,
-            names=names,
-            index_col=index_col,
-            usecols=usecols,
-            dtype=dtype,
-            engine=engine,
-            converters=converters,
-            true_values=true_values,
-            false_values=false_values,
-            skiprows=skiprows,
             nrows=nr,
-            na_values=na_values,
-            keep_default_na=keep_default_na,
-            verbose=verbose,
-            parse_dates=parse_dates,
-            date_parser=date_parser,
-            thousands=thousands,
-            comment=comment,
-            skipfooter=skipfooter,
-            **kwds,
+            **kwargs,
         )
 
     if not isinstance(io, str):

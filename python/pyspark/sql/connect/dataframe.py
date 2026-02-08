@@ -1901,7 +1901,7 @@ class DataFrame(ParentDataFrame):
             try:
                 self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle dumps failed with exception: {e}.")
                 self._cached_schema_serialized = None
         return self._cached_schema
 
@@ -1913,7 +1913,7 @@ class DataFrame(ParentDataFrame):
             try:
                 return CPickleSerializer().loads(self._cached_schema_serialized)
             except Exception as e:
-                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+                logger.warning(f"DataFrame schema pickle loads failed with exception: {e}.")
         # In case of pickle ser/de failure, fallback to deepcopy approach.
         return copy.deepcopy(_schema)
 

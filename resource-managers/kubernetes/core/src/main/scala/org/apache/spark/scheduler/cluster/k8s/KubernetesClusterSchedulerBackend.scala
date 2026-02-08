@@ -230,6 +230,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def labelDecommissioningExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
     conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
+      val value = conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse("")
       val labelTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
           kubernetesClient.pods()
@@ -239,13 +240,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
             .resources()
             .forEach { podResource =>
-              podResource.edit({ p: Pod =>
-                new PodBuilder(p).editOrNewMetadata()
-                  .addToLabels(label,
-                    conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
-                  .endMetadata()
-                  .build()})
-          }
+              podResource.patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
+                .addToLabels(label, value)
+                .endMetadata()
+                .build())
+            }
         }
       }
       executorService.execute(labelTask)
@@ -353,10 +353,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
             kubernetesClient.pods()
               .inNamespace(namespace)
               .withName(x.podName)
-              .edit({p: Pod => new PodBuilder(p).editMetadata()
+              .patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
                 .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
                 .endMetadata()
-                .build()})
+                .build())
           }
         }
         executorService.execute(labelTask)
