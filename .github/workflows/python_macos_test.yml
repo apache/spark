@@ -51,6 +51,7 @@ jobs:
     runs-on: macos-15
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}

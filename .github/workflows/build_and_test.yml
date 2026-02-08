@@ -229,6 +229,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -495,6 +496,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
