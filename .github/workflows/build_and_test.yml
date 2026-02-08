@@ -242,6 +242,7 @@ jobs:
     timeout-minutes: 150
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -526,6 +527,7 @@ jobs:
         --security-opt seccomp=unconfined
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
