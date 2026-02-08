@@ -2776,19 +2776,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
             # Arrow-optimized Python UDF takes a struct type argument as a Row
-            # When legacy pandas conversion is enabled, use "row" and convert ndarray to list
             struct_in_pandas = (
-                "row"
-                if (
-                    eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                    or runner_conf.use_legacy_pandas_udf_conversion
-                )
-                else "dict"
+                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
-            ndarray_as_list = (
-                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                or runner_conf.use_legacy_pandas_udf_conversion
-            )
+            ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF takes input types
             input_type = (
                 _parse_datatype_json_string(utf8_deserializer.loads(infile))
