@@ -15,16 +15,16 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240911.1
+FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with PyPy 3.11"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260202
+ENV FULL_REFRESH_DATE=20260207
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -51,10 +51,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN add-apt-repository ppa:pypy/ppa
+# Install PyPy 3.11
 RUN mkdir -p /usr/local/pypy/pypy3.11 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.11-v7.3.20-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.11 --strip-components=1 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3.11 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3
+
+# Setup virtual environment
+ENV VIRTUAL_ENV=/opt/spark-venv
+RUN pypy3 -m venv --without-pip $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install PyPy 3.11 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
