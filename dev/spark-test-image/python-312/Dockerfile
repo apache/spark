@@ -42,21 +42,24 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     openjdk-17-jdk-headless \
     python3.12 \
-    python3-pip \
-    python3-venv \
     pkg-config \
     tzdata \
     software-properties-common \
-    zlib1g-dev
+    zlib1g-dev \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
-# Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
+# Setup virtual environment
+ENV VIRTUAL_ENV=/opt/spark-venv
+RUN python3.12 -m venv --without-pip $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Install Python 3.12 packages
-ENV VIRTUAL_ENV /opt/spark-venv
-RUN python3.12 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
 RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
