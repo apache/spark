@@ -123,14 +123,14 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   test("query stop deactivates related store providers") {
     var coordRef: StateStoreCoordinatorRef = null
     try {
-      implicit val spark: SparkSession = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val spark: SparkSession = SparkSession.builder().sparkContext(sc).getOrCreate()
       SparkSession.setActiveSession(spark)
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 
       // Start a query and run a batch to load state stores
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
       val aggregated = inputData.toDF().groupBy("value").agg(count("*")) // stateful query
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
       val query = aggregated.writeStream
@@ -253,8 +253,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
-          implicit val sparkSession: SparkSession = spark
-          val inputData = MemoryStream[Int]
+
+          val inputData = MemoryStream[Int](spark)
           val query = setUpStatefulQuery(inputData, "query")
           // Add, commit, and wait multiple times to force snapshot versions and time difference
           (0 until 6).foreach { _ =>
@@ -289,10 +289,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
-          implicit val sparkSession: SparkSession = spark
+
           // Start a join query and run some data to force snapshot uploads
-          val input1 = MemoryStream[Int]
-          val input2 = MemoryStream[Int]
+          val input1 = MemoryStream[Int](spark)
+          val input2 = MemoryStream[Int](spark)
           val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
           val df2 = input2.toDF().select($"value" as "rightKey", ($"value" * 3) as "rightValue")
           val joined = df1.join(df2, expr("leftKey = rightKey"))
@@ -332,10 +332,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sparkSession: SparkSession = spark
+
         // Start and run two queries together with some data to force snapshot uploads
-        val input1 = MemoryStream[Int]
-        val input2 = MemoryStream[Int]
+        val input1 = MemoryStream[Int](spark)
+        val input2 = MemoryStream[Int](spark)
         val query1 = setUpStatefulQuery(input1, "query1")
         val query2 = setUpStatefulQuery(input2, "query2")
 
@@ -399,9 +399,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sparkSession: SparkSession = spark
+
         // Start a query and run some data to force snapshot uploads
-        val inputData = MemoryStream[Int]
+        val inputData = MemoryStream[Int](spark)
         val query = setUpStatefulQuery(inputData, "query")
 
         // Go through two batches to force two snapshot uploads.
@@ -443,9 +443,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sparkSession: SparkSession = spark
+
         // Start a query and run some data to force snapshot uploads
-        val inputData = MemoryStream[Int]
+        val inputData = MemoryStream[Int](spark)
         val query = setUpStatefulQuery(inputData, "query")
 
         // Go through several rounds of input to force snapshot uploads
@@ -486,7 +486,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
         SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
       ) {
         withTempDir { srcDir =>
-          val inputData = MemoryStream[Int]
+          val inputData = MemoryStream[Int](spark)
           val query = inputData.toDF().dropDuplicates()
           val numPartitions = query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
           // Keep track of state checkpoint directory for the second run
@@ -608,7 +608,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
       SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
     ) {
       withTempDir { srcDir =>
-        val inputData = MemoryStream[Int]
+        val inputData = MemoryStream[Int](spark)
         val query = inputData.toDF().dropDuplicates()
 
         testStream(query)(
@@ -686,7 +686,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
         SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
       ) {
         withTempDir { srcDir =>
-          val inputData = MemoryStream[Int]
+          val inputData = MemoryStream[Int](spark)
           val query = inputData.toDF().dropDuplicates()
 
           // Populate state stores with an initial snapshot, so that timestamp isn't marked
