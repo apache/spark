@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import gc
 import json
 import logging
 import os
@@ -351,6 +352,11 @@ def try_remote_call(f: FuncT) -> FuncT:
 def del_remote_cache(ref_id: str) -> None:
     if ref_id is not None and "." not in ref_id:
         try:
+            # Skip if GC is disabled, which means we're inside a gRPC call.
+            # Sending another gRPC command here would deadlock on the channel lock.
+            # The cache will be cleaned up when the session is closed.
+            if not gc.isenabled():
+                return
             from pyspark.sql.connect.session import SparkSession
 
             session = SparkSession.getActiveSession()
