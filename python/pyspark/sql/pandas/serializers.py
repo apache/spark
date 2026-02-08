@@ -38,7 +38,6 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
-    from_arrow_type,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
