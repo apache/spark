@@ -37,7 +37,7 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
     PandasToArrowConversion,
-    cast_arrow_array,
+    coerce_arrow_array,
 )
 from pyspark.sql.pandas.types import (
     to_arrow_type,
@@ -296,10 +296,10 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
                     try:
                         coerced_arrays = [
-                            cast_arrow_array(
+                            coerce_arrow_array(
                                 batch.column(i),
                                 field.type,
-                                safecheck=True,
+
                             )
                             for i, field in enumerate(arrow_return_type)
                         ]
@@ -311,7 +311,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                                 "actual": str(batch.schema),
                             },
                         )
-                    coerced_batch = pa.RecordBatch.from_arrays(coerced_arrays, names=expected_field_names)
+                    coerced_batch = pa.RecordBatch.from_arrays(
+                        coerced_arrays, names=expected_field_names
+                    )
                 yield coerced_batch, arrow_return_type
 
         return super().dump_stream(apply_type_coercion(), stream)
@@ -633,7 +635,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             if len(packed) == 2 and isinstance(packed[1], pa.DataType):
                 packed = [packed]  # type: ignore[list-item]
             arrs = [
-                cast_arrow_array(
+                coerce_arrow_array(
                     arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast
                 )
                 for arr, arrow_type in packed

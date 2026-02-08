@@ -162,7 +162,9 @@ class ArrowBatchTransformer:
         ]
 
 
-def cast_arrow_array(
+# TODO: elevate to ArrowBatchTransformer and operate on full RecordBatch schema
+#       instead of per-column coercion.
+def coerce_arrow_array(
     arr: "pa.Array",
     target_type: "pa.DataType",
     *,
@@ -170,7 +172,10 @@ def cast_arrow_array(
     arrow_cast: bool = True,
 ) -> "pa.Array":
     """
-    Cast an Arrow Array to a target type.
+    Coerce an Arrow Array to a target type, with optional type-mismatch enforcement.
+
+    When ``arrow_cast`` is True (default), mismatched types are cast to the
+    target type.  When False, a type mismatch raises an error instead.
 
     Parameters
     ----------
@@ -187,7 +192,6 @@ def cast_arrow_array(
     -------
     pa.Array
     """
-
     from pyspark.errors import PySparkTypeError
 
     if arr.type == target_type:
@@ -199,6 +203,10 @@ def cast_arrow_array(
             f"Expected: {target_type}, but got: {arr.type}."
         )
 
+    # when safe is True, the cast will fail if there's a overflow or other
+    # unsafe conversion.
+    # RecordBatch.cast(...) isn't used as minimum PyArrow version
+    # required for RecordBatch.cast(...) is v16.0
     return arr.cast(target_type=target_type, safe=safecheck)
 
 
