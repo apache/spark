@@ -459,7 +459,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             """
             # Normalize: iterator UDFs yield (series, spark_type) directly,
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
-            series_tuples: Tuple[Tuple["pd.Series", DataType], ...]
+            series_tuples: Tuple[Tuple[Union["pd.Series", "pd.DataFrame"], DataType], ...]
             if len(packed) == 2 and isinstance(packed[1], DataType):
                 # single UDF result: wrap in tuple
                 series_tuples = (packed,)
@@ -565,13 +565,13 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             """
             # Normalize: iterator UDFs yield (series, spark_type) directly,
             # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
-            series_tuples: List[Tuple[Union["pd.Series", "pd.DataFrame"], DataType]]
+            series_tuples: Tuple[Tuple[Union["pd.Series", "pd.DataFrame"], DataType], ...]
             if len(packed) == 2 and isinstance(packed[1], DataType):
-                # single UDF result: wrap in list
-                series_tuples = [packed]
+                # single UDF result: wrap in tuple
+                series_tuples = (packed,)
             else:
                 # multiple UDF results: already iterable of tuples
-                series_tuples = list(packed)
+                series_tuples = tuple(packed)
 
             # When struct_in_pandas="dict", UDF must return DataFrame for struct types
             if self._struct_in_pandas == "dict":
