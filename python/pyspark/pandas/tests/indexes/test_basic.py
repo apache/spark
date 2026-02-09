@@ -22,7 +22,7 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexBasicMixin:

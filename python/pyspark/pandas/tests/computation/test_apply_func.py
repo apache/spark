@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from datetime import datetime
-import sys
 from typing import List
 
 import numpy as np
