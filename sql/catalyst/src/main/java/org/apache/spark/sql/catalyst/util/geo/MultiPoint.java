@@ -39,7 +39,7 @@ class MultiPoint extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return points.isEmpty() || points.stream().allMatch(Point::isEmpty);
+    return points.isEmpty();
   }
 
   @Override

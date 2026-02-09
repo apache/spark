@@ -39,7 +39,7 @@ class MultiPolygon extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return polygons.isEmpty() || polygons.stream().allMatch(Polygon::isEmpty);
+    return polygons.isEmpty();
   }
 
   @Override

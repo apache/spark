@@ -39,7 +39,7 @@ class MultiLineString extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return lineStrings.isEmpty() || lineStrings.stream().allMatch(LineString::isEmpty);
+    return lineStrings.isEmpty();
   }
 
   @Override

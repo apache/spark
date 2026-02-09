@@ -39,7 +39,7 @@ class GeometryCollection extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return geometries.isEmpty() || geometries.stream().allMatch(GeometryModel::isEmpty);
+    return geometries.isEmpty();
   }
 
   @Override
