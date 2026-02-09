@@ -652,7 +652,7 @@ Misc Functions
     version
 
 Datasketch Functions
---------------
+--------------------
 .. autosummary::
     :toctree: api/
 
