@@ -150,7 +150,7 @@ def _convert_exception(
                 sql_state=sql_state,
                 server_stacktrace=stacktrace,
                 display_server_stacktrace=display_server_stacktrace,
-                contexts=contexts,
+                contexts=contexts,  # type: ignore[arg-type]
                 grpc_status_code=grpc_status_code,
                 breaking_change_info=breaking_change_info,
             )
@@ -164,7 +164,7 @@ def _convert_exception(
         sql_state=sql_state,
         server_stacktrace=stacktrace,
         display_server_stacktrace=display_server_stacktrace,
-        contexts=contexts,
+        contexts=contexts,  # type: ignore[arg-type]
         grpc_status_code=grpc_status_code,
         breaking_change_info=breaking_change_info,
     )

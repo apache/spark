@@ -865,7 +865,7 @@ def _new_type_holders(
                 new_param.tpe = param.stop  # type: ignore[assignment]
             else:
                 # When the given argument is a numpy's dtype instance.
-                new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
+                new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop  # type: ignore[assignment]
             new_params.append(new_param)
         return tuple(new_params)
     elif is_unnamed_params:
@@ -878,7 +878,7 @@ def _new_type_holders(
             if isinstance(param, ExtensionDtype):
                 new_type.tpe = param  # type: ignore[assignment]
             else:
-                new_type.tpe = param.type if isinstance(param, np.dtype) else param
+                new_type.tpe = param.type if isinstance(param, np.dtype) else param  # type: ignore[assignment]
             new_types.append(new_type)
         return tuple(new_types)
     else:

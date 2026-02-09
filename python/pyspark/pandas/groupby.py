@@ -1980,7 +1980,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         if LooseVersion(pd.__version__) < "3.0.0":
-            from pandas.core.common import is_builtin_func  # type: ignore[import-untyped]
+            from pandas.core.common import is_builtin_func  # type: ignore[import-not-found]
 
             f = is_builtin_func(func)
         else:
@@ -2249,7 +2249,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
-        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
+        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names  # type: ignore[return-value]
 
     @staticmethod
     def _spark_group_map_apply(
@@ -3746,6 +3746,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 psdf = align_diff_frames(
                     assign_columns,
@@ -3761,6 +3762,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         new_by_series = []
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 new_by_series.append(psdf._psser_for(label).rename(psser.name))
             else:

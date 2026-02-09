@@ -89,7 +89,7 @@ RUN python3.12 -m pip install \
     'ipython_genutils' \
     'jinja2' \
     'matplotlib' \
-    'mypy==1.8.0' \
+    'mypy==1.19.1' \
     'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \

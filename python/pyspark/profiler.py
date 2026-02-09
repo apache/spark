@@ -335,15 +335,14 @@ class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
                 if c1_line and c2_line:
                     # c1, c2 should have same keys - line number
                     udf_code_map[lineno] = (
-                        cast(MemoryTuple, c1_line)[0] + cast(MemoryTuple, c2_line)[0],  # increment
-                        cast(MemoryTuple, c1_line)[1] + cast(MemoryTuple, c2_line)[1],  # mem_usage
-                        cast(MemoryTuple, c1_line)[2]
-                        + cast(MemoryTuple, c2_line)[2],  # occurrences
+                        c1_line[0] + c2_line[0],  # increment
+                        c1_line[1] + c2_line[1],  # mem_usage
+                        c1_line[2] + c2_line[2],  # occurrences
                     )
                 elif c1_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c1_line)
+                    udf_code_map[lineno] = c1_line
                 elif c2_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c2_line)
+                    udf_code_map[lineno] = c2_line
                 else:
                     udf_code_map[lineno] = None
             value1[filename] = [(k, v) for k, v in udf_code_map.items()]

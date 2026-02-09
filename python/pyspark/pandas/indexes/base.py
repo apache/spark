@@ -41,7 +41,7 @@ from pandas.api.types import (
     is_object_dtype,
 )
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
@@ -547,7 +547,7 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined]
+            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined, arg-type]
         )
         if copy:
             result = result.copy()
