@@ -41,6 +41,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.errors import PySparkException
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -508,6 +509,35 @@ class BasePythonStreamingDataSourceTestsMixin:
         q = df.writeStream.foreachBatch(check_batch).trigger(availableNow=True).start()
         q.awaitTermination(timeout=30)
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+    def test_simple_stream_reader_offset_did_not_advance_raises(self):
+        """Validate that returning end == start with non-empty data raises SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class BuggySimpleStreamReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                # Bug: return same offset as end despite returning data
+                start_idx = start["offset"]
+                it = iter([(i,) for i in range(start_idx, start_idx + 3)])
+                return (it, {"offset": start_idx})
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        reader = BuggySimpleStreamReader()
+        wrapper = _SimpleStreamReaderWrapper(reader)
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset({"offset": 0}, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
 
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
