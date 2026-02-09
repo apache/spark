@@ -315,20 +315,39 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("SECTION 7: Error Cases - cannot drop builtin function") {
+  test("SECTION 7: Error Cases - cannot drop builtin function (DROP FUNCTION)") {
     checkError(
-      exception = intercept[ParseException] {
-        sql("DROP TEMPORARY FUNCTION system.builtin.abs")
+      exception = intercept[AnalysisException] {
+        sql("DROP FUNCTION system.builtin.abs")
       },
-      condition = "INVALID_TEMP_OBJ_QUALIFIER",
-      sqlState = "42602",
+      condition = "FORBIDDEN_OPERATION",
+      sqlState = "42809",
       parameters = Map(
-        "objectName" -> "`abs`",
+        "statement" -> "DROP",
         "objectType" -> "FUNCTION",
-        "qualifier" -> "`system`.`builtin`"
+        "objectName" -> "`abs`"
       )
     )
   }
+
+  test("SECTION 7: Error Cases - cannot create function in builtin namespace (CREATE FUNCTION)") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE FUNCTION system.builtin.my_func() RETURNS INT RETURN 1")
+      },
+      condition = "FORBIDDEN_OPERATION",
+      sqlState = "42809",
+      parameters = Map(
+        "statement" -> "CREATE",
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`my_func`"
+      )
+    )
+  }
+
+  // COMMENT ON FUNCTION is not yet supported in the parser; when added, we should reject
+  // COMMENT ON FUNCTION system.builtin.<name> with FORBIDDEN_OPERATION (statement="COMMENT ON",
+  // objectType="FUNCTION", objectName=...).
 
   test("SECTION 7: Error Cases - cannot create duplicate functions") {
     sql("CREATE TEMPORARY FUNCTION dup_test() RETURNS INT RETURN 42")

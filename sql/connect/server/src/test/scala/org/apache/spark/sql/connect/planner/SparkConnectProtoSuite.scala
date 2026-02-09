@@ -124,7 +124,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     // With function qualification support, this now throws AnalysisException
     // (wrapped in SparkException) because the function cannot be resolved,
     // rather than UnsupportedOperationException
-    assertThrows[AnalysisException] {
+    assertThrows[org.apache.spark.SparkUnsupportedOperationException] {
       analyzePlan(transform(connectPlan))
     }
 

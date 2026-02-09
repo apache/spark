@@ -3079,9 +3079,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def cannotDropBuiltinFuncError(functionName: String): Throwable = {
+    operationNotAllowedOnBuiltinFunctionError("DROP", functionName)
+  }
+
+  def operationNotAllowedOnBuiltinFunctionError(
+      statement: String,
+      functionName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1255",
-      messageParameters = Map("functionName" -> functionName))
+      errorClass = "FORBIDDEN_OPERATION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "objectType" -> "FUNCTION",
+        "objectName" -> toSQLId(functionName)))
   }
 
   def invalidTempObjQualifierError(
