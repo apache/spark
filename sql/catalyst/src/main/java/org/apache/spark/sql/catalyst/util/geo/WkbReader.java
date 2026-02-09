@@ -39,18 +39,21 @@ public class WkbReader {
   private final boolean geographyMode;
   private byte[] currentWkb;
 
-  // Geography coordinate bounds
+  // Geography coordinate bounds.
   private static final double MIN_LONGITUDE = -180.0;
   private static final double MAX_LONGITUDE = 180.0;
   private static final double MIN_LATITUDE = -90.0;
   private static final double MAX_LATITUDE = 90.0;
+  // Default WKB reader settings.
+  private static final int DEFAULT_VALIDATION_LEVEL = 1; // basic validation
+  private static final boolean DEFAULT_GEOGRAPHY_MODE = false; // no geography bounds checking
 
   /**
    * Constructor for WkbReader with default validation level (1 = basic validation)
    * and geometry mode (no geography coordinate bounds checking).
    */
   public WkbReader() {
-    this(1, false);
+    this(DEFAULT_VALIDATION_LEVEL, DEFAULT_GEOGRAPHY_MODE);
   }
 
   /**
@@ -58,7 +61,15 @@ public class WkbReader {
    * @param validationLevel validation level (0 = no validation, 1 = basic validation)
    */
   public WkbReader(int validationLevel) {
-    this(validationLevel, false);
+    this(validationLevel, DEFAULT_GEOGRAPHY_MODE);
+  }
+
+  /**
+   * Constructor for WkbReader with default validation level and geography mode.
+   * @param geographyMode if true, validates geography coordinate bounds for longitude and latitude
+   */
+  public WkbReader(boolean geographyMode) {
+    this(DEFAULT_VALIDATION_LEVEL, geographyMode);
   }
 
   /**

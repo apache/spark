@@ -78,7 +78,7 @@ public final class Geography implements Geo {
 
   // Returns a Geography object with the specified SRID value by parsing the input WKB.
   public static Geography fromWkb(byte[] wkb, int srid) {
-    WkbReader reader = new WkbReader(1, true);
+    WkbReader reader = new WkbReader(true);
     reader.read(wkb); // Validate WKB with geography coordinate bounds.
 
     byte[] bytes = new byte[HEADER_SIZE + wkb.length];
