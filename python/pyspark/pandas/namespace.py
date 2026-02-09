@@ -52,6 +52,8 @@ from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
@@ -941,7 +943,7 @@ def read_excel(
     keep_default_na: bool = True,
     verbose: bool = False,
     parse_dates: Union[bool, List, Dict] = False,
-    date_parser: Optional[Callable] = None,
+    date_parser: Union[Optional[Callable], _NoValueType] = _NoValue,
     thousands: Optional[str] = None,
     comment: Optional[str] = None,
     skipfooter: int = 0,
@@ -1137,34 +1139,44 @@ def read_excel(
     2     None    NaN
     """
 
+    kwargs = dict(
+        header=header,
+        names=names,
+        index_col=index_col,
+        usecols=usecols,
+        dtype=dtype,
+        engine=engine,
+        converters=converters,
+        true_values=true_values,
+        false_values=false_values,
+        skiprows=skiprows,
+        na_values=na_values,
+        keep_default_na=keep_default_na,
+        verbose=verbose,
+        parse_dates=parse_dates,
+        thousands=thousands,
+        comment=comment,
+        skipfooter=skipfooter,
+        **kwds,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        if date_parser is not _NoValue:
+            kwargs["date_parser"] = date_parser
+    else:
+        if date_parser is not _NoValue:
+            raise TypeError("The 'date_parser' keyword is not supported in pandas 3.0.0 and later.")
+
     def pd_read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
     ) -> pd.DataFrame:
-        return pd.read_excel(  # type: ignore[call-overload, misc]
+        return pd.read_excel(  # type: ignore[return-value]
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
-            header=header,
-            names=names,
-            index_col=index_col,
-            usecols=usecols,
-            dtype=dtype,
-            engine=engine,
-            converters=converters,
-            true_values=true_values,
-            false_values=false_values,
-            skiprows=skiprows,
             nrows=nr,
-            na_values=na_values,
-            keep_default_na=keep_default_na,
-            verbose=verbose,
-            parse_dates=parse_dates,
-            date_parser=date_parser,
-            thousands=thousands,
-            comment=comment,
-            skipfooter=skipfooter,
-            **kwds,
+            **kwargs,
         )
 
     if not isinstance(io, str):
@@ -1595,7 +1607,7 @@ def to_datetime(
     errors: str = "raise",
     format: Optional[str] = None,
     unit: Optional[str] = None,
-    infer_datetime_format: bool = False,
+    infer_datetime_format: Union[bool, _NoValueType] = _NoValue,
     origin: str = "unix",
 ):
     """
@@ -1735,19 +1747,29 @@ def to_datetime(
         "microseconds": "us",
     }
 
+    kwargs = dict(
+        errors=errors,
+        format=format,
+        unit=unit,
+        origin=origin,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        kwargs["infer_datetime_format"] = (
+            infer_datetime_format if infer_datetime_format is not _NoValue else False
+        )
+    else:
+        if infer_datetime_format is not _NoValue:
+            raise TypeError(
+                "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
+            )
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
     ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
-        return pd.to_datetime(
-            pser_or_pdf,
-            errors=errors,
-            format=format,
-            unit=unit,
-            infer_datetime_format=infer_datetime_format,
-            origin=origin,
-        )
+        return pd.to_datetime(pser_or_pdf, **kwargs)
 
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
@@ -1762,14 +1784,7 @@ def to_datetime(
 
         psdf = arg[list_cols]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
-    return pd.to_datetime(
-        arg,
-        errors=errors,
-        format=format,
-        unit=unit,
-        infer_datetime_format=infer_datetime_format,
-        origin=origin,
-    )
+    return pd.to_datetime(arg, **kwargs)
 
 
 def date_range(
@@ -1879,7 +1894,7 @@ def date_range(
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -2087,7 +2102,7 @@ def timedelta_range(
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
-    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],

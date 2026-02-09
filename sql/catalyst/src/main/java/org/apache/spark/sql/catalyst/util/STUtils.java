@@ -112,6 +112,10 @@ public final class STUtils {
   }
 
   public static GeometryVal stGeomFromWKB(byte[] wkb, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
     return toPhysVal(Geometry.fromWkb(wkb, srid));
   }
 

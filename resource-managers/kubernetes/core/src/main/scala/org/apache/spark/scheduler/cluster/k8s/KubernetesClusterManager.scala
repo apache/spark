@@ -129,7 +129,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor, conf = sc.conf)
 
-    val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
+    val executorPodsLifecycleManager = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
       snapshotsStore)
@@ -153,7 +153,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       schedulerExecutorService,
       snapshotsStore,
       executorPodsAllocator,
-      executorPodsLifecycleEventHandler,
+      executorPodsLifecycleManager,
       podsWatchEventSource,
       podsPollingEventSource)
   }

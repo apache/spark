@@ -1350,14 +1350,16 @@ object RocksDBStateEncoder extends Logging {
    * @param valueSchema Schema defining the structure of values to be encoded
    * @param useMultipleValuesPerKey If true, creates an encoder that can handle multiple values
    *                                per key; if false, creates an encoder for single values
+   * @param delimiterSize Size of the delimiter used between multiple values (in bytes)
    * @return A configured RocksDBValueStateEncoder instance
    */
   def getValueEncoder(
       dataEncoder: RocksDBDataEncoder,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
+      useMultipleValuesPerKey: Boolean,
+      delimiterSize: Int = 1): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(dataEncoder, valueSchema)
+      new MultiValuedStateEncoder(dataEncoder, valueSchema, delimiterSize)
     } else {
       new SingleValueStateEncoder(dataEncoder, valueSchema)
     }
@@ -1726,7 +1728,8 @@ class NoPrefixKeyStateEncoder(
  */
 class MultiValuedStateEncoder(
     dataEncoder: RocksDBDataEncoder,
-    valueSchema: StructType)
+    valueSchema: StructType,
+    delimiterSize: Int)
   extends RocksDBValueStateEncoder with Logging {
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
@@ -1786,7 +1789,7 @@ class MultiValuedStateEncoder(
             numBytes
           )
           pos += numBytes
-          pos += 1 // eat the delimiter character
+          pos += delimiterSize // eat the delimiter based on actual delimiter size
           dataEncoder.decodeValue(encodedValue)
         }
       }
