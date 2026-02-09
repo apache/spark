@@ -38,6 +38,35 @@ public class WktWriterTest extends WkbTestBase {
   }
 
   @Test
+  public void testPointWithZeroCoordinate() {
+    // 0.0 should be normalized to "0".
+    Point point = new Point(new double[]{0.0, 0.0}, 0);
+    Assertions.assertEquals("POINT(0 0)", point.toString());
+  }
+
+  @Test
+  public void testPointWithNegativeZeroCoordinate() {
+    // -0.0 should be normalized to "0" (not "-0" or "-0.0").
+    Point point = new Point(new double[]{-0.0, -0.0}, 0);
+    Assertions.assertEquals("POINT(0 0)", point.toString());
+  }
+
+  @Test
+  public void testPointWithLargeIntegerCoordinateBeyondLongRange() {
+    // For very large values WKT should use scientific notation.
+    Point point = new Point(new double[]{1.2e19, -3.4e19}, 0);
+    String wkt = point.toString();
+    Assertions.assertEquals("POINT(1.2E19 -3.4E19)", wkt);
+  }
+
+  @Test
+  public void testPointWithDoubleMaxValue() {
+    Point point = new Point(new double[]{Double.MAX_VALUE, -Double.MAX_VALUE}, 0);
+    String wkt = point.toString();
+    Assertions.assertEquals("POINT(1.7976931348623157E308 -1.7976931348623157E308)", wkt);
+  }
+
+  @Test
   public void testPointToString() {
     Point point = new Point(new double[]{1.0, 2.0}, 0);
     String wkt = point.toString();
