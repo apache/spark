@@ -448,27 +448,34 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
 
     # ----- version overrides -----
 
-    @staticmethod
-    def _version_overrides():
+    @classmethod
+    def _version_overrides(cls):
         """
         Build overrides for known PyArrow version-dependent behaviors.
 
-        PyArrow < 21: to_pylist() on float16 arrays returns np.float16 objects
-        instead of plain Python floats, so all successful casts to float16
-        produce a different string representation.
+        PyArrow < 21: str(scalar) for float16 uses numpy's formatting
+        (via np.float16), which varies across numpy versions:
+          - numpy >= 2.4: scientific notation (e.g. "3.277e+04")
+          - numpy <  2.4: decimal (e.g. "32770.0")
+        The golden file uses PyArrow >= 21 output (Python float).
+        We compute the expected values dynamically to handle all
+        numpy versions.
         """
         overrides = {}
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
-            # PyArrow < 21: scalar.as_py() for float16 returns np.float16,
-            # whose str() uses numpy formatting (e.g. "0.1" instead of
-            # "0.0999755859375", "3.277e+04" instead of "32768.0").
             F16 = "float16"
+
+            def f16_repr(values):
+                arr = cls._make_float16_array(values)
+                return cls.repr_value(arr, max_len=0)
+
+            frac = f16_repr([0.1, 0.9, None])
             overrides.update(
                 {
-                    ("int16:max_min", F16): "[3.277e+04, -3.277e+04, None]@float16",
-                    ("float16:fractional", F16): "[0.1, 0.9, None]@float16",
-                    ("float32:fractional", F16): "[0.1, 0.9, None]@float16",
-                    ("float64:fractional", F16): "[0.1, 0.9, None]@float16",
+                    ("int16:max_min", F16): f16_repr([32767.0, -32768.0, None]),
+                    ("float16:fractional", F16): frac,
+                    ("float32:fractional", F16): frac,
+                    ("float64:fractional", F16): frac,
                 }
             )
         return overrides
