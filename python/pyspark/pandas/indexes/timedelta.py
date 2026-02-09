@@ -133,10 +133,10 @@ class TimedeltaIndex(Index):
                 kwargs["closed"] = closed
         else:
             if unit is not _NoValue:
-                raise ValueError("The 'unit' keyword is not supported in pandas 3.0.0 and later.")
+                raise TypeError("The 'unit' keyword is not supported in pandas 3.0.0 and later.")
 
             if closed is not _NoValue:
-                raise ValueError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
+                raise TypeError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
 
         return cast(TimedeltaIndex, ps.from_pandas(pd.TimedeltaIndex(**kwargs)))
 

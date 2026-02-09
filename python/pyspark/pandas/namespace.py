@@ -1607,7 +1607,7 @@ def to_datetime(
     errors: str = "raise",
     format: Optional[str] = None,
     unit: Optional[str] = None,
-    infer_datetime_format: bool = False,
+    infer_datetime_format: Union[bool, _NoValueType] = _NoValue,
     origin: str = "unix",
 ):
     """
@@ -1747,19 +1747,29 @@ def to_datetime(
         "microseconds": "us",
     }
 
+    kwargs = dict(
+        errors=errors,
+        format=format,
+        unit=unit,
+        origin=origin,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        kwargs["infer_datetime_format"] = (
+            infer_datetime_format if infer_datetime_format is not _NoValue else False
+        )
+    else:
+        if infer_datetime_format is not _NoValue:
+            raise TypeError(
+                "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
+            )
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
     ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
-        return pd.to_datetime(
-            pser_or_pdf,
-            errors=errors,
-            format=format,
-            unit=unit,
-            infer_datetime_format=infer_datetime_format,
-            origin=origin,
-        )
+        return pd.to_datetime(pser_or_pdf, **kwargs)
 
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
@@ -1774,14 +1784,7 @@ def to_datetime(
 
         psdf = arg[list_cols]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
-    return pd.to_datetime(
-        arg,
-        errors=errors,
-        format=format,
-        unit=unit,
-        infer_datetime_format=infer_datetime_format,
-        origin=origin,
-    )
+    return pd.to_datetime(arg, **kwargs)
 
 
 def date_range(
