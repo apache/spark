@@ -179,15 +179,17 @@ public class RetryingBlockTransferor {
     try {
       transferStarter.createAndStart(blockIdsToTransfer, myListener);
     } catch (Exception e) {
-      if (numRetries > 0) {
-        logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
-          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length),
-          MDC.of(LogKeys.NUM_RETRY, numRetries));
-      } else {
-        logger.error("Exception while beginning {} of {} outstanding blocks", e,
-          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length));
+      if (listener.logBlockTransferExceptions()) {
+        if (numRetries > 0) {
+          logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
+            MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+            MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length),
+            MDC.of(LogKeys.NUM_RETRY, numRetries));
+        } else {
+          logger.error("Exception while beginning {} of {} outstanding blocks", e,
+            MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+            MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length));
+        }
       }
       if (shouldRetry(e) && initiateRetry(e)) {
         // successfully initiated a retry

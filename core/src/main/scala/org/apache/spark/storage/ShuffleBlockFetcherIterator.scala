@@ -372,6 +372,9 @@ final class ShuffleBlockFetcherIterator(
           }
         }
       }
+
+      override def logBlockTransferExceptions(): Boolean =
+        !FallbackStorage.isConfigured(SparkEnv.get.conf)
     }
 
     // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
