@@ -1305,6 +1305,56 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("RocksDB: all compression types") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()
+
+    // Empty string falls back to no compression.    
+    var conf = RocksDBConf().copy(compression = "")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.NO_COMPRESSION)
+    }
+
+    // Unknown config falls back to no compression.
+    conf = RocksDBConf().copy(compression = "foobar")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.NO_COMPRESSION)
+    }
+
+    // All 6 possible compression types are supported.
+    conf = RocksDBConf().copy(compression = "snappy")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.SNAPPY_COMPRESSION)
+    }
+
+    conf = RocksDBConf().copy(compression = "z")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.ZLIB_COMPRESSION)
+    }
+
+    conf = RocksDBConf().copy(compression = "bzip2")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.BZLIB2_COMPRESSION)
+    }
+
+    conf = RocksDBConf().copy(compression = "lz4")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
+    }
+
+    conf = RocksDBConf().copy(compression = "lz4hc")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.LZ4HC_COMPRESSION)
+    }
+
+    conf = RocksDBConf().copy(compression = "zstd")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.rocksDbOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+    }
+
+    // "xpress" is not supported.
+  }
+
   testWithColumnFamilies(
     "RocksDB: test includesPrefix parameter during changelog replay",
     TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
