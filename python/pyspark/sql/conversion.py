@@ -20,12 +20,14 @@ import datetime
 import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
+import pyspark
 from pyspark.errors import PySparkValueError
 from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
     _create_converter_to_pandas,
     to_arrow_schema,
+    from_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
@@ -104,6 +106,60 @@ class ArrowBatchTransformer:
         else:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
+
+    @classmethod
+    def to_pandas(
+        cls,
+        batch: Union["pa.RecordBatch", "pa.Table"],
+        timezone: str,
+        schema: Optional["StructType"] = None,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        df_for_struct: bool = False,
+    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
+        """
+        Convert a RecordBatch or Table to a list of pandas Series.
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch or pa.Table
+            The Arrow RecordBatch or Table to convert.
+        timezone : str
+            Timezone for timestamp conversion.
+        schema : StructType, optional
+            Spark schema for type conversion. If None, types are inferred from Arrow.
+        struct_in_pandas : str
+            How to represent struct in pandas ("dict", "row", etc.)
+        ndarray_as_list : bool
+            Whether to convert ndarray as list.
+        df_for_struct : bool
+            If True, convert struct columns to DataFrame instead of Series.
+
+        Returns
+        -------
+        List[Union[pd.Series, pd.DataFrame]]
+            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
+        """
+        import pandas as pd
+
+        if batch.num_columns == 0:
+            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
+
+        if schema is None:
+            schema = from_arrow_schema(batch.schema)
+
+        return [
+            ArrowArrayToPandasConversion.convert(
+                batch.column(i),
+                schema[i].dataType,
+                ser_name=schema[i].name,
+                timezone=timezone,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+                df_for_struct=df_for_struct,
+            )
+            for i in range(batch.num_columns)
+        ]
 
 
 class LocalDataToArrowConversion:
@@ -1076,6 +1132,39 @@ class ArrowArrayConversion:
             convert=convert_func,
         )
 
+    @classmethod
+    def preprocess_time(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
+        """
+        1, always drop the timezone from TimestampType;
+        2, coerce_temporal_nanoseconds: coerce timestamp time units to nanoseconds
+        """
+        import pyarrow as pa
+        import pyarrow.types as types
+        import pyarrow.compute as pc
+
+        def check_type_func(pa_type: pa.DataType) -> bool:
+            return types.is_timestamp(pa_type) and (pa_type.unit != "ns" or pa_type.tz is not None)
+
+        def convert_func(arr: pa.Array) -> pa.Array:
+            assert isinstance(arr, pa.TimestampArray)
+
+            pa_type = arr.type
+
+            if pa_type.tz is not None:
+                arr = pc.local_timestamp(arr)
+            if pa_type.unit != "ns":
+                arr = pc.cast(arr, target_type=pa.timestamp("ns", tz=None))
+            return arr
+
+        return cls.convert(
+            arr,
+            check_type=check_type_func,
+            convert=convert_func,
+        )
+
 
 class ArrowArrayToPandasConversion:
     """
@@ -1091,9 +1180,10 @@ class ArrowArrayToPandasConversion:
     @classmethod
     def convert(
         cls,
-        arrow_column: Union["pa.Array", "pa.ChunkedArray"],
-        target_type: DataType,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
         *,
+        ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
         struct_in_pandas: str = "dict",
         ndarray_as_list: bool = False,
@@ -1104,10 +1194,12 @@ class ArrowArrayToPandasConversion:
 
         Parameters
         ----------
-        arrow_column : pa.Array or pa.ChunkedArray
+        arr : pa.Array or pa.ChunkedArray
             The Arrow column to convert.
-        target_type : DataType
+        spark_type : DataType
             The target Spark type for the column to be converted to.
+        ser_name : str
+            The name of returned pd.Series. If not set, will try to get it from arr._name.
         timezone : str, optional
             Timezone for timestamp conversion. Required if the data contains timestamp types.
         struct_in_pandas : str, optional
@@ -1125,10 +1217,11 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
-        if cls._prefer_convert_numpy(target_type, df_for_struct):
+        if cls._prefer_convert_numpy(spark_type, df_for_struct):
             return cls.convert_numpy(
-                arrow_column,
-                target_type,
+                arr,
+                spark_type,
+                ser_name=ser_name,
                 timezone=timezone,
                 struct_in_pandas=struct_in_pandas,
                 ndarray_as_list=ndarray_as_list,
@@ -1136,8 +1229,8 @@ class ArrowArrayToPandasConversion:
             )
 
         return cls.convert_legacy(
-            arrow_column,
-            target_type,
+            arr,
+            spark_type,
             timezone=timezone,
             struct_in_pandas=struct_in_pandas,
             ndarray_as_list=ndarray_as_list,
@@ -1259,6 +1352,8 @@ class ArrowArrayToPandasConversion:
             ShortType,
             IntegerType,
             LongType,
+            TimestampType,
+            TimestampNTZType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1271,6 +1366,7 @@ class ArrowArrayToPandasConversion:
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
         *,
+        ser_name: Optional[str] = None,
         timezone: Optional[str] = None,
         struct_in_pandas: Optional[str] = None,
         ndarray_as_list: bool = False,
@@ -1287,22 +1383,32 @@ class ArrowArrayToPandasConversion:
             assert types.is_struct(arr.type)
             assert len(spark_type.names) == len(arr.type.names), f"{spark_type} {arr.type} "
 
-            series = [
-                cls.convert_numpy(
-                    field_arr,
-                    spark_type=field.dataType,
-                    timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    ndarray_as_list=ndarray_as_list,
-                    df_for_struct=False,  # always False for child fields
-                )
-                for field_arr, field in zip(arr.flatten(), spark_type)
-            ]
-            pdf = pd.concat(series, axis=1)
-            pdf.columns = spark_type.names
-            return pdf
+            return pd.concat(
+                [
+                    cls.convert_numpy(
+                        field_arr,
+                        spark_type=field.dataType,
+                        ser_name=field.name,
+                        timezone=timezone,
+                        struct_in_pandas=struct_in_pandas,
+                        ndarray_as_list=ndarray_as_list,
+                        df_for_struct=False,  # always False for child fields
+                    )
+                    for field_arr, field in zip(arr.flatten(), spark_type)
+                ],
+                axis=1,
+            )
 
-        arr = ArrowArrayConversion.localize_tz(arr)
+        if ser_name is None:
+            # Arrow array from batch.column(idx) contains name,
+            # and this name will be used to rename the pandas series
+            # returned by array.to_pandas().
+            # This name will be dropped after pa.compute functions.
+            ser_name = arr._name
+
+        arr = ArrowArrayConversion.preprocess_time(arr)
+
+        series: pd.Series
 
         # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
         # 1, benchmark a nullable integral array
@@ -1333,24 +1439,24 @@ class ArrowArrayToPandasConversion:
         # 19.1 μs ± 242 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
         if isinstance(spark_type, ByteType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, ShortType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int16Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, IntegerType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int32Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(spark_type, LongType):
             if arr.null_count > 0:
-                return arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
+                series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
             else:
-                return arr.to_pandas()
+                series = arr.to_pandas()
         elif isinstance(
             spark_type,
             (
@@ -1370,16 +1476,13 @@ class ArrowArrayToPandasConversion:
             ),
         ):
             # TODO(SPARK-55333): Revisit date_as_object in arrow->pandas conversion
-            # TODO(SPARK-55334): Implement coerce_temporal_nanoseconds
             # If the given column is a date type column, creates a series of datetime.date directly
             # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
             # datetime64[ns] type handling.
-            # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
             pandas_options = {
                 "date_as_object": True,
-                "coerce_temporal_nanoseconds": True,
             }
-            return arr.to_pandas(**pandas_options)
+            series = arr.to_pandas(**pandas_options)
         # elif isinstance(
         #     spark_type,
         #     (
@@ -1395,3 +1498,5 @@ class ArrowArrayToPandasConversion:
         # TODO(SPARK-55324): Support complex types
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
+
+        return series.rename(ser_name)

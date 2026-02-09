@@ -33,7 +33,9 @@ import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.streaming.{Offset, ReadAllAvailable, ReadLimit}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonStreamingSourceReadLimit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
@@ -46,11 +48,19 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  val CHECK_SUPPORTED_FEATURES_ID = 888
+  val PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID = 889
+  val LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID = 890
+  val GET_DEFAULT_READ_LIMIT_FUNC_ID = 891
+  val REPORT_LATEST_OFFSET_FUNC_ID = 892
   // Status code for JVM to decide how to receive prefetched record batches
   // for simple stream reader.
   val PREFETCHED_RECORDS_NOT_FOUND = 0
   val NON_EMPTY_PYARROW_RECORD_BATCHES = 1
   val EMPTY_PYARROW_RECORD_BATCHES = 2
+  val READ_ALL_AVAILABLE_JSON = """{"_type": "ReadAllAvailable"}"""
+
+  case class SupportedFeatures(admissionControl: Boolean, triggerAvailableNow: Boolean)
 }
 
 /**
@@ -92,6 +102,7 @@ class PythonStreamingSourceRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
@@ -129,11 +140,97 @@ class PythonStreamingSourceRunner(
     }
   }
 
+  def checkSupportedFeatures(): SupportedFeatures = {
+    dataOut.writeInt(CHECK_SUPPORTED_FEATURES_ID)
+    dataOut.flush()
+
+    val featureBits = dataIn.readInt()
+    if (featureBits == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "checkSupportedFeatures", msg)
+    }
+    val admissionControl = (featureBits & (1 << 0)) == 1
+    val availableNow = (featureBits & (1 << 1)) == (1 << 1)
+
+    SupportedFeatures(admissionControl, availableNow)
+  }
+
+  def getDefaultReadLimit(): String = {
+    dataOut.writeInt(GET_DEFAULT_READ_LIMIT_FUNC_ID)
+    dataOut.flush()
+
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "getDefaultReadLimit", msg)
+    }
+
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  def reportLatestOffset(): String = {
+    dataOut.writeInt(REPORT_LATEST_OFFSET_FUNC_ID)
+    dataOut.flush()
+
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "reportLatestOffset", msg)
+    }
+
+    if (len == 0) {
+      null
+    } else {
+      PythonWorkerUtils.readUTF(len, dataIn)
+    }
+  }
+
+  def prepareForTriggerAvailableNow(): Unit = {
+    dataOut.writeInt(PREPARE_FOR_TRIGGER_AVAILABLE_NOW_FUNC_ID)
+    dataOut.flush()
+    val status = dataIn.readInt()
+    if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "prepareForTriggerAvailableNow", msg)
+    }
+  }
+
   /**
    * Invokes latestOffset() function of the stream reader and receive the return value.
    */
   def latestOffset(): String = {
     dataOut.writeInt(LATEST_OFFSET_FUNC_ID)
+    dataOut.flush()
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset", msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  def latestOffset(startOffset: Offset, limit: ReadLimit): String = {
+    dataOut.writeInt(LATEST_OFFSET_ADMISSION_CONTROL_FUNC_ID)
+    PythonWorkerUtils.writeUTF(startOffset.json, dataOut)
+    limit match {
+      case _: ReadAllAvailable =>
+        // NOTE: we need to use a constant here to match the Python side given the engine can
+        // decide by itself to use ReadAllAvailable and the Python side version of the instance
+        // isn't available here.
+        PythonWorkerUtils.writeUTF(READ_ALL_AVAILABLE_JSON, dataOut)
+
+      case p: PythonStreamingSourceReadLimit =>
+        PythonWorkerUtils.writeUTF(p.json, dataOut)
+
+      case _ =>
+        throw new UnsupportedOperationException("Unsupported ReadLimit type: " +
+          s"${limit.getClass.getName}")
+    }
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {

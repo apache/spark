@@ -17,6 +17,7 @@
 import os
 import re
 import tarfile
+import time
 import traceback
 import urllib.request
 from shutil import rmtree
@@ -143,7 +144,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
         tar = None
         try:
             print("Downloading %s from:\n- %s" % (pretty_pkg_name, url))
-            download_to_file(urllib.request.urlopen(url), package_local_path)
+            _download_with_retries(url, package_local_path)
 
             print("Installing to %s" % dest)
             tar = tarfile.open(package_local_path, "r:gz")
@@ -171,7 +172,7 @@ def get_preferred_mirrors():
     for _ in range(3):
         try:
             response = urllib.request.urlopen(
-                "https://www.apache.org/dyn/closer.lua?preferred=true"
+                "https://www.apache.org/dyn/closer.lua?preferred=true", timeout=10
             )
             mirror_urls.append(response.read().decode("utf-8"))
         except Exception:
@@ -184,6 +185,40 @@ def get_preferred_mirrors():
         "https://dist.apache.org/repos/dist/release",
     ]
     return list(set(mirror_urls)) + [x for x in default_sites if x not in mirror_urls]
+
+
+def _download_with_retries(url, path, max_retries=3, timeout=600):
+    """
+    Download a file from a URL with retry logic and timeout handling.
+
+    Parameters
+    ----------
+    url : str
+        The URL to download from.
+    path : str
+        The local file path to save the downloaded file.
+    max_retries : int
+        Maximum number of retry attempts per URL.
+    timeout : int
+        Timeout in seconds for the HTTP request.
+    """
+    for attempt in range(max_retries):
+        try:
+            response = urllib.request.urlopen(url, timeout=timeout)
+            download_to_file(response, path)
+            return
+        except Exception as e:
+            if os.path.exists(path):
+                os.remove(path)
+            if attempt < max_retries - 1:
+                wait = 2**attempt * 5
+                print(
+                    "Download attempt %d/%d failed: %s. Retrying in %d seconds..."
+                    % (attempt + 1, max_retries, str(e), wait)
+                )
+                time.sleep(wait)
+            else:
+                raise
 
 
 def download_to_file(response, path, chunk_size=1024 * 1024):

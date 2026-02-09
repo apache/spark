@@ -20,6 +20,7 @@ openpyxl
 
 # PySpark test dependencies (optional)
 coverage
+tabulate
 
 # Linter
 ruff==0.14.8

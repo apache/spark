@@ -15,16 +15,16 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240911.1
+FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Documentation"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250616
+ENV FULL_REFRESH_DATE=20260208
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -63,9 +63,7 @@ RUN apt-get update && apt-get install -y \
     ruby-dev \
     software-properties-common \
     wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+    zlib1g-dev
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" && \
@@ -83,6 +81,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Setup virtual environment
+ENV VIRTUAL_ENV=/opt/spark-venv
+RUN python3.11 -m venv --without-pip $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
