@@ -121,11 +121,8 @@ public class WkbReader {
    */
   private void validateGeographyBounds(Point point, long pos) {
     if (geographyMode && validationLevel > 0 && !point.isEmpty()) {
-      if (!isValidLongitude(point.getX())) {
-        throw new WkbParseException("Longitude must be between -180 and 180", pos, currentWkb);
-      }
-      if (!isValidLatitude(point.getY())) {
-        throw new WkbParseException("Latitude must be between -90 and 90", pos, currentWkb);
+      if (!isValidLongitude(point.getX()) || !isValidLatitude(point.getY())) {
+        throw new WkbParseException("Invalid coordinate value found", pos, currentWkb);
       }
     }
   }

@@ -621,7 +621,7 @@ public class WkbGeographyTest extends WkbTestBase {
     Assertions.assertEquals(2000000.0, geom.asPoint().getY(), 1e-10);
   }
 
-  // ========== Error Message Quality Tests ==========
+  // ========== Error Message Tests ==========
 
   @Test
   public void testGeographyErrorMessageContainsBoundsInfo() {
@@ -630,17 +630,6 @@ public class WkbGeographyTest extends WkbTestBase {
     WkbParseException ex = Assertions.assertThrows(
         WkbParseException.class, () -> geographyReader1().read(wkb));
     String msg = ex.getMessage();
-    Assertions.assertTrue(msg.contains("Longitude") || msg.contains("Latitude"));
-  }
-
-  @Test
-  public void testGeographyErrorMessageContainsWkbHex() {
-    // Verify error message contains the WKB hex for debugging
-    byte[] wkb = makePointWkb2D(200.0, 0.0);
-    WkbParseException ex = Assertions.assertThrows(
-        WkbParseException.class, () -> geographyReader1().read(wkb));
-    // WkbParseException includes hex representation of WKB
-    Assertions.assertNotNull(ex.getMessage(), "Error message should not be null");
-    Assertions.assertTrue(!ex.getMessage().isEmpty(), "Error message should not be empty");
+    Assertions.assertTrue(msg.contains("Invalid coordinate value"));
   }
 }

@@ -179,11 +179,9 @@ class GeographyExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geography.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geography WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test

@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.GeometryModel;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
+import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.unsafe.types.GeographyVal;
 
 import java.nio.ByteBuffer;
@@ -122,19 +124,20 @@ public final class Geography implements Geo {
 
   @Override
   public byte[] toWkb() {
-    // This method returns only the WKB portion of the in-memory Geography representation.
-    // Note that the header is skipped, and that the WKB is returned as-is (little-endian).
-    return Arrays.copyOfRange(getBytes(), WKB_OFFSET, getBytes().length);
+    return toWkbInternal(DEFAULT_ENDIANNESS);
   }
 
   @Override
   public byte[] toWkb(ByteOrder endianness) {
-    // The default endianness is Little Endian (NDR).
-    if (endianness == DEFAULT_ENDIANNESS) {
-      return toWkb();
-    } else {
-      throw new UnsupportedOperationException("Geography WKB endianness is not yet supported.");
-    }
+    return toWkbInternal(endianness);
+  }
+
+  private byte[] toWkbInternal(ByteOrder endianness) {
+    WkbReader reader = new WkbReader(true);
+    GeometryModel model = reader.read(Arrays.copyOfRange(
+      getBytes(), WKB_OFFSET, getBytes().length));
+    WkbWriter writer = new WkbWriter();
+    return writer.write(model, endianness);
   }
 
   @Override
