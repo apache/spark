@@ -19,14 +19,37 @@ from typing import Any, Optional
 import os
 import time
 
-import pandas as pd
-
 try:
     import numpy as np
 
     have_numpy = True
 except ImportError:
     have_numpy = False
+
+try:
+    import pandas as pd
+
+    have_pandas = True
+except ImportError:
+    have_pandas = False
+
+try:
+    import pyarrow as pa
+
+    have_pyarrow = True
+except ImportError:
+    have_pyarrow = False
+
+
+# PyArrow uses internal names ("halffloat", "float", "double") that differ from
+# the commonly used names ("float16", "float32", "float64").  This mapping
+# normalises the str() representation of Arrow DataType so that repr_type()
+# returns the more intuitive names.
+_ARROW_FLOAT_ALIASES = {
+    "halffloat": "float16",
+    "float": "float32",
+    "double": "float64",
+}
 
 
 class GoldenFileTestMixin:
@@ -87,14 +110,21 @@ class GoldenFileTestMixin:
     def setup_timezone(cls, tz: str = "America/Los_Angeles") -> None:
         """
         Setup timezone for deterministic test results.
-        Synchronizes timezone between Python and Java.
+
+        Sets the OS-level TZ environment variable and, when a Spark session
+        is available, synchronises the timezone with the JVM and Spark config.
+        This allows the mixin to be used with both ReusedSQLTestCase (Spark)
+        and plain unittest.TestCase (no Spark).
         """
         cls._tz_prev = os.environ.get("TZ", None)
         os.environ["TZ"] = tz
         time.tzset()
 
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        # Sync with Spark / Java if a session is available.
+        if hasattr(cls, "sc"):
+            cls.sc.environment["TZ"] = tz
+        if hasattr(cls, "spark"):
+            cls.spark.conf.set("spark.sql.session.timeZone", tz)
 
     @classmethod
     def teardown_timezone(cls) -> None:
@@ -167,86 +197,158 @@ class GoldenFileTestMixin:
     @staticmethod
     def repr_type(t: Any) -> str:
         """
-        Convert a type to string representation.
+        Convert a type to a readable string representation.
 
         Handles different type representations:
-        - Spark DataType: uses simpleString() (e.g., "int", "string", "array<int>")
-        - Python type: uses __name__ (e.g., "int", "str", "list")
-        - Other: uses str()
+
+        - Spark DataType: uses simpleString()
+          (e.g. "int", "string", "array<int>")
+        - PyArrow DataType: uses str(t) with float-name normalisation
+          (e.g. "int8", "float32", "timestamp[s, tz=UTC]")
+        - Python type: uses __name__
+          (e.g. "int", "str", "list")
+        - Other: falls back to str(t)
 
         Parameters
         ----------
         t : Any
-            The type to represent. Can be Spark DataType or Python type.
+            The type to represent.
 
         Returns
         -------
         str
-            String representation of the type.
+            Human-readable string representation of the type.
         """
-        # Check if it's a Spark DataType (has simpleString method)
+        # Spark DataType
         if hasattr(t, "simpleString"):
             return t.simpleString()
-        # Check if it's a Python type
+        # Python type (class)
         elif isinstance(t, type):
             return t.__name__
         else:
-            return str(t)
+            s = str(t)
+            # Normalise PyArrow float type names to be more intuitive:
+            #   "halffloat" -> "float16", "float" -> "float32", "double" -> "float64"
+            return _ARROW_FLOAT_ALIASES.get(s, s)
+
+    @classmethod
+    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a PyArrow Array/ChunkedArray for golden file.
+
+        Each element uses str(scalar) from PyArrow's own scalar formatting.
+
+        Parameters
+        ----------
+        value : pa.Array or pa.ChunkedArray
+            The PyArrow array to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "[val1, val2, None]@arrow_type"
+        """
+        # Escape NULL bytes so the value can be safely stored in CSV files.
+        elements = [str(scalar).replace("\x00", "\\0") for scalar in value]
+        v_str = "[" + ", ".join(elements) + "]"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@{cls.repr_type(value.type)}"
+
+    @classmethod
+    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a pandas DataFrame for golden file.
+
+        Parameters
+        ----------
+        value : pd.DataFrame
+            The pandas DataFrame to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "value@Dataframe[schema]"
+        """
+        v_str = value.to_json().replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
+        return f"{v_str}@Dataframe[{simple_schema}]"
+
+    @classmethod
+    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a numpy ndarray for golden file.
+
+        Parameters
+        ----------
+        value : np.ndarray
+            The numpy ndarray to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "value@ndarray[dtype]"
+        """
+        v_str = str(value).replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@ndarray[{value.dtype.name}]"
+
+    @classmethod
+    def repr_python_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a plain Python value for golden file.
+
+        Returns
+        -------
+        str
+            "str(value)@class_name"
+        """
+        v_str = str(value).replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@{type(value).__name__}"
 
     @classmethod
     def repr_value(cls, value: Any, max_len: int = 32) -> str:
         """
-        Convert Python value to string representation for golden file.
+        Format a value for golden file, dispatching to the appropriate repr
+        based on the value's type.
 
-        Default format: "value_str@type_name"
-        Subclasses can override this method for custom representations.
+        - PyArrow Array/ChunkedArray -> repr_arrow_value
+        - pandas DataFrame -> repr_pandas_value
+        - numpy ndarray -> repr_numpy_value
+        - Everything else -> repr_python_value
 
         Parameters
         ----------
         value : Any
-            The Python value to represent.
+            The value to represent.
         max_len : int, default 32
-            Maximum length for the value string portion.
+            Maximum length for the value string portion.  0 means no limit.
 
         Returns
         -------
         str
             String representation in format "value@type".
         """
-        v_str = str(value)[:max_len]
-        return f"{v_str}@{type(value).__name__}"
+        if have_pyarrow and isinstance(value, (pa.Array, pa.ChunkedArray)):
+            return cls.repr_arrow_value(value, max_len)
 
-    @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
-        """
-        Convert Python/Pandas value to string representation for golden file.
-
-        Extended version that handles pandas DataFrame and numpy ndarray specially.
-
-        Parameters
-        ----------
-        value : Any
-            The Python value to represent.
-        max_len : int, default 32
-            Maximum length for the value string portion.
-
-        Returns
-        -------
-        str
-            String representation in format "value@type[dtype]".
-        """
-        if isinstance(value, pd.DataFrame):
-            v_str = value.to_json()
-        else:
-            v_str = str(value)
-        v_str = v_str.replace("\n", " ")[:max_len]
-
+        if have_pandas and isinstance(value, pd.DataFrame):
+            return cls.repr_pandas_value(value, max_len)
         if have_numpy and isinstance(value, np.ndarray):
-            return f"{v_str}@ndarray[{value.dtype.name}]"
-        elif isinstance(value, pd.DataFrame):
-            simple_schema = ", ".join([f"{t} {d.name}" for t, d in value.dtypes.items()])
-            return f"{v_str}@Dataframe[{simple_schema}]"
-        return f"{v_str}@{type(value).__name__}"
+            return cls.repr_numpy_value(value, max_len)
+
+        return cls.repr_python_value(value, max_len)
 
     @staticmethod
     def clean_result(result: str) -> str:

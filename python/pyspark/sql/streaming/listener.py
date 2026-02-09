@@ -914,12 +914,20 @@ class SourceProgress(dict):
 
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "SourceProgress":
+        def _to_json_string(value: Any) -> str:
+            """Convert offset value to JSON string. If already a string, return as-is.
+            If a dict/list, JSON-encode it."""
+            if isinstance(value, str):
+                return value
+            else:
+                return json.dumps(value)
+
         return cls(
             jdict=j,
             description=j["description"],
-            startOffset=str(j["startOffset"]),
-            endOffset=str(j["endOffset"]),
-            latestOffset=str(j["latestOffset"]),
+            startOffset=_to_json_string(j["startOffset"]),
+            endOffset=_to_json_string(j["endOffset"]),
+            latestOffset=_to_json_string(j["latestOffset"]),
             numInputRows=j["numInputRows"],
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],

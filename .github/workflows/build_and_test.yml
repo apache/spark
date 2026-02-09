@@ -105,6 +105,8 @@ jobs:
             buf=true
             ui=true
             docs=true
+            java17=true
+            java25=true
           else
             pyspark_install=false
             pandas=false
@@ -116,6 +118,8 @@ jobs:
             buf=false
             ui=false
             docs=false
+            java17=false
+            java25=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           precondition="
@@ -128,8 +132,8 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
-              \"java17\" : \"$build\",
-              \"java25\" : \"$build\",
+              \"java17\" : \"$java17\",
+              \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
@@ -238,6 +242,7 @@ jobs:
     timeout-minutes: 150
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -522,6 +527,7 @@ jobs:
         --security-opt seccomp=unconfined
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -626,6 +632,7 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        lsb_release -a
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
         do
           $py --version
@@ -659,7 +666,7 @@ jobs:
         verbose: true
     - name: Upload test results to Codecov
       env: ${{ fromJSON(inputs.envs) }}
-      if: (!cancelled()) && github.repository == 'apache/spark'
+      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
       with:
         report_type: 'test_results'
@@ -919,6 +926,7 @@ jobs:
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        lsb_release -a
         if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
           python3.9 --version
           python3.9 -m pip list
@@ -1098,7 +1106,9 @@ jobs:
       run: python3.9 -m pip list
     - name: List Python packages
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
-      run: python3.11 -m pip list
+      run: |
+        lsb_release -a
+        python3.11 -m pip list
     - name: Install dependencies for documentation generation
       run: |
         # Keep the version of Bundler here in sync with the following locations:

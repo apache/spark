@@ -167,6 +167,7 @@ object TreePattern extends Enumeration  {
   val REPARTITION_OPERATION: Value = Value
   val REBALANCE_PARTITIONS: Value = Value
   val RESOLVED_METRIC_VIEW: Value = Value
+  val SEQUENTIAL_STREAMING_UNION: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val SORT: Value = Value
   val SQL_TABLE_FUNCTION: Value = Value
