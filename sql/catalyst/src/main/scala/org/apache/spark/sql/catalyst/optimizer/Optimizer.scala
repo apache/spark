@@ -1844,133 +1844,119 @@ object CombineUnions extends Rule[LogicalPlan] {
       if AttributeSet(keys) == u.outputSet =>
       DeduplicateWithinWatermark(keys, flattenUnion(u, true))
     case su: SequentialStreamingUnion =>
-      flattenUnionLike(su, false, (c: Seq[LogicalPlan]) => su.copy(children = c))
+      flattenSequentialStreamingUnion(su, false)
     case Distinct(su: SequentialStreamingUnion) =>
-      Distinct(flattenUnionLike(su, true, (c: Seq[LogicalPlan]) => su.copy(children = c)))
+      Distinct(flattenSequentialStreamingUnion(su, true))
     case Deduplicate(keys: Seq[Attribute], su: SequentialStreamingUnion)
       if AttributeSet(keys) == su.outputSet =>
-      Deduplicate(keys,
-        flattenUnionLike(su, true, (c: Seq[LogicalPlan]) => su.copy(children = c)))
+      Deduplicate(keys, flattenSequentialStreamingUnion(su, true))
     case DeduplicateWithinWatermark(keys: Seq[Attribute], su: SequentialStreamingUnion)
       if AttributeSet(keys) == su.outputSet =>
-      DeduplicateWithinWatermark(keys,
-        flattenUnionLike(su, true, (c: Seq[LogicalPlan]) => su.copy(children = c)))
-  }
-
-  /**
-   * Helper to extract byName and allowMissingCol from UnionBase instances.
-   * Returns (byName, allowMissingCol) tuple.
-   */
-  private def extractUnionParams(u: UnionBase): (Boolean, Boolean) = u match {
-    case union: Union => (union.byName, union.allowMissingCol)
-    case seqUnion: SequentialStreamingUnion =>
-      (seqUnion.byName, seqUnion.allowMissingCol)
-    case _ => (false, false) // Default for other UnionBase subtypes
+      DeduplicateWithinWatermark(keys, flattenSequentialStreamingUnion(su, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
-    // Delegate to the generic flattenUnionLike method
-    flattenUnionLike(union, flattenDistinct,
-      (children: Seq[LogicalPlan]) => union.copy(children = children))
-  }
+    val topByName = union.byName
+    val topAllowMissingCol = union.allowMissingCol
 
-  /**
-   * Generic flattening for UnionBase subtypes (SequentialStreamingUnion, etc.) with support
-   * for projection pushdown. Handles:
-   * - Direct nesting of the same union type
-   * - Distinct/Deduplicate wrapping
-   * - Projection pushdown through nested unions
-   *
-   * @param unionLike The union-like node to flatten
-   * @param flattenDistinct Whether to flatten through Distinct/Deduplicate
-   * @param copy Function to create a new instance with updated children
-   * @tparam T The specific UnionBase subtype
-   */
-  private def flattenUnionLike[T <: UnionBase](
-      unionLike: T,
-      flattenDistinct: Boolean,
-      copy: Seq[LogicalPlan] => T): T = {
-
-    // Extract byName and allowMissingCol from the union-like node
-    val (topByName, topAllowMissingCol) = extractUnionParams(unionLike)
-
-    val stack = mutable.Stack[LogicalPlan](unionLike)
+    val stack = mutable.Stack[LogicalPlan](union)
     val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
-
-    // Flatten nested union-like nodes with matching resolution rules
+    // Note that we should only flatten the unions with same byName and allowMissingCol.
+    // Although we do `UnionCoercion` at analysis phase, we manually run `CombineUnions`
+    // in some places like `Dataset.union`. Flattening unions with different resolution
+    // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
-        // Collapse nested Projects
         case p1 @ Project(_, p2: Project)
             if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
               !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
               !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
-        // Match the specific type T within Distinct
-        case Distinct(child: UnionBase)
-            if flattenDistinct && child.getClass == unionLike.getClass =>
-          val (childByName, childAllowMissingCol) = extractUnionParams(child)
-          if (childByName == topByName && childAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(child.children.reverse)
-          } else {
-            flattened += Distinct(child)
-          }
-        // Match the specific type T within Deduplicate
-        case Deduplicate(keys: Seq[Attribute], child: UnionBase)
-            if flattenDistinct && child.getClass == unionLike.getClass &&
-              AttributeSet(keys) == child.outputSet =>
-          val (childByName, childAllowMissingCol) = extractUnionParams(child)
-          if (childByName == topByName && childAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(child.children.reverse)
-          } else {
-            flattened += Deduplicate(keys, child)
-          }
-        // Push down projection through Distinct(UnionLike)
-        case project @ Project(projectList, Distinct(u: UnionBase))
-            if projectList.forall(_.deterministic) && u.children.nonEmpty &&
-              flattenDistinct && u.getClass == unionLike.getClass &&
+        case Distinct(Union(children, byName, allowMissingCol))
+            if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(children.reverse)
+        // Only handle distinct-like 'Deduplicate', where the keys == output
+        case Deduplicate(keys: Seq[Attribute], u: Union)
+            if flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          stack.pushAll(u.children.reverse)
+        case Union(children, byName, allowMissingCol)
+            if byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(children.reverse)
+        // Push down projection through Union and then push pushed plan to Stack if
+        // there is a Project.
+        case project @ Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol &&
               canPushProjectionThroughUnion(project) =>
-          val (uByName, uAllowMissingCol) = extractUnionParams(u)
-          if (uByName == topByName && uAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
-          } else {
-            flattened += project
-          }
-        // Push down projection through Deduplicate(UnionLike)
-        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], u: UnionBase))
-            if projectList.forall(_.deterministic) && flattenDistinct &&
-              u.getClass == unionLike.getClass && AttributeSet(keys) == u.outputSet &&
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
+        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet &&
               canPushProjectionThroughUnion(project) =>
-          val (uByName, uAllowMissingCol) = extractUnionParams(u)
-          if (uByName == topByName && uAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
-          } else {
-            flattened += project
-          }
-        // Push down projection through UnionLike directly
-        case project @ Project(projectList, u: UnionBase)
-            if projectList.forall(_.deterministic) && u.children.nonEmpty &&
-              u.getClass == unionLike.getClass && canPushProjectionThroughUnion(project) =>
-          val (uByName, uAllowMissingCol) = extractUnionParams(u)
-          if (uByName == topByName && uAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
-          } else {
-            flattened += project
-          }
-        // Match direct nesting of the same type
-        case child: UnionBase if child.getClass == unionLike.getClass =>
-          val (childByName, childAllowMissingCol) = extractUnionParams(child)
-          if (childByName == topByName && childAllowMissingCol == topAllowMissingCol) {
-            stack.pushAll(child.children.reverse)
-          } else {
-            flattened += child
-          }
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
+        case project @ Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty && byName == topByName &&
+              allowMissingCol == topAllowMissingCol && canPushProjectionThroughUnion(project) =>
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, u).reverse)
         case child =>
           flattened += child
       }
     }
-    copy(flattened.toSeq)
+    union.copy(children = flattened.toSeq)
+  }
+
+  private def flattenSequentialStreamingUnion(
+      seqUnion: SequentialStreamingUnion,
+      flattenDistinct: Boolean): SequentialStreamingUnion = {
+    val topByName = seqUnion.byName
+    val topAllowMissingCol = seqUnion.allowMissingCol
+
+    val stack = mutable.Stack[LogicalPlan](seqUnion)
+    val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
+
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case p1 @ Project(_, p2: Project)
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) &&
+              !p1.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) &&
+              !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
+          val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+          stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
+        case Distinct(su: SequentialStreamingUnion)
+            if flattenDistinct && su.byName == topByName &&
+              su.allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(su.children.reverse)
+        case Deduplicate(keys: Seq[Attribute], su: SequentialStreamingUnion)
+            if flattenDistinct && su.byName == topByName &&
+              su.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == su.outputSet =>
+          stack.pushAll(su.children.reverse)
+        case su: SequentialStreamingUnion
+            if su.byName == topByName && su.allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(su.children.reverse)
+        case project @ Project(projectList, Distinct(su: SequentialStreamingUnion))
+            if projectList.forall(_.deterministic) && su.children.nonEmpty &&
+              flattenDistinct && su.byName == topByName &&
+              su.allowMissingCol == topAllowMissingCol &&
+              canPushProjectionThroughUnion(project) =>
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, su).reverse)
+        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute],
+            su: SequentialStreamingUnion))
+            if projectList.forall(_.deterministic) && flattenDistinct &&
+              su.byName == topByName && su.allowMissingCol == topAllowMissingCol &&
+              AttributeSet(keys) == su.outputSet && canPushProjectionThroughUnion(project) =>
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, su).reverse)
+        case project @ Project(projectList, su: SequentialStreamingUnion)
+            if projectList.forall(_.deterministic) && su.children.nonEmpty &&
+              su.byName == topByName && su.allowMissingCol == topAllowMissingCol &&
+              canPushProjectionThroughUnion(project) =>
+          stack.pushAll(pushProjectionThroughUnionLike(projectList, su).reverse)
+        case child =>
+          flattened += child
+      }
+    }
+    seqUnion.copy(children = flattened.toSeq)
   }
 }
 
