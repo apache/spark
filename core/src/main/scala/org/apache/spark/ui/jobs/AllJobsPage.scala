@@ -347,8 +347,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
             exitCode match {
               case Some(code) if code != 0 =>
                 <li>
-                  <strong>Final Status:</strong>
-                  {s"Failure (exit code: $code)"}
+                  <strong>Exit Code:</strong>
+                  {code.toString}
                 </li>
               case _ => <!-- -->
             }
