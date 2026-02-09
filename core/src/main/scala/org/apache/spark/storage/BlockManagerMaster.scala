@@ -193,40 +193,48 @@ class BlockManagerMaster(
 
   /** Remove all blocks belonging to the given RDD. */
   def removeRdd(rddId: Int, blocking: Boolean): Unit = {
-    val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
+    val msg = RemoveRdd(rddId)
+    val future = if (blocking) {
+      driverEndpoint.askSync[Future[Seq[Int]]](msg, waitBlockRemovalTimeout)
+    } else {
+      driverEndpoint.ask[Future[Seq[Int]]](msg)
+    }
+
     future.failed.foreach(e =>
       logWarning(log"Failed to remove RDD ${MDC(RDD_ID, rddId)} - " +
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
-    if (blocking) {
-      waitBlockRemovalTimeout.awaitResult(future)
-    }
   }
 
   /** Remove all blocks belonging to the given shuffle. */
   def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
-    val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
+    val msg = RemoveShuffle(shuffleId)
+    val future = if (blocking) {
+      driverEndpoint.askSync[Future[Seq[Boolean]]](msg, waitBlockRemovalTimeout)
+    } else {
+      driverEndpoint.ask[Future[Seq[Boolean]]](msg)
+    }
+
     future.failed.foreach(e =>
       logWarning(log"Failed to remove shuffle ${MDC(SHUFFLE_ID, shuffleId)} - " +
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
-    if (blocking) {
-      waitBlockRemovalTimeout.awaitResult(future)
-    }
   }
 
   /** Remove all blocks belonging to the given broadcast. */
   def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean): Unit = {
-    val future = driverEndpoint.askSync[Future[Seq[Int]]](
-      RemoveBroadcast(broadcastId, removeFromMaster))
+    val msg = RemoveBroadcast(broadcastId, removeFromMaster)
+    val future = if (blocking) {
+      driverEndpoint.askSync[Future[Seq[Int]]](msg, waitBlockRemovalTimeout)
+    } else {
+      driverEndpoint.ask[Future[Seq[Int]]](msg)
+    }
+
     future.failed.foreach(e =>
       logWarning(log"Failed to remove broadcast ${MDC(BROADCAST_ID, broadcastId)}" +
         log" with removeFromMaster = ${MDC(REMOVE_FROM_MASTER, removeFromMaster)} - " +
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
-    if (blocking) {
-      waitBlockRemovalTimeout.awaitResult(future)
-    }
   }
 
   /**
