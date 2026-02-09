@@ -280,6 +280,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(self._jdf.exceptAll(other._jdf), self.sparkSession)
 
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return DataFrame(self._jdf.zipWithIndex(indexColName), self.sparkSession)
+
     def isLocal(self) -> bool:
         return self._jdf.isLocal()
 

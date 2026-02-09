@@ -30,6 +30,13 @@ class DatetimeOpsParityTests(
     pass
 
 
+class DatetimeNTZOpsParityTests(DatetimeOpsParityTests):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 

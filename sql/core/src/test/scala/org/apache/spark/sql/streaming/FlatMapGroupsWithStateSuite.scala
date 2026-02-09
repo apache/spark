@@ -832,7 +832,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     def constructUnionDf(desiredPartitionsForInput1: Int)
       : (MemoryStream[String], MemoryStream[String], DataFrame) = {
-      val input1 = MemoryStream[String](desiredPartitionsForInput1)
+      val input1 = MemoryStream[String](spark, desiredPartitionsForInput1)
       val input2 = MemoryStream[String]
       val df1 = input1.toDF()
         .select($"value", $"value")

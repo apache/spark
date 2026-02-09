@@ -621,22 +621,28 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            _table = pa.Table.from_batches(
-                [
-                    create_arrow_batch_from_pandas(
-                        [(c, st) for (_, c), st in zip(data.items(), spark_types)],
-                        timezone=cast(str, timezone),
-                        safecheck=safecheck == "true",
-                        prefers_large_types=prefers_large_types,
-                    )
-                ]
-            )
+            # Handle the 0-column case separately to preserve row count.
+            if len(data.columns) == 0:
+                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+            else:
+                _table = pa.Table.from_batches(
+                    [
+                        create_arrow_batch_from_pandas(
+                            [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                            timezone=cast(str, timezone),
+                            safecheck=safecheck == "true",
+                            prefers_large_types=prefers_large_types,
+                        )
+                    ]
+                )
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
-                _table = _table.rename_columns(
-                    cast(StructType, _deduplicate_field_names(schema)).names
-                ).cast(arrow_schema)
+                # Skip cast for 0-column tables as it loses row count
+                if len(schema.fields) > 0:
+                    _table = _table.rename_columns(
+                        cast(StructType, _deduplicate_field_names(schema)).names
+                    ).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
             # If no schema supplied by user then get the names of columns only
@@ -937,12 +943,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warning(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warning(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -958,7 +964,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        logger.warn(
+                        logger.warning(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )
