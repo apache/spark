@@ -25,31 +25,33 @@ import org.apache.spark.sql.types.DataType
 /**
  * Operations related to physical type representation.
  *
- * PURPOSE:
- * Defines how a logical type (e.g., TimeType) is physically represented in memory.
+ * PURPOSE: Defines how a logical type (e.g., TimeType) is physically represented in memory.
  * This includes the physical data type, Java class for code generation, and mutable
  * value type for SpecificInternalRow.
  *
- * USAGE CONTEXT:
- * Used by:
- * - PhysicalDataType.scala - determines physical type mapping
- * - CodeGenerator.scala - determines Java class for codegen
- * - SpecificInternalRow.scala - determines MutableValue type
- * - ColumnVector operations
+ * USAGE CONTEXT - examples of use:
+ *   - PhysicalDataType.scala - determines physical type mapping
+ *   - CodeGenerator.scala - determines Java class for codegen
+ *   - SpecificInternalRow.scala - determines MutableValue type
+ *   - ColumnVector operations
  *
  * @see TimeTypeOps for reference implementation
  * @since 4.1.0
  */
 trait PhyTypeOps extends TypeOps {
+
   /**
    * Returns the physical data type representation.
    *
    * The physical type determines how values are stored in memory and accessed
    * from InternalRow and ColumnVector.
    *
-   * @return PhysicalDataType (e.g., PhysicalLongType for TimeType)
-   * @example TimeType -> PhysicalLongType (stored as Long nanoseconds)
-   * @example DecimalType -> PhysicalDecimalType (stored as Decimal object)
+   * @return
+   *   PhysicalDataType (e.g., PhysicalLongType for TimeType)
+   * @example
+   *   TimeType -> PhysicalLongType (stored as Long nanoseconds)
+   * @example
+   *   DecimalType -> PhysicalDecimalType (stored as Decimal object)
    */
   def getPhysicalType: PhysicalDataType
 
@@ -59,7 +61,8 @@ trait PhyTypeOps extends TypeOps {
    * This class is used when generating Java/Scala code for expressions
    * that operate on this type.
    *
-   * @return Java class (e.g., classOf[Long] for TimeType)
+   * @return
+   *   Java class (e.g., classOf[Long] for TimeType)
    */
   def getJavaClass: Class[_]
 
@@ -69,7 +72,8 @@ trait PhyTypeOps extends TypeOps {
    * MutableValue is a mutable wrapper that can hold values of the physical type.
    * It's used for efficient row mutation without boxing/unboxing overhead.
    *
-   * @return MutableValue instance (e.g., MutableLong for TimeType)
+   * @return
+   *   MutableValue instance (e.g., MutableLong for TimeType)
    */
   def getMutableValue: MutableValue
 
@@ -81,9 +85,12 @@ trait PhyTypeOps extends TypeOps {
    *
    * Used by InternalRow.getWriter() for interpreted aggregation and row mutation.
    *
-   * @param ordinal The column index to write to
-   * @return Writer function (InternalRow, Any) => Unit
-   * @example TimeType -> (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+   * @param ordinal
+   *   The column index to write to
+   * @return
+   *   Writer function (InternalRow, Any) => Unit
+   * @example
+   *   TimeType -> (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
    */
   def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
 }
@@ -92,12 +99,16 @@ trait PhyTypeOps extends TypeOps {
  * Companion object providing factory methods for PhyTypeOps.
  */
 object PhyTypeOps {
+
   /**
    * Creates a PhyTypeOps instance for the given DataType.
    *
-   * @param dt The DataType to get physical operations for
-   * @return PhyTypeOps instance
-   * @throws SparkException if the type doesn't support PhyTypeOps
+   * @param dt
+   *   The DataType to get physical operations for
+   * @return
+   *   PhyTypeOps instance
+   * @throws SparkException
+   *   if the type doesn't support PhyTypeOps
    */
   def apply(dt: DataType): PhyTypeOps = TypeOps(dt).asInstanceOf[PhyTypeOps]
 
@@ -108,8 +119,10 @@ object PhyTypeOps {
    * to TypeOps.supports(dt). This method exists for consistency with the
    * check-and-delegate pattern.
    *
-   * @param dt The DataType to check
-   * @return true if the type supports PhyTypeOps
+   * @param dt
+   *   The DataType to check
+   * @return
+   *   true if the type supports PhyTypeOps
    */
   def supports(dt: DataType): Boolean = TypeOps.supports(dt)
 }

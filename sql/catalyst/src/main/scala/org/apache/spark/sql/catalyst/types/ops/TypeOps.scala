@@ -23,13 +23,11 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 /**
  * Base trait for all type operations in the Types Framework.
  *
- * PURPOSE:
- * TypeOps centralizes type-specific operations that were previously scattered across 40+ files
- * in pattern matching expressions like `case _: TimeType => ...`. By implementing TypeOps for
- * a new type, all integration points automatically work without modifying those files.
+ * PURPOSE: TypeOps centralizes type-specific operations that were previously scattered across
+ * 40+ files in pattern matching expressions like `case _: TimeType => ...`. By implementing
+ * TypeOps for a new type, all integration points automatically work without modifying those files.
  *
- * USAGE:
- * Integration points use the check-and-delegate pattern:
+ * USAGE - integration points use the check-and-delegate pattern:
  * {{{
  * def getPhysicalType(dt: DataType): PhysicalDataType = dt match {
  *   case _ if TypeOps.supports(dt) => TypeOps(dt).asInstanceOf[PhyTypeOps].getPhysicalType
@@ -38,16 +36,17 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * }
  * }}}
  *
- * IMPLEMENTATION:
- * To add a new type to the framework:
- * 1. Create a case class extending TypeOps and the relevant traits (PhyTypeOps, etc.)
- * 2. Register it in the TypeOps.apply() and TypeOps.supports() methods below
- * 3. No other file modifications needed - all integration points automatically work
+ * IMPLEMENTATION - to add a new type to the framework:
+ *   1. Create a case class extending TypeOps and the relevant traits (PhyTypeOps, etc.)
+ *   2. Register it in the TypeOps.apply() and TypeOps.supports() methods below
+ *   3. No other file modifications needed - all integration points automatically work
  *
- * @see TimeTypeOps for a reference implementation
+ * @see
+ *   TimeTypeOps for a reference implementation
  * @since 4.1.0
  */
 trait TypeOps extends Serializable {
+
   /** The DataType this Ops instance handles */
   def dataType: DataType
 }
@@ -59,12 +58,16 @@ trait TypeOps extends Serializable {
  * like TimeType(precision) or DecimalType(precision, scale).
  */
 object TypeOps {
+
   /**
    * Creates a TypeOps instance for the given DataType.
    *
-   * @param dt The DataType to get operations for
-   * @return TypeOps instance for the type
-   * @throws SparkException if no TypeOps implementation exists for the type
+   * @param dt
+   *   The DataType to get operations for
+   * @return
+   *   TypeOps instance for the type
+   * @throws SparkException
+   *   if no TypeOps implementation exists for the type
    */
   def apply(dt: DataType): TypeOps = dt match {
     case tt: TimeType => TimeTypeOps(tt)
@@ -84,8 +87,10 @@ object TypeOps {
    * case _ if TypeOps.supports(dt) => TypeOps(dt).someMethod()
    * }}}
    *
-   * @param dt The DataType to check
-   * @return true if the type is supported by the framework
+   * @param dt
+   *   The DataType to check
+   * @return
+   *   true if the type is supported by the framework
    */
   def supports(dt: DataType): Boolean = dt match {
     case _: TimeType => true
