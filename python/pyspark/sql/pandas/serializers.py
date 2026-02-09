@@ -36,10 +36,8 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
-    ArrowArrayToPandasConversion,
 )
 from pyspark.sql.pandas.types import (
-    from_arrow_type,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
@@ -440,17 +438,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             assert isinstance(input_type, StructType)
         self._input_type = input_type
         self._arrow_cast = arrow_cast
-
-    def arrow_to_pandas(
-        self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
-    ):
-        return ArrowArrayToPandasConversion.convert_legacy(
-            arrow_column,
-            spark_type or from_arrow_type(arrow_column.type),
-            timezone=self._timezone,
-            struct_in_pandas=struct_in_pandas,
-            ndarray_as_list=ndarray_as_list,
-        )
 
     def _create_array(self, series, spark_type, *, arrow_cast=False, prefers_large_types=False):
         """
