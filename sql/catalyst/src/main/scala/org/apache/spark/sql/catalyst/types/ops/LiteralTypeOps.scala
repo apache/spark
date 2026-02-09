@@ -23,31 +23,34 @@ import org.apache.spark.sql.types.DataType
 /**
  * Operations related to literal creation and code generation.
  *
- * PURPOSE:
- * Provides default literal values and Java literal representations for types.
+ * PURPOSE: Provides default literal values and Java literal representations for types.
  * This is used when a column needs a default value (e.g., ALTER TABLE ADD COLUMN)
  * or when generating code that includes literal values.
  *
- * USAGE CONTEXT:
- * Used by:
- * - literals.scala - Literal.default() method
- * - CodeGenerator.scala - generating Java literal strings
- * - ALTER TABLE ADD COLUMN - default column values
- * - Query optimization - constant folding
+ * USAGE CONTEXT - examples of use:
+ *   - literals.scala - Literal.default() method
+ *   - CodeGenerator.scala - generating Java literal strings
+ *   - ALTER TABLE ADD COLUMN - default column values
+ *   - Query optimization - constant folding
  *
- * @see TimeTypeOps for reference implementation
+ * @see
+ *   TimeTypeOps for reference implementation
  * @since 4.1.0
  */
 trait LiteralTypeOps extends TypeOps {
+
   /**
    * Returns the default literal value for this type.
    *
    * This is used when a default value is needed, such as when adding
    * a new column without specifying a default.
    *
-   * @return Literal with the default value and correct type
-   * @example TimeType -> Literal(0L, TimeType(precision)) representing "00:00:00"
-   * @example DecimalType(10,2) -> Literal(Decimal(0), DecimalType(10,2))
+   * @return
+   *   Literal with the default value and correct type
+   * @example
+   *   TimeType -> Literal(0L, TimeType(precision)) representing "00:00:00"
+   * @example
+   *   DecimalType(10,2) -> Literal(Decimal(0), DecimalType(10,2))
    */
   def getDefaultLiteral: Literal
 
@@ -58,10 +61,14 @@ trait LiteralTypeOps extends TypeOps {
    * as strings that the compiler can parse. This method provides that
    * representation.
    *
-   * @param v The internal value to represent
-   * @return Java literal string (e.g., "123456L" for a Long value)
-   * @example 123456L -> "123456L" (for TimeType nanoseconds)
-   * @example Decimal(10.5) -> "Decimal(10.5)" (for DecimalType)
+   * @param v
+   *   The internal value to represent
+   * @return
+   *   Java literal string (e.g., "123456L" for a Long value)
+   * @example
+   *   123456L -> "123456L" (for TimeType nanoseconds)
+   * @example
+   *   Decimal(10.5) -> "Decimal(10.5)" (for DecimalType)
    */
   def getJavaLiteral(v: Any): String
 }
@@ -70,20 +77,26 @@ trait LiteralTypeOps extends TypeOps {
  * Companion object providing factory methods for LiteralTypeOps.
  */
 object LiteralTypeOps {
+
   /**
    * Creates a LiteralTypeOps instance for the given DataType.
    *
-   * @param dt The DataType to get literal operations for
-   * @return LiteralTypeOps instance
-   * @throws SparkException if the type doesn't support LiteralTypeOps
+   * @param dt
+   *   The DataType to get literal operations for
+   * @return
+   *   LiteralTypeOps instance
+   * @throws SparkException
+   *   if the type doesn't support LiteralTypeOps
    */
   def apply(dt: DataType): LiteralTypeOps = TypeOps(dt).asInstanceOf[LiteralTypeOps]
 
   /**
    * Checks if a DataType supports LiteralTypeOps operations.
    *
-   * @param dt The DataType to check
-   * @return true if the type supports LiteralTypeOps
+   * @param dt
+   *   The DataType to check
+   * @return
+   *   true if the type supports LiteralTypeOps
    */
   def supports(dt: DataType): Boolean = TypeOps.supports(dt)
 }

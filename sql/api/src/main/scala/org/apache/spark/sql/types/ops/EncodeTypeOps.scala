@@ -23,30 +23,33 @@ import org.apache.spark.sql.types.DataType
 /**
  * Operations for row encoding and decoding.
  *
- * PURPOSE:
- * Provides the encoder needed for Dataset[T] operations. The encoder handles
+ * PURPOSE: Provides the encoder needed for Dataset[T] operations. The encoder handles
  * serialization and deserialization of user objects to/from internal rows.
  *
- * USAGE CONTEXT:
- * Used by:
- * - RowEncoder.scala - creates encoders for schema fields
- * - EncoderUtils.scala - encoder utility functions
- * - Spark Connect - client-side encoding
- * - Dataset[T] API - all typed dataset operations
+ * USAGE CONTEXT - examples of use:
+ *   - RowEncoder.scala - creates encoders for schema fields
+ *   - EncoderUtils.scala - encoder utility functions
+ *   - Spark Connect - client-side encoding
+ *   - Dataset[T] API - all typed dataset operations
  *
- * @see TimeTypeApiOps for reference implementation
+ * @see
+ *   TimeTypeApiOps for reference implementation
  * @since 4.1.0
  */
 trait EncodeTypeOps extends TypeApiOps {
+
   /**
    * Returns the AgnosticEncoder for this type.
    *
-   * The encoder handles serialization (external -> internal) and deserialization
-   * (internal -> external) for Dataset[T] operations.
+   * The encoder handles serialization (external -> internal) and deserialization (internal ->
+   * external) for Dataset[T] operations.
    *
-   * @return AgnosticEncoder instance (e.g., LocalTimeEncoder for TimeType)
-   * @example TimeType -> LocalTimeEncoder (handles java.time.LocalTime)
-   * @example DateType -> LocalDateEncoder or DateEncoder (depending on config)
+   * @return
+   *   AgnosticEncoder instance (e.g., LocalTimeEncoder for TimeType)
+   * @example
+   *   TimeType -> LocalTimeEncoder (handles java.time.LocalTime)
+   * @example
+   *   DateType -> LocalDateEncoder or DateEncoder (depending on config)
    */
   def getEncoder: AgnosticEncoder[_]
 }
@@ -55,20 +58,26 @@ trait EncodeTypeOps extends TypeApiOps {
  * Companion object providing factory methods for EncodeTypeOps.
  */
 object EncodeTypeOps {
+
   /**
    * Creates an EncodeTypeOps instance for the given DataType.
    *
-   * @param dt The DataType to get encoding operations for
-   * @return EncodeTypeOps instance
-   * @throws SparkException if the type doesn't support EncodeTypeOps
+   * @param dt
+   *   The DataType to get encoding operations for
+   * @return
+   *   EncodeTypeOps instance
+   * @throws SparkException
+   *   if the type doesn't support EncodeTypeOps
    */
   def apply(dt: DataType): EncodeTypeOps = TypeApiOps(dt).asInstanceOf[EncodeTypeOps]
 
   /**
    * Checks if a DataType supports EncodeTypeOps operations.
    *
-   * @param dt The DataType to check
-   * @return true if the type supports EncodeTypeOps
+   * @param dt
+   *   The DataType to check
+   * @return
+   *   true if the type supports EncodeTypeOps
    */
   def supports(dt: DataType): Boolean = TypeApiOps.supports(dt)
 }

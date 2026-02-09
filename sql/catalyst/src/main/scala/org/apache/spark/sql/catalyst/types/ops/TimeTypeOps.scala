@@ -30,24 +30,23 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * Server-side (catalyst) operations for TimeType.
  *
  * This class provides all type-specific operations for TIME type including:
- * - Physical type representation (PhyTypeOps)
- * - Literal creation (LiteralTypeOps)
- * - External type conversion (ExternalTypeOps)
+ *   - Physical type representation (PhyTypeOps)
+ *   - Literal creation (LiteralTypeOps)
+ *   - External type conversion (ExternalTypeOps)
  *
  * It also inherits client-side operations from TimeTypeApiOps:
- * - String formatting (FormatTypeOps)
- * - Row encoding (EncodeTypeOps)
+ *   - String formatting (FormatTypeOps)
+ *   - Row encoding (EncodeTypeOps)
  *
- * INTERNAL REPRESENTATION:
- * TIME values are stored as Long representing nanoseconds since midnight.
- * - Range: 0 to 86,399,999,999,999 (00:00:00.000000000 to 23:59:59.999999999)
- * - Physical type: PhysicalLongType
- * - External type: java.time.LocalTime
+ * INTERNAL REPRESENTATION - values are stored as Long representing nanoseconds since midnight:
+ *   - Range: 0 to 86,399,999,999,999 (00:00:00.000000000 to 23:59:59.999999999)
+ *   - Physical type: PhysicalLongType
+ *   - External type: java.time.LocalTime
  *
  * PRECISION:
- * TimeType supports precision from 0 to 6 (fractional seconds digits).
- * The internal representation always uses nanoseconds regardless of precision.
- * Precision only affects parsing and display formatting.
+ *   - TimeType supports precision from 0 to 6 (fractional seconds digits).
+ *   - The internal representation always uses nanoseconds regardless of precision.
+ *   - Precision only affects parsing and display formatting.
  *
  * EXAMPLE USAGE:
  * {{{
@@ -57,7 +56,8 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * ops.toScala(37800000000000L) // Returns LocalTime.of(10, 30, 0)
  * }}}
  *
- * @param t The TimeType with precision information
+ * @param t
+ *   The TimeType with precision information
  * @since 4.1.0
  */
 case class TimeTypeOps(override val t: TimeType)
@@ -97,16 +97,18 @@ case class TimeTypeOps(override val t: TimeType)
   /**
    * Default TIME literal is midnight (00:00:00).
    *
-   * Returns Literal(0L, TimeType(precision)) where 0L represents midnight
-   * (0 nanoseconds since midnight).
+   * @return
+   *   Literal(0L, TimeType(precision)) - 0L represents midnight (0 nanoseconds since midnight).
    */
   override def getDefaultLiteral: Literal = Literal.create(0L, t)
 
   /**
    * Java literal representation for code generation.
    *
-   * @param v Long nanoseconds value
-   * @return Java literal string (e.g., "37800000000000L")
+   * @param v
+   *    Long nanoseconds value
+   * @return
+   *   Java literal string (e.g., "37800000000000L")
    */
   override def getJavaLiteral(v: Any): String = s"${v}L"
 
@@ -115,8 +117,10 @@ case class TimeTypeOps(override val t: TimeType)
   /**
    * Converts LocalTime to internal Long nanoseconds representation.
    *
-   * @param scalaValue java.time.LocalTime instance
-   * @return Long nanoseconds since midnight
+   * @param scalaValue
+   *   java.time.LocalTime instance
+   * @return
+   *   Long nanoseconds since midnight
    */
   override def toCatalystImpl(scalaValue: Any): Any = {
     DateTimeUtils.localTimeToNanos(scalaValue.asInstanceOf[LocalTime])
@@ -125,8 +129,10 @@ case class TimeTypeOps(override val t: TimeType)
   /**
    * Converts internal Long nanoseconds to LocalTime.
    *
-   * @param catalystValue Long nanoseconds since midnight (may be null)
-   * @return java.time.LocalTime instance, or null if input was null
+   * @param catalystValue
+   *   Long nanoseconds since midnight (may be null)
+   * @return
+   *   java.time.LocalTime instance, or null if input was null
    */
   override def toScala(catalystValue: Any): Any = {
     if (catalystValue == null) null
@@ -136,9 +142,12 @@ case class TimeTypeOps(override val t: TimeType)
   /**
    * Extracts TIME value from InternalRow and converts to LocalTime.
    *
-   * @param row The InternalRow containing the TIME value
-   * @param column The column index
-   * @return java.time.LocalTime instance
+   * @param row
+   *   The InternalRow containing the TIME value
+   * @param column
+   *   The column index
+   * @return
+   *   java.time.LocalTime instance
    */
   override def toScalaImpl(row: InternalRow, column: Int): Any = {
     DateTimeUtils.nanosToLocalTime(row.getLong(column))
