@@ -26211,7 +26211,7 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_asbinary", geo)
 
@@ -26238,7 +26238,9 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+def st_geomfromwkb(
+    wkb: "ColumnOrName", srid: Optional[Union["ColumnOrName", int]] = None
+) -> Column:
     """Parses the input WKB description and returns the corresponding GEOMETRY value.
 
     .. versionadded:: 4.1.0
@@ -26247,15 +26249,22 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     ----------
     wkb : :class:`~pyspark.sql.Column` or str
         A BINARY value in WKB format, representing a GEOMETRY value.
+    srid : :class:`~pyspark.sql.Column` or int, optional
+        The optional SRID value of the geometry. Default is 0.
 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
     """
-    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    if srid is None:
+        return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    else:
+        srid = _enum_to_value(srid)
+        srid = lit(srid) if isinstance(srid, int) else srid
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)  # type: ignore[arg-type]
 
 
 @_try_remote_functions
@@ -26284,7 +26293,7 @@ def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326))).collect()
-    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb), 4326))=4326)]
+    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb, 0), 4326))=4326)]
     """
     srid = _enum_to_value(srid)
     srid = lit(srid) if isinstance(srid, int) else srid
@@ -26315,7 +26324,7 @@ def st_srid(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb'))).collect()
-    [Row(st_srid(st_geomfromwkb(wkb))=0)]
+    [Row(st_srid(st_geomfromwkb(wkb, 0))=0)]
     """
     return _invoke_function_over_columns("st_srid", geo)
 

@@ -28,6 +28,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import concurrent.futures
 import logging
 import threading
 import os
@@ -38,6 +39,7 @@ import uuid
 import sys
 import time
 import traceback
+import weakref
 from typing import (
     Iterable,
     Iterator,
@@ -65,8 +67,8 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
-from pyspark.util import is_remote_only
-from pyspark.accumulators import SpecialAccumulatorIds
+from pyspark.util import is_remote_only, disable_gc
+from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
 from pyspark.version import __version__
 from pyspark.traceback_utils import CallSite
 from pyspark.resource.information import ResourceInformation
@@ -751,6 +753,8 @@ class SparkConnectClient(object):
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
+        self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
@@ -1272,7 +1276,8 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        ExecutePlanResponseReattachableIterator.shutdown()
+        concurrent.futures.wait(self._release_futures)
+        ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
 
@@ -1457,6 +1462,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @disable_gc
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
         Execute the passed request `req` and drop all results.
@@ -1486,6 +1492,7 @@ class SparkConnectClient(object):
                         handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
@@ -1494,6 +1501,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @disable_gc
     def _execute_and_fetch_as_iterator(
         self,
         req: pb2.ExecutePlanRequest,
@@ -1548,8 +1556,6 @@ class SparkConnectClient(object):
                 logger.debug("Received observed metric batch.")
                 for observed_metrics in self._build_observed_metrics(b.observed_metrics):
                     if observed_metrics.name == "__python_accumulator__":
-                        from pyspark.worker_util import pickleSer
-
                         for metric in observed_metrics.metrics:
                             (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
                             if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
@@ -1687,6 +1693,7 @@ class SparkConnectClient(object):
                         yield from handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:

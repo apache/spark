@@ -31,6 +31,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
 from pandas.api.extensions import ExtensionDtype
 
+from pyspark.loose_version import LooseVersion
+
 
 extension_dtypes: Tuple[type, ...]
 try:
@@ -148,8 +150,6 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    from pyspark.loose_version import LooseVersion
-
     # For NumPy typing, NumPy version should be 1.21+
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
@@ -274,7 +274,10 @@ def spark_type_to_pandas_dtype(
                 return BooleanDtype()
             # StringType
             elif isinstance(spark_type, types.StringType):
-                return StringDtype()
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    return StringDtype()
+                else:
+                    return StringDtype(na_value=np.nan)
 
         # FractionalType
         if extension_float_dtypes_available:

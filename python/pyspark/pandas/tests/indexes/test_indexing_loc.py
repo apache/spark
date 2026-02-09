@@ -207,7 +207,7 @@ class IndexingLocMixin:
     def test_loc_timestamp_str(self):
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="H", periods=100),
+            index=pd.date_range("2011-01-01", freq="h", periods=100),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -223,7 +223,7 @@ class IndexingLocMixin:
 
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="M", periods=100),
+            index=pd.date_range("2011-01-01", freq="ME", periods=100),
         )
         psdf = ps.from_pandas(pdf)
         # TODO?: self.assert_eq(pdf.loc['2011-01'], psdf.loc['2011-01'])

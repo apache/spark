@@ -281,6 +281,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS =
+    buildConf("spark.sql.analyzer.subqueryAliasAlwaysPropagateMetadataColumns")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, SubqueryAlias always propagates metadata columns from its child. " +
+        "When false, SubqueryAlias only propagates metadata columns if the child is a " +
+        "LeafNode or another SubqueryAlias (legacy behavior).")
+      .booleanConf
+      .createWithDefault(true)
+
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
       .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")
@@ -916,6 +927,17 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enableQueryLevelRollbackOnMismatch")
+      .internal()
+      .doc("Whether to rollback all the consumer stages from the same query executor " +
+        "when we detect checksum mismatches with its producer stages, including cancel " +
+        "running shuffle map stages and resubmit, clean up all the shuffle data written " +
+        "for available shuffle map stages and abort the running result stages.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
@@ -3023,6 +3045,21 @@ object SQLConf {
       // 5 is the default table format version for RocksDB 6.20.3.
       .createWithDefault(5)
 
+  /**
+   * Note: this is defined in `RocksDBConf.MERGE_OPERATOR_VERSION_CONF`. These two places should
+   * be updated together.
+   */
+  val STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION =
+    buildConf("spark.sql.streaming.stateStore.rocksdb.mergeOperatorVersion")
+      .internal()
+      .doc("Set the RocksDB merge operator version. This will be stored in the checkpoint when " +
+        "starting a streaming query. The checkpoint will use this merge operator version for " +
+        "the entire lifetime of the query.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => v == 1 || v == 2, "Must be 1 or 2")
+      .createWithDefault(2)
+
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
@@ -4046,6 +4083,13 @@ object SQLConf {
       .checkValue(_ >= 0, "This value must be equal to or greater than 0.")
       .createWithDefaultString("48MB")
 
+  val PYSPARK_TOJSON_RETURN_DATAFRAME =
+    buildConf("spark.sql.pyspark.toJSON.returnDataFrame")
+      .doc("When true, DataFrame.toJSON in PySpark Classic returns a Dataframe instead of RDD.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -4056,6 +4100,17 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(Utils.isTesting)
+
+  val PYTHON_DATA_SOURCE_PROFILER =
+    buildConf("spark.sql.pyspark.dataSource.profiler")
+      .doc("Configure the Python Data Source profiler by enabling or disabling it " +
+        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "or unsetting the config disables the profiler. This is disabled by default.")
+      .version("4.2.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("perf", "memory"))
+      .createOptional
 
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
@@ -4512,11 +4567,18 @@ object SQLConf {
   val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
     buildConf("spark.sql.scripting.continueHandlerEnabled")
       .internal()
-      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
-        "is under development and still not working as intended. This feature switch is intended " +
-        "to be used internally for development and testing, not by end users. " +
-        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .doc("SQL Scripting CONTINUE HANDLER feature enables CONTINUE exception handlers " +
+        "which are essential for cursor iteration with NOT FOUND conditions.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SQL_SCRIPTING_CURSOR_ENABLED =
+    buildConf("spark.sql.scripting.cursorEnabled")
+      .internal()
+      .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
+        "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -5091,6 +5153,16 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL =
+    buildConf("spark.sql.artifact.cacheStorageLevel")
+      .internal()
+      .doc("Storage level for cached blocks in artifact manager. Valid values are any " +
+        "StorageLevel name (e.g., MEMORY_AND_DISK_SER, DISK_ONLY, MEMORY_ONLY, etc.).")
+      .version("4.2.0")
+      .stringConf
+      .checkValue(v => Try(StorageLevel.fromString(v)).isSuccess, "Invalid StorageLevel")
+      .createWithDefault("MEMORY_AND_DISK_SER")
 
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
@@ -7187,6 +7259,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def shuffleChecksumMismatchFullRetryEnabled: Boolean =
     getConf(SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
 
+  def shuffleChecksumMismatchQueryLevelRollbackEnabled: Boolean =
+    getConf(SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED)
+
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
@@ -7674,9 +7749,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
+  def pysparkToJSONReturnDataFrame: Boolean = getConf(PYSPARK_TOJSON_RETURN_DATAFRAME)
+
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
+  def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 

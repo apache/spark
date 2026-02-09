@@ -63,6 +63,7 @@ jobs:
     # timeout-minutes: 150
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -153,7 +154,7 @@ jobs:
           python${{matrix.python}} -m pip install --ignore-installed 'blinker>=1.6.2'
           python${{matrix.python}} -m pip install --ignore-installed 'six==1.16.0'
           python${{matrix.python}} -m pip install numpy 'pyarrow>=22.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy 'plotly<6.0.0' 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler>=0.61.0' 'scikit-learn>=1.3.2' unittest-xml-reporting && \
-          python${{matrix.python}} -m pip install 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'googleapis-common-protos==1.71.0' 'zstandard==0.25.0' 'graphviz==0.20.3' && \
+          python${{matrix.python}} -m pip install 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'googleapis-common-protos==1.71.0' 'zstandard==0.25.0' 'graphviz==0.20.3' && \
           python${{matrix.python}} -m pip cache purge
       - name: List Python packages
         run: python${{matrix.python}} -m pip list
@@ -166,16 +167,6 @@ jobs:
             echo "Python Packaging Tests Enabled!"
           fi
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
-      - name: Upload test results to Codecov
-        env: ${{ fromJSON(inputs.envs) }}
-        if: (!cancelled()) && github.repository == 'apache/spark'
-        uses: codecov/codecov-action@v5
-        with:
-          report_type: 'test_results'
-          files: '**/target/test-reports/*.xml'
-          flags: ${{ env.PYTHON_TO_TEST }}-${{ inputs.branch }}-${{ inputs.os }}
-          name: PySpark-Test-Results
-          token: ${{ secrets.codecov_token }}
       - name: Upload test results to report
         env: ${{ fromJSON(inputs.envs) }}
         if: always()

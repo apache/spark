@@ -281,7 +281,7 @@ object Literal {
         assert(u.nameParts.length == 1)
         assert(!u.isDistinct)
         assert(u.filter.isEmpty)
-        assert(!u.ignoreNulls)
+        assert(u.ignoreNulls.isEmpty)
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
         FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)

@@ -44,6 +44,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
   protected val workerModule: String
 
+  protected def runnerConf: Map[String, String] = Map.empty
+
   protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit
 
   protected def receiveFromPython(dataIn: DataInputStream): T
@@ -107,6 +109,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
@@ -123,6 +126,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
       PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
       PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
+      PythonWorkerUtils.writeConf(runnerConf, dataOut)
 
       writeToPython(dataOut, pickler)
 
