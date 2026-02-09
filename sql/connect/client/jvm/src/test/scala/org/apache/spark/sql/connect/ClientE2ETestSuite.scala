@@ -772,6 +772,42 @@ class ClientE2ETestSuite
     assert(spark.range(10).count() === 10)
   }
 
+  test("Dataset zipWithIndex") {
+    val df = spark.range(5).repartition(3)
+    val result = df.zipWithIndex()
+    assert(result.columns === Array("id", "index"))
+    assert(result.schema.last.dataType === LongType)
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("Dataset zipWithIndex with custom column name") {
+    val result = spark.range(3).zipWithIndex("row_num")
+    assert(result.columns === Array("id", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === Array(0L, 1L, 2L))
+  }
+
+  test("Dataset zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("Dataset zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+
   test("Dataset collect tuple") {
     val session = spark
     import session.implicits._
@@ -1620,7 +1656,10 @@ class ClientE2ETestSuite
     val observation = Observation("test_observation")
     val observed_df = spark
       .range(10)
-      .observe(observation, sum("id").as("sum_id"), (sum("id") / lit(0)).as("sum_id_div_by_zero"))
+      .observe(
+        observation,
+        sum("id").as("sum_id"),
+        raise_error(lit("test error")).as("raise_error"))
 
     observed_df.collect()
 

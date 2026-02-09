@@ -215,6 +215,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val simplifiedTraceback: Boolean = false
 
   protected def runnerConf: Map[String, String] = Map.empty
+  protected def evalConf: Map[String, String] = Map.empty
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -323,6 +324,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
@@ -516,6 +518,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
         dataOut.writeInt(evalType)
         PythonWorkerUtils.writeConf(runnerConf, dataOut)
+        PythonWorkerUtils.writeConf(evalConf, dataOut)
         writeCommand(dataOut)
 
         dataOut.flush()
@@ -657,8 +660,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val msg = PythonWorkerUtils.readUTF(stream)
-      new PythonException(msg, writer.exception.orNull)
+      val traceback = PythonWorkerUtils.readUTF(stream)
+      val msg = "An exception was thrown from the Python worker"
+      new PythonException(
+        errorClass = "PYTHON_EXCEPTION",
+        messageParameters = Map("msg" -> msg, "traceback" -> traceback),
+        cause = writer.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {

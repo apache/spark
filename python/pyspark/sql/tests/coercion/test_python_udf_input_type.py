@@ -18,7 +18,6 @@
 from decimal import Decimal
 import datetime
 import os
-import time
 import unittest
 
 from pyspark.sql.functions import udf
@@ -51,6 +50,7 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_numpy:
     import numpy as np
@@ -73,29 +73,7 @@ if have_pandas:
     or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
-class UDFInputTypeTests(ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-
-        super().tearDownClass()
-
+class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     @property
     def prefix(self):
         return "golden_python_udf_input_type_coercion"
@@ -289,27 +267,20 @@ class UDFInputTypeTests(ReusedSQLTestCase):
             self._compare_or_generate_golden(golden_file, test_name)
 
     def _compare_or_generate_golden(self, golden_file, test_name):
-        testing = os.environ.get("SPARK_GENERATE_GOLDEN_FILES", "?") != "1"
+        generating = self.is_generating_golden()
 
         golden_csv = os.path.join(os.path.dirname(__file__), f"{golden_file}.csv")
         golden_md = os.path.join(os.path.dirname(__file__), f"{golden_file}.md")
 
         golden = None
-        if testing:
-            golden = pd.read_csv(
-                golden_csv,
-                sep="\t",
-                index_col=0,
-                dtype="str",
-                na_filter=False,
-                engine="python",
-            )
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
 
         results = []
-        for idx, (test_name, spark_type, data_func) in enumerate(self.test_cases):
+        for idx, (case_name, spark_type, data_func) in enumerate(self.test_cases):
             input_df = data_func(spark_type).repartition(1)
             input_data = [row["value"] for row in input_df.collect()]
-            result = [test_name, spark_type.simpleString(), str(input_data)]
+            result = [case_name, self.repr_type(spark_type), str(input_data)]
 
             try:
 
@@ -350,15 +321,15 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                 result.append(f"✗ {str(e)}")
 
             # Clean up exception message to remove newlines and extra whitespace
-            result = [r.replace("\n", " ").replace("\r", " ").replace("\t", " ") for r in result]
+            result = [self.clean_result(r) for r in result]
 
             error_msg = None
-            if testing and result != list(golden.iloc[idx]):
+            if not generating and result != list(golden.iloc[idx]):
                 error_msg = f"line mismatch: expects {list(golden.iloc[idx])} but got {result}"
 
             results.append((result, error_msg))
 
-        if testing:
+        if not generating:
             errs = []
             for _, err in results:
                 if err is not None:
@@ -371,18 +342,7 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                 columns=["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
             )
 
-            # generating the CSV file as the golden file
-            new_golden.to_csv(golden_csv, sep="\t", header=True, index=True)
-
-            try:
-                # generating the GitHub flavored Markdown file
-                # package tabulate is required
-                new_golden.to_markdown(golden_md, index=True, tablefmt="github")
-            except Exception as e:
-                print(
-                    f"{test_name} return type coercion: "
-                    f"fail to write the markdown file due to {e}!"
-                )
+            self.save_golden(new_golden, golden_csv, golden_md)
 
 
 if __name__ == "__main__":

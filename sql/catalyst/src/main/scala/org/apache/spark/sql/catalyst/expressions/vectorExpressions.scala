@@ -360,6 +360,10 @@ case class VectorNormalize(vector: Expression, degree: Expression)
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
+// Note: This implementation uses single-precision floating-point arithmetic (Float).
+// Precision loss is expected for very large aggregates due to:
+// 1. Accumulated rounding errors in incremental average updates
+// 2. Loss of significance when dividing by large counts
 case class VectorAvg(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -441,6 +445,8 @@ case class VectorAvg(
     buffer.setLong(mutableAggBufferOffset + countIndex, 0L)
   }
 
+  private lazy val inputContainsNull = child.dataType.asInstanceOf[ArrayType].containsNull
+
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val inputValue = child.eval(input)
     if (inputValue == null) {
@@ -451,30 +457,41 @@ case class VectorAvg(
     val inputLen = inputArray.numElements()
 
     // Check for NULL elements in input vector - skip if any NULL element found
-    for (i <- 0 until inputLen) {
-      if (inputArray.isNullAt(i)) {
-        return
+    // Only check if the array type can contain nulls
+    if (inputContainsNull) {
+      var i = 0
+      while (i < inputLen) {
+        if (inputArray.isNullAt(i)) {
+          return
+        }
+        i += 1
       }
     }
 
-    val currentCount = buffer.getLong(mutableAggBufferOffset + countIndex)
+    val avgOffset = mutableAggBufferOffset + avgIndex
+    val dimOffset = mutableAggBufferOffset + dimIndex
+    val countOffset = mutableAggBufferOffset + countIndex
+
+    val currentCount = buffer.getLong(countOffset)
 
     if (currentCount == 0L) {
       // First valid vector - just copy it as the initial average
       val byteBuffer =
         ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (i <- 0 until inputLen) {
+      var i = 0
+      while (i < inputLen) {
         byteBuffer.putFloat(inputArray.getFloat(i))
+        i += 1
       }
-      buffer.update(mutableAggBufferOffset + avgIndex, byteBuffer.array())
-      buffer.setInt(mutableAggBufferOffset + dimIndex, inputLen)
-      buffer.setLong(mutableAggBufferOffset + countIndex, 1L)
+      buffer.update(avgOffset, byteBuffer.array())
+      buffer.setInt(dimOffset, inputLen)
+      buffer.setLong(countOffset, 1L)
     } else {
-      val currentDim = buffer.getInt(mutableAggBufferOffset + dimIndex)
+      val currentDim = buffer.getInt(dimOffset)
 
       // Empty array case - if current is empty and input is empty, keep empty
       if (currentDim == 0 && inputLen == 0) {
-        buffer.setLong(mutableAggBufferOffset + countIndex, currentCount + 1L)
+        buffer.setLong(countOffset, currentCount + 1L)
         return
       }
 
@@ -489,45 +506,52 @@ case class VectorAvg(
 
       // Update running average: new_avg = old_avg + (new_value - old_avg) / (count + 1)
       val newCount = currentCount + 1L
-      val currentAvgBytes = buffer.getBinary(mutableAggBufferOffset + avgIndex)
-      val currentAvgBuffer =
+      val invCount = 1.0f / newCount
+      val currentAvgBytes = buffer.getBinary(avgOffset)
+      // reuse the buffer without reallocation
+      val avgBuffer =
         ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newAvgBuffer =
-        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (i <- 0 until currentDim) {
-        val oldAvg = currentAvgBuffer.getFloat()
+      var i = 0
+      var idx = 0
+      while (i < currentDim) {
+        val oldAvg = avgBuffer.getFloat(idx)
         val newVal = inputArray.getFloat(i)
-        newAvgBuffer.putFloat(oldAvg + ((newVal - oldAvg) / newCount.toFloat))
+        avgBuffer.putFloat(idx, oldAvg + (newVal - oldAvg) * invCount)
+        i += 1
+        idx += 4 // 4 bytes per float
       }
-      buffer.update(mutableAggBufferOffset + avgIndex, newAvgBuffer.array())
-      buffer.setLong(mutableAggBufferOffset + countIndex, newCount)
+      buffer.setLong(countOffset, newCount)
     }
   }
 
   override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
-    val inputCount = inputBuffer.getLong(inputAggBufferOffset + countIndex)
+    val avgOffset = mutableAggBufferOffset + avgIndex
+    val dimOffset = mutableAggBufferOffset + dimIndex
+    val countOffset = mutableAggBufferOffset + countIndex
+    val inputAvgOffset = inputAggBufferOffset + avgIndex
+    val inputDimOffset = inputAggBufferOffset + dimIndex
+    val inputCountOffset = inputAggBufferOffset + countIndex
+
+    val inputCount = inputBuffer.getLong(inputCountOffset)
     if (inputCount == 0L) {
       return
     }
 
-    val inputAvgBytes = inputBuffer.getBinary(inputAggBufferOffset + avgIndex)
-    val inputDim = inputBuffer.getInt(inputAggBufferOffset + dimIndex)
-    val currentCount = buffer.getLong(mutableAggBufferOffset + countIndex)
+    val inputAvgBytes = inputBuffer.getBinary(inputAvgOffset)
+    val inputDim = inputBuffer.getInt(inputDimOffset)
+    val currentCount = buffer.getLong(countOffset)
 
     if (currentCount == 0L) {
       // Copy input buffer to current buffer
-      buffer.update(mutableAggBufferOffset + avgIndex, inputAvgBytes.clone())
-      buffer.setInt(mutableAggBufferOffset + dimIndex, inputDim)
-      buffer.setLong(mutableAggBufferOffset + countIndex, inputCount)
+      buffer.update(avgOffset, inputAvgBytes.clone())
+      buffer.setInt(dimOffset, inputDim)
+      buffer.setLong(countOffset, inputCount)
     } else {
-      val currentDim = buffer.getInt(mutableAggBufferOffset + dimIndex)
+      val currentDim = buffer.getInt(dimOffset)
 
       // Empty array case
       if (currentDim == 0 && inputDim == 0) {
-        buffer.setLong(
-          mutableAggBufferOffset + countIndex,
-          currentCount + inputCount
-        )
+        buffer.setLong(countOffset, currentCount + inputCount)
         return
       }
 
@@ -544,29 +568,30 @@ case class VectorAvg(
       // combined_avg = (left_avg * left_count) / (left_count + right_count) +
       //   (right_avg * right_count) / (left_count + right_count)
       val newCount = currentCount + inputCount
-      val currentAvgBytes = buffer.getBinary(mutableAggBufferOffset + avgIndex)
-      val currentAvgBuffer =
+      val leftWeight = currentCount.toFloat / newCount
+      val rightWeight = inputCount.toFloat / newCount
+      val currentAvgBytes = buffer.getBinary(avgOffset)
+      // reuse the buffer without reallocation
+      val avgBuffer =
         ByteBuffer.wrap(currentAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
       val inputAvgBuffer =
         ByteBuffer.wrap(inputAvgBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newAvgBuffer =
-        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (_ <- 0 until currentDim) {
-        // getFloat() will auto-increment the buffer's current position by 4
-        val leftAvg = currentAvgBuffer.getFloat()
-        val rightAvg = inputAvgBuffer.getFloat()
-        newAvgBuffer.putFloat(
-          (leftAvg * currentCount) / newCount.toFloat +
-            (rightAvg * inputCount) / newCount.toFloat
-        )
+      var i = 0
+      var idx = 0
+      while (i < currentDim) {
+        val leftAvg = avgBuffer.getFloat(idx)
+        val rightAvg = inputAvgBuffer.getFloat(idx)
+        avgBuffer.putFloat(idx, leftAvg * leftWeight + rightAvg * rightWeight)
+        i += 1
+        idx += 4 // 4 bytes per float
       }
-      buffer.update(mutableAggBufferOffset + avgIndex, newAvgBuffer.array())
-      buffer.setLong(mutableAggBufferOffset + countIndex, newCount)
+      buffer.setLong(countOffset, newCount)
     }
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val count = buffer.getLong(mutableAggBufferOffset + countIndex)
+    val countOffset = mutableAggBufferOffset + countIndex
+    val count = buffer.getLong(countOffset)
     if (count == 0L) {
       null
     } else {
@@ -574,8 +599,10 @@ case class VectorAvg(
       val avgBytes = buffer.getBinary(mutableAggBufferOffset + avgIndex)
       val avgBuffer = ByteBuffer.wrap(avgBytes).order(ByteOrder.LITTLE_ENDIAN)
       val result = new Array[Float](dim)
-      for (i <- 0 until dim) {
+      var i = 0
+      while (i < dim) {
         result(i) = avgBuffer.getFloat()
+        i += 1
       }
       ArrayData.toArrayData(result)
     }
@@ -600,6 +627,10 @@ case class VectorAvg(
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
+// Note: This implementation uses single-precision floating-point arithmetic (Float).
+// Precision loss is expected for very large aggregates due to:
+// 1. Accumulated rounding errors when summing many values
+// 2. Loss of significance when adding small values to large accumulated sums
 case class VectorSum(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -671,6 +702,8 @@ case class VectorSum(
   ): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  private lazy val inputContainsNull = child.dataType.asInstanceOf[ArrayType].containsNull
+
   override def initialize(buffer: InternalRow): Unit = {
     buffer.update(mutableAggBufferOffset + sumIndex, null)
     buffer.update(mutableAggBufferOffset + dimIndex, null)
@@ -686,23 +719,33 @@ case class VectorSum(
     val inputLen = inputArray.numElements()
 
     // Check for NULL elements in input vector - skip if any NULL element found
-    for (i <- 0 until inputLen) {
-      if (inputArray.isNullAt(i)) {
-        return
+    // Only check if the array type can contain nulls
+    if (inputContainsNull) {
+      var i = 0
+      while (i < inputLen) {
+        if (inputArray.isNullAt(i)) {
+          return
+        }
+        i += 1
       }
     }
 
-    if (buffer.isNullAt(mutableAggBufferOffset + sumIndex)) {
+    val sumOffset = mutableAggBufferOffset + sumIndex
+    val dimOffset = mutableAggBufferOffset + dimIndex
+
+    if (buffer.isNullAt(sumOffset)) {
       // First valid vector - just copy it as the initial sum
       val byteBuffer =
         ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (i <- 0 until inputLen) {
+      var i = 0
+      while (i < inputLen) {
         byteBuffer.putFloat(inputArray.getFloat(i))
+        i += 1
       }
-      buffer.update(mutableAggBufferOffset + sumIndex, byteBuffer.array())
-      buffer.setInt(mutableAggBufferOffset + dimIndex, inputLen)
+      buffer.update(sumOffset, byteBuffer.array())
+      buffer.setInt(dimOffset, inputLen)
     } else {
-      val currentDim = buffer.getInt(mutableAggBufferOffset + dimIndex)
+      val currentDim = buffer.getInt(dimOffset)
 
       // Empty array case - if current is empty and input is empty, keep empty
       if (currentDim == 0 && inputLen == 0) {
@@ -719,34 +762,39 @@ case class VectorSum(
       }
 
       // Update sum: new_sum = old_sum + new_value
-      val currentSumBytes = buffer.getBinary(mutableAggBufferOffset + sumIndex)
-      val currentSumBuffer =
+      val currentSumBytes = buffer.getBinary(sumOffset)
+      // reuse the buffer without reallocation
+      val sumBuffer =
         ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newSumBuffer =
-        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (i <- 0 until currentDim) {
-        newSumBuffer.putFloat(
-          currentSumBuffer.getFloat() + inputArray.getFloat(i)
-        )
+      var i = 0
+      var idx = 0
+      while (i < currentDim) {
+        sumBuffer.putFloat(idx, sumBuffer.getFloat(idx) + inputArray.getFloat(i))
+        i += 1
+        idx += 4 // 4 bytes per float
       }
-      buffer.update(mutableAggBufferOffset + sumIndex, newSumBuffer.array())
     }
   }
 
   override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
-    if (inputBuffer.isNullAt(inputAggBufferOffset + sumIndex)) {
+    val sumOffset = mutableAggBufferOffset + sumIndex
+    val dimOffset = mutableAggBufferOffset + dimIndex
+    val inputSumOffset = inputAggBufferOffset + sumIndex
+    val inputDimOffset = inputAggBufferOffset + dimIndex
+
+    if (inputBuffer.isNullAt(inputSumOffset)) {
       return
     }
 
-    val inputSumBytes = inputBuffer.getBinary(inputAggBufferOffset + sumIndex)
-    val inputDim = inputBuffer.getInt(inputAggBufferOffset + dimIndex)
+    val inputSumBytes = inputBuffer.getBinary(inputSumOffset)
+    val inputDim = inputBuffer.getInt(inputDimOffset)
 
-    if (buffer.isNullAt(mutableAggBufferOffset + sumIndex)) {
+    if (buffer.isNullAt(sumOffset)) {
       // Copy input buffer to current buffer
-      buffer.update(mutableAggBufferOffset + sumIndex, inputSumBytes.clone())
-      buffer.setInt(mutableAggBufferOffset + dimIndex, inputDim)
+      buffer.update(sumOffset, inputSumBytes.clone())
+      buffer.setInt(dimOffset, inputDim)
     } else {
-      val currentDim = buffer.getInt(mutableAggBufferOffset + dimIndex)
+      val currentDim = buffer.getInt(dimOffset)
 
       // Empty array case
       if (currentDim == 0 && inputDim == 0) {
@@ -763,32 +811,35 @@ case class VectorSum(
       }
 
       // Merge sums: combined_sum = left_sum + right_sum
-      val currentSumBytes = buffer.getBinary(mutableAggBufferOffset + sumIndex)
-      val currentSumBuffer =
+      val currentSumBytes = buffer.getBinary(sumOffset)
+      // reuse the buffer without reallocation
+      val sumBuffer =
         ByteBuffer.wrap(currentSumBytes).order(ByteOrder.LITTLE_ENDIAN)
       val inputSumBuffer =
         ByteBuffer.wrap(inputSumBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val newSumBuffer =
-        ByteBuffer.allocate(currentDim * 4).order(ByteOrder.LITTLE_ENDIAN)
-      for (_ <- 0 until currentDim) {
-        newSumBuffer.putFloat(
-          currentSumBuffer.getFloat() + inputSumBuffer.getFloat()
-        )
+      var i = 0
+      var idx = 0
+      while (i < currentDim) {
+        sumBuffer.putFloat(idx, sumBuffer.getFloat(idx) + inputSumBuffer.getFloat(idx))
+        i += 1
+        idx += 4 // 4 bytes per float
       }
-      buffer.update(mutableAggBufferOffset + sumIndex, newSumBuffer.array())
     }
   }
 
   override def eval(buffer: InternalRow): Any = {
-    if (buffer.isNullAt(mutableAggBufferOffset + sumIndex)) {
+    val sumOffset = mutableAggBufferOffset + sumIndex
+    if (buffer.isNullAt(sumOffset)) {
       null
     } else {
       val dim = buffer.getInt(mutableAggBufferOffset + dimIndex)
-      val sumBytes = buffer.getBinary(mutableAggBufferOffset + sumIndex)
+      val sumBytes = buffer.getBinary(sumOffset)
       val sumBuffer = ByteBuffer.wrap(sumBytes).order(ByteOrder.LITTLE_ENDIAN)
       val result = new Array[Float](dim)
-      for (i <- 0 until dim) {
+      var i = 0
+      while (i < dim) {
         result(i) = sumBuffer.getFloat()
+        i += 1
       }
       ArrayData.toArrayData(result)
     }

@@ -16,11 +16,10 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.function.UnaryOperator
-
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.apache.hadoop.util.StringUtils
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.any
@@ -75,15 +74,10 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
 
     setter.setDiagnostics(diagnostics, conf)
 
-    val captor: ArgumentCaptor[UnaryOperator[Pod]] =
-      ArgumentCaptor.forClass(classOf[UnaryOperator[Pod]])
-    verify(driverPodOperations).edit(captor.capture())
+    val podCaptor: ArgumentCaptor[Pod] = ArgumentCaptor.forClass(classOf[Pod])
+    verify(driverPodOperations).patch(any(classOf[PatchContext]), podCaptor.capture())
 
-    val fn = captor.getValue
-    val initialPod = SparkPod.initialPod().pod
-    val editedPod = fn.apply(initialPod)
-
-    assert(editedPod.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
+    assert(podCaptor.getValue.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
       == StringUtils.stringifyException(diagnostics))
   }
 }

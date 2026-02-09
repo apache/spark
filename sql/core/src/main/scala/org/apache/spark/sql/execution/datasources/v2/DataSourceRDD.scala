@@ -24,6 +24,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
@@ -97,7 +98,8 @@ class DataSourceRDD(
           }
 
           // Once we advance to the next partition, update the metric callback for early finish
-          partitionMetricCallback.advancePartition(iter, reader)
+          val previousMetrics = partitionMetricCallback.advancePartition(iter, reader)
+          previousMetrics.foreach(reader.initMetricsValues)
 
           currentIter = Some(iter)
           hasNext
@@ -118,19 +120,26 @@ private class PartitionMetricCallback
   private var iter: MetricsIterator[_] = null
   private var reader: PartitionReader[_] = null
 
-  def advancePartition(iter: MetricsIterator[_], reader: PartitionReader[_]): Unit = {
-    execute()
+  def advancePartition(
+      iter: MetricsIterator[_],
+      reader: PartitionReader[_]): Option[Array[CustomTaskMetric]] = {
+    val metrics = execute()
 
     this.iter = iter
     this.reader = reader
+
+    metrics
   }
 
-  def execute(): Unit = {
+  def execute(): Option[Array[CustomTaskMetric]] = {
     if (iter != null && reader != null) {
-      CustomMetrics
-        .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
+      val metrics = reader.currentMetricsValues
+      CustomMetrics.updateMetrics(metrics.toImmutableArraySeq, customMetrics)
       iter.forceUpdateMetrics()
       reader.close()
+      Some(metrics)
+    } else {
+      None
     }
   }
 }

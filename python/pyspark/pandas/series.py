@@ -7223,7 +7223,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins and sum the values
         of the timestamps falling into a bin.
 
-        >>> series.resample('3T').sum().sort_index()
+        >>> series.resample('3min').sum().sort_index()
         2000-01-01 00:00:00     3.0
         2000-01-01 00:03:00    12.0
         2000-01-01 00:06:00    21.0
@@ -7239,7 +7239,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         To include this value, close the right side of the bin interval as
         illustrated in the example below this one.
 
-        >>> series.resample('3T', label='right').sum().sort_index()
+        >>> series.resample('3min', label='right').sum().sort_index()
         2000-01-01 00:03:00     3.0
         2000-01-01 00:06:00    12.0
         2000-01-01 00:09:00    21.0
@@ -7248,7 +7248,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins as above, but close the right
         side of the bin interval.
 
-        >>> series.resample('3T', label='right', closed='right').sum().sort_index()
+        >>> series.resample('3min', label='right', closed='right').sum().sort_index()
         2000-01-01 00:00:00     0.0
         2000-01-01 00:03:00     6.0
         2000-01-01 00:06:00    15.0
@@ -7257,7 +7257,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Upsample the series into 30 second bins.
 
-        >>> series.resample('30S').sum().sort_index()[0:5]   # Select first 5 rows
+        >>> series.resample('30s').sum().sort_index()[0:5]   # Select first 5 rows
         2000-01-01 00:00:00    0.0
         2000-01-01 00:00:30    0.0
         2000-01-01 00:01:00    1.0

@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
@@ -42,6 +43,7 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[IN]
   with PythonArrowOutput[OUT] {
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
@@ -61,8 +63,6 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
   override val killWorkerOnFlushFailure: Boolean =
     SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
-
-  override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -168,12 +168,16 @@ object ArrowPythonRunner {
     val binaryAsBytes = Seq(
       SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
       conf.pysparkBinaryAsBytes.toString)
-    val profiler = conf.pythonUDFProfiler.map(p =>
+    val udfProfiler = conf.pythonUDFProfiler.map(p =>
       Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
+    ).getOrElse(Seq.empty)
+    val dataSourceProfiler = conf.pythonDataSourceProfiler.map(p =>
+      Seq(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
     ).getOrElse(Seq.empty)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
-      legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler: _*)
+      legacyPandasConversion ++ legacyPandasConversionUDF ++
+      udfProfiler ++ dataSourceProfiler: _*)
   }
 }

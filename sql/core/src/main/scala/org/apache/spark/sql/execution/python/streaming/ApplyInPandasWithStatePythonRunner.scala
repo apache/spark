@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWri
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 
@@ -69,6 +70,7 @@ class ApplyInPandasWithStatePythonRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
+  ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -85,7 +87,6 @@ class ApplyInPandasWithStatePythonRunner(
   private val sqlConf = SQLConf.get
 
   override val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
-  override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
@@ -116,22 +117,17 @@ class ApplyInPandasWithStatePythonRunner(
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
     )
 
+  override protected def evalConf: Map[String, String] =
+    super.evalConf ++ Map(
+      "state_value_schema" -> stateValueSchema.json
+    )
+
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 
-  /**
-   * This method sends out the additional metadata before sending out actual data.
-   *
-   * Specifically, this class overrides this method to also write the schema for state value.
-   */
-  override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    super.handleMetadataBeforeExec(stream)
-    // Also write the schema for state value
-    PythonRDD.writeUTF(stateValueSchema.json, stream)
-  }
   private var pandasWriter: ApplyInPandasWithStateWriter = _
   /**
    * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and
