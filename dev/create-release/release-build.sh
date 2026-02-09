@@ -565,7 +565,7 @@ EOF
   
   if [[ -n "$OLD_VERSION" ]]; then
     echo "Removing old version: spark-$OLD_VERSION"
-    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" --username "$ASF_USERNAME" --password "$ASF_PASSWORD" --non-interactive -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
   else
     echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
   fi

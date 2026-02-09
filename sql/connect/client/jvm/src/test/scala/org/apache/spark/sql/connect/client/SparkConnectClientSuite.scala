@@ -693,11 +693,9 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       assert(new String(bytes, UTF_8) == binaryData)
     }
 
-    // Non base64-encoded -bin header throws IllegalArgumentException.
-    client = buildClientWithHeader(keyName, binaryData)
-
+    // Non base64-encoded -bin header throws IllegalArgumentException at construction time.
     assertThrows[IllegalArgumentException] {
-      client.execute(plan)
+      buildClientWithHeader(keyName, binaryData)
     }
 
     // Non -bin headers keep using the ASCII marshaller.

@@ -31,12 +31,12 @@ class ResampleErrorMixin:
         with self.assertRaisesRegex(
             NotImplementedError, "resample currently works only for DatetimeIndex"
         ):
-            psdf.resample("3Y").sum()
+            psdf.resample("3YE").sum()
 
         with self.assertRaisesRegex(
             NotImplementedError, "resample currently works only for DatetimeIndex"
         ):
-            psdf.id.resample("3Y").sum()
+            psdf.id.resample("3YE").sum()
 
         dates = [
             datetime.datetime(2012, 1, 2),

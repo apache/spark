@@ -22,8 +22,13 @@ import importlib
 from inspect import currentframe, getframeinfo
 import os
 import sys
-from typing import Any, IO
+from typing import Any, IO, Optional
 import warnings
+
+if "SPARK_TESTING" in os.environ:
+    assert (
+        os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
+    ), "This module can only be imported in python woker"
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -194,3 +199,35 @@ def send_accumulator_updates(outfile: IO) -> None:
     write_int(len(_accumulatorRegistry), outfile)
     for aid, accum in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
+
+
+class Conf:
+    def __init__(self, infile: Optional[IO] = None) -> None:
+        self._conf: dict[str, Any] = {}
+        if infile is not None:
+            self.load(infile)
+
+    def load(self, infile: IO) -> None:
+        num_conf = read_int(infile)
+        # We do a sanity check here to reduce the possibility to stuck indefinitely
+        # due to an invalid messsage. If the numer of configurations is obviously
+        # wrong, we just raise an error directly.
+        # We hand-pick the configurations to send to the worker so the number should
+        # be very small (less than 100).
+        if num_conf < 0 or num_conf > 10000:
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            self._conf[k] = v
+
+    def get(self, key: str, default: Any = "") -> Any:
+        val = self._conf.get(key, default)
+        if isinstance(val, str):
+            return val.lower()
+        return val
