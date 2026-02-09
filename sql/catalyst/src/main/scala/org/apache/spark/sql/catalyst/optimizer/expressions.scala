@@ -497,6 +497,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
+    case not: Not => simplifyNot(not)
+  }
+
+  /**
+   * Simplify Not expressions. This method is extracted to allow recursive calls for
+   * Not(a Or b) and Not(a And b) cases, which avoids calling the entire actualExprTransformer
+   * and only focuses on Not simplification.
+   */
+  private def simplifyNot(not: Not): Expression = not match {
     case Not(TrueLiteral) => FalseLiteral
     case Not(FalseLiteral) => TrueLiteral
 
@@ -506,22 +515,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case Not(a LessThan b) => GreaterThanOrEqual(a, b)
     case Not(a LessThanOrEqual b) => GreaterThan(a, b)
 
-    // SPARK-54881: push down the NOT operators on children, before attaching the junction Node
-    // to the main tree. This ensures idempotency in an optimal way and avoids an extra rule
-    // iteration.
+    // De Morgan's Laws can create new Not expressions that need further simplification.
     case Not(a Or b) =>
-      And(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
-        actualExprTransformer
-      }
+      And(simplifyNot(Not(a)), simplifyNot(Not(b)))
     case Not(a And b) =>
-      Or(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
-        actualExprTransformer
-      }
+      Or(simplifyNot(Not(a)), simplifyNot(Not(b)))
 
     case Not(Not(e)) => e
 
     case Not(IsNull(e)) => IsNotNull(e)
     case Not(IsNotNull(e)) => IsNull(e)
+
+    case _ => not
   }
 }
 

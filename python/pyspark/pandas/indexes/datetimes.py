@@ -24,6 +24,7 @@ from pandas.api.types import is_hashable
 from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.pandas import DataFrame
 from pyspark.pandas.indexes.base import Index
@@ -109,8 +110,8 @@ class DatetimeIndex(Index):
         cls,
         data=None,
         freq=_NoValue,
-        normalize=False,
-        closed=None,
+        normalize=_NoValue,
+        closed=_NoValue,
         ambiguous="raise",
         dayfirst=False,
         yearfirst=False,
@@ -118,30 +119,8 @@ class DatetimeIndex(Index):
         copy=False,
         name=None,
     ) -> "DatetimeIndex":
-        if closed is not None:
-            warnings.warn(
-                "The 'closed' keyword in DatetimeIndex construction is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        if normalize is not None:
-            warnings.warn(
-                "The 'normalize' keyword in DatetimeIndex construction is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        if not is_hashable(name):
-            raise TypeError("Index.name must be a hashable type")
-
-        if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "datetime64[ns]"
-            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
-
         kwargs = dict(
             data=data,
-            normalize=normalize,
-            closed=closed,
             ambiguous=ambiguous,
             dayfirst=dayfirst,
             yearfirst=yearfirst,
@@ -151,6 +130,39 @@ class DatetimeIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if normalize is not _NoValue:
+                warnings.warn(
+                    "The 'normalize' keyword in DatetimeIndex construction is deprecated "
+                    "and will be removed in a future version.",
+                    FutureWarning,
+                )
+                kwargs["normalize"] = normalize
+            else:
+                kwargs["normalize"] = False
+            if closed is not _NoValue:
+                warnings.warn(
+                    "The 'closed' keyword in DatetimeIndex construction is deprecated "
+                    "and will be removed in a future version.",
+                    FutureWarning,
+                )
+                kwargs["closed"] = closed
+        else:
+            if normalize is not _NoValue:
+                raise TypeError(
+                    "The 'normalize' keyword is not supported in pandas 3.0.0 and later."
+                )
+            if closed is not _NoValue:
+                raise TypeError("The 'closed' keyword is not supported in pandas 3.0.0 and later.")
+
+        if not is_hashable(name):
+            raise TypeError("Index.name must be a hashable type")
+
+        if isinstance(data, (Series, Index)):
+            if dtype is None:
+                dtype = "datetime64[ns]"
+            return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
 

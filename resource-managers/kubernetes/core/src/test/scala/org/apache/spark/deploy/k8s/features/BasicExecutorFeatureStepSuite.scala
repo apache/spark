@@ -651,6 +651,23 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .getLimits.get("memory")) === "1174Mi")
   }
 
+  test("SPARK-55431: executor pod sets resizePolicy to NotRequired for cpu and memory") {
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val resizePolicies = executor.container.getResizePolicy.asScala
+    assert(resizePolicies.size === 2)
+
+    val cpuPolicy = resizePolicies.find(_.getResourceName == "cpu")
+    assert(cpuPolicy.isDefined)
+    assert(cpuPolicy.get.getRestartPolicy === "NotRequired")
+
+    val memoryPolicy = resizePolicies.find(_.getResourceName == "memory")
+    assert(memoryPolicy.isDefined)
+    assert(memoryPolicy.get.getRestartPolicy === "NotRequired")
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

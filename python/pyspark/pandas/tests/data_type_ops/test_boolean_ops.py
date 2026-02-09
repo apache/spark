@@ -404,7 +404,7 @@ class BooleanOpsTestsMixin:
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class BooleanExtensionOpsTest(OpsTestBase):
+class BooleanExtensionOpsTestsMixin:
     @property
     def boolean_pdf(self):
         return pd.DataFrame(
@@ -833,6 +833,14 @@ class BooleanExtensionOpsTest(OpsTestBase):
 
 class BooleanOpsTests(
     BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
+class BooleanExtensionOpsTests(
+    BooleanExtensionOpsTestsMixin,
     OpsTestBase,
     PandasOnSparkTestCase,
 ):

@@ -25,6 +25,7 @@ import scala.concurrent.Future
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils}
@@ -72,6 +73,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
+  private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
   // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
   // order of the value of this annotation, ascending.
@@ -212,11 +215,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
             .resources()
             .forEach { podResource =>
-              podResource.edit({ p: Pod =>
-                new PodBuilder(p).editOrNewMetadata()
-                  .addToAnnotations(podDeletionCostAnnotation, cost.toString)
-                  .endMetadata()
-                  .build()})
+              podResource.patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
+                .addToAnnotations(podDeletionCostAnnotation, cost.toString)
+                .endMetadata()
+                .build())
             }
         }
       }
@@ -227,6 +230,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def labelDecommissioningExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
     conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
+      val value = conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse("")
       val labelTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
           kubernetesClient.pods()
@@ -236,13 +240,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
             .resources()
             .forEach { podResource =>
-              podResource.edit({ p: Pod =>
-                new PodBuilder(p).editOrNewMetadata()
-                  .addToLabels(label,
-                    conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
-                  .endMetadata()
-                  .build()})
-          }
+              podResource.patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
+                .addToLabels(label, value)
+                .endMetadata()
+                .build())
+            }
         }
       }
       executorService.execute(labelTask)
@@ -350,10 +353,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
             kubernetesClient.pods()
               .inNamespace(namespace)
               .withName(x.podName)
-              .edit({p: Pod => new PodBuilder(p).editMetadata()
+              .patch(PATCH_CONTEXT, new PodBuilder()
+                .withNewMetadata()
                 .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
                 .endMetadata()
-                .build()})
+                .build())
           }
         }
         executorService.execute(labelTask)
