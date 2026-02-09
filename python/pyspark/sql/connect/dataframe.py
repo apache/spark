@@ -1215,7 +1215,7 @@ class DataFrame(ParentDataFrame):
 
     def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
         return self.select(
-            F.col("*"), InternalFunction.distributed_sequence_id().alias(indexColName)
+            F.col("*"), F._invoke_function("distributed_sequence_id")).alias(indexColName)
         )
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
