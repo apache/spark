@@ -754,7 +754,7 @@ class SparkConnectClient(object):
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
         self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
-        
+
         self._release_session_on_exit = os.getenv(
             "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
         ).lower() in ("true", "1")
