@@ -136,7 +136,7 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
       parameters = Map("operator" -> "SequentialStreamingUnion"))
   }
 
-  test("ValidateSequentialStreamingUnion - rejects directly nested unions") {
+  test("ValidateSequentialStreamingUnionNesting - rejects directly nested unions") {
     val streamingRelation1 = testRelation1.copy(isStreaming = true)
     val streamingRelation2 = testRelation2.copy(isStreaming = true)
     val streamingRelation3 = testRelation3.copy(isStreaming = true)
@@ -146,16 +146,17 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     val innerUnion = SequentialStreamingUnion(streamingRelation1, streamingRelation2)
     val outerUnion = SequentialStreamingUnion(innerUnion, streamingRelation3)
 
+    // Note: This validation now runs AFTER optimizer flattening
     checkError(
       exception = intercept[AnalysisException] {
-        ValidateSequentialStreamingUnion(outerUnion)
+        ValidateSequentialStreamingUnionNesting(outerUnion)
       },
       condition = "NESTED_SEQUENTIAL_STREAMING_UNION",
       parameters = Map(
         "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
   }
 
-  test("ValidateSequentialStreamingUnion - rejects nested unions through other operators") {
+  test("ValidateSequentialStreamingUnionNesting - rejects nested unions through other operators") {
     val streamingRelation1 = testRelation1.copy(isStreaming = true)
     val streamingRelation2 = testRelation2.copy(isStreaming = true)
     val streamingRelation3 = testRelation3.copy(isStreaming = true)
@@ -166,9 +167,10 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
     val projectOverUnion = Project(Seq($"a", $"b"), innerUnion)
     val outerUnion = SequentialStreamingUnion(projectOverUnion, streamingRelation3)
 
+    // Note: This validation now runs AFTER optimizer flattening
     checkError(
       exception = intercept[AnalysisException] {
-        ValidateSequentialStreamingUnion(outerUnion)
+        ValidateSequentialStreamingUnionNesting(outerUnion)
       },
       condition = "NESTED_SEQUENTIAL_STREAMING_UNION",
       parameters = Map(

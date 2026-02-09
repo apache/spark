@@ -413,4 +413,93 @@ class SetOperationSuite extends PlanTest {
         optimizedRelation4, optimizedRelation5))).select($"a").analyze)
 
   }
+
+  test("SequentialStreamingUnion: combine nested unions into one") {
+    // Mark relations as streaming for SequentialStreamingUnion
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion1 = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val seqUnion2 = SequentialStreamingUnion(
+      streamRel1, SequentialStreamingUnion(streamRel2, streamRel3))
+    val optimized1 = Optimize.execute(seqUnion1.analyze)
+    val optimized2 = Optimize.execute(seqUnion2.analyze)
+
+    // Both should flatten to the same 3-child SequentialStreamingUnion
+    val expected = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    comparePlans(optimized1, expected.analyze)
+    comparePlans(optimized2, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten through Distinct") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val distinctSeqUnion = Distinct(seqUnion)
+    val optimized = Optimize.execute(distinctSeqUnion.analyze)
+
+    val expected = Distinct(SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten through Deduplicate") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val deduped = seqUnion.deduplicate($"a", $"b", $"c")
+    val optimized = Optimize.execute(deduped.analyze)
+
+    val expected = Deduplicate(
+      Seq($"a", $"b", $"c"),
+      SequentialStreamingUnion(
+        Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: project to each side") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val streamRel3 = testRelation.copy(isStreaming = true)
+
+    // Create union first, then project on top (like Union test at line 73)
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    val seqUnionQuery = seqUnion.select($"a")
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    // Should push projection down to each child
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select($"a") ::
+        streamRel2.select($"a") ::
+        streamRel3.select($"a") :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: expressions in project list are pushed down") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val seqUnionQuery = seqUnion.select(($"a" + $"b").as("ab"))
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select(($"a" + $"b").as("ab")) ::
+        streamRel2.select(($"a" + $"b").as("ab")) :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
 }

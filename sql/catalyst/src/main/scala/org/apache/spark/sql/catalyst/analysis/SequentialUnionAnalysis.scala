@@ -36,19 +36,19 @@ object FlattenSequentialStreamingUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Validates SequentialStreamingUnion constraints:
+ * Validates SequentialStreamingUnion constraints during analysis:
  * - All children must be streaming relations
- * - No nested SequentialStreamingUnions (should be flattened first)
  * - No stateful operations in any child subtrees
  *
  * Note: Minimum 2 children is enforced by the resolved property, not explicit validation.
+ * Note: Nesting validation happens after optimization (see
+ *       ValidateSequentialStreamingUnionNesting).
  */
 object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.foreach {
       case su: SequentialStreamingUnion =>
         validateAllStreaming(su)
-        validateNoNesting(su)
         validateNoStatefulDescendants(su)
       case _ =>
     }
@@ -62,19 +62,33 @@ object ValidateSequentialStreamingUnion extends Rule[LogicalPlan] {
     }
   }
 
-  private def validateNoNesting(su: SequentialStreamingUnion): Unit = {
-    su.children.foreach { child =>
-      if (child.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
-        throw QueryCompilationErrors.nestedSequentialStreamingUnionError()
-      }
-    }
-  }
-
   private def validateNoStatefulDescendants(su: SequentialStreamingUnion): Unit = {
     su.children.foreach { child =>
       if (child.exists(UnsupportedOperationChecker.isStatefulOperation)) {
         throw QueryCompilationErrors.statefulChildrenNotSupportedInSequentialStreamingUnionError()
       }
     }
+  }
+}
+
+/**
+ * Validates that SequentialStreamingUnion nodes have no nesting after optimization.
+ * This runs as a post-optimization check to ensure the optimizer has properly flattened
+ * all nested SequentialStreamingUnions (including those wrapped in stateless operations).
+ *
+ * Runs after CombineUnions has flattened nested unions.
+ */
+object ValidateSequentialStreamingUnionNesting extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.foreach {
+      case su: SequentialStreamingUnion =>
+        su.children.foreach { child =>
+          if (child.containsPattern(SEQUENTIAL_STREAMING_UNION)) {
+            throw QueryCompilationErrors.nestedSequentialStreamingUnionError()
+          }
+        }
+      case _ =>
+    }
+    plan
   }
 }
