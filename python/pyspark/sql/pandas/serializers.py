@@ -294,23 +294,24 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                             f"Expected: {expected_field_names}, but got: {actual_field_names}."
                         )
 
-                    try:
-                        coerced_arrays = [
-                            coerce_arrow_array(
-                                batch.column(i),
-                                field.type,
-
+                    coerced_arrays = []
+                    for i, field in enumerate(arrow_return_type):
+                        try:
+                            coerced_arrays.append(
+                                coerce_arrow_array(
+                                    batch.column(i),
+                                    field.type,
+                                    safecheck=True,
+                                )
                             )
-                            for i, field in enumerate(arrow_return_type)
-                        ]
-                    except (pa.ArrowInvalid, pa.ArrowTypeError):
-                        raise PySparkRuntimeError(
-                            errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
-                            messageParameters={
-                                "expected": str(arrow_return_type),
-                                "actual": str(batch.schema),
-                            },
-                        )
+                        except (pa.ArrowInvalid, pa.ArrowTypeError):
+                            raise PySparkRuntimeError(
+                                errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                                messageParameters={
+                                    "expected": str(field.type),
+                                    "actual": str(batch.column(i).type),
+                                },
+                            )
                     coerced_batch = pa.RecordBatch.from_arrays(
                         coerced_arrays, names=expected_field_names
                     )
