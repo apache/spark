@@ -535,7 +535,7 @@ The following example demonstrates how to implement a basic Data Source using Ar
     class ArrowBatchDataSourceReader(DataSourceReader):
         def __init__(self, schema, options):
             self.schema: str = schema
-            self.arrow_schema=to_arrow_schema(self.schema)
+            self.arrow_schema = to_arrow_schema(self.schema)
             self.options = options
 
         def read(self, partition):
