@@ -17,12 +17,13 @@
 
 package org.apache.spark.storage
 
-import java.io.DataInputStream
+import java.io.{DataInputStream, InputStream}
 import java.nio.ByteBuffer
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
+import io.netty.buffer.Unpooled
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -31,8 +32,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
@@ -114,6 +115,51 @@ private[storage] class FallbackStorageRpcEndpointRef(conf: SparkConf, hadoopConf
   }
 }
 
+/**
+ * Lazily reads a segment of an Hadoop FileSystem file, i.e. when createInputStream is called.
+ * @param filesystem hadoop filesystem
+ * @param file path of the file
+ * @param offset offset of the segment
+ * @param length size of the segmetn
+ */
+private[storage] class FileSystemSegmentManagedBuffer(
+    filesystem: FileSystem,
+    file: Path,
+    offset: Long,
+    length: Long) extends ManagedBuffer with Logging {
+
+  override def size(): Long = length
+
+  override def nioByteBuffer(): ByteBuffer = {
+    Utils.tryWithResource(createInputStream()) { in =>
+      ByteBuffer.wrap(in.readAllBytes())
+    }
+  }
+
+  override def createInputStream(): InputStream = {
+    val startTimeNs = System.nanoTime()
+    try {
+      val in = filesystem.open(file)
+      in.seek(offset)
+      new LimitedInputStream(in, length)
+    } finally {
+      logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
+    }
+  }
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
+
+  override def convertToNetty(): AnyRef = {
+    Unpooled.wrappedBuffer(nioByteBuffer());
+  }
+
+  override def convertToNettyForSsl(): AnyRef = {
+    Unpooled.wrappedBuffer(nioByteBuffer());
+  }
+}
+
 private[spark] object FallbackStorage extends Logging {
   /** We use one block manager id as a place holder. */
   val FALLBACK_BLOCK_MANAGER_ID: BlockManagerId = BlockManagerId("fallback", "remote", 7337)
@@ -168,7 +214,9 @@ private[spark] object FallbackStorage extends Logging {
   }
 
   /**
-   * Read a ManagedBuffer.
+   * Read a block as ManagedBuffer. This reads the index for offset and block size
+   * but does not read the actual block data. Those data are later read when calling
+   * createInputStream() on the returned ManagedBuffer.
    */
   def read(conf: SparkConf, blockId: BlockId): ManagedBuffer = {
     logInfo(log"Read ${MDC(BLOCK_ID, blockId)}")
@@ -202,15 +250,7 @@ private[spark] object FallbackStorage extends Logging {
         val hash = JavaUtils.nonNegativeHash(name)
         val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$hash/$name")
         val size = nextOffset - offset
-        logDebug(s"To byte array $size")
-        val array = new Array[Byte](size.toInt)
-        val startTimeNs = System.nanoTime()
-        Utils.tryWithResource(fallbackFileSystem.open(dataFile)) { f =>
-          f.seek(offset)
-          f.readFully(array)
-          logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
-        }
-        new NioManagedBuffer(ByteBuffer.wrap(array))
+        new FileSystemSegmentManagedBuffer(fallbackFileSystem, dataFile, offset, size)
       }
     }
   }
