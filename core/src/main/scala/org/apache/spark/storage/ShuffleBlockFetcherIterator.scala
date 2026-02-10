@@ -391,6 +391,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] def partitionBlocksByFetchMode(
       blocksByAddress: Iterator[(BlockManagerId, collection.Seq[(BlockId, Long, Int)])],
       localBlocks: mutable.LinkedHashSet[(BlockId, Int)],
+      fallbackStorageBlocks: mutable.LinkedHashSet[(BlockId, Int)],
       hostLocalBlocksByExecutor:
         mutable.LinkedHashMap[BlockManagerId, collection.Seq[(BlockId, Long, Int)]],
       pushMergedLocalBlocks: mutable.LinkedHashSet[BlockId]): ArrayBuffer[FetchRequest] = {
@@ -402,13 +403,15 @@ final class ShuffleBlockFetcherIterator(
     // in order to limit the amount of data in flight
     val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
     var localBlockBytes = 0L
+    var fallbackStorageBlockBytes = 0L
     var hostLocalBlockBytes = 0L
     var numHostLocalBlocks = 0
     var pushMergedLocalBlockBytes = 0L
     val prevNumBlocksToFetch = numBlocksToFetch
 
-    val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
-    val localExecIds = Set(blockManager.blockManagerId.executorId, fallback)
+    val localExecId = blockManager.blockManagerId.executorId
+    val fallbackExecId = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
+    val localAndFallbackExecIds = Set(localExecId, fallbackExecId)
     for ((address, blockInfos) <- blocksByAddress) {
       checkBlockSizes(blockInfos)
       if (pushBasedFetchHelper.isPushMergedShuffleBlockAddress(address)) {
@@ -420,12 +423,23 @@ final class ShuffleBlockFetcherIterator(
         } else {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
         }
-      } else if (localExecIds.contains(address.executorId)) {
+      } else if (address.executorId == localExecId) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
+      } else if (localAndFallbackExecIds.contains(address.executorId)) {
+        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
+          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
+        numBlocksToFetch += mergedBlockInfos.size
+        if (address.executorId == localExecId) {
+          localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
+          localBlockBytes += mergedBlockInfos.map(_.size).sum
+        } else {
+          fallbackStorageBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
+          fallbackStorageBlockBytes += mergedBlockInfos.map(_.size).sum
+        }
       } else if (blockManager.hostLocalDirManager.isDefined &&
         address.host == blockManager.blockManagerId.host) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
@@ -445,13 +459,14 @@ final class ShuffleBlockFetcherIterator(
     }
     val (remoteBlockBytes, numRemoteBlocks) =
       collectedRemoteRequests.foldLeft((0L, 0))((x, y) => (x._1 + y.size, x._2 + y.blocks.size))
-    val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes +
-      pushMergedLocalBlockBytes
+    val totalBytes = localBlockBytes + fallbackStorageBlockBytes + remoteBlockBytes +
+      hostLocalBlockBytes + pushMergedLocalBlockBytes
     val blocksToFetchCurrentIteration = numBlocksToFetch - prevNumBlocksToFetch
-    assert(blocksToFetchCurrentIteration == localBlocks.size +
+    assert(blocksToFetchCurrentIteration == localBlocks.size + fallbackStorageBlocks.size +
       numHostLocalBlocks + numRemoteBlocks + pushMergedLocalBlocks.size,
         s"The number of non-empty blocks $blocksToFetchCurrentIteration doesn't equal to the sum " +
         s"of the number of local blocks ${localBlocks.size} + " +
+        s"the number of fallback storage blocks ${fallbackStorageBlocks.size} + " +
         s"the number of host-local blocks ${numHostLocalBlocks} " +
         s"the number of push-merged-local blocks ${pushMergedLocalBlocks.size} " +
         s"+ the number of remote blocks ${numRemoteBlocks} ")
@@ -459,8 +474,10 @@ final class ShuffleBlockFetcherIterator(
       log"Getting ${MDC(NUM_BLOCKS, blocksToFetchCurrentIteration)} " +
       log"(${MDC(TOTAL_SIZE, Utils.bytesToString(totalBytes))}) non-empty blocks including " +
       log"${MDC(NUM_LOCAL_BLOCKS, localBlocks.size)} " +
-      log"(${MDC(LOCAL_BLOCKS_SIZE, Utils.bytesToString(localBlockBytes))}) local and " +
-      log"${MDC(NUM_HOST_LOCAL_BLOCKS, numHostLocalBlocks)} " +
+      log"(${MDC(LOCAL_BLOCKS_SIZE, Utils.bytesToString(localBlockBytes))}) " +
+      log"local and ${MDC(NUM_FALLBACK_STORAGE_BLOCKS, fallbackStorageBlocks.size)} " +
+      log"(${MDC(FALLBACK_STORAGE_BLOCKS_SIZE, Utils.bytesToString(fallbackStorageBlockBytes))}) " +
+      log"fallback storage and ${MDC(NUM_HOST_LOCAL_BLOCKS, numHostLocalBlocks)} " +
       log"(${MDC(HOST_LOCAL_BLOCKS_SIZE, Utils.bytesToString(hostLocalBlockBytes))}) " +
       log"host-local and ${MDC(NUM_PUSH_MERGED_LOCAL_BLOCKS, pushMergedLocalBlocks.size)} " +
       log"(${MDC(PUSH_MERGED_LOCAL_BLOCKS_SIZE, Utils.bytesToString(pushMergedLocalBlockBytes))})" +
@@ -608,6 +625,42 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
+  /**
+   * Fetch the blocks from fallback storage while we are fetching remote blocks.
+   */
+  private[this] def fetchFallbackStorageBlocks(
+      blocks: mutable.LinkedHashSet[(BlockId, Int)]): Unit = {
+    logDebug(s"Start fetching fallback storage blocks: ${blocks.mkString(", ")}")
+    val iter = blocks.iterator
+    while (iter.hasNext) {
+      val (blockId, mapIndex) = iter.next()
+      try {
+        val buf = blockManager.getFallbackStorageBlockData(blockId)
+        // TODO: add fallback storage metrics
+        shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size)
+        buf.retain()
+        results.put(SuccessFetchResult(blockId, mapIndex, blockManager.blockManagerId,
+          buf.size(), buf, false))
+      } catch {
+        // If we see an exception, stop immediately.
+        case e: Exception =>
+          e match {
+            // ClosedByInterruptException is an excepted exception when kill task,
+            // don't log the exception stack trace to avoid confusing users.
+            // See: SPARK-28340
+            case ce: ClosedByInterruptException =>
+              logError(
+                log"Error occurred while fetching local blocks, ${MDC(ERROR, ce.getMessage)}")
+            case ex: Exception => logError("Error occurred while fetching local blocks", ex)
+          }
+          results.putFirst(
+            FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
+          return
+      }
+    }
+  }
+
   private[this] def fetchHostLocalBlock(
       blockId: BlockId,
       mapIndex: Int,
@@ -712,13 +765,15 @@ final class ShuffleBlockFetcherIterator(
     context.addTaskCompletionListener(onCompleteCallback)
     // Local blocks to fetch, excluding zero-sized blocks.
     val localBlocks = mutable.LinkedHashSet[(BlockId, Int)]()
+    val fallbackStorageBlocks = mutable.LinkedHashSet[(BlockId, Int)]()
     val hostLocalBlocksByExecutor =
       mutable.LinkedHashMap[BlockManagerId, collection.Seq[(BlockId, Long, Int)]]()
     val pushMergedLocalBlocks = mutable.LinkedHashSet[BlockId]()
     // Partition blocks by the different fetch modes: local, host-local, push-merged-local and
     // remote blocks.
     val remoteRequests = partitionBlocksByFetchMode(
-      blocksByAddress, localBlocks, hostLocalBlocksByExecutor, pushMergedLocalBlocks)
+      blocksByAddress, localBlocks, fallbackStorageBlocks, hostLocalBlocksByExecutor,
+      pushMergedLocalBlocks)
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(remoteRequests)
     assert ((0 == reqsInFlight) == (0 == bytesInFlight),
@@ -738,6 +793,11 @@ final class ShuffleBlockFetcherIterator(
     // Get Local Blocks
     fetchLocalBlocks(localBlocks)
     logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
+
+    // Get Fallback Storage Blocks
+    fetchFallbackStorageBlocks(fallbackStorageBlocks)
+    logDebug(s"Got fallback storage blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
+
     // Get host local blocks if any
     withFetchWaitTimeTracked(fetchAllHostLocalBlocks(hostLocalBlocksByExecutor))
     pushBasedFetchHelper.fetchAllPushMergedLocalBlocks(pushMergedLocalBlocks)
@@ -1287,17 +1347,21 @@ final class ShuffleBlockFetcherIterator(
       originalBlocksByAddr:
         Iterator[(BlockManagerId, collection.Seq[(BlockId, Long, Int)])]): Unit = {
     val originalLocalBlocks = mutable.LinkedHashSet[(BlockId, Int)]()
+    val originalFallbackStorageBlocks = mutable.LinkedHashSet[(BlockId, Int)]()
     val originalHostLocalBlocksByExecutor =
       mutable.LinkedHashMap[BlockManagerId, collection.Seq[(BlockId, Long, Int)]]()
     val originalMergedLocalBlocks = mutable.LinkedHashSet[BlockId]()
     val originalRemoteReqs = partitionBlocksByFetchMode(originalBlocksByAddr,
-      originalLocalBlocks, originalHostLocalBlocksByExecutor, originalMergedLocalBlocks)
+      originalLocalBlocks, originalFallbackStorageBlocks, originalHostLocalBlocksByExecutor,
+      originalMergedLocalBlocks)
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(originalRemoteReqs)
     logInfo(log"Created ${MDC(NUM_REQUESTS, originalRemoteReqs.size)} fallback remote requests " +
       log"for push-merged")
     // fetch all the fallback blocks that are local.
     fetchLocalBlocks(originalLocalBlocks)
+    // fetch all the fallback blocks from fallback storage.
+    fetchFallbackStorageBlocks(originalFallbackStorageBlocks)
     // Merged local blocks should be empty during fallback
     assert(originalMergedLocalBlocks.isEmpty,
       "There should be zero push-merged blocks during fallback")
