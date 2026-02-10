@@ -41,7 +41,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -55,7 +55,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).select("index", "data", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+        checkAnswer(query, Seq(Row(3, "c", "3/3"), Row(2, "b", "2/2"), Row(1, "a", "1/1")))
       }
     }
   }
@@ -124,7 +124,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
 
       checkAnswer(
         dfQuery,
-        Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+        Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3"))
       )
     }
   }
@@ -134,7 +134,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       prepareTable()
       checkAnswer(
         spark.table(tbl).select("id", "data").select("index", "_partition"),
-        Seq(Row(0, "3/1"), Row(0, "0/2"), Row(0, "1/3"))
+        Seq(Row(0, "1/1"), Row(0, "2/2"), Row(0, "3/3"))
       )
     }
   }
@@ -159,7 +159,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).where("id > 1").select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        checkAnswer(query, Seq(Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -171,7 +171,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = spark.table(tbl).orderBy("id").select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -185,7 +185,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         .select("id", "data", "index", "_partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
     }
   }
@@ -200,7 +200,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
-        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+        checkAnswer(query, Seq(Row(1, "a", 0, "1/1"), Row(2, "b", 0, "2/2"), Row(3, "c", 0, "3/3")))
       }
 
       assertThrows[AnalysisException] {
