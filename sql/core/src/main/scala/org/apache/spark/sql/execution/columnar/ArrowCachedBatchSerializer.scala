@@ -171,107 +171,39 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 }
 
 /**
- * Iterator that converts InternalRow to ArrowCachedBatch.
+ * Companion object with shared utility methods for Arrow cache serialization.
  */
-private class InternalRowToArrowCachedBatchIterator(
-    rowIter: Iterator[InternalRow],
-    schema: Seq[Attribute],
-    sparkSchema: StructType,
-    maxRecordsPerBatch: Long,
-    timeZoneId: String,
-    compressionCodecName: String,
-    compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
+private object ArrowCachedBatchSerializer {
 
-  private val compressionCodec = createCompressionCodec(
-    compressionCodecName,
-    compressionLevel)
-
-  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-    s"InternalRowToArrowCachedBatchIterator-${TaskContext.get().taskAttemptId()}",
-    0,
-    Long.MaxValue)
-
-  private val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, false, false)
-  private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-  private val arrowWriter = ArrowWriter.create(root)
-  private val unloader = new VectorUnloader(root, true, compressionCodec, true)
-
-  // Create statistics collectors for each column
-  private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
-    createColumnStats(attr.dataType)
-  }.toArray
-
-  // Register cleanup
-  Option(TaskContext.get()).foreach { tc =>
-    tc.addTaskCompletionListener[Unit] { _ =>
-      close()
+  // scalastyle:off caselocale
+  def createCompressionCodec(
+      codecName: String,
+      compressionLevel: Int): CompressionCodec = {
+    codecName.toLowerCase match {
+      case "none" => NoCompressionCodec.INSTANCE
+      case "zstd" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
+        factory.createCodec(codecType)
+      case "lz4" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new Lz4CompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case other =>
+        throw SparkException.internalError(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
     }
   }
+  // scalastyle:on caselocale
 
-  override def hasNext: Boolean = rowIter.hasNext || {
-    close()
-    false
-  }
-
-  override def next(): ArrowCachedBatch = {
-    var rowCount = 0
-
-    // Reset statistics collectors for new batch
-    statsCollectors.foreach { stats =>
-      // Create new instance to reset state
-      val index = statsCollectors.indexOf(stats)
-      statsCollectors(index) = createColumnStats(schema(index).dataType)
-    }
-
-    Utils.tryWithSafeFinally {
-      // Write rows to Arrow vectors and collect statistics incrementally
-      while (rowIter.hasNext && rowCount < maxRecordsPerBatch) {
-        val row = rowIter.next()
-        arrowWriter.write(row)
-
-        // Collect statistics for this row
-        var i = 0
-        while (i < statsCollectors.length) {
-          statsCollectors(i).gatherStats(row, i)
-          i += 1
-        }
-
-        rowCount += 1
-      }
-      arrowWriter.finish()
-
-      // Get the Arrow RecordBatch with compression
-      val recordBatch = unloader.getRecordBatch()
-
-      Utils.tryWithSafeFinally {
-        // Serialize to Arrow IPC format
-        val arrowData = serializeBatch(recordBatch)
-
-        // Build statistics InternalRow from collected stats
-        val stats = buildStatisticsFromCollectors(statsCollectors, schema)
-
-        ArrowCachedBatch(rowCount, arrowData, stats)
-      } {
-        recordBatch.close()
-      }
-    } {
-      arrowWriter.reset()
-    }
-  }
-
-  private def close(): Unit = {
-    root.close()
-    allocator.close()
-  }
-
-  private def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+  def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
     val out = new ByteArrayOutputStream()
     val writeChannel = new WriteChannel(Channels.newChannel(out))
     MessageSerializer.serialize(writeChannel, batch)
     out.toByteArray
   }
 
-  private def createColumnStats(dataType: DataType): ColumnStats = {
+  def createColumnStats(dataType: DataType): ColumnStats = {
     dataType match {
       case BooleanType => new BooleanColumnStats
       case ByteType => new ByteColumnStats
@@ -292,7 +224,7 @@ private class InternalRowToArrowCachedBatchIterator(
     }
   }
 
-  private def buildStatisticsFromCollectors(
+  def buildStatisticsFromCollectors(
       collectors: Array[ColumnStats],
       schema: Seq[Attribute]): InternalRow = {
     val stats = collectors.flatMap { collector =>
@@ -303,7 +235,7 @@ private class InternalRowToArrowCachedBatchIterator(
     InternalRow.fromSeq(stats.toSeq)
   }
 
-  private def collectStatistics(
+  def collectStatistics(
       root: VectorSchemaRoot,
       schema: Seq[Attribute]): InternalRow = {
     val rowCount = root.getRowCount
@@ -336,7 +268,7 @@ private class InternalRowToArrowCachedBatchIterator(
     new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(stats.toArray)
   }
 
-  private def calculateMinMaxBoolean(
+  def calculateMinMaxBoolean(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = true
@@ -360,7 +292,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxByte(
+  def calculateMinMaxByte(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Byte.MaxValue
@@ -384,7 +316,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxShort(
+  def calculateMinMaxShort(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Short.MaxValue
@@ -408,7 +340,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxInt(
+  def calculateMinMaxInt(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Int.MaxValue
@@ -432,7 +364,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxDate(
+  def calculateMinMaxDate(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Int.MaxValue
@@ -456,7 +388,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxLong(
+  def calculateMinMaxLong(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Long.MaxValue
@@ -480,7 +412,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxTimestamp(
+  def calculateMinMaxTimestamp(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Long.MaxValue
@@ -505,7 +437,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxTimestampNTZ(
+  def calculateMinMaxTimestampNTZ(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Long.MaxValue
@@ -530,7 +462,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxFloat(
+  def calculateMinMaxFloat(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Float.MaxValue
@@ -554,7 +486,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxDouble(
+  def calculateMinMaxDouble(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min = Double.MaxValue
@@ -578,7 +510,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxString(
+  def calculateMinMaxString(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int): (Any, Any) = {
     var min: org.apache.spark.unsafe.types.UTF8String = null
@@ -603,7 +535,7 @@ private class InternalRowToArrowCachedBatchIterator(
     if (hasValue) (min, max) else (null, null)
   }
 
-  private def calculateMinMaxDecimal(
+  def calculateMinMaxDecimal(
       vector: org.apache.arrow.vector.FieldVector,
       rowCount: Int,
       dataType: org.apache.spark.sql.types.DataType): (Any, Any) = {
@@ -632,27 +564,102 @@ private class InternalRowToArrowCachedBatchIterator(
 
     if (hasValue) (min, max) else (null, null)
   }
+}
 
-  // scalastyle:off caselocale
-  private def createCompressionCodec(
-      codecName: String,
-      compressionLevel: Int): CompressionCodec = {
-    codecName.toLowerCase match {
-      case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+/**
+ * Iterator that converts InternalRow to ArrowCachedBatch.
+ */
+private class InternalRowToArrowCachedBatchIterator(
+    rowIter: Iterator[InternalRow],
+    schema: Seq[Attribute],
+    sparkSchema: StructType,
+    maxRecordsPerBatch: Long,
+    timeZoneId: String,
+    compressionCodecName: String,
+    compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
+
+  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+    compressionCodecName,
+    compressionLevel)
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"InternalRowToArrowCachedBatchIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, false, false)
+  private val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  private val arrowWriter = ArrowWriter.create(root)
+  private val unloader = new VectorUnloader(root, true, compressionCodec, true)
+
+  // Create statistics collectors for each column
+  private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
+    ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
+  }.toArray
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      close()
     }
   }
-  // scalastyle:on caselocale
+
+  override def hasNext: Boolean = rowIter.hasNext || {
+    close()
+    false
+  }
+
+  override def next(): ArrowCachedBatch = {
+    var rowCount = 0
+
+    // Reset statistics collectors for new batch
+    statsCollectors.foreach { stats =>
+      // Create new instance to reset state
+      val index = statsCollectors.indexOf(stats)
+      statsCollectors(index) = ArrowCachedBatchSerializer.createColumnStats(schema(index).dataType)
+    }
+
+    Utils.tryWithSafeFinally {
+      // Write rows to Arrow vectors and collect statistics incrementally
+      while (rowIter.hasNext && rowCount < maxRecordsPerBatch) {
+        val row = rowIter.next()
+        arrowWriter.write(row)
+
+        // Collect statistics for this row
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
+        }
+
+        rowCount += 1
+      }
+      arrowWriter.finish()
+
+      // Get the Arrow RecordBatch with compression
+      val recordBatch = unloader.getRecordBatch()
+
+      Utils.tryWithSafeFinally {
+        // Serialize to Arrow IPC format
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+
+        // Build statistics InternalRow from collected stats
+        val stats = ArrowCachedBatchSerializer.buildStatisticsFromCollectors(
+          statsCollectors, schema)
+
+        ArrowCachedBatch(rowCount, arrowData, stats)
+      } {
+        recordBatch.close()
+      }
+    } {
+      arrowWriter.reset()
+    }
+  }
+
+  private def close(): Unit = {
+    root.close()
+    allocator.close()
+  }
 }
 
 /**
@@ -666,7 +673,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
 
-  private val compressionCodec = createCompressionCodec(
+  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
     compressionCodecName,
     compressionLevel)
 
@@ -720,8 +727,8 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       val recordBatch = unloader.getRecordBatch()
 
       Utils.tryWithSafeFinally {
-        val arrowData = serializeBatch(recordBatch)
-        val stats = collectStatistics(root, schema)
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
         recordBatch.close()
@@ -743,7 +750,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
 
     // Create statistics collectors for each column
     val statsCollectors: Array[ColumnStats] = schema.map { attr =>
-      createColumnStats(attr.dataType)
+      ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
     }.toArray
 
     Utils.tryWithSafeFinally {
@@ -763,8 +770,9 @@ private class ColumnarBatchToArrowCachedBatchIterator(
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {
-        val arrowData = serializeBatch(recordBatch)
-        val stats = buildStatisticsFromCollectors(statsCollectors, schema)
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+        val stats = ArrowCachedBatchSerializer.buildStatisticsFromCollectors(
+          statsCollectors, schema)
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
         recordBatch.close()
@@ -774,398 +782,6 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       root.close()
     }
   }
-
-  private def createColumnStats(dataType: DataType): ColumnStats = {
-    dataType match {
-      case BooleanType => new BooleanColumnStats
-      case ByteType => new ByteColumnStats
-      case ShortType => new ShortColumnStats
-      case IntegerType => new IntColumnStats
-      case DateType => new IntColumnStats  // Date is stored as Int
-      case LongType => new LongColumnStats
-      case TimestampType => new LongColumnStats  // Timestamp is stored as Long
-      case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
-      case FloatType => new FloatColumnStats
-      case DoubleType => new DoubleColumnStats
-      case StringType => new StringColumnStats(StringType)
-      case BinaryType => new BinaryColumnStats
-      case dt: DecimalType => new DecimalColumnStats(dt)
-      case CalendarIntervalType => new IntervalColumnStats
-      case VariantType => new VariantColumnStats
-      case _ => new ObjectColumnStats(dataType)
-    }
-  }
-
-  private def buildStatisticsFromCollectors(
-      collectors: Array[ColumnStats],
-      schema: Seq[Attribute]): InternalRow = {
-    val stats = collectors.flatMap { collector =>
-      val collected = collector.collectedStatistics
-      // ColumnStats returns: [lowerBound, upperBound, nullCount, count, sizeInBytes]
-      Seq(collected(0), collected(1), collected(2), collected(3), collected(4))
-    }
-    InternalRow.fromSeq(stats.toSeq)
-  }
-
-  private def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
-    val writeChannel = new WriteChannel(Channels.newChannel(out))
-    MessageSerializer.serialize(writeChannel, batch)
-    out.toByteArray
-  }
-
-  private def collectStatistics(
-      root: VectorSchemaRoot,
-      schema: Seq[Attribute]): InternalRow = {
-    // Reuse the collectStatistics from InternalRowToArrowCachedBatchIterator
-    // by calling the same logic
-    val rowCount = root.getRowCount
-    val vectors = root.getFieldVectors.asScala.toSeq
-
-    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes
-    val stats = schema.zip(vectors).flatMap { case (attr, vector) =>
-      val nullCount = (0 until rowCount).count(i => vector.isNull(i))
-      val sizeInBytes = vector.getBufferSize.toLong
-
-      val (lower, upper) = attr.dataType match {
-        case BooleanType => calculateMinMaxBoolean(vector, rowCount)
-        case ByteType => calculateMinMaxByte(vector, rowCount)
-        case ShortType => calculateMinMaxShort(vector, rowCount)
-        case IntegerType => calculateMinMaxInt(vector, rowCount)
-        case DateType => calculateMinMaxDate(vector, rowCount)
-        case LongType => calculateMinMaxLong(vector, rowCount)
-        case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
-        case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
-        case FloatType => calculateMinMaxFloat(vector, rowCount)
-        case DoubleType => calculateMinMaxDouble(vector, rowCount)
-        case StringType => calculateMinMaxString(vector, rowCount)
-        case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
-        case _ => (null, null) // Skip for binary and complex types
-      }
-
-      Seq(lower, upper, nullCount, rowCount, sizeInBytes)
-    }
-
-    new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(stats.toArray)
-  }
-
-  private def calculateMinMaxBoolean(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = true
-    var max = false
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(i) != 0
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxByte(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Byte.MaxValue
-    var max = Byte.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxShort(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Short.MaxValue
-    var max = Short.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxInt(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Int.MaxValue
-    var max = Int.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxDate(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Int.MaxValue
-    var max = Int.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxLong(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Long.MaxValue
-    var max = Long.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxTimestamp(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Long.MaxValue
-    var max = Long.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value =
-          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxTimestampNTZ(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Long.MaxValue
-    var max = Long.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value =
-          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxFloat(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Float.MaxValue
-    var max = Float.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxDouble(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min = Double.MaxValue
-    var max = Double.MinValue
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxString(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
-    var min: org.apache.spark.unsafe.types.UTF8String = null
-    var max: org.apache.spark.unsafe.types.UTF8String = null
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(i)
-        val value = org.apache.spark.unsafe.types.UTF8String.fromBytes(bytes)
-        if (!hasValue) {
-          min = value.clone()
-          max = value.clone()
-          hasValue = true
-        } else {
-          if (value.binaryCompare(min) < 0) min = value.clone()
-          if (value.binaryCompare(max) > 0) max = value.clone()
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  private def calculateMinMaxDecimal(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int,
-      dataType: org.apache.spark.sql.types.DataType): (Any, Any) = {
-    val decimalType = dataType.asInstanceOf[DecimalType]
-    var min: org.apache.spark.sql.types.Decimal = null
-    var max: org.apache.spark.sql.types.Decimal = null
-    var hasValue = false
-
-    (0 until rowCount).foreach { i =>
-      if (!vector.isNull(i)) {
-        val bigDecimal = vector.asInstanceOf[
-          org.apache.arrow.vector.DecimalVector].getObject(i)
-        val value = org.apache.spark.sql.types.Decimal(
-          bigDecimal, decimalType.precision, decimalType.scale)
-
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value.compareTo(min) < 0) min = value
-          if (value.compareTo(max) > 0) max = value
-        }
-      }
-    }
-
-    if (hasValue) (min, max) else (null, null)
-  }
-
-  // scalastyle:off caselocale
-  private def createCompressionCodec(
-      codecName: String,
-      compressionLevel: Int): CompressionCodec = {
-    codecName.toLowerCase match {
-      case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-    }
-  }
-  // scalastyle:on caselocale
 }
 
 /**
