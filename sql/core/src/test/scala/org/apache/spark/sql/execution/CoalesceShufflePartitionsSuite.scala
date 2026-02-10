@@ -315,7 +315,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
   }
 
-  test("SPARK-46590 adaptive query execution works correctly with broadcast join and union") {
+  test("SPARK-46590 adaptive query execution works correctly with broadcast nested loop join " +
+    "and union") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
@@ -374,6 +375,61 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
         .save()
     }
     withSparkSession(test, 100, None)
+  }
+
+  test("SPARK-55461 adaptive query execution works correctly with broadcast hash join and union") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      import spark.implicits._
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      val df00 = spark.range(0, 1000, 2)
+        .selectExpr("id as key1", "id as value1")
+        .union(Seq.fill(100000)((600, 600)).toDF("key1", "value1"))
+      val df01 = spark.range(0, 1000, 3)
+        .selectExpr("id as key1", "id as value1")
+      val df10 = spark.range(0, 1000, 5)
+        .selectExpr("id as key2", "id as value2")
+        .union(Seq.fill(500000)((600, 600)).toDF("key2", "value2"))
+      val df11 = spark.range(0, 1000, 7)
+        .selectExpr("id as key2", "id as value2")
+      val df20 = spark.range(0, 10).selectExpr("id as key2", "id as value2")
+
+      val unionDF = df00.join(df01, Array("key1", "value1"), "left_outer")
+        .union(df10.join(df11, Array("key2", "value2"), "left_outer"))
+      // Adding equi-join to trigger BHJ
+      df20.join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
+        .write
+        .format("noop")
+        .mode("overwrite")
+        .save()
+    }
+    withSparkSession(test, 12000, None)
+  }
+
+  test("SPARK-55461 adaptive query execution works correctly with broadcast hash join and " +
+    "nested union and non-skewed smj") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      import spark.implicits._
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      val df00 = spark.range(0, 1000, 2)
+        .selectExpr("id as key1", "id as value1")
+      val df01 = spark.range(0, 1000, 3)
+        .selectExpr("id as key1", "id as value1")
+      val df10 = spark.range(0, 1000, 5)
+        .selectExpr("id as key2", "id as value2")
+        .union(Seq.fill(500000)((600, 600)).toDF("key2", "value2"))
+      val df20 = spark.range(0, 10).selectExpr("id as key2", "id as value2")
+
+      val unionDF = df00.join(df01, Array("key1", "value1"), "left_outer")
+        .union(df10.groupBy("key2").count())
+      val result = df20.join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
+        .count()
+      assert(result == 5, s"Query result should be 5 (expected) but $result (actual)")
+    }
+    withSparkSession(test, 12000, None)
   }
 
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
