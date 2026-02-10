@@ -827,7 +827,11 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             columns = {}
             for col_idx, series_list in all_series_by_col.items():
                 # Use the original series name if available
-                col_name = series_list[0].name if hasattr(series_list[0], 'name') and series_list[0].name else f"col{col_idx}"
+                col_name = (
+                    series_list[0].name
+                    if hasattr(series_list[0], "name") and series_list[0].name
+                    else f"col{col_idx}"
+                )
                 columns[col_name] = pd.concat(series_list, ignore_index=True)
             value_df = pd.DataFrame(columns)
         else:
