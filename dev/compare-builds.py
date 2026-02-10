@@ -45,8 +45,8 @@ Output
 Filtering
 ---------
   --matching-only   Only compare JARs present in both builds.
-  --ignore-shaded   Ignore classes under org/sparkproject/ and
-                    org/apache/spark/unused/ when comparing module JARs.
+  --ignore-shaded   Ignore shaded class/service differences and bundled
+                    deps in Maven fat-JAR modules (core, connect).
   --modules M1,M2   Restrict comparison to specific modules.
   -v, --verbose     Show class-level details for differing JARs.
 
@@ -106,6 +106,8 @@ class JarInfo:
     classes: Set[str] = field(default_factory=set)
     resources: Set[str] = field(default_factory=set)
     meta_inf: Set[str] = field(default_factory=set)
+    services: Set[str] = field(default_factory=set)
+    multi_release_classes: Set[str] = field(default_factory=set)
 
     @property
     def name(self) -> str:
@@ -115,12 +117,17 @@ class JarInfo:
         return len(self.classes)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "path": str(self.path.relative_to(SPARK_HOME)),
             "size": self.size,
             "class_count": self.class_count(),
             "resource_count": len(self.resources),
         }
+        if self.services:
+            d["services_count"] = len(self.services)
+        if self.multi_release_classes:
+            d["multi_release_class_count"] = len(self.multi_release_classes)
+        return d
 
 
 @dataclass
@@ -131,6 +138,8 @@ class ComparisonResult:
     sbt_jar: Optional[JarInfo]
     only_in_maven: Set[str] = field(default_factory=set)
     only_in_sbt: Set[str] = field(default_factory=set)
+    services_only_in_maven: Set[str] = field(default_factory=set)
+    services_only_in_sbt: Set[str] = field(default_factory=set)
     size_diff_pct: float = 0.0
 
     @property
@@ -150,11 +159,18 @@ class ComparisonResult:
             and self.sbt_jar is not None
             and len(self.only_in_maven) == 0
             and len(self.only_in_sbt) == 0
+            and len(self.services_only_in_maven) == 0
+            and len(self.services_only_in_sbt) == 0
         )
 
     @property
     def has_content_diff(self) -> bool:
-        return len(self.only_in_maven) > 0 or len(self.only_in_sbt) > 0
+        return (
+            len(self.only_in_maven) > 0
+            or len(self.only_in_sbt) > 0
+            or len(self.services_only_in_maven) > 0
+            or len(self.services_only_in_sbt) > 0
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"status": self.status}
@@ -170,6 +186,10 @@ class ComparisonResult:
         if self.only_in_sbt:
             d["only_in_sbt"] = _class_package_counts(self.only_in_sbt)
             d["only_in_sbt_count"] = len(self.only_in_sbt)
+        if self.services_only_in_maven:
+            d["services_only_in_maven"] = sorted(self.services_only_in_maven)
+        if self.services_only_in_sbt:
+            d["services_only_in_sbt"] = sorted(self.services_only_in_sbt)
         return d
 
 
@@ -222,11 +242,11 @@ def get_jar_contents(jar_path: Path) -> JarInfo:
             for name in zf.namelist():
                 if name.endswith("/"):
                     continue  # Skip directories
-                if name.endswith(".class"):
-                    # Skip multi-release JAR entries (META-INF/versions/X/*.class)
-                    # These are version-specific and may differ between builds
+                if name.startswith("META-INF/services/"):
+                    info.services.add(name)
+                elif name.endswith(".class"):
                     if name.startswith("META-INF/versions/"):
-                        info.meta_inf.add(name)
+                        info.multi_release_classes.add(name)
                     else:
                         info.classes.add(name)
                 elif name.startswith("META-INF/"):
@@ -265,50 +285,80 @@ def normalize_jar_name(name: str) -> str:
     # Remove .jar extension
     base = name[:-4] if name.endswith(".jar") else name
 
-    # Find version pattern: -X.Y.Z or -X.Y.Z-SNAPSHOT or similar
-    # Version starts with a digit after a hyphen
-    version_pattern = r"-(\d+\.\d+\.\d+.*?)$"
-    match = re.search(version_pattern, base)
-    if match:
-        return base[: match.start()]
+    # Strategy 1: Use the Scala binary version suffix (_2.13, _2.12, _3, etc.)
+    # as an anchor. All Spark artifacts include this suffix, and it always appears
+    # between the artifact name and the build version. The suffix is _X.Y or _X,
+    # and must be followed by '-' (version) or end of string.
+    scala_match = re.search(r"_\d+(\.\d+)?(?=-|$)", base)
+    if scala_match:
+        return base[: scala_match.end()]
+
+    # Strategy 2: Fall back to version pattern for non-Scala JARs (X.Y or X.Y.Z)
+    version_match = re.search(r"-\d+\.\d+", base)
+    if version_match:
+        return base[: version_match.start()]
+
     return base
+
+
+def _find_module_dirs() -> List[Path]:
+    """Parse module directories from root pom.xml.
+
+    Reads <module> elements from the root POM to get the exact list of build
+    modules.  This avoids an expensive rglob("target") across the entire
+    Spark tree (which would walk .git/, python/, docs/, R/, etc.).
+    """
+    pom_path = SPARK_HOME / "pom.xml"
+    if not pom_path.exists():
+        return []
+
+    pom_text = pom_path.read_text()
+    dirs: List[Path] = []
+    for match in re.finditer(r"<module>(.*?)</module>", pom_text):
+        module_dir = SPARK_HOME / match.group(1)
+        if module_dir.is_dir():
+            dirs.append(module_dir)
+    return dirs
+
+
+def _should_skip_jar_file(jar_path: Path) -> bool:
+    """Return True if a JAR file should be excluded from comparison."""
+    name = jar_path.name
+    if "-tests.jar" in name or "-sources.jar" in name or "-javadoc.jar" in name:
+        return True
+    return should_skip_jar(name)
 
 
 def find_maven_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
     """Find all JAR files from Maven build."""
-    jars = {}
+    jars: Dict[str, JarInfo] = {}
 
-    # Maven puts JARs in module/target/
-    for target_dir in SPARK_HOME.rglob("target"):
-        # Skip SBT's scala-versioned directories
-        if "/scala-" in str(target_dir):
-            continue
-        # Skip test-classes and other non-artifact directories
-        if "test-classes" in str(target_dir) or "classes" == target_dir.name:
+    # Maven puts JARs in {module}/target/.  We parse module paths from pom.xml
+    # to avoid an expensive walk of the entire source tree.
+    module_dirs = _find_module_dirs()
+
+    for module_dir in module_dirs:
+        target_dir = module_dir / "target"
+        if not target_dir.is_dir():
             continue
 
         for jar_path in target_dir.glob("*.jar"):
-            # Skip test JARs, sources, javadocs
-            if "-tests.jar" in jar_path.name or "-sources.jar" in jar_path.name:
-                continue
-            if "-javadoc.jar" in jar_path.name:
-                continue
-
-            # Skip JARs that should be excluded from regular comparison
-            if should_skip_jar(jar_path.name):
+            if _should_skip_jar_file(jar_path):
                 continue
 
             # Filter by module if specified
             if modules:
-                module_match = False
-                for m in modules:
-                    if m in str(jar_path):
-                        module_match = True
-                        break
-                if not module_match:
+                if not any(m in str(jar_path) for m in modules):
                     continue
 
             norm_name = normalize_jar_name(jar_path.name)
+            if norm_name in jars:
+                prev = jars[norm_name].path
+                print(
+                    f"[warn] duplicate Maven JAR key '{norm_name}':"
+                    f" {prev.relative_to(SPARK_HOME)} vs"
+                    f" {jar_path.relative_to(SPARK_HOME)}, keeping latter"
+                )
             jars[norm_name] = get_jar_contents(jar_path)
 
     return jars
@@ -316,36 +366,38 @@ def find_maven_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
 
 def find_sbt_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
     """Find all JAR files from SBT build."""
-    jars = {}
+    jars: Dict[str, JarInfo] = {}
 
-    # SBT puts JARs in module/target/scala-X.XX/
-    for scala_dir in SPARK_HOME.rglob("target/scala-*"):
-        if not scala_dir.is_dir():
+    # SBT puts JARs in {module}/target/scala-X.XX/.
+    module_dirs = _find_module_dirs()
+
+    for module_dir in module_dirs:
+        target_dir = module_dir / "target"
+        if not target_dir.is_dir():
             continue
 
-        for jar_path in scala_dir.glob("*.jar"):
-            # Skip test JARs and sources
-            if "-tests.jar" in jar_path.name or "-sources.jar" in jar_path.name:
-                continue
-            if "-javadoc.jar" in jar_path.name:
+        for scala_dir in target_dir.glob("scala-*"):
+            if not scala_dir.is_dir():
                 continue
 
-            # Skip JARs that should be excluded from regular comparison
-            if should_skip_jar(jar_path.name):
-                continue
-
-            # Filter by module if specified
-            if modules:
-                module_match = False
-                for m in modules:
-                    if m in str(jar_path):
-                        module_match = True
-                        break
-                if not module_match:
+            for jar_path in scala_dir.glob("*.jar"):
+                if _should_skip_jar_file(jar_path):
                     continue
 
-            norm_name = normalize_jar_name(jar_path.name)
-            jars[norm_name] = get_jar_contents(jar_path)
+                # Filter by module if specified
+                if modules:
+                    if not any(m in str(jar_path) for m in modules):
+                        continue
+
+                norm_name = normalize_jar_name(jar_path.name)
+                if norm_name in jars:
+                    prev = jars[norm_name].path
+                    print(
+                        f"[warn] duplicate SBT JAR key '{norm_name}':"
+                        f" {prev.relative_to(SPARK_HOME)} vs"
+                        f" {jar_path.relative_to(SPARK_HOME)}, keeping latter"
+                    )
+                jars[norm_name] = get_jar_contents(jar_path)
 
     return jars
 
@@ -360,6 +412,29 @@ SHADED_PACKAGES = {
 def is_shaded_class(class_name: str) -> bool:
     """Check if a class is from a shaded package."""
     return any(class_name.startswith(pkg) for pkg in SHADED_PACKAGES)
+
+
+def _is_shaded_service(service_path: str) -> bool:
+    """Check if a META-INF/services/ file references a shaded package."""
+    # e.g. META-INF/services/org.sparkproject.jetty.compression.Compression
+    service_name = service_path.rsplit("/", 1)[-1]
+    return any(
+        service_name.startswith(pkg.rstrip("/").replace("/", ".")) for pkg in SHADED_PACKAGES
+    )
+
+
+# Modules where Maven's shade plugin bundles dependency classes into the
+# module JAR, making it a "fat JAR".  SBT keeps these as thin module JARs
+# with separate assembly JARs.  When --ignore-shaded is active, extra
+# Maven-only classes in these modules are expected (bundled deps) provided
+# that SBT's own classes are all present in Maven.
+FAT_JAR_MODULES = {"spark-core", "spark-connect-client-jvm", "spark-connect"}
+
+
+def _is_fat_jar_module(norm_name: str) -> bool:
+    """Check if a normalized JAR name is a known fat-JAR module."""
+    base = norm_name.split("_")[0] if "_" in norm_name else norm_name
+    return base in FAT_JAR_MODULES
 
 
 def _format_size_diff(maven_size: int, sbt_size: int) -> str:
@@ -411,12 +486,31 @@ def compare_jars(
             result.only_in_maven = maven_classes - sbt_classes
             result.only_in_sbt = sbt_classes - maven_classes
 
+            # Compare META-INF/services/ (service loader configs)
+            result.services_only_in_maven = maven_jar.services - sbt_jar.services
+            result.services_only_in_sbt = sbt_jar.services - maven_jar.services
+
+            if ignore_shaded:
+                # Filter out service files that reference shaded packages
+                result.services_only_in_maven = {
+                    s for s in result.services_only_in_maven if not _is_shaded_service(s)
+                }
+                result.services_only_in_sbt = {
+                    s for s in result.services_only_in_sbt if not _is_shaded_service(s)
+                }
+                # For known fat-JAR modules, Maven's shade plugin bundles
+                # dependency classes and their services into the module JAR.
+                # If all of SBT's classes are present in Maven, the extra
+                # Maven classes/services are just bundled deps.
+                if _is_fat_jar_module(name) and not result.only_in_sbt:
+                    result.only_in_maven = set()
+                    if not result.services_only_in_sbt:
+                        result.services_only_in_maven = set()
+
             # Calculate size difference as percentage of the smaller JAR
             min_size = min(maven_jar.size, sbt_jar.size)
             if min_size > 0:
-                result.size_diff_pct = (
-                    abs(maven_jar.size - sbt_jar.size) / min_size * 100
-                )
+                result.size_diff_pct = abs(maven_jar.size - sbt_jar.size) / min_size * 100
 
         results[name] = result
 
@@ -515,6 +609,9 @@ def _status_label(r: ComparisonResult) -> str:
         parts.append(f"+{len(r.only_in_maven)} Maven")
     if r.only_in_sbt:
         parts.append(f"+{len(r.only_in_sbt)} SBT")
+    if r.services_only_in_maven or r.services_only_in_sbt:
+        svc_n = len(r.services_only_in_maven) + len(r.services_only_in_sbt)
+        parts.append(f"{svc_n} services differ")
     return ", ".join(parts) if parts else "differs"
 
 
@@ -545,12 +642,16 @@ def print_report(
     line_width = col_module + col_maven + col_sbt + col_status + 9  # separators
 
     print()
-    print(f"{'Module':<{col_module}}  {'Maven (bytes)':>{col_maven}}  {'SBT (bytes)':>{col_sbt}}  {'Status':<{col_status}}")
+    print(
+        f"{'Module':<{col_module}}  {'Maven (bytes)':>{col_maven}}  {'SBT (bytes)':>{col_sbt}}  {'Status':<{col_status}}"
+    )
     print("\u2500" * line_width)
 
     for name, mvn_size, sbt_size, status in rows:
         marker = "\u2713" if status == "match" else "\u2717"
-        print(f"{name:<{col_module}}  {mvn_size:>{col_maven}}  {sbt_size:>{col_sbt}}  {marker} {status}")
+        print(
+            f"{name:<{col_module}}  {mvn_size:>{col_maven}}  {sbt_size:>{col_sbt}}  {marker} {status}"
+        )
 
     print("\u2500" * line_width)
 
@@ -577,11 +678,19 @@ def print_report(
             print(f"\n  {name} [{r.status}]")
 
             if r.maven_jar and r.sbt_jar:
+                mvn_mr = len(r.maven_jar.multi_release_classes)
+                sbt_mr = len(r.sbt_jar.multi_release_classes)
+                mvn_svc = len(r.maven_jar.services)
+                sbt_svc = len(r.sbt_jar.services)
                 print(
-                    f"    Maven: {r.maven_jar.class_count()} classes, {r.maven_jar.size:,} bytes"
+                    f"    Maven: {r.maven_jar.class_count()} classes,"
+                    f" {mvn_svc} services, {r.maven_jar.size:,} bytes"
+                    + (f" ({mvn_mr} multi-release classes skipped)" if mvn_mr else "")
                 )
                 print(
-                    f"    SBT:   {r.sbt_jar.class_count()} classes, {r.sbt_jar.size:,} bytes"
+                    f"    SBT:   {r.sbt_jar.class_count()} classes,"
+                    f" {sbt_svc} services, {r.sbt_jar.size:,} bytes"
+                    + (f" ({sbt_mr} multi-release classes skipped)" if sbt_mr else "")
                 )
                 print(f"    Size:  {_format_size_diff(r.maven_jar.size, r.sbt_jar.size)}")
 
@@ -595,11 +704,21 @@ def print_report(
                 for line in _summarize_classes(r.only_in_sbt):
                     print(f"      {line}")
 
+            if r.services_only_in_maven:
+                print(f"    Services only in Maven ({len(r.services_only_in_maven)}):")
+                for svc in sorted(r.services_only_in_maven):
+                    print(f"      {svc}")
+
+            if r.services_only_in_sbt:
+                print(f"    Services only in SBT ({len(r.services_only_in_sbt)}):")
+                for svc in sorted(r.services_only_in_sbt):
+                    print(f"      {svc}")
+
 
 def compare_assembly_data() -> Dict[str, Any]:
     """Collect assembly comparison data and return structured dict."""
-    maven_assemblies = find_all_assembly_jars("maven")
-    sbt_assemblies = find_all_assembly_jars("sbt")
+    maven_assemblies = find_shaded_jars("maven")
+    sbt_assemblies = find_shaded_jars("sbt")
 
     all_names = set(maven_assemblies.keys()) | set(sbt_assemblies.keys())
     assemblies_data: Dict[str, Any] = {}
@@ -615,6 +734,7 @@ def compare_assembly_data() -> Dict[str, Any]:
 
         if maven_info:
             entry["maven"] = {
+                "jar_type": "module",
                 "path": str(maven_jar.relative_to(SPARK_HOME)),
                 "size": maven_info.size,
                 "class_count": maven_info.class_count(),
@@ -622,6 +742,7 @@ def compare_assembly_data() -> Dict[str, Any]:
             }
         if sbt_info:
             entry["sbt"] = {
+                "jar_type": "assembly",
                 "path": str(sbt_jar.relative_to(SPARK_HOME)),
                 "size": sbt_info.size,
                 "class_count": sbt_info.class_count(),
@@ -634,10 +755,10 @@ def compare_assembly_data() -> Dict[str, Any]:
         maven_packages: Dict[str, int] = defaultdict(int)
         sbt_packages: Dict[str, int] = defaultdict(int)
 
-        for cls in (maven_info.classes if maven_info else set()):
+        for cls in maven_info.classes if maven_info else set():
             pkg = "/".join(cls.split("/")[:-1])
             maven_packages[pkg] += 1
-        for cls in (sbt_info.classes if sbt_info else set()):
+        for cls in sbt_info.classes if sbt_info else set():
             pkg = "/".join(cls.split("/")[:-1])
             sbt_packages[pkg] += 1
 
@@ -645,22 +766,22 @@ def compare_assembly_data() -> Dict[str, Any]:
         only_sbt_pkgs = set(sbt_packages.keys()) - set(maven_packages.keys())
 
         if only_maven_pkgs:
-            entry["only_in_maven"] = {
-                pkg: maven_packages[pkg] for pkg in sorted(only_maven_pkgs)
-            }
+            entry["only_in_maven"] = {pkg: maven_packages[pkg] for pkg in sorted(only_maven_pkgs)}
             total_issues += len(only_maven_pkgs)
         if only_sbt_pkgs:
-            entry["only_in_sbt"] = {
-                pkg: sbt_packages[pkg] for pkg in sorted(only_sbt_pkgs)
-            }
+            entry["only_in_sbt"] = {pkg: sbt_packages[pkg] for pkg in sorted(only_sbt_pkgs)}
             total_issues += len(only_sbt_pkgs)
 
         # Shading verification
         shaded_prefixes = ["org/sparkproject/", "org/apache/spark/unused/"]
         shading = {}
         for prefix in shaded_prefixes:
-            m_count = sum(1 for c in (maven_info.classes if maven_info else set()) if c.startswith(prefix))
-            s_count = sum(1 for c in (sbt_info.classes if sbt_info else set()) if c.startswith(prefix))
+            m_count = sum(
+                1 for c in (maven_info.classes if maven_info else set()) if c.startswith(prefix)
+            )
+            s_count = sum(
+                1 for c in (sbt_info.classes if sbt_info else set()) if c.startswith(prefix)
+            )
             shading[prefix] = {"maven": m_count, "sbt": s_count}
             if maven_info and sbt_info and m_count != s_count:
                 total_issues += 1
@@ -689,9 +810,11 @@ def print_assembly_report(data: Dict[str, Any]) -> None:
         for build in ("maven", "sbt"):
             if build in entry:
                 info = entry[build]
+                jar_type = info.get("jar_type", "")
+                suffix = f" ({jar_type} JAR)" if jar_type else ""
                 label = "Maven" if build == "maven" else "SBT  "
                 print(
-                    f"    {label}: {info['path']}"
+                    f"    {label}{suffix}: {info['path']}"
                     f" ({info['size']:,} bytes, {info['class_count']} classes,"
                     f" {info['resource_count']} resources)"
                 )
@@ -759,12 +882,16 @@ SHADING_RULES = {
 }
 
 
-def find_all_assembly_jars(build_type: str) -> Dict[str, Path]:
-    """Find all assembly JARs for a specific build type (maven or sbt).
+def find_shaded_jars(build_type: str) -> Dict[str, Path]:
+    """Find the JARs that contain shaded classes for each build system.
 
-    Maven embeds shaded classes in the module JAR itself (no separate assembly).
-    SBT produces separate *-assembly-*.jar files under target/scala-X.XX/.
-    For shading analysis, we use the module JAR for Maven and the assembly JAR for SBT.
+    Maven embeds shaded classes in the module JAR itself (no separate assembly),
+    so this returns module JARs like ``spark-core_2.13-*.jar``.
+
+    SBT produces separate assembly JARs (``*-assembly-*.jar``) under
+    ``target/scala-X.XX/``, so this returns those.
+
+    Used by both ``--assemblies-only`` and ``--shading`` modes.
     """
     assemblies = {}
 
@@ -839,7 +966,7 @@ def analyze_shading(jar_path: Path) -> Dict[str, Dict[str, Set[str]]]:
                 for pattern in shaded_patterns:
                     if name.startswith(pattern):
                         # Extract the shaded sub-package (first 2 levels for detail)
-                        rest = name[len(pattern):]
+                        rest = name[len(pattern) :]
                         parts = rest.split("/")
                         if len(parts) >= 2:
                             sub_pkg = "/".join(parts[:2])
@@ -857,13 +984,15 @@ def analyze_shading(jar_path: Path) -> Dict[str, Dict[str, Set[str]]]:
 
 def compare_shading_data() -> Dict[str, Any]:
     """Collect shading comparison data and return structured dict."""
-    maven_assemblies = find_all_assembly_jars("maven")
-    sbt_assemblies = find_all_assembly_jars("sbt")
+    maven_assemblies = find_shaded_jars("maven")
+    sbt_assemblies = find_shaded_jars("sbt")
 
     all_names = set(maven_assemblies.keys()) | set(sbt_assemblies.keys())
-    unshaded_issues = 0
-    shaded_matching = 0
-    shaded_differing = 0
+    unshaded_packages = 0  # Number of package prefixes that contain unshaded classes
+    unshaded_class_count = 0  # Total number of classes that should have been relocated
+    shaded_matching = 0  # Packages where both sides exist and classes match exactly
+    shaded_differing = 0  # Packages where both sides exist but classes differ
+    shaded_skipped = 0  # Packages where one side is missing (no comparison possible)
     assemblies_data: Dict[str, Any] = {}
 
     for name in sorted(all_names):
@@ -873,11 +1002,13 @@ def compare_shading_data() -> Dict[str, Any]:
 
         if maven_jar:
             entry["maven"] = {
+                "jar_type": "module",
                 "path": str(maven_jar.relative_to(SPARK_HOME)),
                 "size": maven_jar.stat().st_size,
             }
         if sbt_jar:
             entry["sbt"] = {
+                "jar_type": "assembly",
                 "path": str(sbt_jar.relative_to(SPARK_HOME)),
                 "size": sbt_jar.stat().st_size,
             }
@@ -895,12 +1026,14 @@ def compare_shading_data() -> Dict[str, Any]:
             entry["unshaded"]["maven"] = {
                 pkg: len(classes) for pkg, classes in sorted(maven_unshaded.items())
             }
-            unshaded_issues += len(maven_unshaded)
+            unshaded_packages += len(maven_unshaded)
+            unshaded_class_count += sum(len(classes) for classes in maven_unshaded.values())
         if sbt_unshaded:
             entry["unshaded"]["sbt"] = {
                 pkg: len(classes) for pkg, classes in sorted(sbt_unshaded.items())
             }
-            unshaded_issues += len(sbt_unshaded)
+            unshaded_packages += len(sbt_unshaded)
+            unshaded_class_count += sum(len(classes) for classes in sbt_unshaded.values())
 
         all_shaded_pkgs = set(maven_shaded.keys()) | set(sbt_shaded.keys())
         shaded_detail = {}
@@ -924,7 +1057,7 @@ def compare_shading_data() -> Dict[str, Any]:
                 else:
                     shaded_matching += 1
             else:
-                shaded_matching += 1
+                shaded_skipped += 1
 
             shaded_detail[pkg] = pkg_entry
         entry["shaded"] = shaded_detail
@@ -937,7 +1070,9 @@ def compare_shading_data() -> Dict[str, Any]:
             "assemblies": len(assemblies_data),
             "shaded_packages_matching": shaded_matching,
             "shaded_packages_differing": shaded_differing,
-            "unshaded_issues": unshaded_issues,
+            "shaded_packages_skipped": shaded_skipped,
+            "unshaded_packages": unshaded_packages,
+            "unshaded_class_count": unshaded_class_count,
         },
         "assemblies": assemblies_data,
     }
@@ -955,11 +1090,13 @@ def print_shading_report(data: Dict[str, Any]) -> None:
         print(f"\n  {name}")
 
         if "maven" in entry:
-            print(f"    Maven: {entry['maven']['path']} ({entry['maven']['size']:,} bytes)")
+            m = entry["maven"]
+            print(f"    Maven (module JAR):   {m['path']} ({m['size']:,} bytes)")
         else:
             print("    Maven: (not built)")
         if "sbt" in entry:
-            print(f"    SBT:   {entry['sbt']['path']} ({entry['sbt']['size']:,} bytes)")
+            s = entry["sbt"]
+            print(f"    SBT   (assembly JAR): {s['path']} ({s['size']:,} bytes)")
         else:
             print("    SBT:   (not built)")
 
@@ -983,8 +1120,10 @@ def print_shading_report(data: Dict[str, Any]) -> None:
                     if not only_m and not only_s:
                         print(f"    \u2713 {pkg}: {m} classes")
                     else:
-                        print(f"    \u2717 {pkg}: Maven={m}, SBT={s}"
-                              f" (+{len(only_m)} Maven, +{len(only_s)} SBT)")
+                        print(
+                            f"    \u2717 {pkg}: Maven={m}, SBT={s}"
+                            f" (+{len(only_m)} Maven, +{len(only_s)} SBT)"
+                        )
                         for cls in only_m[:5]:
                             print(f"        only in Maven: {cls}")
                         if len(only_m) > 5:
@@ -1000,16 +1139,24 @@ def print_shading_report(data: Dict[str, Any]) -> None:
 
     matching = summary["shaded_packages_matching"]
     differing = summary["shaded_packages_differing"]
-    total = matching + differing
+    skipped = summary["shaded_packages_skipped"]
+    unshaded_pkgs = summary["unshaded_packages"]
+    unshaded_cls = summary["unshaded_class_count"]
+    compared = matching + differing
     print("\u2500" * 72)
-    print(f"Summary: {total} shaded packages checked,"
-          f" {matching} matching, {differing} differing,"
-          f" {summary['unshaded_issues']} unshaded issues")
-    if summary["unshaded_issues"] > 0:
-        print("FAIL: found packages that should have been relocated but were not")
+    parts = [f"{compared} shaded packages compared ({matching} match, {differing} differ)"]
+    if skipped:
+        parts.append(f"{skipped} skipped (one side missing)")
+    if unshaded_pkgs:
+        parts.append(f"{unshaded_pkgs} unshaded packages ({unshaded_cls} classes)")
+    print(f"Summary: {', '.join(parts)}")
+    if unshaded_cls > 0:
+        print(f"FAIL: {unshaded_cls} classes found that should have been relocated")
     elif differing > 0:
-        print("WARN: all packages properly shaded, but class-level differences found"
-              " (review above to determine if acceptable)")
+        print(
+            "WARN: all packages properly shaded, but class-level differences found"
+            " (review above to determine if acceptable)"
+        )
     else:
         print("PASS: all packages properly shaded, class contents match exactly")
 
@@ -1022,7 +1169,6 @@ def get_maven_dependencies() -> Dict[str, Set[str]]:
         "dependency:list",
         "-DoutputAbsoluteArtifactFilename=false",
         "-DincludeScope=compile",
-        "-q",
     ]
     ret, stdout, stderr = run_command(cmd)
     if ret != 0:
@@ -1177,6 +1323,111 @@ def print_dependencies_report(data: Dict[str, Any]) -> None:
         print(f"Result: {summary['differing']} modules have dependency differences")
 
 
+def _self_test() -> bool:
+    """Run self-tests for internal helpers. Returns True if all pass."""
+    passed = 0
+    failed = 0
+
+    def check(input_name: str, expected: str) -> None:
+        nonlocal passed, failed
+        actual = normalize_jar_name(input_name)
+        if actual == expected:
+            passed += 1
+        else:
+            failed += 1
+            print(f"  FAIL: normalize_jar_name({input_name!r})")
+            print(f"        expected {expected!r}, got {actual!r}")
+
+    print("Testing normalize_jar_name ...")
+
+    # Standard Spark artifacts with Scala suffix
+    check("spark-core_2.13-4.0.0-SNAPSHOT.jar", "spark-core_2.13")
+    check("spark-sql_2.13-4.0.0-SNAPSHOT.jar", "spark-sql_2.13")
+    check("spark-catalyst_2.13-4.0.0-SNAPSHOT.jar", "spark-catalyst_2.13")
+    check("spark-mllib_2.13-4.0.0-SNAPSHOT.jar", "spark-mllib_2.13")
+    check("spark-hive_2.13-4.0.0-SNAPSHOT.jar", "spark-hive_2.13")
+
+    # Artifacts with digits in the name (the tricky cases)
+    check(
+        "spark-sql-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-sql-kafka-0-10_2.13",
+    )
+    check(
+        "spark-streaming-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-streaming-kafka-0-10_2.13",
+    )
+    check(
+        "spark-token-provider-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-token-provider-kafka-0-10_2.13",
+    )
+
+    # Compound module names
+    check(
+        "spark-connect-client-jvm_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-connect-client-jvm_2.13",
+    )
+    check(
+        "spark-hive-thriftserver_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-hive-thriftserver_2.13",
+    )
+    check("spark-mllib-local_2.13-4.0.0-SNAPSHOT.jar", "spark-mllib-local_2.13")
+
+    # Release versions (no SNAPSHOT)
+    check("spark-core_2.13-4.0.0.jar", "spark-core_2.13")
+    check("spark-core_2.13-3.5.1.jar", "spark-core_2.13")
+
+    # Scala 2.12
+    check("spark-core_2.12-4.0.0-SNAPSHOT.jar", "spark-core_2.12")
+    check(
+        "spark-sql-kafka-0-10_2.12-3.5.1.jar",
+        "spark-sql-kafka-0-10_2.12",
+    )
+
+    # Scala 3
+    check("spark-core_3-4.0.0-SNAPSHOT.jar", "spark-core_3")
+
+    # No version at all (just artifact name)
+    check("spark-core_2.13.jar", "spark-core_2.13")
+    check("spark-core_2.13", "spark-core_2.13")
+
+    # Non-Scala JARs (fallback to semver regex)
+    check("commons-lang3-3.12.0.jar", "commons-lang3")
+    check("guava-31.1-jre.jar", "guava")
+
+    # No version, no Scala suffix
+    check("some-lib.jar", "some-lib")
+    check("some-lib", "some-lib")
+
+    # Test JARs with -tests suffix
+    check("spark-core_2.13-4.0.0-SNAPSHOT-tests.jar", "spark-core_2.13")
+
+    # Assembly JARs (normally skipped, but normalize should still work)
+    check(
+        "spark-streaming-kafka-0-10-assembly_2.13-4.0.0-SNAPSHOT.jar",
+        "spark-streaming-kafka-0-10-assembly_2.13",
+    )
+
+    # _find_module_dirs smoke test
+    print("Testing _find_module_dirs ...")
+    module_dirs = _find_module_dirs()
+    if len(module_dirs) >= 20:
+        passed += 1
+    else:
+        failed += 1
+        print(f"  FAIL: _find_module_dirs() returned {len(module_dirs)} dirs, expected >= 20")
+    # Spot-check a few known modules
+    rel_paths = {str(d.relative_to(SPARK_HOME)) for d in module_dirs}
+    for expected_mod in ("core", "sql/core", "connector/kafka-0-10-sql"):
+        if expected_mod in rel_paths:
+            passed += 1
+        else:
+            failed += 1
+            print(f"  FAIL: _find_module_dirs() missing expected module '{expected_mod}'")
+
+    print(f"  {passed} passed, {failed} failed")
+    return failed == 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Compare SBT and Maven builds for Spark",
@@ -1186,9 +1437,7 @@ def main():
     parser.add_argument(
         "--build-maven", action="store_true", help="Build with Maven before comparing"
     )
-    parser.add_argument(
-        "--build-sbt", action="store_true", help="Build with SBT before comparing"
-    )
+    parser.add_argument("--build-sbt", action="store_true", help="Build with SBT before comparing")
     parser.add_argument(
         "--build-both",
         action="store_true",
@@ -1205,9 +1454,7 @@ def main():
         action="store_true",
         help="Show detailed class-level differences",
     )
-    parser.add_argument(
-        "--assemblies-only", action="store_true", help="Compare assembly JARs only"
-    )
+    parser.add_argument("--assemblies-only", action="store_true", help="Compare assembly JARs only")
     parser.add_argument("--output", "-o", type=str, help="Write report to file")
     parser.add_argument(
         "--maven-profiles",
@@ -1223,7 +1470,7 @@ def main():
     parser.add_argument(
         "--ignore-shaded",
         action="store_true",
-        help="Ignore shaded package differences (org/sparkproject/, etc.)",
+        help="Ignore shaded classes/services and bundled deps in fat-JAR modules",
     )
     parser.add_argument(
         "--deps",
@@ -1240,18 +1487,26 @@ def main():
         action="store_true",
         help="Output structured JSON instead of human-readable text",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run internal self-tests and exit",
+    )
 
     args = parser.parse_args()
+
+    if args.self_test:
+        sys.exit(0 if _self_test() else 1)
 
     # Parse modules
     modules = None
     if args.modules:
-        modules = [m.strip() for m in args.modules.split(",")]
+        modules = [m.strip() for m in args.modules.split(",") if m.strip()]
 
     # Parse Maven profiles
     maven_profiles = None
     if args.maven_profiles:
-        maven_profiles = [p.strip() for p in args.maven_profiles.split(",")]
+        maven_profiles = [p.strip() for p in args.maven_profiles.split(",") if p.strip()]
 
     # Build if requested
     if args.build_both:
@@ -1282,7 +1537,7 @@ def main():
             _output_report(report)
         if not args.json:
             print_dependencies_report(report)
-        if report["summary"]["differing"] > 0:
+        if "error" in report or report["summary"]["differing"] > 0:
             sys.exit(1)
         return
 
@@ -1293,6 +1548,8 @@ def main():
             _output_report(report)
         if not args.json:
             print_shading_report(report)
+        if report["summary"]["unshaded_class_count"] > 0:
+            sys.exit(1)
         return
 
     # Assembly comparison mode
