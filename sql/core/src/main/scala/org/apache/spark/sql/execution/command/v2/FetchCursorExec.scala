@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatal
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.expressions.VariableReference
-import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
