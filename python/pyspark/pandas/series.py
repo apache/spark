@@ -48,7 +48,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.api.extensions import no_default
 from pandas.api.types import (
     is_list_like,
@@ -1082,9 +1082,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):
+        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):
+        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")

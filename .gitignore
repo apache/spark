@@ -84,6 +84,7 @@ python/docs/source/tutorial/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
+python/benchmarks/.asv/
 .mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml

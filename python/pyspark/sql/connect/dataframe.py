@@ -1212,6 +1212,11 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return self.select(
+            F.col("*"), F._invoke_function("distributed_sequence_id").alias(indexColName)
+        )
+
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
         res = DataFrame(

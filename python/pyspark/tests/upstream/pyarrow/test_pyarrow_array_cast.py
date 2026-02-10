@@ -18,6 +18,12 @@
 """
 Tests for PyArrow's pa.Array.cast() method using golden file comparison.
 
+This test suite covers both safe=True (default) and safe=False modes:
+- safe=True: Checks for overflows and unsafe conversions, raises errors on failure
+- safe=False: Allows potentially unsafe conversions (truncation, overflow wrapping)
+
+Each mode generates separate golden files to capture their different behaviors.
+
 ## Golden File Cell Format
 
 Each cell in the golden file uses the value@type format:
@@ -92,12 +98,22 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
             np_values = [np.float16(v) if v is not None else None for v in values]
             return pa.array(np_values, pa.float16())
 
-    def _try_cast(self, src_arr, tgt_type):
+    def _try_cast(self, src_arr, tgt_type, safe=True):
         """
         Try casting a source array to target type and return a value@type string.
 
         Uses repr_value() from GoldenFileTestMixin, which formats PyArrow arrays
         as "[val1, val2, null]@arrow_type" using each scalar's as_py() value.
+
+        Parameters
+        ----------
+        src_arr : pa.Array
+            Source PyArrow array to cast
+        tgt_type : pa.DataType
+            Target PyArrow type
+        safe : bool, default True
+            If True, check for overflows and unsafe conversions.
+            If False, allow potentially unsafe conversions.
 
         Returns
         -------
@@ -108,7 +124,7 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
                 e.g. "ERR@ArrowNotImplementedError"
         """
         try:
-            result = src_arr.cast(tgt_type, safe=True)
+            result = src_arr.cast(tgt_type, safe=safe)
             return self.repr_value(result, max_len=0)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
@@ -448,35 +464,73 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
 
     # ----- version overrides -----
 
-    @staticmethod
-    def _version_overrides():
+    @classmethod
+    def _version_overrides_safe(cls):
         """
-        Build overrides for known PyArrow version-dependent behaviors.
+        Build overrides for known PyArrow version-dependent behaviors (safe=True mode).
 
-        PyArrow < 21: to_pylist() on float16 arrays returns np.float16 objects
-        instead of plain Python floats, so all successful casts to float16
-        produce a different string representation.
+        PyArrow < 21: str(scalar) for float16 uses numpy's formatting
+        (via np.float16), which varies across numpy versions:
+          - numpy >= 2.4: scientific notation (e.g. "3.277e+04")
+          - numpy <  2.4: decimal (e.g. "32770.0")
+        The golden file uses PyArrow >= 21 output (Python float).
+        We compute the expected values dynamically to handle all
+        numpy versions.
         """
         overrides = {}
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
-            # PyArrow < 21: scalar.as_py() for float16 returns np.float16,
-            # whose str() uses numpy formatting (e.g. "0.1" instead of
-            # "0.0999755859375", "3.277e+04" instead of "32768.0").
             F16 = "float16"
+
+            def f16_repr(values):
+                arr = cls._make_float16_array(values)
+                return cls.repr_value(arr, max_len=0)
+
+            frac = f16_repr([0.1, 0.9, None])
             overrides.update(
                 {
-                    ("int16:max_min", F16): "[3.277e+04, -3.277e+04, None]@float16",
-                    ("float16:fractional", F16): "[0.1, 0.9, None]@float16",
-                    ("float32:fractional", F16): "[0.1, 0.9, None]@float16",
-                    ("float64:fractional", F16): "[0.1, 0.9, None]@float16",
+                    ("int16:max_min", F16): f16_repr([32767.0, -32768.0, None]),
+                    ("float16:fractional", F16): frac,
+                    ("float32:fractional", F16): frac,
+                    ("float64:fractional", F16): frac,
                 }
             )
         return overrides
 
-    # ----- test method -----
+    @classmethod
+    def _version_overrides_unsafe(cls):
+        """
+        Build overrides for known PyArrow version-dependent behaviors (safe=False mode).
+
+        PyArrow < 21: str(scalar) for float16 uses numpy's formatting
+        (via np.float16), which varies across numpy versions.
+        Same dynamic computation approach as safe=True mode.
+        Additional overrides may be needed for different PyArrow versions
+        as safe=False behavior varies across versions.
+        """
+        overrides = {}
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            F16 = "float16"
+
+            def f16_repr(values):
+                arr = cls._make_float16_array(values)
+                return cls.repr_value(arr, max_len=0)
+
+            frac = f16_repr([0.1, 0.9, None])
+            overrides.update(
+                {
+                    ("int16:max_min", F16): f16_repr([32767.0, -32768.0, None]),
+                    ("float16:fractional", F16): frac,
+                    ("float32:fractional", F16): frac,
+                    ("float64:fractional", F16): frac,
+                }
+            )
+        # Additional overrides will be discovered during cross-version testing
+        return overrides
+
+    # ----- test methods -----
 
     def test_scalar_cast_matrix(self):
-        """Test all scalar-to-scalar type cast combinations."""
+        """Test all scalar-to-scalar type cast combinations with safe=True."""
         source_names, source_arrays = self._get_source_arrays()
         target_types = self._get_target_types()
         target_names = [self.repr_type(t) for t in target_types]
@@ -485,9 +539,28 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         self.compare_or_generate_golden_matrix(
             row_names=source_names,
             col_names=target_names,
-            compute_cell=lambda src, tgt: self._try_cast(source_arrays[src], target_lookup[tgt]),
-            golden_file_prefix="golden_pyarrow_scalar_cast",
-            overrides=self._version_overrides(),
+            compute_cell=lambda src, tgt: self._try_cast(
+                source_arrays[src], target_lookup[tgt], safe=True
+            ),
+            golden_file_prefix="golden_pyarrow_scalar_cast_safe",
+            overrides=self._version_overrides_safe(),
+        )
+
+    def test_scalar_cast_matrix_unsafe(self):
+        """Test all scalar-to-scalar type cast combinations with safe=False."""
+        source_names, source_arrays = self._get_source_arrays()
+        target_types = self._get_target_types()
+        target_names = [self.repr_type(t) for t in target_types]
+        target_lookup = dict(zip(target_names, target_types))
+
+        self.compare_or_generate_golden_matrix(
+            row_names=source_names,
+            col_names=target_names,
+            compute_cell=lambda src, tgt: self._try_cast(
+                source_arrays[src], target_lookup[tgt], safe=False
+            ),
+            golden_file_prefix="golden_pyarrow_scalar_cast_unsafe",
+            overrides=self._version_overrides_unsafe(),
         )
 
 
@@ -591,12 +664,12 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
         source_arrays = dict(cases)
         return source_names, source_arrays
 
-    # ----- test method -----
+    # ----- version overrides -----
 
     @staticmethod
-    def _version_overrides():
+    def _version_overrides_safe():
         """
-        Build overrides for known PyArrow version-dependent behaviors.
+        Build overrides for known PyArrow version-dependent behaviors (safe=True mode).
 
         PyArrow < 21: struct field reordering during cast is not supported,
             raises ArrowTypeError instead.
@@ -618,8 +691,35 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
                 overrides[(src, "struct<a: int32, b: string>")] = "ERR@ArrowTypeError"
         return overrides
 
+    @staticmethod
+    def _version_overrides_unsafe():
+        """
+        Build overrides for known PyArrow version-dependent behaviors (safe=False mode).
+
+        Same version-dependent struct behaviors apply in unsafe mode.
+        Additional overrides may be needed for different PyArrow versions
+        as safe=False behavior varies across versions.
+        """
+        overrides = {}
+        struct_sources = [
+            "struct<x: int32, y: string>:standard",
+            "struct<x: int32, y: string>:null_fields",
+        ]
+        # PyArrow < 21: struct field reorder not supported
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            for src in struct_sources:
+                overrides[(src, "struct<y: string, x: int32>")] = "ERR@ArrowTypeError"
+        # PyArrow < 19: struct field name mismatch not supported
+        if LooseVersion(pa.__version__) < LooseVersion("19.0.0"):
+            for src in struct_sources:
+                overrides[(src, "struct<a: int32, b: string>")] = "ERR@ArrowTypeError"
+        # Additional overrides will be discovered during cross-version testing
+        return overrides
+
+    # ----- test methods -----
+
     def test_nested_cast_matrix(self):
-        """Test all nested type cast combinations."""
+        """Test all nested type cast combinations with safe=True."""
         source_names, source_arrays = self._get_source_arrays()
         target_types = self._get_target_types()
         target_names = [self.repr_type(t) for t in target_types]
@@ -628,9 +728,28 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
         self.compare_or_generate_golden_matrix(
             row_names=source_names,
             col_names=target_names,
-            compute_cell=lambda src, tgt: self._try_cast(source_arrays[src], target_lookup[tgt]),
-            golden_file_prefix="golden_pyarrow_nested_cast",
-            overrides=self._version_overrides(),
+            compute_cell=lambda src, tgt: self._try_cast(
+                source_arrays[src], target_lookup[tgt], safe=True
+            ),
+            golden_file_prefix="golden_pyarrow_nested_cast_safe",
+            overrides=self._version_overrides_safe(),
+        )
+
+    def test_nested_cast_matrix_unsafe(self):
+        """Test all nested type cast combinations with safe=False."""
+        source_names, source_arrays = self._get_source_arrays()
+        target_types = self._get_target_types()
+        target_names = [self.repr_type(t) for t in target_types]
+        target_lookup = dict(zip(target_names, target_types))
+
+        self.compare_or_generate_golden_matrix(
+            row_names=source_names,
+            col_names=target_names,
+            compute_cell=lambda src, tgt: self._try_cast(
+                source_arrays[src], target_lookup[tgt], safe=False
+            ),
+            golden_file_prefix="golden_pyarrow_nested_cast_unsafe",
+            overrides=self._version_overrides_unsafe(),
         )
 
 

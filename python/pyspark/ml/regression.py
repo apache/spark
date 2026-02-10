@@ -1585,7 +1585,7 @@ class RandomForestRegressor(
         return self._set(minWeightFractionPerNode=value)
 
 
-class RandomForestRegressionModel(
+class RandomForestRegressionModel(  # type: ignore[misc]
     _JavaRegressionModel[Vector],
     _TreeEnsembleModel,
     _RandomForestRegressorParams,

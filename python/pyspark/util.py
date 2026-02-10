@@ -456,7 +456,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
                     for tag in tags:
-                        session.addTag(tag)  # type: ignore[union-attr]
+                        session.addTag(tag)
                     return ff(*args, **kwargs)
 
                 return wrapped
@@ -480,7 +480,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            return f(*args, **kwargs)  # type: ignore[misc, operator]
+            return f(*args, **kwargs)
 
         return wrapped
     else:
@@ -569,7 +569,7 @@ class InheritableThread(threading.Thread):
                 assert hasattr(self, "_tags")
                 assert session is not None
                 thread_local = session.client.thread_local
-                thread_local.tags = self._tags  # type: ignore[has-type]
+                thread_local.tags = self._tags
                 return target(*a, **k)
 
             super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
@@ -585,7 +585,7 @@ class InheritableThread(threading.Thread):
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
                     if hasattr(self, "_tags"):
-                        for tag in self._tags:  # type: ignore[has-type]
+                        for tag in self._tags:
                             self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)

@@ -43,11 +43,10 @@ class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
       assert(streamingRelation.get.sourceIdentifyingName == Unassigned,
         s"Expected Unassigned but got ${streamingRelation.get.sourceIdentifyingName}")
 
-      // Verify the CatalogTable in DataSource has the name set
-      val catalogTable = streamingRelation.get.dataSource.catalogTable
-      assert(catalogTable.isDefined, "Expected CatalogTable in DataSource")
-      assert(catalogTable.get.streamingSourceIdentifyingName == Some(Unassigned),
-        s"Expected Some(Unassigned) but got ${catalogTable.get.streamingSourceIdentifyingName}")
+      // Verify the DataSource has the sourceIdentifyingName set
+      val dsSourceName = streamingRelation.get.dataSource.userSpecifiedStreamingSourceName
+      assert(dsSourceName == Some(Unassigned),
+        s"Expected Some(Unassigned) but got $dsSourceName")
     }
   }
 

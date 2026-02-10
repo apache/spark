@@ -238,6 +238,30 @@ private[spark] object Config extends Logging {
       .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
       .createWithDefault(0)
 
+  val EXECUTOR_RESIZE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.resizeInterval")
+      .doc("Interval between executor resize operations. To disable, set 0 (default)")
+      .version("4.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "Interval should be non-negative")
+      .createWithDefault(0)
+
+  val EXECUTOR_RESIZE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
+      .doc("The threshold to resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
+      .createWithDefault(0.9)
+
+  val EXECUTOR_RESIZE_FACTOR =
+    ConfigBuilder("spark.kubernetes.executor.resizeFactor")
+      .doc("The factor to resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
+      .createWithDefault(0.1)
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"

@@ -325,8 +325,8 @@ class SparkSession(SparkConversionMixin):
                 raise PySparkRuntimeError(
                     errorClass="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
                     messageParameters={
-                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),
-                        "connect_url": self._options.get(
+                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),  # type: ignore[dict-item]
+                        "connect_url": self._options.get(  # type: ignore[dict-item]
                             "spark.remote", os.environ.get("SPARK_REMOTE")
                         ),
                     },
@@ -595,6 +595,7 @@ class SparkSession(SparkConversionMixin):
                 self._validate_startup_urls()
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                assert url is not None
                 if url.startswith("local"):
                     raise PySparkRuntimeError(
                         errorClass="UNSUPPORTED_LOCAL_CONNECTION_STRING",
@@ -624,7 +625,7 @@ class SparkSession(SparkConversionMixin):
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     @classproperty
-    def builder(cls: Type["SparkSession"]) -> "Builder":  # type: ignore[misc]
+    def builder(cls: Type["SparkSession"]) -> "Builder":
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
         .. versionchanged:: 3.4.0
