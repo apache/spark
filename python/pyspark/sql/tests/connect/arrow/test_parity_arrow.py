@@ -17,6 +17,7 @@
 
 import unittest
 
+from pyspark.errors import AnalysisException
 from pyspark.sql.tests.arrow.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -83,6 +84,32 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_large_cached_local_relation_same_values(self):
         self.check_large_cached_local_relation_same_values()
+
+    def test_large_local_relation_size_limit_exceeded(self):
+        import random
+        import string
+
+        conf_key = "spark.sql.session.localRelationSizeLimit"
+        original_limit = self.spark.conf.get(conf_key)
+        try:
+            new_limit = 50 * 1024 * 1024
+            self.spark.conf.set(conf_key, new_limit)
+
+            row_size = 1000
+            row_count = 64 * 1000
+            suffix = "abcdef"
+            str_value = (
+                "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
+            )
+            data = [(i, str_value) for i in range(row_count)]
+
+            with self.assertRaisesRegex(
+                AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{new_limit}"
+            ):
+                df = self.spark.createDataFrame(data, ["col1", "col2"])
+                df.count()
+        finally:
+            self.spark.conf.set(conf_key, original_limit)
 
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)

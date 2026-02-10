@@ -20,7 +20,7 @@ FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
 RUFF_BUILD="ruff"
 MINIMUM_RUFF="0.14.0"
-MINIMUM_MYPY="1.8.0"
+MINIMUM_MYPY="1.19.1"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -164,10 +164,14 @@ function mypy_data_test {
     fi
 
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -o "python_files=test_*.yml" \
       --rootdir python \
       --mypy-only-local-stub \
       --mypy-ini-file python/mypy.ini \
-      python/pyspark ) 2>&1)
+      python/pyspark/tests/typing \
+      python/pyspark/sql/tests/typing \
+      python/pyspark/ml/tests/typing \
+      ) 2>&1)
 
     PYTEST_STATUS=$?
 

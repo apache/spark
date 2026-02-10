@@ -37,7 +37,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pyarrow,
-    pyarrow_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message,
 )
 class CogroupedMapInArrowTestsMixin:
     @property
@@ -196,7 +196,7 @@ class CogroupedMapInArrowTestsMixin:
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m. Unexpected: v, v2.\n",
+                "Missing: m. Unexpected: v, v2.",
             ):
                 # stats returns three columns while here we set schema with two columns
                 self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
@@ -232,7 +232,7 @@ class CogroupedMapInArrowTestsMixin:
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.\n",
+                "Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 self.cogrouped.applyInArrow(odd_means, schema="id long, m double").collect()

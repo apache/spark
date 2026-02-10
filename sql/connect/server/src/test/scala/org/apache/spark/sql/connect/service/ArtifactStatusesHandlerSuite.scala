@@ -45,7 +45,7 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
-    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
 
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {

@@ -55,7 +55,10 @@ class BooleanOpsTestsMixin:
 
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(b_pser + pser, b_psser + psser, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser + pser, b_psser + psser, check_exact=False, ignore_null=ignore_null
+            )
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col == "bool":
@@ -74,7 +77,10 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser - True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser - pdf[col], b_psser - psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser - psdf[col])
@@ -91,7 +97,10 @@ class BooleanOpsTestsMixin:
         self.assert_eq(b_pser * False, b_psser * False)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser * pdf[col], b_psser * psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
@@ -149,7 +158,10 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser % True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser % pdf[col], b_psser % psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser % psdf[col])
@@ -392,7 +404,7 @@ class BooleanOpsTestsMixin:
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class BooleanExtensionOpsTest(OpsTestBase):
+class BooleanExtensionOpsTestsMixin:
     @property
     def boolean_pdf(self):
         return pd.DataFrame(
@@ -821,6 +833,14 @@ class BooleanExtensionOpsTest(OpsTestBase):
 
 class BooleanOpsTests(
     BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
+class BooleanExtensionOpsTests(
+    BooleanExtensionOpsTestsMixin,
     OpsTestBase,
     PandasOnSparkTestCase,
 ):

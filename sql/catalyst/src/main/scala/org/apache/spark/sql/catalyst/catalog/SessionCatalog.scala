@@ -586,8 +586,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val table = qualifiedIdent.table
-    requireDbExists(db)
-    requireTableExists(qualifiedIdent)
+    // Let the external catalog handle all error cases (db not exists, table not exists)
     attachCatalogName(externalCatalog.getTable(db, table))
   }
 
@@ -893,14 +892,8 @@ class SessionCatalog(
       }
     } else {
       if (name.database.isDefined || !tempViews.contains(table)) {
-        requireDbExists(db)
-        // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
-        // Instead, log it as an error message.
-        if (tableExists(qualifiedIdent)) {
-          externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
-        } else if (!ignoreIfNotExists) {
-          throw new NoSuchTableException(db = db, table = table)
-        }
+        // Let the external catalog handle all error cases (db not exists, table not exists)
+        externalCatalog.dropTable(db, table, ignoreIfNotExists, purge)
       } else {
         tempViews.remove(table)
       }
@@ -1552,7 +1545,13 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
-    requireDbExists(db)
+    if (!databaseExists(db)) {
+      if (ignoreIfNotExists) {
+        return
+      } else {
+        throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
+      }
+    }
     if (functionExists(qualifiedIdent)) {
       if (functionRegistry.functionExists(qualifiedIdent)) {
         // If we have loaded this function into the FunctionRegistry,

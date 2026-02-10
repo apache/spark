@@ -237,7 +237,8 @@ private[sql] class RocksDBStateStoreProvider
       val valueEncoder = RocksDBStateEncoder.getValueEncoder(
         dataEncoder,
         valueSchema,
-        useMultipleValuesPerKey
+        useMultipleValuesPerKey,
+        rocksDB.delimiterSize
       )
       keyValueEncoderMap.putIfAbsent(colFamilyName, (keyEncoder, valueEncoder, cfId))
     }
@@ -257,6 +258,18 @@ private[sql] class RocksDBStateStoreProvider
         isValidated = true
       }
       value
+    }
+
+    override def multiGet(
+        keys: Array[UnsafeRow],
+        colFamilyName: String): Iterator[UnsafeRow] = {
+      validateAndTransitionState(UPDATE)
+      verify(keys != null && keys.forall(_ != null), "Keys cannot be null")
+      verifyColFamilyOperations("multiGet", colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val encodedKeys = keys.map(kvEncoder._1.encodeKey)
+      val encodedValues = rocksDB.multiGet(encodedKeys, colFamilyName)
+      encodedValues.map(kvEncoder._2.decodeValue)
     }
 
     override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
@@ -291,8 +304,9 @@ private[sql] class RocksDBStateStoreProvider
       "that supports multiple values for a single key.")
 
       if (storeConf.rowChecksumEnabled) {
-        // multiGet provides better perf for row checksum, since it avoids copying values
-        val encodedValuesIterator = rocksDB.multiGet(keyEncoder.encodeKey(key), colFamilyName)
+        // getMergedValues provides better perf for row checksum, since it avoids copying values
+        val encodedValuesIterator =
+          rocksDB.getMergedValues(keyEncoder.encodeKey(key), colFamilyName)
         valueEncoder.decodeValues(encodedValuesIterator)
       } else {
         val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
@@ -383,6 +397,24 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
+    }
+
+    override def deleteRange(
+        beginKey: UnsafeRow,
+        endKey: UnsafeRow,
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot deleteRange after already committed or aborted")
+      verify(beginKey != null, "Begin key cannot be null")
+      verify(endKey != null, "End key cannot be null")
+      verifyColFamilyOperations("deleteRange", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._1.supportsDeleteRange,
+        "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
+      val encodedBeginKey = kvEncoder._1.encodeKey(beginKey)
+      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+      rocksDB.deleteRange(encodedBeginKey, encodedEndKey, colFamilyName)
     }
 
     override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
@@ -702,7 +734,8 @@ private[sql] class RocksDBStateStoreProvider
     val valueEncoder = RocksDBStateEncoder.getValueEncoder(
       dataEncoder,
       valueSchema,
-      useMultipleValuesPerKey
+      useMultipleValuesPerKey,
+      rocksDB.delimiterSize
     )
 
     var cfId: Short = 0
@@ -1412,7 +1445,7 @@ class RocksDBStateStoreChangeDataReader(
           val valueBytes = if (storeConf.rowChecksumEnabled &&
             nextRecord._1 != RecordType.DELETE_RECORD) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, keyBytes, nextRecord._3)
+              readVerifier, keyBytes, nextRecord._3, rocksDB.delimiterSize)
           } else {
             nextRecord._3
           }
@@ -1435,7 +1468,7 @@ class RocksDBStateStoreChangeDataReader(
             (nextRecord._1, key, nextRecord._3)
           case _ =>
             val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, nextRecord._2, nextRecord._3)
+              readVerifier, nextRecord._2, nextRecord._3, rocksDB.delimiterSize)
             (nextRecord._1, nextRecord._2, value)
         }
       } else {

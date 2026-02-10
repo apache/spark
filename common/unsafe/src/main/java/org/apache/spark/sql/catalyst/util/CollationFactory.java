@@ -1248,6 +1248,13 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns the collation ID for the given fully qualified name.
+   */
+  public static int fullyQualifiedNameToId(String[] collationName) throws SparkException {
+    return collationNameToId(resolveFullyQualifiedName(collationName));
+  }
+
+  /**
    * Returns the collation ID for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {

@@ -585,7 +585,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 bround.__doc__ = pysparkfuncs.bround.__doc__
@@ -604,7 +604,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
@@ -616,7 +616,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
@@ -698,7 +698,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 floor.__doc__ = pysparkfuncs.floor.__doc__
@@ -833,7 +833,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("round", col, scale)
 
 
 round.__doc__ = pysparkfuncs.round.__doc__
@@ -1577,9 +1577,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 any_value.__doc__ = pysparkfuncs.any_value.__doc__
@@ -1591,9 +1589,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 first_value.__doc__ = pysparkfuncs.first_value.__doc__
@@ -1605,9 +1601,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 last_value.__doc__ = pysparkfuncs.last_value.__doc__
@@ -3987,6 +3981,15 @@ def time_to_micros(col: "ColumnOrName") -> Column:
 time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
 
 
+def _ensure_column_or_name(arg: Optional[Any]) -> "ColumnOrName":
+    if not isinstance(arg, (Column, str)):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "arg", "arg_type": type(arg).__name__},
+        )
+    return arg
+
+
 @overload
 def make_timestamp(
     years: "ColumnOrName",
@@ -4044,23 +4047,23 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4071,13 +4074,13 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+                "make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
             )
 
 
@@ -4138,26 +4141,27 @@ def try_make_timestamp(
                 errorClass="CANNOT_SET_TOGETHER",
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
+
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4168,13 +4172,13 @@ def try_make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+                "try_make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
             )
 
 
@@ -4264,12 +4268,12 @@ def make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
-            cast("ColumnOrName", years),
-            cast("ColumnOrName", months),
-            cast("ColumnOrName", days),
-            cast("ColumnOrName", hours),
-            cast("ColumnOrName", mins),
-            cast("ColumnOrName", secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4278,7 +4282,7 @@ def make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            "make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
@@ -4324,12 +4328,12 @@ def try_make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz",
-            cast("ColumnOrName", years),
-            cast("ColumnOrName", months),
-            cast("ColumnOrName", days),
-            cast("ColumnOrName", hours),
-            cast("ColumnOrName", mins),
-            cast("ColumnOrName", secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4338,7 +4342,7 @@ def try_make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            "try_make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
@@ -4611,6 +4615,48 @@ def kll_sketch_agg_double(
 
 
 kll_sketch_agg_double.__doc__ = pysparkfuncs.kll_sketch_agg_double.__doc__
+
+
+def kll_merge_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_bigint.__doc__ = pysparkfuncs.kll_merge_agg_bigint.__doc__
+
+
+def kll_merge_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_float.__doc__ = pysparkfuncs.kll_merge_agg_float.__doc__
+
+
+def kll_merge_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_double.__doc__ = pysparkfuncs.kll_merge_agg_double.__doc__
 
 
 def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
@@ -5004,8 +5050,15 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
 
 
-def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+def st_geomfromwkb(
+    wkb: "ColumnOrName", srid: Optional[Union["ColumnOrName", int]] = None
+) -> Column:
+    if srid is None:
+        return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    else:
+        srid = _enum_to_value(srid)
+        srid = lit(srid) if isinstance(srid, int) else srid
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__

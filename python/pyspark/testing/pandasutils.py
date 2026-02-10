@@ -371,6 +371,7 @@ class PandasOnSparkTestUtils:
         rtol: float = 1e-5,
         atol: float = 1e-8,
         check_row_order: bool = True,
+        ignore_null: bool = False,
     ):
         """
         Asserts if two arbitrary objects are equal or not. If given objects are
@@ -389,9 +390,20 @@ class PandasOnSparkTestUtils:
             float values in actual and expected. Set to 1e-8 by default.
         :param check_row_order: A flag indicating whether the order of rows should be considered
             in the comparison. If set to False, row order will be ignored.
+        :param ignore_null: if this is enabled, the comparison will ignore null values.
         """
         import pandas as pd
         from pandas.api.types import is_list_like
+
+        if ignore_null:
+            # We use _assert_pandas_almost_equal with atol=0 and rtol=0 to check if the
+            # values are equal because null values are properly handled by it
+            if not almost:
+                # It's possible to set almost=True and ignore_null=True. In that case,
+                # honor atol and rtol settings. ignore_null=True is implied by almost=True.
+                almost = True
+                rtol = 0
+                atol = 0
 
         # for pandas-on-Spark DataFrames, allow choice to ignore row order
         if isinstance(left, (ps.DataFrame, ps.Series, ps.Index)):
@@ -453,7 +465,9 @@ class PandasOnSparkTestUtils:
         elif is_list_like(lobj) and is_list_like(robj):
             self.assertTrue(len(left) == len(right))
             for litem, ritem in zip(left, right):
-                self.assert_eq(litem, ritem, check_exact=check_exact, almost=almost)
+                self.assert_eq(
+                    litem, ritem, check_exact=check_exact, almost=almost, ignore_null=ignore_null
+                )
         elif (lobj is not None and pd.isna(lobj)) and (robj is not None and pd.isna(robj)):
             pass
         else:

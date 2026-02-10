@@ -323,8 +323,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   }
 
   private def functionExists(ident: Seq[String]): Boolean = {
-    val plan =
-      UnresolvedFunctionName(ident, Catalog.FUNCTION_EXISTS_COMMAND_NAME, false, None)
+    val plan = UnresolvedFunctionName(ident, Catalog.FUNCTION_EXISTS_COMMAND_NAME)
     try {
       sparkSession.sessionState.executePlan(plan).analyzed match {
         case _: ResolvedPersistentFunc => true
@@ -337,7 +336,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
+    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction")
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {

@@ -71,11 +71,11 @@ options { tokenVocab = SqlBaseLexer; }
       return false;
     }
     int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
-    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+    return la == SELECT || la == EXTEND || la == SET || la == DROP ||
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
-           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL;
@@ -227,7 +227,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG catalogIdentifierReference                           #setCatalog
+    | SET CATALOG expression                                           #setCatalog
     | CREATE namespace (IF errorCapturingNot EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -350,6 +350,13 @@ statement
         (COMMA identifierReferences+=identifierReference)*
         dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
+    | DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+                                                                       #declareCursorStatement
+    | OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
+                                                                       #openCursorStatement
+    | FETCH ((NEXT? FROM) | FROM)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
+                                                                       #fetchCursorStatement
+    | CLOSE multipartIdentifier                                        #closeCursorStatement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -424,10 +431,14 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? watermarkClause?
-      tableAlias                                                       #streamTableName
+    : STREAM multipartIdentifier optionsClause?
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? watermarkClause? tableAlias                       #streamTableName
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
+    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
+    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -560,9 +571,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
+    : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -919,7 +930,7 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN
+    : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
 
 pivotColumn
@@ -1067,11 +1078,16 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
-    | functionTable                                         #tableValuedFunction
+    | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
     ;
 
 optionsClause
     : WITH options=propertyList
+    ;
+
+// Clause for naming streaming sources with IDENTIFIED BY
+identifiedByClause
+    : IDENTIFIED BY sourceName=errorCapturingIdentifier
     ;
 
 // Unlike all other types of expression for relation, we do not support watermarkClause for
@@ -1112,13 +1128,19 @@ functionTableArgument
     | functionArgument
     ;
 
-// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
-// referred by other clause, please check wheter watermarkClause makes sense to the clause.
-// If not, consider separate this rule.
-functionTable
+// A table function call including opening and closing parentheses.
+tableFunctionCall
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN watermarkClause? tableAlias
+      RIGHT_PAREN
+    ;
+
+// A table function call with optional trailing clauses for streaming and aliasing.
+// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
+// the AST builder will reject it with an error. The clause must come before watermarkClause
+// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+tableFunctionCallWithTrailingClauses
+    : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
 
 tableAlias
@@ -1407,8 +1429,8 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
@@ -1815,7 +1837,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
-    | DROP identifierSeq
+    | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
@@ -1865,6 +1887,7 @@ ansiNonReserved
     | ARCHIVE
     | ARRAY
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | BEGIN
@@ -1887,6 +1910,7 @@ ansiNonReserved
     | CHAR
     | CHARACTER
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -1903,6 +1927,7 @@ ansiNonReserved
     | CONTAINS
     | CONTINUE
     | COST
+    | CURSOR
     | CUBE
     | CURRENT
     | DATA
@@ -1971,6 +1996,7 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -1984,6 +2010,7 @@ ansiNonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2034,12 +2061,14 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
     | NULLS
     | NUMERIC
     | OF
+    | OPEN
     | OPTION
     | OPTIONS
     | OUT
@@ -2063,6 +2092,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER
@@ -2223,6 +2253,7 @@ nonReserved
     | ARRAY
     | AS
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2251,6 +2282,7 @@ nonReserved
     | CHARACTER
     | CHECK
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -2274,6 +2306,7 @@ nonReserved
     | CREATE
     | CUBE
     | CURRENT
+    | CURSOR
     | CURRENT_DATE
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
@@ -2358,6 +2391,7 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -2372,6 +2406,7 @@ nonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2426,6 +2461,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
@@ -2436,6 +2472,7 @@ nonReserved
     | OF
     | OFFSET
     | ONLY
+    | OPEN
     | OPTION
     | OPTIONS
     | OR
@@ -2464,6 +2501,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER

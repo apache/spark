@@ -44,6 +44,7 @@ import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
+  def supportsDeleteRange: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
@@ -629,7 +630,7 @@ class UnsafeRowDataEncoder(
   override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
     keyStateEncoderSpec match {
       case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
-        decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+        decodeToUnsafeRow(bytes, numFields = keySchema.length - numColsPrefixKey)
       case RangeKeyScanStateEncoderSpec(_, orderingOrdinals) =>
         decodeToUnsafeRow(bytes, keySchema.length - orderingOrdinals.length)
       case _ => throw unsupportedOperationForKeyStateEncoder("decodeRemainingKey")
@@ -1349,14 +1350,16 @@ object RocksDBStateEncoder extends Logging {
    * @param valueSchema Schema defining the structure of values to be encoded
    * @param useMultipleValuesPerKey If true, creates an encoder that can handle multiple values
    *                                per key; if false, creates an encoder for single values
+   * @param delimiterSize Size of the delimiter used between multiple values (in bytes)
    * @return A configured RocksDBValueStateEncoder instance
    */
   def getValueEncoder(
       dataEncoder: RocksDBDataEncoder,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
+      useMultipleValuesPerKey: Boolean,
+      delimiterSize: Int = 1): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(dataEncoder, valueSchema)
+      new MultiValuedStateEncoder(dataEncoder, valueSchema, delimiterSize)
     } else {
       new SingleValueStateEncoder(dataEncoder, valueSchema)
     }
@@ -1472,6 +1475,8 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def supportsDeleteRange: Boolean = false
 }
 
 /**
@@ -1669,6 +1674,8 @@ class RangeKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def supportsDeleteRange: Boolean = true
 }
 
 /**
@@ -1699,6 +1706,8 @@ class NoPrefixKeyStateEncoder(
 
   override def supportPrefixKeyScan: Boolean = false
 
+  override def supportsDeleteRange: Boolean = false
+
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
   }
@@ -1719,7 +1728,8 @@ class NoPrefixKeyStateEncoder(
  */
 class MultiValuedStateEncoder(
     dataEncoder: RocksDBDataEncoder,
-    valueSchema: StructType)
+    valueSchema: StructType,
+    delimiterSize: Int)
   extends RocksDBValueStateEncoder with Logging {
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
@@ -1779,7 +1789,7 @@ class MultiValuedStateEncoder(
             numBytes
           )
           pos += numBytes
-          pos += 1 // eat the delimiter character
+          pos += delimiterSize // eat the delimiter based on actual delimiter size
           dataEncoder.decodeValue(encodedValue)
         }
       }

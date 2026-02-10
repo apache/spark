@@ -12,14 +12,36 @@
       }
     },
     "expressions": [{
-      "unresolvedFunction": {
-        "functionName": "to_json",
-        "arguments": [{
+      "alias": {
+        "expr": {
           "unresolvedFunction": {
-            "functionName": "struct",
+            "functionName": "to_json",
             "arguments": [{
-              "unresolvedStar": {
-                "planId": "0"
+              "unresolvedFunction": {
+                "functionName": "struct",
+                "arguments": [{
+                  "unresolvedStar": {
+                    "planId": "0"
+                  },
+                  "common": {
+                    "origin": {
+                      "jvmOrigin": {
+                        "stackTrace": [{
+                          "classLoaderName": "app",
+                          "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                          "methodName": "toJSON",
+                          "fileName": "Dataset.scala"
+                        }, {
+                          "classLoaderName": "app",
+                          "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                          "methodName": "~~trimmed~anonfun~~",
+                          "fileName": "PlanGenerationTestSuite.scala"
+                        }]
+                      }
+                    }
+                  }
+                }],
+                "isInternal": false
               },
               "common": {
                 "origin": {
@@ -58,8 +80,8 @@
               }
             }
           }
-        }],
-        "isInternal": false
+        },
+        "name": ["value"]
       },
       "common": {
         "origin": {

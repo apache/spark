@@ -32,6 +32,7 @@ from typing import (
     IO,
     Iterable,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -46,15 +47,17 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pandas.core.accessor import CachedAccessor
-from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
+from pandas.api.extensions import no_default
+from pandas.api.types import (
     is_list_like,
     is_hashable,
     CategoricalDtype,
 )
-from pandas.tseries.frequencies import DateOffset
+from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import (
     functions as F,
     Column as PySparkColumn,
@@ -414,7 +417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     """
 
     def __init__(  # type: ignore[no-untyped-def]
-        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=no_default
     ):
         assert data is not None
 
@@ -424,14 +427,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert dtype is None
             assert name is None
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             self._anchor = data
             self._col_label = index
 
         elif isinstance(data, Series):
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             if name:
                 data = data.rename(name)
@@ -452,7 +455,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 assert dtype is None
                 assert name is None
                 assert not copy
-                assert not fastpath
+                assert fastpath is no_default
                 s = data
             else:
                 from pyspark.pandas.indexes.base import Index
@@ -463,9 +466,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         "Try pandas index or array-like."
                     )
 
-                s = pd.Series(
-                    data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
-                )
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0"):
+                    s = pd.Series(
+                        data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
+                    )
+                else:
+                    # fastpath is removed since pandas 3.0.0
+                    s = pd.Series(data=data, index=index, dtype=dtype, name=name, copy=copy)
             internal = InternalFrame.from_pandas(pd.DataFrame(s))
             if s.name is None:
                 internal = internal.copy(column_labels=[None])
@@ -513,9 +520,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
-        "spark", SparkSeriesMethods
-    )
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)
 
     @property
     def dtypes(self) -> Dtype:
@@ -1206,10 +1211,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 else:
                     current = current.when(self.spark.column == F.lit(to_replace), value)
 
-            if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
+            if isinstance(arg, dict) and hasattr(arg, "__missing__"):
+                tmp_val = arg[np._NoValue]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore[attr-defined]
+                del arg[np._NoValue]
                 current = current.otherwise(F.lit(tmp_val))
             else:
                 current = current.otherwise(F.lit(None).cast(self.spark.data_type))
@@ -6941,7 +6946,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psser = ps.Series([1, 2, 3, 4], index=idx)
         >>> psser
         2018-04-09 00:00:00    1
@@ -7160,8 +7165,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def resample(
         self,
         rule: str_type,
-        closed: Optional[str_type] = None,
-        label: Optional[str_type] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         on: Optional["Series"] = None,
     ) -> "SeriesResampler":
         """
@@ -7201,7 +7206,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Start by creating a series with 9 one minute timestamps.
 
-        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='min')
         >>> series = ps.Series(range(9), index=index, name='V')
         >>> series
         2000-01-01 00:00:00    0
@@ -7218,7 +7223,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins and sum the values
         of the timestamps falling into a bin.
 
-        >>> series.resample('3T').sum().sort_index()
+        >>> series.resample('3min').sum().sort_index()
         2000-01-01 00:00:00     3.0
         2000-01-01 00:03:00    12.0
         2000-01-01 00:06:00    21.0
@@ -7234,7 +7239,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         To include this value, close the right side of the bin interval as
         illustrated in the example below this one.
 
-        >>> series.resample('3T', label='right').sum().sort_index()
+        >>> series.resample('3min', label='right').sum().sort_index()
         2000-01-01 00:03:00     3.0
         2000-01-01 00:06:00    12.0
         2000-01-01 00:09:00    21.0
@@ -7243,7 +7248,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins as above, but close the right
         side of the bin interval.
 
-        >>> series.resample('3T', label='right', closed='right').sum().sort_index()
+        >>> series.resample('3min', label='right', closed='right').sum().sort_index()
         2000-01-01 00:00:00     0.0
         2000-01-01 00:03:00     6.0
         2000-01-01 00:06:00    15.0
@@ -7252,7 +7257,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Upsample the series into 30 second bins.
 
-        >>> series.resample('30S').sum().sort_index()[0:5]   # Select first 5 rows
+        >>> series.resample('30s').sum().sort_index()[0:5]   # Select first 5 rows
         2000-01-01 00:00:00    0.0
         2000-01-01 00:00:30    0.0
         2000-01-01 00:01:00    1.0
@@ -7363,7 +7368,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         )
                     )
                 return rest + footer
-        return pser.to_string(name=self.name, dtype=self.dtype)
+        return pser.to_string(name=self.name, dtype=self.dtype)  # type: ignore[call-overload]
 
     def __dir__(self) -> Iterable[str_type]:
         if not isinstance(self.spark.data_type, StructType):

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -26,8 +27,42 @@ class DropTableSuite extends v1.DropTableSuiteBase with CommandSuiteBase {
   test("hive client calls") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkHiveClientCalls(expected = 10) {
+      // Drop existing table: 3 Hive client calls
+      // 1. tableExists (in DropTableExec to check if table exists)
+      // 2. getTable (in loadTable -> getTableRawMetadata to get table metadata)
+      // 3. dropTable (the actual drop operation)
+      checkHiveClientCalls(expected = 3) {
         sql(s"DROP TABLE $t")
+      }
+    }
+
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      // Drop non-existent table with IF EXISTS: 1 Hive client call
+      // 1. tableExists (returns false, IF EXISTS allows silent return)
+      checkHiveClientCalls(expected = 1) {
+        sql(s"DROP TABLE IF EXISTS $catalog.ns.tbl")
+      }
+      // Drop non-existent table without IF EXISTS: 1 Hive client call
+      // 1. tableExists (returns false, throws TABLE_OR_VIEW_NOT_FOUND)
+      checkHiveClientCalls(expected = 1) {
+        intercept[AnalysisException] {
+          sql(s"DROP TABLE $catalog.ns.tbl")
+        }
+      }
+    }
+
+    // Drop table in non-existent database with IF EXISTS: 1 Hive client call
+    // 1. tableExists (returns false, IF EXISTS allows silent return)
+    checkHiveClientCalls(expected = 1) {
+      sql(s"DROP TABLE IF EXISTS $catalog.non_existent_db.tbl")
+    }
+
+    // Drop table in non-existent database without IF EXISTS: 1 Hive client call
+    // 1. tableExists (returns false, throws TABLE_OR_VIEW_NOT_FOUND)
+    checkHiveClientCalls(expected = 1) {
+      intercept[AnalysisException] {
+        sql(s"DROP TABLE $catalog.non_existent_db.tbl")
       }
     }
   }

@@ -2617,7 +2617,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 @_try_remote_functions
@@ -2671,7 +2671,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 @_try_remote_functions
@@ -3058,7 +3058,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 @_try_remote_functions
@@ -7758,7 +7758,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("round", col, scale)
 
 
 @_try_remote_functions
@@ -7814,7 +7814,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 @_try_remote_functions
@@ -8844,9 +8844,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -8899,9 +8897,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -8954,9 +8950,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -25064,6 +25058,15 @@ def time_to_micros(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_to_micros", col)
 
 
+def _ensure_column_or_name(arg: Optional[Any]) -> "ColumnOrName":
+    if not isinstance(arg, (Column, str)):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "arg", "arg_type": type(arg).__name__},
+        )
+    return arg
+
+
 @overload
 def make_timestamp(
     years: "ColumnOrName",
@@ -25257,23 +25260,23 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -25284,13 +25287,13 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+                "make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
             )
 
 
@@ -25500,23 +25503,23 @@ def try_make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", years),
-                cast("ColumnOrName", months),
-                cast("ColumnOrName", days),
-                cast("ColumnOrName", hours),
-                cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -25527,13 +25530,13 @@ def try_make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time),
-                cast("ColumnOrName", timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+                "try_make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
             )
 
 
@@ -25884,12 +25887,12 @@ def make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
-            cast("ColumnOrName", years),
-            cast("ColumnOrName", months),
-            cast("ColumnOrName", days),
-            cast("ColumnOrName", hours),
-            cast("ColumnOrName", mins),
-            cast("ColumnOrName", secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -25898,7 +25901,7 @@ def make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            "make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
@@ -26040,12 +26043,12 @@ def try_make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz",
-            cast("ColumnOrName", years),
-            cast("ColumnOrName", months),
-            cast("ColumnOrName", days),
-            cast("ColumnOrName", hours),
-            cast("ColumnOrName", mins),
-            cast("ColumnOrName", secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -26054,7 +26057,7 @@ def try_make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            "try_make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
@@ -26202,7 +26205,7 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_asbinary", geo)
 
@@ -26229,7 +26232,9 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+def st_geomfromwkb(
+    wkb: "ColumnOrName", srid: Optional[Union["ColumnOrName", int]] = None
+) -> Column:
     """Parses the input WKB description and returns the corresponding GEOMETRY value.
 
     .. versionadded:: 4.1.0
@@ -26238,15 +26243,22 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     ----------
     wkb : :class:`~pyspark.sql.Column` or str
         A BINARY value in WKB format, representing a GEOMETRY value.
+    srid : :class:`~pyspark.sql.Column` or int, optional
+        The optional SRID value of the geometry. Default is 0.
 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
     """
-    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    if srid is None:
+        return _invoke_function_over_columns("st_geomfromwkb", wkb)
+    else:
+        srid = _enum_to_value(srid)
+        srid = lit(srid) if isinstance(srid, int) else srid
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 @_try_remote_functions
@@ -26275,7 +26287,7 @@ def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326))).collect()
-    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb), 4326))=4326)]
+    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb, 0), 4326))=4326)]
     """
     srid = _enum_to_value(srid)
     srid = lit(srid) if isinstance(srid, int) else srid
@@ -26306,7 +26318,7 @@ def st_srid(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb'))).collect()
-    [Row(st_srid(st_geomfromwkb(wkb))=0)]
+    [Row(st_srid(st_geomfromwkb(wkb, 0))=0)]
     """
     return _invoke_function_over_columns("st_srid", geo)
 
@@ -26962,6 +26974,138 @@ def kll_sketch_agg_double(
     True
     """
     fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_merge_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: merges binary KllLongsSketch representations and returns the
+    merged sketch. The optional k parameter controls the size and accuracy of the merged
+    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
+    from the first input sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary KllLongsSketch representations
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged binary representation of the KllLongsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([1,2,3], "INT")
+    >>> df2 = spark.createDataFrame([4,5,6], "INT")
+    >>> sketch1 = df1.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch2 = df2.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> merged = sketch1.union(sketch2).agg(sf.kll_merge_agg_bigint("sketch").alias("merged"))
+    >>> n = merged.select(sf.kll_sketch_get_n_bigint("merged")).first()[0]
+    >>> n
+    6
+    """
+    fn = "kll_merge_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_merge_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: merges binary KllFloatsSketch representations and returns the
+    merged sketch. The optional k parameter controls the size and accuracy of the merged
+    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
+    from the first input sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary KllFloatsSketch representations
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged binary representation of the KllFloatsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([1.0,2.0,3.0], "FLOAT")
+    >>> df2 = spark.createDataFrame([4.0,5.0,6.0], "FLOAT")
+    >>> sketch1 = df1.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch2 = df2.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> merged = sketch1.union(sketch2).agg(sf.kll_merge_agg_float("sketch").alias("merged"))
+    >>> n = merged.select(sf.kll_sketch_get_n_float("merged")).first()[0]
+    >>> n
+    6
+    """
+    fn = "kll_merge_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_merge_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: merges binary KllDoublesSketch representations and returns the
+    merged sketch. The optional k parameter controls the size and accuracy of the merged
+    sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
+    from the first input sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary KllDoublesSketch representations
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged binary representation of the KllDoublesSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([1.0,2.0,3.0], "DOUBLE")
+    >>> df2 = spark.createDataFrame([4.0,5.0,6.0], "DOUBLE")
+    >>> sketch1 = df1.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch2 = df2.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> merged = sketch1.union(sketch2).agg(sf.kll_merge_agg_double("sketch").alias("merged"))
+    >>> n = merged.select(sf.kll_sketch_get_n_double("merged")).first()[0]
+    >>> n
+    6
+    """
+    fn = "kll_merge_agg_double"
     if k is None:
         return _invoke_function_over_columns(fn, col)
     else:

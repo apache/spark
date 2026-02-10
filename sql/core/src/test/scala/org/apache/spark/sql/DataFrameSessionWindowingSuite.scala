@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter, LogicalPlan, Project}
@@ -28,8 +26,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
-  with BeforeAndAfterEach {
+class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 

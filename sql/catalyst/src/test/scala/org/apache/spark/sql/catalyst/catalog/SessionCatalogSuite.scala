@@ -409,15 +409,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      // Should always throw exception when the database does not exist
-      intercept[NoSuchNamespaceException] {
+      // Should throw exception when the database does not exist and ignoreIfNotExists is false
+      intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchNamespaceException] {
-        catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
-          purge = false)
-      }
+      // Should succeed (no-op) when the database does not exist and ignoreIfNotExists is true
+      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
+        purge = false)
       intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false,
           purge = false)

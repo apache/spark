@@ -35,7 +35,7 @@ UT = TypeVar("UT", bound="DistributedMatrix")
 VT = TypeVar("VT", bound="Matrix")
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import VectorLike
+    from pyspark.mllib._typing import VectorLike
 
 __all__ = [
     "BlockMatrix",

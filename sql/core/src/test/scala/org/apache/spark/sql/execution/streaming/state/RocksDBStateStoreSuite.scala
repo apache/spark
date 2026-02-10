@@ -1730,7 +1730,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("validate rocksdb values iterator correctness") {
+  private def testMergeWithOperatorVersions(testName: String)(testFn: Int => Unit): Unit = {
+    RocksDBConf.MERGE_OPERATOR_VALID_VERSIONS.foreach { version =>
+      test(testName + s" - merge operator version $version") {
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> version.toString) {
+          testFn(version)
+        }
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - put then merge") { _ =>
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
         useMultipleValuesPerKey = true)) { provider =>
@@ -1762,6 +1773,103 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
         assert(get(store, "a", 0).isEmpty)
         store.abort()
+      }
+    }
+  }
+
+  test("validate rocksdb values iterator correctness - blind merge with operator version 2") {
+    withSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "2") {
+
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        // We do blind merge than put against non-existing key.
+        // Note that this is only safe with merge operator version 2.
+        merge(store, "a", 0, 1)
+
+        val iterator0 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        assert(iterator0.hasNext)
+        assert(valueRowToData(iterator0.next()) === 1)
+        assert(!iterator0.hasNext)
+
+        merge(store, "a", 0, 2)
+        merge(store, "a", 0, 3)
+
+        val iterator1 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        (1 to 3).map { i =>
+          assert(iterator1.hasNext)
+          assert(valueRowToData(iterator1.next()) === i)
+        }
+
+        assert(!iterator1.hasNext)
+
+        store.abort()
+      }
+    }
+  }
+
+  testMergeWithOperatorVersions(
+    "validate rocksdb values iterator correctness - fuzzy merge and put"
+  ) { version =>
+    val seed = System.currentTimeMillis()
+    val rand = new Random(seed)
+    logInfo(s"fuzzy merge and put test using seed: $seed")
+
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+
+        try {
+          val inputValues = scala.collection.mutable.ArrayBuffer[Int]()
+
+          def performPut(value: Int): Unit = {
+            put(store, "a", 0, value)
+            inputValues.clear()
+            inputValues += value.toInt
+          }
+
+          def performMerge(value: Int): Unit = {
+            merge(store, "a", 0, value)
+            inputValues += value.toInt
+          }
+
+          def performRemove(): Unit = {
+            remove(store, _._1 == "a")
+            inputValues.clear()
+          }
+
+          (0 to 100000).foreach { _ =>
+            val op = rand.nextInt(3)
+
+            op match {
+              case 0 =>
+                val value = rand.nextInt(10)
+                performPut(value)
+              case 1 =>
+                val value = rand.nextInt(10)
+                if (inputValues.isEmpty && version == 1) {
+                  // version 1 can't handle blind merge against non-existing key, so we have to
+                  // fall back to put
+                  performPut(value)
+                } else {
+                  performMerge(value)
+                }
+              case 2 =>
+                performRemove()
+            }
+
+            val iterator = store.valuesIterator(dataToKeyRow("a", 0))
+            val valuesInStateStore = iterator.map(valueRowToData).toSeq
+            assert(valuesInStateStore === inputValues)
+          }
+        } finally {
+          store.abort()
+        }
       }
     }
   }
@@ -2397,6 +2505,44 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Operations after abort should fail due to invalid stamp
       intercept[StateStoreInvalidStamp] {
         put(store1, "c", 0, 3)
+      }
+    }
+  }
+
+  test("deleteRange - bulk deletion of keys in range") {
+    tryWithProviderResource(
+      newStoreProvider(
+        keySchemaWithRangeScan,
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put keys with timestamps that will be ordered
+        // Keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10))
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20))
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30))
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40))
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50))
+
+        // Verify all keys exist
+        assert(store.iterator().toSeq.length === 5)
+
+        // Delete range [2, 4) - should delete keys with timestamps 2 and 3
+        val beginKey = dataToKeyRowWithRangeScan(2L, "")
+        val endKey = dataToKeyRowWithRangeScan(4L, "")
+        store.deleteRange(beginKey, endKey)
+
+        // Verify remaining keys
+        val remainingKeys = store.iterator().map { kv =>
+          keyRowWithRangeScanToData(kv.key)
+        }.toSeq
+
+        // Keys 1, 4, 5 should remain; keys 2, 3 should be deleted
+        assert(remainingKeys.length === 3)
+        assert(remainingKeys.map(_._1).toSet === Set(1L, 4L, 5L))
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
