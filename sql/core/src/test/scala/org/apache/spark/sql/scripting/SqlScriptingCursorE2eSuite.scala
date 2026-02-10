@@ -1933,7 +1933,6 @@ END;""")
   SET result = 'opened';  -- Should NOT reach here
   FETCH cur INTO x, y;
   SET result = 'fetched: ' || x || ',' || y;  -- Should NOT reach here
-  END;
 
   SELECT result;
 END;""")
