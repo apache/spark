@@ -6199,7 +6199,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  0.0  3.0  1.0  4
         """
         if LooseVersion(pd.__version__) < "3.0.0":
-            if method is not _NoValue:
+            if method is _NoValue:
                 method = None
         else:
             if method is not _NoValue:

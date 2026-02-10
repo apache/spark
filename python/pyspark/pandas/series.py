@@ -2187,7 +2187,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Name: x, dtype: object
         """
         if LooseVersion(pd.__version__) < "3.0.0":
-            if method is not _NoValue:
+            if method is _NoValue:
                 method = None
         else:
             if method is not _NoValue:
