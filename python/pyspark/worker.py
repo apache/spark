@@ -3125,21 +3125,18 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             and see `wrap_grouped_map_pandas_udf_with_state` for more details on how output will
             be used.
             """
-            from itertools import tee
+            from itertools import chain
 
             state = a[1]
             data_gen = (x[0] for x in a[0])
 
             # We know there should be at least one item in the iterator/generator.
-            # We want to peek the first element to construct the key, hence applying
-            # tee to construct the key while we retain another iterator/generator
-            # for values.
-            keys_gen, values_gen = tee(data_gen)
-            keys_elem = next(keys_gen)
-            keys = [keys_elem[o] for o in parsed_offsets[0][0]]
+            # Consume the first element to extract keys
+            first_elem = next(data_gen)
+            keys = [first_elem[o] for o in parsed_offsets[0][0]]
 
             # This must be generator comprehension - do not materialize.
-            vals = ([x[o] for o in parsed_offsets[0][1]] for x in values_gen)
+            vals = ([x[o] for o in parsed_offsets[0][1]] for x in chain([first_elem], data_gen))
 
             return f(keys, vals, state)
 
