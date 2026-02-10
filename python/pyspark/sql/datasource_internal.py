@@ -108,7 +108,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         except StopIteration:
             return
         raise PySparkException(
-            errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            errorClass="STREAM_READER_OFFSET_DID_NOT_ADVANCE",
             messageParameters={},
         )
 

@@ -928,10 +928,6 @@ class SimpleDataSourceStreamReader(ABC):
         Read all available data from start offset and return the offset that next read attempt
         starts from.
 
-        When there is data, the end offset must advance past the start offset; otherwise
-        Spark raises a validation exception. When there is no data to read, the implementation
-        may return the same offset as both start and end, but must provide an empty iterator.
-
         Parameters
         ----------
         start : dict

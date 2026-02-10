@@ -511,7 +511,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
     def test_simple_stream_reader_offset_did_not_advance_raises(self):
-        """Validate that returning end == start with non-empty data raises SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE."""
+        """Validate that returning end == start with non-empty data raises STREAM_READER_OFFSET_DID_NOT_ADVANCE."""
         from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
 
         class BuggySimpleStreamReader(SimpleDataSourceStreamReader):
@@ -536,7 +536,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             wrapper.latestOffset({"offset": 0}, ReadAllAvailable())
         self.assertEqual(
             cm.exception.getCondition(),
-            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            "STREAM_READER_OFFSET_DID_NOT_ADVANCE",
         )
 
     def test_simple_stream_reader_empty_iterator_start_equals_end_allowed(self):

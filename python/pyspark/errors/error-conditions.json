@@ -1185,9 +1185,9 @@
       "SparkContext or SparkSession should be created first."
     ]
   },
-  "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
+  "STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
     "message": [
-      "SimpleDataSourceStreamReader.read() returned a non-empty batch but the end offset did not advance past the start offset. Returning end equal to start with data would cause the same batch to be processed repeatedly. The end offset must represent the position after the last record returned."
+      "Stream reader read() returned a non-empty batch but the end offset did not advance past the start offset. Returning end equal to start with data would cause the same batch to be processed repeatedly. The end offset must represent the position after the last record returned."
     ]
   },
   "SLICE_WITH_STEP": {
