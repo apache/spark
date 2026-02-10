@@ -59,29 +59,10 @@ case class ExpandExec(
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val groups = projections.map(projection).toArray
       groups.foreach(_.initialize(index))
-      new Iterator[InternalRow] {
-        private[this] var result: InternalRow = _
-        private[this] var idx = -1  // -1 means the initial state
-        private[this] var input: InternalRow = _
-
-        override final def hasNext: Boolean = (-1 < idx && idx < groups.length) || iter.hasNext
-
-        override final def next(): InternalRow = {
-          if (idx <= 0) {
-            // in the initial (-1) or beginning(0) of a new input row, fetch the next input tuple
-            input = iter.next()
-            idx = 0
-          }
-
-          result = groups(idx)(input)
-          idx += 1
-
-          if (idx == groups.length && iter.hasNext) {
-            idx = 0
-          }
-
+      iter.flatMap { input =>
+        groups.iterator.map { group =>
           numOutputRows += 1
-          result
+          group(input)
         }
       }
     }
