@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+
 /**
  * Sealed trait representing the lifecycle state of a cursor.
  * State transitions:
@@ -45,16 +48,16 @@ case object CursorDeclared extends CursorState
  * @param outputSchema The output attributes (needed for type checking in FETCH)
  */
 case class CursorOpened(
-    resultIterator: Iterator[org.apache.spark.sql.catalyst.InternalRow],
-    outputSchema: Seq[org.apache.spark.sql.catalyst.expressions.Attribute]) extends CursorState
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
  * Cursor is being fetched from - same as CursorOpened but marks that fetching has begun.
  * We keep this separate state for consistency and potential future use.
  */
 case class CursorFetching(
-    resultIterator: Iterator[org.apache.spark.sql.catalyst.InternalRow],
-    outputSchema: Seq[org.apache.spark.sql.catalyst.expressions.Attribute]) extends CursorState
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
  * Cursor has been closed and resources released.
