@@ -59,15 +59,19 @@ class SeriesMissingDataMixin:
         pser.loc[3] = np.nan
         psser.loc[3] = np.nan
 
-        self.assert_eq(psser.fillna(0), pser.fillna(0))
-        self.assert_eq(psser.fillna(method="ffill"), pser.fillna(method="ffill"))
-        self.assert_eq(
-            psser.fillna(method="bfill").sort_index(), pser.fillna(method="bfill").sort_index()
-        )
-        self.assert_eq(
-            psser.fillna(method="backfill").sort_index(),
-            pser.fillna(method="backfill").sort_index(),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.fillna(0), pser.fillna(0))
+            self.assert_eq(psser.fillna(method="ffill"), pser.fillna(method="ffill"))
+            self.assert_eq(
+                psser.fillna(method="bfill").sort_index(), pser.fillna(method="bfill").sort_index()
+            )
+            self.assert_eq(
+                psser.fillna(method="backfill").sort_index(),
+                pser.fillna(method="backfill").sort_index(),
+            )
+        else:
+            with self.assertRaises(TypeError):
+                psser.fillna(method="ffill")
 
         # inplace fillna on non-nullable column
         pdf = pd.DataFrame({"a": [1, 2, None], "b": [1, 2, 3]})
