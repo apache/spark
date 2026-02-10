@@ -275,7 +275,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-54796: block decom manager handles ShuffleManagerNotInitializedException " +
-    "with retry") {
+    "with retry on same peer") {
     // Set up the mocks so we return one shuffle block
     val conf = sparkConf
       .clone
@@ -287,25 +287,23 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     when(bm.getMigratableRDDBlocks())
       .thenReturn(Seq())
     val exe1 = BlockManagerId("exec1", "host1", 12345)
-    val exe2 = BlockManagerId("exec2", "host2", 12345)
     when(bm.getPeers(mc.any()))
-      .thenReturn(Seq(exe1), Seq(exe1), Seq(exe2))
+      .thenReturn(Seq(exe1))
 
     val blockTransferService = mock(classOf[BlockTransferService])
     val uploadAttempts = new AtomicLong(0)
-    // Simulate ShuffleManagerNotInitializedException on first attempt to exe1,
-    // then succeed on retry to exe2
+    // Simulate ShuffleManagerNotInitializedException on first attempt,
+    // then succeed on retry to the same peer (transient condition resolved)
     when(blockTransferService.uploadBlock(
       mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
       .thenAnswer(new Answer[Future[Unit]] {
         override def answer(invocation: InvocationOnMock): Future[Unit] = {
-          val execId = invocation.getArgument[String](2)
           val attempt = uploadAttempts.incrementAndGet()
-          if (attempt == 1 && execId == exe1.executorId) {
-            // First attempt to exe1 fails with ShuffleManagerNotInitializedException
+          if (attempt == 1) {
+            // First attempt fails with ShuffleManagerNotInitializedException
             Future.failed(new RuntimeException("ShuffleManagerNotInitializedException"))
           } else {
-            // Subsequent attempts succeed
+            // Subsequent attempts succeed (ShuffleManager is now initialized)
             Future.successful(())
           }
         }
@@ -316,15 +314,13 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
     when(bm.blockTransferService).thenReturn(blockTransferService)
 
-    // Verify the decom manager handles this correctly
+    // The migration thread keeps running for the same peer and retries succeed.
     val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
     validateDecommissionTimestampsOnManager(bmDecomManager, numShuffles = Some(1))
-    verify(blockTransferService, times(1))
+    // 1 failed attempt + 2 successful sub-block uploads (index + data) on retry,
+    // all to the same peer since the thread keeps running
+    verify(blockTransferService, times(3))
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
-        mc.any(), mc.any(), mc.any(), mc.isNull())
-    // Called twice for data and index blocks
-    verify(blockTransferService, times(2))
-      .uploadBlock(mc.any(), mc.any(), mc.eq(exe2.executorId),
         mc.any(), mc.any(), mc.any(), mc.isNull())
   }
 

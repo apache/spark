@@ -107,8 +107,11 @@ private[storage] class BlockManagerDecommissioner(
         try {
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
-          var isTargetDecommissioned = false
-          var isTargetShuffleManagerNotInitialized = false
+          var needRetry = false
+          // By default, increment the failure count on retry. Transient failures
+          // (e.g. target decommissioned, ShuffleManager not ready) reset this to
+          // retryCount to avoid penalizing the block.
+          var newRetryCount = retryCount + 1
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
             logInfo(log"Ignore deleted shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
@@ -158,48 +161,44 @@ private[storage] class BlockManagerDecommissioner(
                 } else if (e.getCause != null && e.getCause.getMessage != null
                   && e.getCause.getMessage
                   .contains(blockSavedOnDecommissionedBlockManagerException)) {
-                  isTargetDecommissioned = true
+                  // Target is decommissioned, don't penalize the block.
                   keepRunning = false
+                  needRetry = true
+                  newRetryCount = retryCount
                 } else if (e.getCause != null && e.getCause.getMessage != null
                   && e.getCause.getMessage
                   .contains(shuffleManagerNotInitializedException)) {
                   // Target executor's ShuffleManager is not yet initialized.
-                  // This can happen if the target executor was just started and hasn't
-                  // finished initializing its ShuffleManager. Allow retry without
-                  // incrementing failure count.
+                  // This is transient, so requeue without incrementing failure count
+                  // and keep the migration thread running for this peer.
                   logWarning(log"Target executor's ShuffleManager not initialized for " +
                     log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}. Will retry.")
-                  isTargetShuffleManagerNotInitialized = true
-                  keepRunning = false
+                  needRetry = true
+                  newRetryCount = retryCount
                 } else {
                   logError(log"Error occurred during migrating " +
                     log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)
                   keepRunning = false
+                  needRetry = true
                 }
               case e: Exception =>
                 logError(log"Error occurred during migrating " +
                   log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}", e)
                 keepRunning = false
+                needRetry = true
             }
           }
-          if (keepRunning) {
-            numMigratedShuffles.incrementAndGet()
-          } else {
-            logWarning(log"Stop migrating shuffle blocks to ${MDC(PEER, peer)}")
-
-            // Don't increment retry count for transient conditions:
-            // - Target executor is decommissioned
-            // - Target executor's ShuffleManager not yet initialized
-            val newRetryCount = if (isTargetDecommissioned ||
-                isTargetShuffleManagerNotInitialized) {
-              retryCount
-            } else {
-              retryCount + 1
-            }
-            // Do not mark the block as migrated if it still needs retry
+          // needRetry: whether the block should be requeued for retry.
+          // keepRunning: whether the migration thread should continue for this peer.
+          if (needRetry) {
             if (!allowRetry(shuffleBlockInfo, newRetryCount)) {
               numMigratedShuffles.incrementAndGet()
             }
+          } else {
+            numMigratedShuffles.incrementAndGet()
+          }
+          if (!keepRunning) {
+            logWarning(log"Stop migrating shuffle blocks to ${MDC(PEER, peer)}")
           }
         } catch {
           case _: InterruptedException =>
