@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeStats, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, expr, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{count, expr, struct, timestamp_seconds, to_timestamp, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.tags.SlowSQLTest
@@ -129,6 +129,26 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
     assert(e.getMessage contains "value")
     assert(e.getMessage contains "int")
+  }
+
+  test("error on nested column") {
+    // Cannot past nested column as `eventTime` to `withWatermark`.
+    val e = intercept[AnalysisException] {
+      Seq((1, ("2024-01-01 10:00:00", "val1"))).toDF("id", "data")
+        .select($"id",
+          struct(
+            to_timestamp($"data._1").as("timestamp"),
+            $"data._2".as("value")
+          ).as("nested_struct"))
+        .withWatermark("nested_struct.timestamp", "0 seconds")
+        .schema
+    }
+    checkError(
+      e,
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters =
+        Map("objectName" -> "`nested_struct`.`timestamp`", "proposal" -> "`id`, `nested_struct`")
+    )
   }
 
   test("event time and watermark metrics") {
