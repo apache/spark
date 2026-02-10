@@ -23,8 +23,8 @@ Compare SBT and Maven builds to verify they produce equivalent artifacts.
 This script validates the migration from sbt-pom-reader to native SBT by
 comparing JAR files, shading, and dependencies between the two build systems.
 
-Comparison modes
-----------------
+Comparison modes (mutually exclusive)
+-------------------------------------
 By default the script compares module JARs (class contents and sizes).
 Use --shading, --assemblies-only, or --deps to switch modes.
 
@@ -34,6 +34,7 @@ Use --shading, --assemblies-only, or --deps to switch modes.
                     differences (may indicate mismatched transitive deps).
   --assemblies-only Compare assembly JARs (size, class count, packages).
   --deps            Compare resolved dependency trees (runs Maven/SBT).
+  --self-test       Run internal self-tests and exit.
 
 Output
 ------
@@ -42,8 +43,10 @@ Output
   -o FILE           Write JSON to FILE (table still shown on terminal).
   --json -o FILE    JSON to both stdout and FILE.
 
-Filtering
----------
+Filtering (JARs mode only)
+--------------------------
+These options only apply to the default JARs comparison mode.
+
   --matching-only   Only compare JARs present in both builds.
   --ignore-shaded   Ignore shaded class/service differences and bundled
                     deps in Maven fat-JAR modules (core, connect).
@@ -59,13 +62,13 @@ Build
 Examples
 --------
     # Quick validation (assumes both builds exist)
-    ./dev/compare-builds.py --matching-only --ignore-shaded -v
+    python ./dev/compare-builds.py --matching-only --ignore-shaded -v
 
     # Shading verification
-    ./dev/compare-builds.py --shading
+    python ./dev/compare-builds.py --shading
 
     # JSON report for CI
-    ./dev/compare-builds.py --matching-only --json -o report.json
+    python ./dev/compare-builds.py --matching-only --json -o report.json
 
 How shading works
 -----------------
@@ -1443,24 +1446,32 @@ def main():
         action="store_true",
         help="Build with both Maven and SBT before comparing",
     )
+    # Comparison mode (mutually exclusive)
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--shading",
+        action="store_true",
+        help="Compare shading/relocation in assembly JARs",
+    )
+    mode_group.add_argument(
+        "--assemblies-only", action="store_true", help="Compare assembly JARs only"
+    )
+    mode_group.add_argument(
+        "--deps",
+        action="store_true",
+        help="Compare dependencies (slower, requires running Maven/SBT)",
+    )
+    mode_group.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run internal self-tests and exit",
+    )
+
+    # Filtering (default JAR mode only)
     parser.add_argument(
         "--modules",
         type=str,
         help="Comma-separated list of modules to compare (e.g., core,sql,catalyst)",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Show detailed class-level differences",
-    )
-    parser.add_argument("--assemblies-only", action="store_true", help="Compare assembly JARs only")
-    parser.add_argument("--output", "-o", type=str, help="Write report to file")
-    parser.add_argument(
-        "--maven-profiles",
-        type=str,
-        default="",
-        help="Maven profiles to use (comma-separated, e.g., hive,yarn)",
     )
     parser.add_argument(
         "--matching-only",
@@ -1473,24 +1484,24 @@ def main():
         help="Ignore shaded classes/services and bundled deps in fat-JAR modules",
     )
     parser.add_argument(
-        "--deps",
+        "--verbose",
+        "-v",
         action="store_true",
-        help="Compare dependencies (slower, requires running Maven/SBT)",
+        help="Show detailed class-level differences",
     )
-    parser.add_argument(
-        "--shading",
-        action="store_true",
-        help="Compare shading/relocation in assembly JARs",
-    )
+
+    # Output
+    parser.add_argument("--output", "-o", type=str, help="Write report to file")
     parser.add_argument(
         "--json",
         action="store_true",
         help="Output structured JSON instead of human-readable text",
     )
     parser.add_argument(
-        "--self-test",
-        action="store_true",
-        help="Run internal self-tests and exit",
+        "--maven-profiles",
+        type=str,
+        default="",
+        help="Maven profiles to use (comma-separated, e.g., hive,yarn)",
     )
 
     args = parser.parse_args()
