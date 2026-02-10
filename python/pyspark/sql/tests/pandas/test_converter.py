@@ -24,6 +24,8 @@ from pyspark.sql.types import (
     StructType,
     Row,
 )
+from pyspark.sql.conversion import ArrowArrayToPandasConversion
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT, PythonOnlyPoint, PythonOnlyUDT
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -579,6 +581,49 @@ class ConverterTests(unittest.TestCase):
                 ]
             ),
         )
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
+class ArrowArrayToPandasConversionTests(unittest.TestCase):
+    """Tests for ArrowArrayToPandasConversion.convert_numpy with UserDefinedType."""
+
+    def test_udt_convert_numpy(self):
+        """Test UDT conversion with convert_numpy."""
+        udt = ExamplePointUDT()
+
+        # basic conversion with nulls
+        arr = pa.array([[1.0, 2.0], None, [3.0, 4.0]], type=pa.list_(pa.float64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
+        self.assertIsInstance(result.iloc[0], ExamplePoint)
+        self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], ExamplePoint(3.0, 4.0))
+        self.assertEqual(result.name, "my_point")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=pa.list_(pa.float64())), udt
+        )
+        self.assertEqual(len(result), 0)
+
+        # PythonOnlyUDT
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([[5.0, 6.0]], type=pa.list_(pa.float64())), PythonOnlyUDT()
+        )
+        self.assertIsInstance(result.iloc[0], PythonOnlyPoint)
+        self.assertEqual(result.iloc[0], PythonOnlyPoint(5.0, 6.0))
+
+    def test_udt_chunked_array(self):
+        """Test UDT conversion with ChunkedArray input."""
+        chunk1 = pa.array([[1.0, 2.0]], type=pa.list_(pa.float64()))
+        chunk2 = pa.array([[3.0, 4.0]], type=pa.list_(pa.float64()))
+        chunked = pa.chunked_array([chunk1, chunk2])
+        result = ArrowArrayToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
+        self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
+        self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
 
 
 if __name__ == "__main__":
