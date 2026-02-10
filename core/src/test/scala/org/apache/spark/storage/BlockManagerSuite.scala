@@ -2038,9 +2038,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
   test("SPARK-54796: putBlockDataAsStream throws ShuffleManagerNotInitializedException " +
     "on timeout") {
-    val sortShuffleMgr = makeSortShuffleManager(Some(conf))
     val bm = makeBlockManager(1000, "exec2", testConf = Some(conf),
-      shuffleManager = sortShuffleMgr)
+      shuffleManager = null)
+    val sortShuffleMgr = makeSortShuffleManager(Some(conf))
     sortShuffleMgr.shuffleBlockResolver._blockManager = bm
 
     // Create a shuffle block ID
@@ -2055,7 +2055,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(classOf[String]))
     }
     assert(exception.getMessage.contains("ShuffleManager not initialized"))
-    assert(exception.getMessage.contains(shuffleBlockId.toString))
+
+    // Retry initialization should succeed once ShuffleManager is initialized
+    when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
+    when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
+    when(mockEnv.shuffleManager).thenReturn(sortShuffleMgr)
+    assert(bm.migratableResolver != null)
   }
 
   test("test decommission block manager should not be part of peers") {

@@ -23,6 +23,5 @@ package org.apache.spark.storage
  * migration request after a short delay.
  */
 class ShuffleManagerNotInitializedException(
-    blockId: BlockId,
     timeoutMs: Long) extends Exception(
-    s"ShuffleManager not initialized within ${timeoutMs}ms while handling shuffle block $blockId.")
+    s"ShuffleManager not initialized within ${timeoutMs}ms.")
