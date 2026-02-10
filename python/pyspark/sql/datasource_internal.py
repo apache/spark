@@ -96,9 +96,12 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     def _validate_read_result(self, start: dict, end: dict, it: Iterator[Tuple]) -> None:
         """
         Validates that read() did not return a non-empty batch with end equal to start,
-        which would cause the same batch to be processed repeatedly.
+        which would cause the same batch to be processed repeatedly. When end != start,
+        appends the result to the cache; when end == start with empty iterator, does not
+        cache (avoids unbounded cache growth).
         """
         if json.dumps(end) != json.dumps(start):
+            self.cache.append(PrefetchedCacheEntry(start, end, it))
             return
         try:
             next(it)
@@ -117,7 +120,6 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
         (iter, end) = self.simple_reader.read(start)
         self._validate_read_result(start, end, iter)
-        self.cache.append(PrefetchedCacheEntry(start, end, iter))
         return end
 
     def commit(self, end: dict) -> None:
