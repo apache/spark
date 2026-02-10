@@ -4267,6 +4267,44 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 
+  def selectIntoNotInSqlScript(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+      messageParameters = Map.empty)
+  }
+
+  def selectIntoFeatureDisabled(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_FEATURE_DISABLED",
+      messageParameters = Map.empty)
+  }
+
+  def selectIntoOnlyAtTopLevel(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+      messageParameters = Map.empty)
+  }
+
+  def selectIntoVariableCountMismatch(numVars: Int, numCols: Int): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
+      messageParameters = Map(
+        "numVars" -> numVars.toString,
+        "numCols" -> numCols.toString))
+  }
+
+  def selectIntoStructFieldMismatch(
+      numCols: Int,
+      numFields: Int,
+      structType: DataType): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_STRUCT_FIELD_MISMATCH",
+      messageParameters = Map(
+        "numCols" -> numCols.toString,
+        "numFields" -> numFields.toString,
+        "structType" -> toSQLType(structType)))
+  }
+
   def sqlScriptInExecuteImmediate(sqlScriptString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",

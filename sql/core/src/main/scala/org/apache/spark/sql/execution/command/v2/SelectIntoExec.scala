@@ -18,31 +18,36 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
 /**
- * Physical plan node for setting a variable.
- * Used by EXECUTE IMMEDIATE INTO.
+ * Physical plan node for SELECT INTO.
+ * Behaves identically to DECLARE + OPEN + FETCH + CLOSE cursor sequence:
+ * - When query returns zero rows, raises NO DATA condition (SQLSTATE 02000)
+ * - When query returns more than one row, an error is thrown
+ * - When query returns exactly one row, values are assigned to variables
+ * @param variables The variables to set
+ * @param query The query that produces the values
  */
-case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
+case class SelectIntoExec(
+    variables: Seq[VariableReference],
+    query: SparkPlan)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
 
     if (values.length == 0) {
-      // EXECUTE IMMEDIATE INTO: set all variables to null
-      variables.foreach { v =>
-        VariableAssignmentUtils.assignVariable(
-          v,
-          null,
-          session.sessionState.catalogManager.tempVariableManager,
-          session.sessionState.conf)
-      }
+      // SELECT INTO: raise NO DATA condition (SQLSTATE 02000)
+      // This allows handlers to catch the condition, matching FETCH cursor INTO behavior
+      throw new AnalysisException(
+        errorClass = "SELECT_INTO_NO_DATA",
+        messageParameters = Map.empty)
     } else if (values.length > 1) {
       throw new SparkException(
         errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
@@ -51,11 +56,36 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     } else {
       // Exactly one row: assign values to variables
       val row = values(0)
+
+      // Validate arity
+      if (variables.length != row.numFields) {
+        throw new AnalysisException(
+          errorClass = "ASSIGNMENT_ARITY_MISMATCH",
+          messageParameters = Map(
+            "numTarget" -> variables.length.toString,
+            "numExpr" -> row.numFields.toString))
+      }
+
       variables.zipWithIndex.foreach { case (v, index) =>
-        val value = row.get(index, v.dataType)
+        val sourceValue = row.get(index, query.output(index).dataType)
+        val sourceType = query.output(index).dataType
+        val targetType = v.dataType
+
+        // Apply ANSI cast if source and target types differ
+        val castedValue = if (sourceType == targetType) {
+          sourceValue
+        } else {
+          val cast = Cast(
+            Literal(sourceValue, sourceType),
+            targetType,
+            Option(session.sessionState.conf.sessionLocalTimeZone),
+            ansiEnabled = true)
+          cast.eval(InternalRow.empty)
+        }
+
         VariableAssignmentUtils.assignVariable(
           v,
-          value,
+          castedValue,
           session.sessionState.catalogManager.tempVariableManager,
           session.sessionState.conf)
       }

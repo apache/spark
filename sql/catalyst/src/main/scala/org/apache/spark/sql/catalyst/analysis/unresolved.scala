@@ -1230,6 +1230,47 @@ case class UnresolvedExecuteImmediate(
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
 
+/**
+ * Represents an unresolved SELECT statement with an INTO clause for variable assignment.
+ *
+ * SELECT INTO assigns query results to variables within SQL scripts:
+ * {{{
+ *   SELECT emp_id, emp_name INTO v_id, v_name FROM employees WHERE dept = 'Sales';
+ * }}}
+ *
+ * The context flags determine where this SELECT INTO appears in the query tree:
+ * - `isTopLevel`: True if at the top level of a statement (not in subquery/CTE definition)
+ * - `isInSetOperation`: True if part of a UNION/INTERSECT/EXCEPT operation
+ * - `isPipeOperator`: True if within a pipe operator expression (|> SELECT)
+ *
+ * During analysis, this node is validated to ensure SELECT INTO appears only in valid contexts
+ * (within SQL script, at top level, not in set operations or pipe operators) and then
+ * resolved to [[SelectIntoVariable]].
+ *
+ * @param query the SELECT query producing values to assign
+ * @param targetVariables the variables to receive the query results
+ * @param isTopLevel true if this SELECT is at the top level of the enclosing statement
+ * @param isInSetOperation true if this SELECT is part of a set operation
+ * @param isPipeOperator true if this SELECT is within a pipe operator context
+ */
+case class UnresolvedSelectInto(
+    query: LogicalPlan,
+    targetVariables: Seq[Expression],
+    isTopLevel: Boolean,
+    isInSetOperation: Boolean,
+    isPipeOperator: Boolean)
+  extends UnresolvedUnaryNode {
+
+  override def child: LogicalPlan = query
+
+  // Forward child's output so scalar subquery validation sees correct column count
+  override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSelectInto =
+    copy(query = newChild, isTopLevel = isTopLevel, isInSetOperation = isInSetOperation,
+      isPipeOperator = isPipeOperator)
+}
+
 case class UnresolvedEventTimeWatermark(
     eventTimeColExpr: NamedExpression,
     delay: CalendarInterval,

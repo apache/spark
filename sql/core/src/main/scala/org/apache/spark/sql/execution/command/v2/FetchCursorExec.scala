@@ -17,17 +17,11 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import java.util.Locale
-
-import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
-import org.apache.spark.sql.catalyst.catalog.VariableDefinition
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, VariableReference}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.DataTypeErrorsBase
-import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 
@@ -145,7 +139,11 @@ case class FetchCursorExec(
         analyzedQuery.output(idx).dataType,
         varRef.dataType)
 
-      assignToVariable(varRef, castedValue)
+      VariableAssignmentUtils.assignVariable(
+        varRef,
+        castedValue,
+        session.sessionState.catalogManager.tempVariableManager,
+        session.sessionState.conf)
     }
   }
 
@@ -166,51 +164,6 @@ case class FetchCursorExec(
         ansiEnabled = true)
       cast.eval(org.apache.spark.sql.catalyst.InternalRow.empty)
     }
-  }
-
-  /**
-   * Assigns a value to a variable, handling case sensitivity properly.
-   */
-  private def assignToVariable(
-      varRef: VariableReference,
-      value: Any): Unit = {
-    val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      varRef.originalNameParts
-    } else {
-      varRef.originalNameParts.map(_.toLowerCase(Locale.ROOT))
-    }
-
-    // Select the appropriate variable manager based on the catalog
-    // This logic matches SetVariableExec.setVariable()
-    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
-
-    val variableManager = varRef.catalog match {
-      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("FetchCursorExec: Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
-
-      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present in FetchCursorExec " +
-          "because ResolveFetchCursor has already determined it exists.")
-
-      case FakeLocalCatalog => scriptingVariableManager.get
-
-      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
-
-      case FakeSystemCatalog => tempVariableManager
-
-      case c => throw SparkException.internalError("Unexpected catalog in FetchCursorExec: " + c)
-    }
-
-    val varDef = VariableDefinition(
-      varRef.identifier,
-      varRef.varDef.defaultValueSQL,
-      Literal(value, varRef.dataType)
-    )
-
-    variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   /**
@@ -260,7 +213,11 @@ case class FetchCursorExec(
     val structValue = structExpr.eval(InternalRow.empty)
 
     // Assign struct to variable
-    assignToVariable(targetVar, structValue)
+    VariableAssignmentUtils.assignVariable(
+      targetVar,
+      structValue,
+      session.sessionState.catalogManager.tempVariableManager,
+      session.sessionState.conf)
   }
 
   override def output: Seq[Attribute] = Nil

@@ -4573,6 +4573,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_SCRIPTING_SELECT_INTO_ENABLED =
+    buildConf("spark.sql.scripting.selectIntoEnabled")
+      .internal()
+      .doc("When true, enables SELECT INTO statement within SQL scripts. " +
+        "SELECT INTO allows assigning query results directly to variables.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_SCRIPTING_CURSOR_ENABLED =
     buildConf("spark.sql.scripting.cursorEnabled")
       .internal()
