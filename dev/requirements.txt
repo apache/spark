@@ -24,8 +24,8 @@ tabulate
 
 # Linter
 ruff==0.14.8
-mypy==1.8.0
-pytest-mypy-plugins==1.9.3
+mypy==1.19.1
+pytest-mypy-plugins==3.2.0
 # See SPARK-38680.
 pandas-stubs>=2.2.0
 scipy-stubs;

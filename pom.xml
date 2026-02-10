@@ -216,7 +216,7 @@
     <bouncycastle.version>1.83</bouncycastle.version>
     <tink.version>1.19.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.9.Final</netty.version>
+    <netty.version>4.2.10.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
     <junit.version>6.0.1</junit.version>
@@ -903,7 +903,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-6</version>
+        <version>1.5.7-7</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -932,7 +932,7 @@
       <dependency>
         <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
         <artifactId>roaringbitmap</artifactId>
-        <version>1.5.3</version>
+        <version>1.6.0</version>
       </dependency>
       <!-- Netty Begin -->
       <dependency>
