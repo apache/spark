@@ -539,6 +539,31 @@ class BasePythonStreamingDataSourceTestsMixin:
             "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
         )
 
+    def test_simple_stream_reader_empty_iterator_start_equals_end_allowed(self):
+        """When read() returns end == start with an empty iterator, no exception and no cache entry."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class EmptyBatchReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                # Valid: same offset as end but empty iterator (no data)
+                return (iter([]), {"offset": start["offset"]})
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        reader = EmptyBatchReader()
+        wrapper = _SimpleStreamReaderWrapper(reader)
+        start = {"offset": 0}
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
