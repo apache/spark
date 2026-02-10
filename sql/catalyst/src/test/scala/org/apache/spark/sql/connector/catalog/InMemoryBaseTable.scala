@@ -236,15 +236,26 @@ abstract class InMemoryBaseTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
+      // the result should be consistent with BucketFunctions defined at transformFunctions.scala
       case BucketTransform(numBuckets, cols, _) =>
-        val valueTypePairs = cols.map(col => extractor(col.fieldNames, cleanedSchema, row))
-        var valueHashCode = 0
-        valueTypePairs.foreach( pair =>
-          if ( pair._1 != null) valueHashCode += pair._1.hashCode()
-        )
-        var dataTypeHashCode = 0
-        valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
-        ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
+        val hash: Long = cols.foldLeft(0L) { (acc, col) =>
+          val valueHash = extractor(col.fieldNames, cleanedSchema, row) match {
+            case (value: Byte, _: ByteType) => value.toLong
+            case (value: Short, _: ShortType) => value.toLong
+            case (value: Int, _: IntegerType) => value.toLong
+            case (value: Long, _: LongType) => value
+            case (value: Long, _: TimestampType) => value
+            case (value: Long, _: TimestampNTZType) => value
+            case (value: UTF8String, _: StringType) =>
+              value.hashCode.toLong
+            case (value: Array[Byte], BinaryType) =>
+              util.Arrays.hashCode(value).toLong
+            case (v, t) =>
+              throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+          }
+          acc + valueHash
+        }
+        Math.floorMod(hash, numBuckets)
       case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>

@@ -812,13 +812,30 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         import pandas as pd
 
         # Convert value_batches (Iterator[list[pd.Series]]) to a single DataFrame
-        # Each value_series is a list of Series (one per column) for one batch
-        # Concatenate Series within each batch (axis=1), then concatenate batches (axis=0)
-        value_dataframes = []
-        for value_series in value_batches:
-            value_dataframes.append(pd.concat(value_series, axis=1))
+        # Optimized: Collect all Series by column, then concat once per column
+        # This avoids the expensive pd.concat(axis=0) across many DataFrames
+        all_series_by_col = {}
 
-        value_df = pd.concat(value_dataframes, axis=0) if value_dataframes else pd.DataFrame()
+        for value_series in value_batches:
+            for col_idx, series in enumerate(value_series):
+                if col_idx not in all_series_by_col:
+                    all_series_by_col[col_idx] = []
+                all_series_by_col[col_idx].append(series)
+
+        # Concatenate each column separately (single concat per column)
+        if all_series_by_col:
+            columns = {}
+            for col_idx, series_list in all_series_by_col.items():
+                # Use the original series name if available
+                col_name = (
+                    series_list[0].name
+                    if hasattr(series_list[0], "name") and series_list[0].name
+                    else f"col{col_idx}"
+                )
+                columns[col_name] = pd.concat(series_list, ignore_index=True)
+            value_df = pd.DataFrame(columns)
+        else:
+            value_df = pd.DataFrame()
 
         if len(argspec.args) == 1:
             result = f(value_df)

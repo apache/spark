@@ -426,7 +426,7 @@ abstract class RDD[T: ClassTag](
     new MapPartitionsRDD[U, T](
       this,
       (_, _, iter) => iter.map(cleanF),
-      preservesDistribution = true)
+      preservesPartitionSizes = true)
   }
 
   /**
@@ -881,22 +881,22 @@ abstract class RDD[T: ClassTag](
    * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
    *                         sensitive, it may return totally different result when the input order
    *                         is changed. Mostly stateful functions are order-sensitive.
-   * @param preservesDistribution Whether the input function preserves the data distribution,
-   *                              that is, 1 number of partitions, and 2 number of rows per each
-   *                              partition. This param is used to optimize the performance of
-   *                              RDD.zipWithIndex.
+   * @param preservesPartitionSizes Whether the input function preserves the number of rows in each
+   *                                partition. This is true for 1:1 element mappings like `map`.
+   *                                Used to optimize `RDD.zipWithIndex` by counting rows on a
+   *                                cheaper ancestor RDD instead of the immediate parent.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
       isOrderSensitive: Boolean = false,
-      preservesDistribution: Boolean = false): RDD[U] = withScope {
+      preservesPartitionSizes: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
       isOrderSensitive = isOrderSensitive,
-      preservesDistribution = preservesDistribution)
+      preservesPartitionSizes = preservesPartitionSizes)
   }
 
   /**
@@ -942,9 +942,9 @@ abstract class RDD[T: ClassTag](
 
   private[spark] def mapPartitionsWithEvaluator[U: ClassTag](
       evaluatorFactory: PartitionEvaluatorFactory[T, U],
-      preservesDistribution: Boolean): RDD[U] = withScope {
+      preservesPartitionSizes: Boolean): RDD[U] = withScope {
     new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory,
-      preservesDistribution = preservesDistribution)
+      preservesPartitionSizes = preservesPartitionSizes)
   }
 
   /**

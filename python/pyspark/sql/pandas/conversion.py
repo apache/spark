@@ -896,15 +896,15 @@ class SparkConversionMixin:
         col_names = cur_dtypes.names
         record_type_list = []
         has_rec_fix = False
-        for i in range(len(cur_dtypes)):
+        for i in range(len(cur_dtypes)):  # type: ignore[arg-type]
             curr_type = cur_dtypes[i]
             # If type is a datetime64 timestamp, convert to microseconds
             # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
             # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
             if curr_type == np.dtype("datetime64[ns]"):
-                curr_type = "datetime64[us]"
+                curr_type = "datetime64[us]"  # type: ignore[assignment]
                 has_rec_fix = True
-            record_type_list.append((str(col_names[i]), curr_type))
+            record_type_list.append((str(col_names[i]), curr_type))  # type: ignore[index]
         return np.dtype(record_type_list) if has_rec_fix else None
 
     def _create_from_pandas_with_arrow(
