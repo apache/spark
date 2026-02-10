@@ -1919,20 +1919,22 @@ END;""")
     sql("INSERT INTO cursor_row_error_test VALUES (1, 10), (2, 0), (3, 5)")
     try {
       val result = sql("""BEGIN
+  DECLARE result STRING DEFAULT 'start';
   DECLARE x INT;
   DECLARE y INT;
-  DECLARE result STRING DEFAULT '';
 
-  DECLARE cur CURSOR FOR SELECT id, 100 / value AS result FROM cursor_row_error_test ORDER BY id;
+  BEGIN
+    DECLARE cur CURSOR FOR SELECT id, 100 / value AS result FROM cursor_row_error_test ORDER BY id;
 
-  DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    SET result = result || ' | failed at open';
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+      SET result = result || ' | failed at open';
 
-  SET result = 'declared';
-  OPEN cur;  -- Fails here: executeToIterator() starts execution, hits divide-by-zero
-  SET result = 'opened';  -- Should NOT reach here
-  FETCH cur INTO x, y;
-  SET result = 'fetched: ' || x || ',' || y;  -- Should NOT reach here
+    SET result = 'declared';
+    OPEN cur;  -- Fails here: executeToIterator() starts execution, hits divide-by-zero
+    SET result = 'opened';  -- Should NOT reach here
+    FETCH cur INTO x, y;
+    SET result = 'fetched: ' || x || ',' || y;  -- Should NOT reach here
+  END;
 
   SELECT result;
 END;""")
