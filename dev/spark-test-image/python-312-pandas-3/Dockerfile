@@ -27,7 +27,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260207
+ENV FULL_REFRESH_DATE=20260210
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     openjdk-17-jdk-headless \
     python3.12 \
+    python3.12-venv \
     pkg-config \
     tzdata \
     software-properties-common \
@@ -55,12 +56,8 @@ RUN apt-get update && apt-get install -y \
 
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
-RUN python3.12 -m venv --without-pip $VIRTUAL_ENV
+RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
-# Install Python 3.12 packages
-# Note that mlflow is execluded since it requires pandas<3
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas>=3 scipy plotly<6.0.0 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
