@@ -1462,7 +1462,6 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    @disable_gc
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
         Execute the passed request `req` and drop all results.
@@ -1496,12 +1495,12 @@ class SparkConnectClient(object):
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            handle_response(b)
+                        with disable_gc():
+                            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                                handle_response(b)
         except Exception as error:
             self._handle_error(error)
 
-    @disable_gc
     def _execute_and_fetch_as_iterator(
         self,
         req: pb2.ExecutePlanRequest,
@@ -1697,8 +1696,15 @@ class SparkConnectClient(object):
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            yield from handle_response(b)
+                        with disable_gc():
+                            gen = self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                        while True:
+                            try:
+                                with disable_gc():
+                                    b = next(gen)
+                                yield from handle_response(b)
+                            except StopIteration:
+                                break
         except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
             if progress is not None:
