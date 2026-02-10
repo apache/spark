@@ -153,7 +153,8 @@ final class ShuffleBlockFetcherIterator(
    * Thread pool reading from fallback storage, first creating FallbackStorageRequest from
    * block id and map index, then materializing requests to SuccessFetchResult.
    */
-  private[this] val fallbackStorageReadPool: ThreadPoolExecutor =
+  // This is visible for testing
+  private[storage] val fallbackStorageReadPool: ThreadPoolExecutor =
     ThreadUtils.newDaemonFixedThreadPool(fallbackStorageReadThreads, "fallback-storage-read")
   private[this] val fallbackStorageReadContext: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(fallbackStorageReadPool)
