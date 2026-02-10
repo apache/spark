@@ -40,7 +40,6 @@ class JDBCTableCatalog extends TableCatalog
   with FunctionCatalog
   with DataTypeErrorsBase
   with Logging {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private var catalogName: String = null
   private var options: JDBCOptions = _
@@ -434,7 +433,8 @@ class JDBCTableCatalog extends TableCatalog
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
     if (ident.namespace().nonEmpty) {
-      throw QueryCompilationErrors.noSuchFunctionError(ident.asFunctionIdentifier)
+      throw QueryCompilationErrors.identifierTooManyNamePartsError(
+        (ident.namespace().toSeq :+ ident.name()))
     }
     functions.get(ident.name()) match {
       case Some(func) =>

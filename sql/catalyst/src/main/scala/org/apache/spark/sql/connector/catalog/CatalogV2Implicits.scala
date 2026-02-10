@@ -166,9 +166,10 @@ private[sql] object CatalogV2Implicits {
     def asMultipartIdentifier: Seq[String] = (ident.namespace :+ ident.name).toImmutableArraySeq
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
-      case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ =>
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
+          ident.namespace().toImmutableArraySeq)
     }
 
     /**
@@ -192,9 +193,10 @@ private[sql] object CatalogV2Implicits {
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
-      case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ =>
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
+          ident.namespace().toImmutableArraySeq)
     }
 
     def toQualifiedNameParts(catalog: CatalogPlugin): Seq[String] = {
