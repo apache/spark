@@ -1185,6 +1185,11 @@
       "SparkContext or SparkSession should be created first."
     ]
   },
+  "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
+    "message": [
+      "SimpleDataSourceStreamReader.read() returned a non-empty batch but the end offset: <end_offset> did not advance past the start offset: <start_offset>. The end offset must represent the position after the last record returned."
+    ]
+  },
   "SLICE_WITH_STEP": {
     "message": [
       "Slice with step is not supported."
@@ -1208,11 +1213,6 @@
   "STREAMING_CONNECT_SERIALIZATION_ERROR": {
     "message": [
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
-    ]
-  },
-  "STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
-    "message": [
-      "Stream reader read() returned a non-empty batch but the end offset did not advance past the start offset. Returning end equal to start with data would cause the same batch to be processed repeatedly. The end offset must represent the position after the last record returned."
     ]
   },
   "ST_INVALID_ALGORITHM_VALUE" : {
