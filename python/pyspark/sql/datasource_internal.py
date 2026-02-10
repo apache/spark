@@ -100,7 +100,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         appends the result to the cache; when end == start with empty iterator, does not
         cache (avoids unbounded cache growth).
         """
-        if end != start:
+        start_str = json.dumps(start)
+        end_str = json.dumps(end)
+        if end_str != start_str:
             self.cache.append(PrefetchedCacheEntry(start, end, it))
             return
         try:
@@ -110,8 +112,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         raise PySparkException(
             errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
             messageParameters={
-                "start_offset": start,
-                "end_offset": end,
+                "start_offset": start_str,
+                "end_offset": end_str,
             },
         )
 
