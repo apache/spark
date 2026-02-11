@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark Cl
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260207
+ENV FULL_REFRESH_DATE=20260210
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     openjdk-17-jdk-headless \
     python3.12 \
+    python3.12-venv \
     pkg-config \
     tzdata \
     software-properties-common \
@@ -52,11 +53,8 @@ RUN apt-get update && apt-get install -y \
 
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
-RUN python3.12 -m venv --without-pip $VIRTUAL_ENV
+RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
-# Install Python 3.12 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
 ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
