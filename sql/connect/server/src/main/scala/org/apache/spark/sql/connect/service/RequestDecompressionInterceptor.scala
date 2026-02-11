@@ -50,8 +50,9 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     val compressedSizesRef = new AtomicReference[Seq[Option[Long]]](Seq.empty)
 
     // Create context with the AtomicReference and start the call within that context
-    val ctx = Context.current().withValue(
-      RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizesRef)
+    val ctx = Context
+      .current()
+      .withValue(RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizesRef)
     val listener = Contexts.interceptCall(ctx, call, headers, next)
 
     new SimpleForwardingServerCallListener[ReqT](listener) {
