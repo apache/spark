@@ -274,42 +274,6 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       }
     }
 
-    test(s"Event time as prefix: iterator with multiple values (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "prefix",
-          useMultipleValuesPerKey = true,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          val keyWithTimestamp1 = keyAndTimestampToRow("key1", 1, 1000L)
-          val values1 = Array(valueToRow(100), valueToRow(101))
-          val keyWithTimestamp2 = keyAndTimestampToRow("key2", 1, 1000L)
-          val values2 = Array(valueToRow(200))
-
-          store.putList(keyWithTimestamp1, values1)
-          store.putList(keyWithTimestamp2, values2)
-
-          // Test iteratorWithMultiValues
-          val iterator = store.iteratorWithMultiValues()
-          val retrievedValues = iterator.map { pair =>
-            pair.value.getInt(0)
-          }.toList
-
-          iterator.close()
-
-          assert(
-            retrievedValues.length === 3
-          ) // 2 values from key1 + 1 value from key2
-          assert(retrievedValues.toSet === Set(100, 101, 200))
-        } finally {
-          store.abort()
-        }
-      }
-    }
-
     test(
       s"Event time as postfix: prefix scan operations (encoding = $encoding)"
     ) {
@@ -357,79 +321,6 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           assert(results(0) === (("key1", 1, -3000L, 100)))
           assert(results(1) === (("key1", 1, 1000L, 101)))
           assert(results(2) === (("key1", 1, 2000L, 102)))
-
-          // Should not contain key2
-          assert(!results.exists(_._1 == "key2"))
-        } finally {
-          store.abort()
-        }
-      }
-    }
-
-    test(s"Event time as postfix: prefix scan with multiple values (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "postfix",
-          useMultipleValuesPerKey = true,
-          dataEncoding = encoding
-        )
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          // Put multiple values for the same key at different event times
-
-          // Insert in non-sorted order to verify ordering by event time
-          val values2 = Array(valueToRow(200), valueToRow(201))
-          store.putList(keyAndTimestampToRow("key1", 1, 1000L), values2)
-
-          val values1 = Array(valueToRow(100), valueToRow(101))
-          store.putList(keyAndTimestampToRow("key1", 1, -3000L), values1)
-
-          val values3 = Array(valueToRow(300), valueToRow(301))
-          store.putList(keyAndTimestampToRow("key1", 1, 2000L), values3)
-
-          // Different key - should not be returned
-          val values4 = Array(valueToRow(400))
-          store.putList(keyAndTimestampToRow("key2", 1, 1500L), values4)
-
-          // Test prefixScanWithMultiValues - pass complete key to find all event times
-          val key1 = keyToRow("key1", 1)
-          val iterator = store.prefixScanWithMultiValues(key1)
-
-          val results = iterator.map { pair =>
-            val keyStr = pair.key.getString(0)
-            val partitionId = pair.key.getInt(1)
-            // The timestamp will be placed at the end of the key row.
-            val timestamp = pair.key.getLong(2)
-            val value = pair.value.getInt(0)
-            (keyStr, partitionId, timestamp, value)
-          }.toList
-          iterator.close()
-
-          // Should return all individual values for key1 across different event times
-          assert(results.length === 6) // 2 values at each of 3 event times
-
-          // Verify results are ordered by event time (ascending)
-          // Group by event time to verify ordering
-          val eventTimes = results.map(_._3)
-          val distinctEventTimes = eventTimes.distinct
-          assert(
-            distinctEventTimes === Seq(-3000L, 1000L, 2000L),
-            "Results should be ordered by event time"
-          )
-
-          // Verify the first 2 results are from time -3000L
-          assert(results.take(2).forall(_._3 === -3000L))
-          assert(results.take(2).map(_._4).toSet === Set(100, 101))
-
-          // Verify the next 2 results are from time 1000L
-          assert(results.slice(2, 4).forall(_._3 === 1000L))
-          assert(results.slice(2, 4).map(_._4).toSet === Set(200, 201))
-
-          // Verify the last 2 results are from time 2000L
-          assert(results.slice(4, 6).forall(_._3 === 2000L))
-          assert(results.slice(4, 6).map(_._4).toSet === Set(300, 301))
 
           // Should not contain key2
           assert(!results.exists(_._1 == "key2"))

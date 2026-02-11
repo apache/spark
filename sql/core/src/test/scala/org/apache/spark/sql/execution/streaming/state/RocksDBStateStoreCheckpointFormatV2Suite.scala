@@ -166,16 +166,6 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
-
-  override def prefixScanWithMultiValues(
-      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-    innerStore.prefixScanWithMultiValues(prefixKey, colFamilyName)
-  }
-
-  override def iteratorWithMultiValues(
-      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-    innerStore.iteratorWithMultiValues(colFamilyName)
-  }
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {

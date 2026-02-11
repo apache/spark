@@ -458,40 +458,6 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def iteratorWithMultiValues(
-        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-      validateAndTransitionState(UPDATE)
-      // Note this verify function only verify on the colFamilyName being valid,
-      // we are actually doing prefix when useColumnFamilies,
-      // but pass "iteratorWithMultiValues" to throw correct error message
-      verifyColFamilyOperations("iteratorWithMultiValues", colFamilyName)
-
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      verify(
-        kvEncoder._2.supportsMultipleValuesPerKey,
-        "Multi-value iterator operation requires an encoder" +
-          " which supports multiple values for a single key")
-
-      val rocksDbIter = rocksDB.iterator(colFamilyName)
-
-      val rowPair = new UnsafeRowPair()
-      val iter = rocksDbIter.flatMap { kv =>
-        val keyRow = kvEncoder._1.decodeKey(kv.key)
-        val valueRows = kvEncoder._2.decodeValues(kv.value)
-        valueRows.iterator.map { valueRow =>
-          rowPair.withRows(keyRow, valueRow)
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-            StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
-            isValidated = true
-          }
-          rowPair
-        }
-      }
-
-      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-    }
-
     override def prefixScan(
         prefixKey: UnsafeRow,
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
@@ -510,40 +476,6 @@ private[sql] class RocksDBStateStoreProvider
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
-      }
-
-      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
-    }
-
-    override def prefixScanWithMultiValues(
-        prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-      validateAndTransitionState(UPDATE)
-      verifyColFamilyOperations("prefixScanWithMultiValues", colFamilyName)
-
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      verify(kvEncoder._1.supportPrefixKeyScan,
-        "prefixScanWithMultiValues requires encoder supporting prefix scan!")
-      verify(
-        kvEncoder._2.supportsMultipleValuesPerKey,
-        "Multi-value iterator operation requires an encoder" +
-          " which supports multiple values for a single key")
-
-      val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-      val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
-
-      val rowPair = new UnsafeRowPair()
-      val iter = rocksDbIter.flatMap { kv =>
-        val keyRow = kvEncoder._1.decodeKey(kv.key)
-        val valueRows = kvEncoder._2.decodeValues(kv.value)
-        valueRows.iterator.map { valueRow =>
-          rowPair.withRows(keyRow, valueRow)
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-            StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
-            isValidated = true
-          }
-          rowPair
-        }
       }
 
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
