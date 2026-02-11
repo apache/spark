@@ -752,7 +752,7 @@ class PipelineCommand(google.protobuf.message.Message):
         EXTENSION_FIELD_NUMBER: builtins.int
         @property
         def define_output(self) -> global___PipelineCommand.DefineOutput:
-            """The output (table or materialized view) definition."""
+            """The output (table or materialized view or sink) definition."""
         @property
         def define_flows(
             self,
