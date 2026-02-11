@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap, ColumnarRow}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class ColumnStatisticsSchema(a: Attribute) extends Serializable {
@@ -382,8 +383,28 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      val size = columnType.actualSize(row, ordinal)
-      sizeInBytes += size
+      // Check if this is a columnar complex type that doesn't support getSizeInBytes
+      val isColumnarComplexType = columnType match {
+        case _: ARRAY =>
+          row.getArray(ordinal).isInstanceOf[ColumnarArray]
+        case _: MAP =>
+          row.getMap(ordinal).isInstanceOf[ColumnarMap]
+        case struct: STRUCT =>
+          row.getStruct(ordinal, struct.dataType.fields.length).isInstanceOf[ColumnarRow]
+        case _ =>
+          false
+      }
+
+      if (!isColumnarComplexType) {
+        // Normal path: calculate size for unsafe types
+        // (UnsafeArrayData/UnsafeMapData/UnsafeRow)
+        val size = columnType.actualSize(row, ordinal)
+        sizeInBytes += size
+      }
+      // else: Skip size calculation for columnar complex types
+      // (ColumnarArray/ColumnarMap/ColumnarRow). These are views into ColumnVectors
+      // and don't expose getSizeInBytes()
+
       count += 1
     } else {
       gatherNullStats()
