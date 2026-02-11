@@ -550,7 +550,7 @@ def main():
             dangling_python_tests = determine_dangling_python_tests(changed_files)
             if dangling_python_tests:
                 print(
-                    f"[error] Found the following dangling Python tests {'.'.join(dangling_python_tests)}"
+                    f"[error] Found the following dangling Python tests {', '.join(dangling_python_tests)}"
                 )
                 print("[error] Please add the tests to the appropriate module.")
                 sys.exit(1)
