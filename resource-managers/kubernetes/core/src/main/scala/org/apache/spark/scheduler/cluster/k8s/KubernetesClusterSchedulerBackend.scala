@@ -76,10 +76,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
-  // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
-  // order of the value of this annotation, ascending.
-  private val podDeletionCostAnnotation = "controller.kubernetes.io/pod-deletion-cost"
-
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
@@ -202,6 +198,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.getExecutorIds()
   }
 
+  // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
+  // order of the value of this annotation, ascending.
   private def annotateExecutorDeletionCost(execIds: Seq[String]): Unit = {
     conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).foreach { cost =>
       logInfo(s"Annotating executor pod(s) ${execIds.mkString(",")} with deletion cost $cost")
@@ -217,7 +215,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .forEach { podResource =>
               podResource.patch(PATCH_CONTEXT, new PodBuilder()
                 .withNewMetadata()
-                .addToAnnotations(podDeletionCostAnnotation, cost.toString)
+                .addToAnnotations(POD_DELETION_COST, cost.toString)
                 .endMetadata()
                 .build())
             }
