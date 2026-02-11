@@ -34,7 +34,7 @@ trait KeyGroupedPartitionedScan[T] {
   def getOutputKeyGroupedPartitioning(
       basePartitioning: KeyGroupedPartitioning,
       spjParams: StoragePartitionJoinParams): KeyGroupedPartitioning = {
-    val expressions = spjParams.joinKeyPositions match {
+    val projectedExpressions = spjParams.joinKeyPositions match {
       case Some(projectionPositions) =>
         projectionPositions.map(i => basePartitioning.expressions(i))
       case _ => basePartitioning.expressions
@@ -50,14 +50,14 @@ trait KeyGroupedPartitionedScan[T] {
       case None =>
         spjParams.joinKeyPositions match {
           case Some(projectionPositions) => basePartitioning.partitionValues.map { r =>
-            val projectedRow = KeyGroupedPartitioning.project(expressions,
+            val projectedRow = KeyGroupedPartitioning.project(basePartitioning.expressions,
               projectionPositions, r)
-            InternalRowComparableWrapper(projectedRow, expressions)
+            InternalRowComparableWrapper(projectedRow, projectedExpressions)
           }.distinct.map(_.row)
           case _ => basePartitioning.partitionValues
         }
     }
-    basePartitioning.copy(expressions = expressions, numPartitions = newPartValues.length,
+    basePartitioning.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
       partitionValues = newPartValues)
   }
 
