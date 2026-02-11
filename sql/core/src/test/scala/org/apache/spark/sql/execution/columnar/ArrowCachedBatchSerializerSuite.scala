@@ -477,4 +477,363 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(serializer.isInstanceOf[ArrowCachedBatchSerializer],
       s"Expected ArrowCachedBatchSerializer but got ${serializer.getClass.getName}")
   }
+
+  test("columnar input with array type from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Seq(1, 2, 3)),
+        (2, Seq(4, 5, 6)),
+        (3, Seq(7, 8, 9))
+      ).toDF("id", "array_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(1, 2, 3)),
+        Row(2, Seq(4, 5, 6)),
+        Row(3, Seq(7, 8, 9))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with struct type from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, ("a", 10)),
+        (2, ("b", 20)),
+        (3, ("c", 30))
+      ).toDF("id", "struct_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Row("a", 10)),
+        Row(2, Row("b", 20)),
+        Row(3, Row("c", 30))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with map type from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Map("a" -> 1, "b" -> 2)),
+        (2, Map("c" -> 3, "d" -> 4)),
+        (3, Map("e" -> 5, "f" -> 6))
+      ).toDF("id", "map_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Map("a" -> 1, "b" -> 2)),
+        Row(2, Map("c" -> 3, "d" -> 4)),
+        Row(3, Map("e" -> 5, "f" -> 6))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with nested complex types from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Seq(("a", Seq(1, 2)), ("b", Seq(3, 4)))),
+        (2, Seq(("c", Seq(5, 6)), ("d", Seq(7, 8))))
+      ).toDF("id", "nested_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(Row("a", Seq(1, 2)), Row("b", Seq(3, 4)))),
+        Row(2, Seq(Row("c", Seq(5, 6)), Row("d", Seq(7, 8))))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with array of structs from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Seq(("apple", 1.5), ("banana", 2.0))),
+        (2, Seq(("orange", 1.8), ("grape", 3.5))),
+        (3, Seq(("mango", 2.5)))
+      ).toDF("id", "items")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(Row("apple", 1.5), Row("banana", 2.0))),
+        Row(2, Seq(Row("orange", 1.8), Row("grape", 3.5))),
+        Row(3, Seq(Row("mango", 2.5)))
+      ))
+
+      // Verify cache was used and operations work
+      val filtered = cached.filter($"id" > 1)
+      checkAnswer(filtered, Seq(
+        Row(2, Seq(Row("orange", 1.8), Row("grape", 3.5))),
+        Row(3, Seq(Row("mango", 2.5)))
+      ))
+    }
+  }
+
+  test("columnar input with struct containing arrays from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, ("user1", Seq("tag1", "tag2", "tag3"))),
+        (2, ("user2", Seq("tag4", "tag5"))),
+        (3, ("user3", Seq("tag6")))
+      ).toDF("id", "user_info")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Row("user1", Seq("tag1", "tag2", "tag3"))),
+        Row(2, Row("user2", Seq("tag4", "tag5"))),
+        Row(3, Row("user3", Seq("tag6")))
+      ))
+
+      // Verify we can access nested fields
+      val extracted = cached.select($"id", $"user_info._1".as("name"))
+      checkAnswer(extracted, Seq(
+        Row(1, "user1"),
+        Row(2, "user2"),
+        Row(3, "user3")
+      ))
+    }
+  }
+
+  test("columnar input with map of arrays from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Map("a" -> Seq(1, 2, 3), "b" -> Seq(4, 5))),
+        (2, Map("c" -> Seq(6, 7), "d" -> Seq(8, 9, 10)))
+      ).toDF("id", "map_of_arrays")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Map("a" -> Seq(1, 2, 3), "b" -> Seq(4, 5))),
+        Row(2, Map("c" -> Seq(6, 7), "d" -> Seq(8, 9, 10)))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with null values in complex types from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Some(Seq(1, 2, 3)), Some(("a", 10))),
+        (2, None, Some(("b", 20))),
+        (3, Some(Seq(4, 5)), None),
+        (4, None, None)
+      ).toDF("id", "array_col", "struct_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(1, 2, 3), Row("a", 10)),
+        Row(2, null, Row("b", 20)),
+        Row(3, Seq(4, 5), null),
+        Row(4, null, null)
+      ))
+
+      // Verify filtering works with nulls
+      val filtered = cached.filter($"array_col".isNotNull)
+      checkAnswer(filtered, Seq(
+        Row(1, Seq(1, 2, 3), Row("a", 10)),
+        Row(3, Seq(4, 5), null)
+      ))
+    }
+  }
+
+  test("columnar input with empty arrays and maps from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, Seq(1, 2, 3), Map("a" -> 1)),
+        (2, Seq.empty[Int], Map.empty[String, Int]),
+        (3, Seq(4), Map("b" -> 2, "c" -> 3))
+      ).toDF("id", "array_col", "map_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(1, 2, 3), Map("a" -> 1)),
+        Row(2, Seq.empty[Int], Map.empty[String, Int]),
+        Row(3, Seq(4), Map("b" -> 2, "c" -> 3))
+      ))
+
+      // Verify cache was used
+      assert(cached.storageLevel.useMemory)
+    }
+  }
+
+  test("columnar input with deeply nested structures from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      // Create a deeply nested structure: Array[Struct[Map[String, Array[Int]]]]
+      val df = Seq(
+        (1, Seq(
+          (Map("x" -> Seq(1, 2)), "data1"),
+          (Map("y" -> Seq(3, 4, 5)), "data2")
+        )),
+        (2, Seq(
+          (Map("z" -> Seq(6)), "data3")
+        ))
+      ).toDF("id", "deep_nested")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, Seq(
+          Row(Map("x" -> Seq(1, 2)), "data1"),
+          Row(Map("y" -> Seq(3, 4, 5)), "data2")
+        )),
+        Row(2, Seq(
+          Row(Map("z" -> Seq(6)), "data3")
+        ))
+      ))
+
+      // Verify operations work on deeply nested data
+      val result = cached.filter($"id" === 1)
+      assert(result.count() === 1)
+    }
+  }
+
+  test("columnar input with mixed primitive and complex types from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      val df = Seq(
+        (1, "name1", 100L, Seq(1, 2, 3), Map("k1" -> "v1"), ("nested", 99)),
+        (2, "name2", 200L, Seq(4, 5), Map("k2" -> "v2"), ("nested2", 88)),
+        (3, "name3", 300L, Seq(6), Map("k3" -> "v3"), ("nested3", 77))
+      ).toDF("id", "name", "value", "array_col", "map_col", "struct_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+      checkAnswer(cached, Seq(
+        Row(1, "name1", 100L, Seq(1, 2, 3), Map("k1" -> "v1"), Row("nested", 99)),
+        Row(2, "name2", 200L, Seq(4, 5), Map("k2" -> "v2"), Row("nested2", 88)),
+        Row(3, "name3", 300L, Seq(6), Map("k3" -> "v3"), Row("nested3", 77))
+      ))
+
+      // Verify column projection works
+      val projected = cached.select("id", "array_col", "struct_col")
+      checkAnswer(projected, Seq(
+        Row(1, Seq(1, 2, 3), Row("nested", 99)),
+        Row(2, Seq(4, 5), Row("nested2", 88)),
+        Row(3, Seq(6), Row("nested3", 77))
+      ))
+    }
+  }
+
+  test("columnar input with large complex types dataset from parquet") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      // Create a larger dataset with complex types
+      val df = (1 to 1000).map { i =>
+        (i, Seq(i, i * 2, i * 3), Map(s"key$i" -> i * 10), (s"struct$i", i * 100))
+      }.toDF("id", "array_col", "map_col", "struct_col")
+
+      // Write as parquet (columnar format)
+      df.write.parquet(path)
+
+      // Read and cache - should use columnar input path
+      val cached = spark.read.parquet(path).cache()
+
+      // Verify a filtered subset
+      val filtered = cached.filter($"id" > 990)
+      assert(filtered.count() === 10)
+
+      // Verify content of filtered data
+      val result = filtered.collect().sortBy(_.getInt(0))
+      assert(result.length === 10)
+      assert(result(0).getInt(0) === 991)
+      assert(result(0).getAs[Seq[Int]](1) === Seq(991, 1982, 2973))
+    }
+  }
+
+  test("columnar input with vectorized reader and complex types") {
+    withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        val df = Seq(
+          (1, Seq(1, 2, 3), ("a", 10)),
+          (2, Seq(4, 5, 6), ("b", 20)),
+          (3, Seq(7, 8, 9), ("c", 30))
+        ).toDF("id", "array_col", "struct_col")
+
+        // Write as parquet (columnar format)
+        df.write.parquet(path)
+
+        // Read and cache with vectorized reader enabled
+        val cached = spark.read.parquet(path).cache()
+        checkAnswer(cached, Seq(
+          Row(1, Seq(1, 2, 3), Row("a", 10)),
+          Row(2, Seq(4, 5, 6), Row("b", 20)),
+          Row(3, Seq(7, 8, 9), Row("c", 30))
+        ))
+
+        // Verify vectorized reader is used
+        val plan = cached.queryExecution.executedPlan
+        val inMemoryScan = plan.collectFirst {
+          case scan: InMemoryTableScanExec => scan
+        }
+        assert(inMemoryScan.isDefined)
+        assert(inMemoryScan.get.supportsColumnar)
+      }
+    }
+  }
 }
