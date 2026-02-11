@@ -31,7 +31,6 @@ import org.apache.spark.tags.SlowSQLTest
 /**
  * Integration test suite for transformWithState operator repartitioning.
  */
-@SlowSQLTest
 class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
@@ -484,7 +483,6 @@ class OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite
   }
 }
 
-@SlowSQLTest
 class OfflineStateRepartitionTransformWithStateCkptV2IntegrationSuite
   extends OfflineStateRepartitionTransformWithStateCkptV1IntegrationSuite {
   override def beforeAll(): Unit = {
