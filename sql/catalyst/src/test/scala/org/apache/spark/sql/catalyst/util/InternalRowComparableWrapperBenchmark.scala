@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.PartitionInternalRow
 import org.apache.spark.sql.types.IntegerType
 
@@ -61,10 +61,10 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       // just to mock the data types
       val expressions = (Seq(Literal(day, IntegerType), Literal(0, IntegerType)))
 
-      val leftPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
-      val rightPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
+      val leftPartitioning = KeyedPartitioning(expressions, partitions, partitions)
+      val rightPartitioning = KeyedPartitioning(expressions, partitions, partitions)
       val merged = InternalRowComparableWrapper.mergePartitions(
-        leftPartitioning.partitionValues, rightPartitioning.partitionValues, expressions)
+        leftPartitioning.partitionKeys, rightPartitioning.partitionKeys, expressions)
       assert(merged.size == bucketNum)
     }
 

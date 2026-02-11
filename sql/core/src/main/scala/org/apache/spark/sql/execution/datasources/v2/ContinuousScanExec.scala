@@ -52,7 +52,7 @@ case class ContinuousScanExec(
   }
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    assert(partitions.forall(_.length == 1), "should only contain a single partition")
+    assert(partitions.forall(_.isDefined), "should contain a partition")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)
@@ -61,7 +61,7 @@ case class ContinuousScanExec(
       sparkContext,
       conf.continuousStreamingExecutorQueueSize,
       conf.continuousStreamingExecutorPollIntervalMs,
-      partitions.map(_.head),
+      partitions.map(_.get),
       schema,
       readerFactory,
       customMetrics)
