@@ -595,14 +595,6 @@ class Dataset[T] private[sql](
     val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
-
-    // Validate that eventTime is a top-level column name.
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val topLevelColumnNames = logicalPlan.output.map(_.name)
-    if (!topLevelColumnNames.exists(columnName => resolver(columnName, eventTime))) {
-      throw QueryCompilationErrors.unresolvedColumnError(eventTime, topLevelColumnNames)
-    }
-
     EventTimeWatermark(util.UUID.randomUUID(), UnresolvedAttribute(eventTime),
       parsedDelay, logicalPlan)
   }

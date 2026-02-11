@@ -450,6 +450,7 @@ class Analyzer(
       DeduplicateRelations ::
       ResolveCollationName ::
       ResolveMergeIntoSchemaEvolution ::
+      ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -4015,6 +4016,24 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
     case other =>
       other.transformExpressionsDownWithPruning(_.containsAnyPattern(ALIAS, MULTI_ALIAS)) {
         case Alias(child, _) => child
+      }
+  }
+}
+
+/**
+ * Validates that the event time column in EventTimeWatermark is a top-level column reference
+ * (e.g. a single name), not a nested field (e.g. "struct_col.field").
+ */
+object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(EVENT_TIME_WATERMARK)) {
+    case etw: EventTimeWatermark =>
+      etw.eventTime match {
+        case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+          etw.failAnalysis(
+            errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+            messageParameters = Map("eventExpr" -> u.sql))
+        case _ => etw
       }
   }
 }

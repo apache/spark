@@ -148,10 +148,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
     checkError(
       e,
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters =
-        Map("objectName" -> "`nested_struct`.`timestamp`", "proposal" -> "`id`, `nested_struct`")
-    )
+      condition = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+      parameters = Map("eventExpr" -> ".*nested_struct.*timestamp.*"),
+      matchPVals = true)
   }
 
   test("event time and watermark metrics") {
