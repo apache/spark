@@ -443,7 +443,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   // Helper methods to create test data
   private val keyProjection = UnsafeProjection.create(keySchema)
   private val keyAndTimestampProjection = UnsafeProjection.create(
-    TimestampKeyStateEncoder.finalKeySchema(keySchema)
+    TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
   )
 
   private def keyToRow(key: String, partitionId: Int): UnsafeRow = {
@@ -468,9 +468,9 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
     val keyStateEncoderSpec = encoderType match {
       case "prefix" => TimestampAsPrefixKeyStateEncoderSpec(
-        TimestampKeyStateEncoder.finalKeySchema(keySchema))
+        TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
       case "postfix" => TimestampAsPostfixKeyStateEncoderSpec(
-        TimestampKeyStateEncoder.finalKeySchema(keySchema))
+        TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema))
       case _ => throw new IllegalArgumentException(s"Unknown encoder type: $encoderType")
     }
 

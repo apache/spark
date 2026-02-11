@@ -664,14 +664,7 @@ case class RangeKeyScanStateEncoderSpec(
   }
 }
 
-/**
- * Encodes row with timestamp as prefix of the key, so that they can be scanned based on
- * timestamp ordering.
- *
- * The encoder expects the provided key schema to have [original key fields..., timestamp field].
- * The key has to be conformed to this schema when putting/getting from the state store. The schema
- * needs to be built via calling [[TimestampKeyStateEncoder.finalKeySchema()]].
- */
+/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
 case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -686,15 +679,7 @@ case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   }
 }
 
-/**
- * Encodes row with timestamp as postfix of the key, so that prefix scan with the keys
- * having the same key but different timestamps is supported. In addition, timestamp is stored
- * in sort order to support timestamp ordered iteration in the result of prefix scan.
- *
- * The encoder expects the provided key schema to have [original key fields..., timestamp field].
- * The key has to be conformed to this schema when putting/getting from the state store. The schema
- * needs to be built via calling [[TimestampKeyStateEncoder.finalKeySchema()]].
- */
+/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
 case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
