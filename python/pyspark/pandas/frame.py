@@ -68,6 +68,8 @@ from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[at
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_sequence  # type: ignore[attr-defined]
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
@@ -6108,7 +6110,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def fillna(
         self,
         value: Optional[Union[Any, Dict[Name, Any]]] = None,
-        method: Optional[str] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
         axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
@@ -6178,7 +6180,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         We can also propagate non-null values forward or backward.
 
-        >>> df.fillna(method='ffill')
+        >>> df.fillna(method='ffill')  # doctest: +SKIP
              A    B    C  D
         0  NaN  2.0  NaN  0
         1  3.0  4.0  NaN  1
@@ -6196,6 +6198,28 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  0.0  1.0  2.0  5
         3  0.0  3.0  1.0  4
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if method is _NoValue:
+                method = None
+        else:
+            if method is not _NoValue:
+                raise TypeError(
+                    "The `method` parameter is not supported in pandas 3.0.0 and later. "
+                )
+            method = None
+
+        return self._fillna_with_method(
+            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+        )
+
+    def _fillna_with_method(
+        self,
+        value: Optional[Union[Any, Dict[Name, Any]]] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ) -> Optional["DataFrame"]:
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError("fillna currently only works for axis=0 or axis='index'")
@@ -6433,7 +6457,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def op(psser: ps.Series) -> ps.Series:
                 if psser.name in to_replace_dict:
                     return psser.replace(
-                        to_replace=to_replace_dict[psser.name], value=value, regex=regex
+                        to_replace=to_replace_dict[psser.name], value=value, regex=regex  # type: ignore[arg-type]
                     )
                 else:
                     return psser
@@ -6603,7 +6627,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Get the rows for the last 3 days:
 
-        >>> psdf.last('3D')
+        >>> psdf.last('3D')  # doctest: +SKIP
                     A
         2018-04-13  3
         2018-04-15  4
@@ -6612,6 +6636,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3 observed days in the dataset, and therefore data for 2018-04-11 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._last(offset)
+        else:
+            raise AttributeError(
+                "The `last` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _last(self, offset: Union[str, DateOffset]) -> "DataFrame":
         warnings.warn(
             "last is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -6667,7 +6700,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Get the rows for the last 3 days:
 
-        >>> psdf.first('3D')
+        >>> psdf.first('3D')  # doctest: +SKIP
                     A
         2018-04-09  1
         2018-04-11  2
@@ -6676,6 +6709,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3 observed days in the dataset, and therefore data for 2018-04-13 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._first(offset)
+        else:
+            raise AttributeError(
+                "The `first` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _first(self, offset: Union[str, DateOffset]) -> "DataFrame":
         warnings.warn(
             "first is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -8105,17 +8147,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         x  1  2  3
         y  4  5  6
         z  7  8  9
-        >>> psdf.swapaxes(i=1, j=0)
+        >>> psdf.swapaxes(i=1, j=0)  # doctest: +SKIP
            x  y  z
         a  1  4  7
         b  2  5  8
         c  3  6  9
-        >>> psdf.swapaxes(i=1, j=1)
+        >>> psdf.swapaxes(i=1, j=1)  # doctest: +SKIP
            a  b  c
         x  1  2  3
         y  4  5  6
         z  7  8  9
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._swapaxes(i, j, copy)
+        else:
+            raise AttributeError(
+                "The `swapaxes` method is not supported in pandas 3.0.0 and later. "
+                "Please use the `transpose` method instead"
+            )
+
+    def _swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "DataFrame":
         assert copy is True
 
         i = validate_axis(i)

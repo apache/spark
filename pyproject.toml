@@ -37,8 +37,11 @@ exclude = [
 ]
 
 [tool.ruff.lint]
+extend-select = [
+    "G010",  # logging-warn
+    "RUF100",  # unused-noqa
+]
 ignore = [
-    "E203", # Skip as black formatter adds a whitespace around ':'.
     "E402", # Module top level import is disabled for optional import check, etc.
     # TODO
     "E721", # Use isinstance for type comparison, too many for now.

@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260208
+ENV FULL_REFRESH_DATE=20260210
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y \
     npm \
     pkg-config \
     python3.12 \
+    python3.12-venv \
     qpdf \
     tzdata \
     r-base \
@@ -72,10 +73,9 @@ ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
-RUN python3.12 -m venv --without-pip $VIRTUAL_ENV
+RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 RUN python3.12 -m pip install \
     'black==23.12.1' \
     'flake8==3.9.0' \
@@ -89,7 +89,7 @@ RUN python3.12 -m pip install \
     'ipython_genutils' \
     'jinja2' \
     'matplotlib' \
-    'mypy==1.8.0' \
+    'mypy==1.19.1' \
     'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \

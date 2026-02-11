@@ -61,11 +61,11 @@ from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import (  # noqa: F401
-    arrow_udf,  # noqa: F401
-    pandas_udf,  # noqa: F401
-    ArrowUDFType,  # noqa: F401
-    PandasUDFType,  # noqa: F401
-)  # noqa: F401
+    arrow_udf,
+    pandas_udf,
+    ArrowUDFType,
+    PandasUDFType,
+)
 
 from pyspark.sql.utils import (
     to_str as _to_str,
@@ -2617,7 +2617,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 @_try_remote_functions
@@ -2671,7 +2671,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 @_try_remote_functions
@@ -3058,7 +3058,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 @_try_remote_functions
@@ -7130,7 +7130,7 @@ def count_min_sketch(
     +----------------------------------------------------------------------------------------------------------------------------------------+
     |0000000100000000000000640000000200000002000000005ADECCEE00000000153EBE090000000000000033000000000000003100000000000000320000000000000032|
     +----------------------------------------------------------------------------------------------------------------------------------------+
-    """  # noqa: E501
+    """
     _eps = lit(eps)
     _conf = lit(confidence)
     if seed is None:
@@ -7758,7 +7758,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("round", col, scale)
 
 
 @_try_remote_functions
@@ -7814,7 +7814,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 @_try_remote_functions
@@ -8844,9 +8844,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -8899,9 +8897,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -8954,9 +8950,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -20261,18 +20255,17 @@ def concat(*cols: "ColumnOrName") -> Column:
     |[61 62 63 64 65 66]|
     +-------------------+
 
-    Example 5: Concatenating mixed types of columns
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1,"abc",3,"def")], ['a','b','c','d'])
-    >>> df.select(sf.concat(df.a, df.b, df.c, df.d)).show()
-    +------------------+
-    |concat(a, b, c, d)|
-    +------------------+
-    |          1abc3def|
-    +------------------+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a')
+    >>> df.select(sf.explode('a').alias("s")).select("s.*").show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
     """
-    return _invoke_function_over_seq_of_columns("concat", cols)
+    return _invoke_function_over_columns("explode", col)
 
 
 @_try_remote_functions
@@ -20343,41 +20336,16 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     |                      2|
     +-----------------------+
 
-    Example 4: Finding the position of a non-existing value in an array
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(["c", "b", "a"],)], ['data'])
-    >>> df.select(sf.array_position(df.data, "d")).show()
-    +-----------------------+
-    |array_position(data, d)|
-    +-----------------------+
-    |                      0|
-    +-----------------------+
-
-    Example 5: Finding the position of a value in an array with nulls
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([([None, "b", "a"],)], ['data'])
-    >>> df.select(sf.array_position(df.data, "a")).show()
-    +-----------------------+
-    |array_position(data, a)|
-    +-----------------------+
-    |                      3|
-    +-----------------------+
-
-    Example 6: Finding the position of a column's value in an array of integers
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([([10, 20, 30], 20)], ['data', 'col'])
-    >>> df.select(sf.array_position(df.data, df.col)).show()
-    +-------------------------+
-    |array_position(data, col)|
-    +-------------------------+
-    |                        2|
-    +-------------------------+
-
+    >>> df.select('*', sf.posexplode('m')).show(truncate=False)
+    +---+---------------------------+---+---+-----+
+    |i  |m                          |pos|key|value|
+    +---+---------------------------+---+---+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|0  |1  |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1  |3  |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|2  |5  |NULL |
+    +---+---------------------------+---+---+-----+
     """
-    return _invoke_function_over_columns("array_position", col, lit(value))
+    return _invoke_function_over_columns("posexplode", col)
 
 
 @_try_remote_functions
@@ -20469,15 +20437,26 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     Example 5: Getting a value from a map using a literal string as the key
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
-    >>> df.select(sf.element_at(df.data, 'b')).show()
-    +-------------------+
-    |element_at(data, b)|
-    +-------------------+
-    |                2.0|
-    +-------------------+
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(NAMED_STRUCT("a",1,"b",2), NULL, NAMED_STRUCT("a",3,"b",4))), (2,ARRAY()), (3,NULL) AS t(i,s)')
+    >>> df.show(truncate=False)
+    +---+----------------------+
+    |i  |s                     |
+    +---+----------------------+
+    |1  |[{1, 2}, NULL, {3, 4}]|
+    |2  |[]                    |
+    |3  |NULL                  |
+    +---+----------------------+
+
+    >>> df.select('*', sf.inline('s')).show(truncate=False)
+    +---+----------------------+----+----+
+    |i  |s                     |a   |b   |
+    +---+----------------------+----+----+
+    |1  |[{1, 2}, NULL, {3, 4}]|1   |2   |
+    |1  |[{1, 2}, NULL, {3, 4}]|NULL|NULL|
+    |1  |[{1, 2}, NULL, {3, 4}]|3   |4   |
+    +---+----------------------+----+----+
     """
-    return _invoke_function_over_columns("element_at", col, lit(extraction))
+    return _invoke_function_over_columns("inline", col)
 
 
 @_try_remote_functions
@@ -20527,13 +20506,30 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     Example 2: Getting the last element of an array using negative index
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(sf.try_element_at(df.data, sf.lit(-1))).show()
-    +------------------------+
-    |try_element_at(data, -1)|
-    +------------------------+
-    |                       c|
-    +------------------------+
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.select('*', sf.explode_outer('m')).show(truncate=False)
+    +---+---------------------------+----+-----+
+    |i  |m                          |key |value|
+    +---+---------------------------+----+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1   |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|3   |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|5   |NULL |
+    |2  |{}                         |NULL|NULL |
+    |3  |NULL                       |NULL|NULL |
+    +---+---------------------------+----+-----+
+    """
+    return _invoke_function_over_columns("explode_outer", col)
+
+
+@_try_remote_functions
+def posexplode_outer(col: "ColumnOrName") -> Column:
+    """
+    Returns a new row for each element with position in the given array or map.
+    Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+    Uses the default column name `pos` for position, and `col` for elements in the
+    array and `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 2.3.0
 
     Example 3: Getting a value from a map using a key
 
@@ -20571,15 +20567,19 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     Example 6: Getting a value from a map using a column name as the key
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
-    >>> df.select(sf.try_element_at(df.data, 'b')).show()
-    +-----------------------+
-    |try_element_at(data, b)|
-    +-----------------------+
-    |                    1.0|
-    +-----------------------+
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.select('*', sf.posexplode_outer('m')).show(truncate=False)
+    +---+---------------------------+----+----+-----+
+    |i  |m                          |pos |key |value|
+    +---+---------------------------+----+----+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|0   |1   |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1   |3   |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|2   |5   |NULL |
+    |2  |{}                         |NULL|NULL|NULL |
+    |3  |NULL                       |NULL|NULL|NULL |
+    +---+---------------------------+----+----+-----+
     """
-    return _invoke_function_over_columns("try_element_at", col, extraction)
+    return _invoke_function_over_columns("posexplode_outer", col)
 
 
 @_try_remote_functions
@@ -20616,14 +20616,18 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     --------
     Example 1: Getting an element at a fixed position
 
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
-    >>> df.select(sf.get(df.data, 1)).show()
-    +------------+
-    |get(data, 1)|
-    +------------+
-    |           b|
-    +------------+
+    >>> df.select('*', sf.inline_outer('s')).show(truncate=False)
+    +---+----------------------+----+----+
+    |i  |s                     |a   |b   |
+    +---+----------------------+----+----+
+    |1  |[{1, 2}, NULL, {3, 4}]|1   |2   |
+    |1  |[{1, 2}, NULL, {3, 4}]|NULL|NULL|
+    |1  |[{1, 2}, NULL, {3, 4}]|3   |4   |
+    |2  |[]                    |NULL|NULL|
+    |3  |NULL                  |NULL|NULL|
+    +---+----------------------+----+----+
+    """
+    return _invoke_function_over_columns("inline_outer", col)
 
     Example 2: Getting an element at a position outside the array boundaries
 
@@ -25745,7 +25749,9 @@ def convert_timezone(
     if sourceTz is None:
         return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
     else:
-        return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
+        srid = _enum_to_value(srid)
+        srid = lit(srid) if isinstance(srid, int) else srid
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 @_try_remote_functions
@@ -26493,17 +26499,329 @@ def make_timestamp(
 
     Example 1: Make timestamp from years, months, days, hours, mins, secs, and timezone.
 
-    >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
-    >>> df.select(
-    ...     sf.make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec, 'tz')
-    ... ).show(truncate=False)
-    +----------------------------------------------------+
-    |make_timestamp(year, month, day, hour, min, sec, tz)|
-    +----------------------------------------------------+
-    |2014-12-27 21:30:45.887                             |
-    +----------------------------------------------------+
+@_try_remote_functions
+def tuple_sketch_agg_double(
+    key: "ColumnOrName",
+    summary: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch with double summaries built from the key and summary columns.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    key : :class:`~pyspark.sql.Column` or column name
+        The column containing key values
+    summary : :class:`~pyspark.sql.Column` or column name
+        The column containing double summary values
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_double`
+    :meth:`pyspark.sql.functions.tuple_sketch_summary_double`
+    :meth:`pyspark.sql.functions.tuple_union_agg_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0), (2, 20.0), (2, 30.0)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_estimate_double(
+    ...     sf.tuple_sketch_agg_double("key", "value"))).show()
+    +--------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_sketch_agg_double(key, value, 12, sum))|
+    +--------------------------------------------------------------------------+
+    |                                                                       2.0|
+    +--------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_agg_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, key, summary, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_sketch_agg_integer(
+    key: "ColumnOrName",
+    summary: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch with integer summaries built from the key and summary columns.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    key : :class:`~pyspark.sql.Column` or column name
+        The column containing key values
+    summary : :class:`~pyspark.sql.Column` or column name
+        The column containing integer summary values
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_integer`
+    :meth:`pyspark.sql.functions.tuple_sketch_summary_integer`
+    :meth:`pyspark.sql.functions.tuple_union_agg_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10), (2, 20), (2, 30)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_estimate_integer(
+    ...     sf.tuple_sketch_agg_integer("key", "value"))).show()
+    +----------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, value, 12, sum))|
+    +----------------------------------------------------------------------------+
+    |                                                                         2.0|
+    +----------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_agg_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, key, summary, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_union_agg_double(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch that is the union of the double TupleSketch objects in the input column.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary TupleSketch representations
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_union_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([(1, 10.0), (2, 20.0)], ["key", "value"])
+    >>> df1 = df1.agg(sf.tuple_sketch_agg_double("key", "value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([(3, 30.0), (4, 40.0)], ["key", "value"])
+    >>> df2 = df2.agg(sf.tuple_sketch_agg_double("key", "value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.tuple_sketch_estimate_double(sf.tuple_union_agg_double("sketch"))).show()
+    +---------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum))|
+    +---------------------------------------------------------------------+
+    |                                                                  4.0|
+    +---------------------------------------------------------------------+
+    """
+    fn = "tuple_union_agg_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_union_agg_integer(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch that is the union of the integer TupleSketch objects in the input column.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary TupleSketch representations
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_union_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([(1, 10), (2, 20)], ["key", "value"])
+    >>> df1 = df1.agg(sf.tuple_sketch_agg_integer("key", "value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([(3, 30), (4, 40)], ["key", "value"])
+    >>> df2 = df2.agg(sf.tuple_sketch_agg_integer("key", "value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.tuple_sketch_estimate_integer(sf.tuple_union_agg_integer("sketch"))).show()
+    +-----------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, sum))|
+    +-----------------------------------------------------------------------+
+    |                                                                    4.0|
+    +-----------------------------------------------------------------------+
+    """
+    fn = "tuple_union_agg_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_intersection_agg_double(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch that is the intersection of the double TupleSketch objects in the input column.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary TupleSketch representations
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["key", "value"])
+    >>> df1 = df1.agg(sf.tuple_sketch_agg_double("key", "value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([(2, 40.0), (3, 50.0), (4, 60.0)], ["key", "value"])
+    >>> df2 = df2.agg(sf.tuple_sketch_agg_double("key", "value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.tuple_sketch_estimate_double(sf.tuple_intersection_agg_double("sketch"))).show()
+    +------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))|
+    +------------------------------------------------------------------------+
+    |                                                                     2.0|
+    +------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_agg_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+@_try_remote_functions
+def tuple_intersection_agg_integer(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    TupleSketch that is the intersection of the integer TupleSketch objects in the input column.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing binary TupleSketch representations
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["key", "value"])
+    >>> df1 = df1.agg(sf.tuple_sketch_agg_integer("key", "value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([(2, 40), (3, 50), (4, 60)], ["key", "value"])
+    >>> df2 = df2.agg(sf.tuple_sketch_agg_integer("key", "value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.tuple_sketch_estimate_integer(sf.tuple_intersection_agg_integer("sketch"))).show()
+    +--------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, sum))|
+    +--------------------------------------------------------------------------+
+    |                                                                       2.0|
+    +--------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_agg_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+@_try_remote_functions
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllLongsSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
 
     Example 2: Make timestamp from years, months, days, hours, mins, and secs (without timezone).
 
@@ -27810,6 +28128,556 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
+@_try_remote_functions
+def tuple_sketch_estimate_double(col: "ColumnOrName") -> Column:
+    """
+    Returns the estimated number of distinct keys from a Datasketches TupleSketch
+    with double summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated cardinality.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_sketch_summary_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0), (2, 20.0), (2, 30.0)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_estimate_double(
+    ...     sf.tuple_sketch_agg_double("key", "value"))).show()
+    +--------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_sketch_agg_double(key, value, 12, sum))|
+    +--------------------------------------------------------------------------+
+    |                                                                       2.0|
+    +--------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_estimate_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def tuple_sketch_estimate_integer(col: "ColumnOrName") -> Column:
+    """
+    Returns the estimated number of distinct keys from a Datasketches TupleSketch
+    with integer summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated cardinality.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_sketch_summary_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10), (2, 20), (2, 30)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_estimate_integer(
+    ...     sf.tuple_sketch_agg_integer("key", "value"))).show()
+    +----------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, value, 12, sum))|
+    +----------------------------------------------------------------------------+
+    |                                                                         2.0|
+    +----------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_estimate_integer"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def tuple_sketch_summary_double(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the aggregated summary value from a Datasketches TupleSketch with double summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The aggregated summary value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0), (2, 20.0), (2, 30.0)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_summary_double(
+    ...     sf.tuple_sketch_agg_double("key", "value"))).show()
+    +------------------------------------------------------------------------------+
+    |tuple_sketch_summary_double(tuple_sketch_agg_double(key, value, 12, sum), sum)|
+    +------------------------------------------------------------------------------+
+    |                                                                          60.0|
+    +------------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_summary_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+@_try_remote_functions
+def tuple_sketch_summary_integer(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the aggregated summary value from a Datasketches TupleSketch with integer summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The aggregated summary value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10), (2, 20), (2, 30)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_summary_integer(
+    ...     sf.tuple_sketch_agg_integer("key", "value"))).show()
+    +--------------------------------------------------------------------------------+
+    |tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, value, 12, sum), sum)|
+    +--------------------------------------------------------------------------------+
+    |                                                                              60|
+    +--------------------------------------------------------------------------------+
+    """
+    fn = "tuple_sketch_summary_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+@_try_remote_functions
+def tuple_sketch_theta_double(col: "ColumnOrName") -> Column:
+    """
+    Returns the theta value from a Datasketches TupleSketch with double summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The theta value (between 0.0 and 1.0).
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0), (2, 20.0)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_theta_double(
+    ...     sf.tuple_sketch_agg_double("key", "value"))).show()
+    +-----------------------------------------------------------------------+
+    |tuple_sketch_theta_double(tuple_sketch_agg_double(key, value, 12, sum))|
+    +-----------------------------------------------------------------------+
+    |                                                                    1.0|
+    +-----------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_sketch_theta_double", col)
+
+
+@_try_remote_functions
+def tuple_sketch_theta_integer(col: "ColumnOrName") -> Column:
+    """
+    Returns the theta value from a Datasketches TupleSketch with integer summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing a binary TupleSketch representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The theta value (between 0.0 and 1.0).
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_sketch_estimate_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10), (2, 20)], ["key", "value"])
+    >>> df.agg(sf.tuple_sketch_theta_integer(
+    ...     sf.tuple_sketch_agg_integer("key", "value"))).show()
+    +-------------------------------------------------------------------------+
+    |tuple_sketch_theta_integer(tuple_sketch_agg_integer(key, value, 12, sum))|
+    +-------------------------------------------------------------------------+
+    |                                                                      1.0|
+    +-------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_sketch_theta_integer", col)
+
+
+@_try_remote_functions
+def tuple_union_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the union of two Datasketches TupleSketch objects with double summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_union_agg_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0, 3, 30.0), (2, 20.0, 4, 40.0)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_double("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_union_double(df.sketch1, "sketch2"))).show()  # noqa
+    +---------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_union_double(sketch1, sketch2, 12, sum))|
+    +---------------------------------------------------------------------------+
+    |                                                                        4.0|
+    +---------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_union_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the union of two Datasketches TupleSketch objects with integer summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_union_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10, 3, 30), (2, 20, 4, 40)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_integer("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_union_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_union_integer(sketch1, sketch2, 12, sum))|
+    +-----------------------------------------------------------------------------+
+    |                                                                          4.0|
+    +-----------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_intersection_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the intersection of two Datasketches TupleSketch objects with double summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_union_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0, 2, 20.0), (2, 20.0, 3, 30.0), (3, 30.0, 4, 40.0)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_double("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_intersection_double(df.sketch1, "sketch2"))).show()  # noqa
+    +------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_intersection_double(sketch1, sketch2, sum))|
+    +------------------------------------------------------------------------------+
+    |                                                                           2.0|
+    +------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_intersection_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Returns the intersection of two Datasketches TupleSketch objects with integer summaries.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_union_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10, 2, 20), (2, 20, 3, 30), (3, 30, 4, 40)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_integer("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_intersection_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +--------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_intersection_integer(sketch1, sketch2, sum))|
+    +--------------------------------------------------------------------------------+
+    |                                                                             2.0|
+    +--------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_difference_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns the set difference of two Datasketches TupleSketch objects with double summaries
+    (elements in first sketch but not in second).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.tuple_union_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0, 4, 40.0), (2, 20.0, 4, 40.0), (3, 30.0, 5, 50.0), (4, 40.0, 5, 50.0)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_double("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_difference_double(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2))|
+    +-----------------------------------------------------------------------+
+    |                                                                    3.0|
+    +-----------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_double", col1, col2)
+
+
+@_try_remote_functions
+def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns the set difference of two Datasketches TupleSketch objects with integer summaries
+    (elements in first sketch but not in second).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The first TupleSketch column
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The second TupleSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_union_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10, 4, 40), (2, 20, 4, 40), (3, 30, 5, 50), (4, 40, 5, 50)], ["key1", "v1", "key2", "v2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.tuple_sketch_agg_integer("key2", "v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_difference_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_difference_integer(sketch1, sketch2))|
+    +-------------------------------------------------------------------------+
+    |                                                                      3.0|
+    +-------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_integer", col1, col2)
+
+
 # ---------------------- Predicates functions ------------------------------
 
 
@@ -28219,7 +29087,7 @@ def aes_encrypt(
     +-------------------------------------------------------------------------------------------------------------+
     |Spark SQL                                                                                                    |
     +-------------------------------------------------------------------------------------------------------------+
-    """  # noqa: E501
+    """
     _mode = lit("GCM") if mode is None else mode
     _padding = lit("DEFAULT") if padding is None else padding
     _iv = lit("") if iv is None else iv
