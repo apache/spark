@@ -170,7 +170,7 @@ message PipelineCommand {
   // Request to execute all flows for a single output (dataset or sink) remotely.
   message ExecuteOutputFlows {
 
-    // The output (table or materialized view) definition.
+    // The output (table or materialized view or sink) definition.
     optional DefineOutput define_output = 1;
 
     // The flows to execute for this table.
