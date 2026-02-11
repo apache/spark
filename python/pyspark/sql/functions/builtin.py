@@ -61,11 +61,11 @@ from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import (  # noqa: F401
-    arrow_udf,  # noqa: F401
-    pandas_udf,  # noqa: F401
-    ArrowUDFType,  # noqa: F401
-    PandasUDFType,  # noqa: F401
-)  # noqa: F401
+    arrow_udf,
+    pandas_udf,
+    ArrowUDFType,
+    PandasUDFType,
+)
 
 from pyspark.sql.utils import (
     to_str as _to_str,
@@ -7130,7 +7130,7 @@ def count_min_sketch(
     +----------------------------------------------------------------------------------------------------------------------------------------+
     |0000000100000000000000640000000200000002000000005ADECCEE00000000153EBE090000000000000033000000000000003100000000000000320000000000000032|
     +----------------------------------------------------------------------------------------------------------------------------------------+
-    """  # noqa: E501
+    """
     _eps = lit(eps)
     _conf = lit(confidence)
     if seed is None:
@@ -20311,7 +20311,7 @@ def explode(col: "ColumnOrName") -> Column:
     |  1|  2|
     |  3|  4|
     +---+---+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("explode", col)
 
 
@@ -20391,7 +20391,7 @@ def posexplode(col: "ColumnOrName") -> Column:
     |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1  |3  |4    |
     |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|2  |5  |NULL |
     +---+---------------------------+---+---+-----+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("posexplode", col)
 
 
@@ -20510,7 +20510,7 @@ def inline(col: "ColumnOrName") -> Column:
     |1  |[{1, 2}, NULL, {3, 4}]|NULL|NULL|
     |1  |[{1, 2}, NULL, {3, 4}]|3   |4   |
     +---+----------------------+----+----+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("inline", col)
 
 
@@ -20577,7 +20577,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     |2  |{}                         |NULL|NULL |
     |3  |NULL                       |NULL|NULL |
     +---+---------------------------+----+-----+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("explode_outer", col)
 
 
@@ -20644,7 +20644,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     |2  |{}                         |NULL|NULL|NULL |
     |3  |NULL                       |NULL|NULL|NULL |
     +---+---------------------------+----+----+-----+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("posexplode_outer", col)
 
 
@@ -20700,7 +20700,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
     |2  |[]                    |NULL|NULL|
     |3  |NULL                  |NULL|NULL|
     +---+----------------------+----+----+
-    """  # noqa: E501
+    """
     return _invoke_function_over_columns("inline_outer", col)
 
 
@@ -28210,7 +28210,7 @@ def aes_encrypt(
     +-------------------------------------------------------------------------------------------------------------+
     |Spark SQL                                                                                                    |
     +-------------------------------------------------------------------------------------------------------------+
-    """  # noqa: E501
+    """
     _mode = lit("GCM") if mode is None else mode
     _padding = lit("DEFAULT") if padding is None else padding
     _iv = lit("") if iv is None else iv
