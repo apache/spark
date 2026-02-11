@@ -55,7 +55,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
-  private val appId = KubernetesConf.getKubernetesAppId()
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -66,11 +65,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
-  private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
-
-  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
-
-  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
+  private val minRegisteredExecutors = initialExecutors * minRegisteredRatio
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -103,13 +98,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
    * @return The application ID
    */
   override def applicationId(): String = {
-    conf.getOption("spark.app.id").getOrElse(appId)
+    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
   }
 
   override def start(): Unit = {
     super.start()
     // Must be called before setting the executors
     podAllocator.start(applicationId(), this)
+    val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleManager.start(this)
@@ -139,7 +135,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       pollEvents.stop()
     }
 
-    if (shouldDeleteDriverService) {
+    if (conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)) {
       Utils.tryLogNonFatalError {
         kubernetesClient
           .services()
@@ -159,7 +155,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       }
     }
 
-    if (shouldDeleteExecutors) {
+    if (conf.get(KUBERNETES_DELETE_EXECUTORS)) {
 
       podAllocator.stop(applicationId())
 
@@ -191,7 +187,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= initialExecutors * minRegisteredRatio
+    totalRegisteredExecutors.get() >= minRegisteredExecutors
   }
 
   override def getExecutorIds(): Seq[String] = synchronized {
