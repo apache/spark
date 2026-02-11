@@ -1501,3 +1501,248 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 }
+
+/**
+ * Test suite that verifies the state data source reader does not create empty state
+ * directories when reading state for all stateful operators.
+ *
+ * When `spark.sql.streaming.checkpoint.stateCreateMetadataDirOnRead` is false (the default),
+ * the reader should not call mkdirs on the schema metadata path. This is important for
+ * Unity Catalog environments where creating directories requires WRITE FILES permission,
+ * but reading state should only require READ FILES permission (ES-1722614).
+ *
+ * Each test runs one batch of a stateful query to create the checkpoint structure
+ * (offsets, commits, metadata), then deletes the state directory and attempts to read.
+ * The read is expected to fail (no state data), but crucially should NOT recreate the
+ * deleted state directory.
+ */
+class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
+  import testImplicits._
+
+  /**
+   * Deletes a directory recursively.
+   */
+  private def deleteRecursively(file: File): Unit = {
+    if (file.isDirectory) {
+      Option(file.listFiles()).foreach(_.foreach(deleteRecursively))
+    }
+    file.delete()
+  }
+
+  /**
+   * Runs a stateful query to create the checkpoint structure, deletes the state directory,
+   * then attempts to read via the state data source and verifies that the state directory
+   * is not recreated.
+   */
+  private def assertStateDirectoryNotRecreatedOnRead(
+      runQuery: String => Unit,
+      readState: String => Unit): Unit = {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+
+      runQuery(checkpointPath)
+
+      val stateDir = new File(tempDir, "state")
+      assert(stateDir.exists(), "State directory should exist after running the query")
+      deleteRecursively(stateDir)
+      assert(!stateDir.exists(), "State directory should be deleted")
+
+      intercept[Exception] {
+        readState(checkpointPath)
+      }
+
+      assert(!stateDir.exists(),
+        "State data source reader should not recreate the deleted state directory")
+    }
+  }
+
+  test("streaming aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runLargeDataStreamingAggregationQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("drop duplicates: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runDropDuplicatesQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("flatMapGroupsWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runFlatMapGroupsWithStateQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("stream-stream join: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runStreamStreamJoinQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.JOIN_SIDE, "left")
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("session window aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runSessionWindowAggregationQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("deleted offsets directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val offsetsDir = new File(tempDir, "offsets")
+      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+      deleteRecursively(offsetsDir)
+      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+      intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+
+      assert(!offsetsDir.exists(),
+        "State data source reader should not recreate the deleted offsets directory")
+    }
+  }
+
+  test("deleted commits directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val commitsDir = new File(tempDir, "commits")
+      assert(commitsDir.exists(), "Commits directory should exist after running the query")
+      deleteRecursively(commitsDir)
+      assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+      intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+
+      assert(!commitsDir.exists(),
+        "State data source reader should not recreate the deleted commits directory")
+    }
+  }
+
+  test("checkpointCreateDirOnRead=true recreates deleted offsets directory") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "true") {
+      withTempDir { tempDir =>
+        val checkpointPath = tempDir.getAbsolutePath
+        runLargeDataStreamingAggregationQuery(checkpointPath)
+
+        val offsetsDir = new File(tempDir, "offsets")
+        assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+        deleteRecursively(offsetsDir)
+        assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+        intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, checkpointPath)
+            .load()
+            .collect()
+        }
+
+        assert(offsetsDir.exists(),
+          "With checkpointCreateDirOnRead=true, offsets directory should be recreated")
+      }
+    }
+  }
+
+  test("checkpointCreateDirOnRead=true recreates deleted commits directory") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "true") {
+      withTempDir { tempDir =>
+        val checkpointPath = tempDir.getAbsolutePath
+        runLargeDataStreamingAggregationQuery(checkpointPath)
+
+        val commitsDir = new File(tempDir, "commits")
+        assert(commitsDir.exists(), "Commits directory should exist after running the query")
+        deleteRecursively(commitsDir)
+        assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+        intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, checkpointPath)
+            .load()
+            .collect()
+        }
+
+        assert(commitsDir.exists(),
+          "With checkpointCreateDirOnRead=true, commits directory should be recreated")
+      }
+    }
+  }
+
+  test("createMetadataDirOnRead=true recreates deleted state directory") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ.key -> "true") {
+      withTempDir { tempDir =>
+        val checkpointPath = tempDir.getAbsolutePath
+        runLargeDataStreamingAggregationQuery(checkpointPath)
+
+        val stateDir = new File(tempDir, "state")
+        assert(stateDir.exists(), "State directory should exist after running the query")
+        deleteRecursively(stateDir)
+        assert(!stateDir.exists(), "State directory should be deleted")
+
+        intercept[Exception] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, checkpointPath)
+            .load()
+            .collect()
+        }
+
+        assert(stateDir.exists(),
+          "With createMetadataDirOnRead=true, state directory should be recreated")
+      }
+    }
+  }
+}

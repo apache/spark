@@ -2584,6 +2584,26 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
+  val STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ =
+    buildConf("spark.sql.streaming.checkpoint.stateCreateMetadataDirOnRead")
+      .internal()
+      .doc(
+        "When true, the state data source reader will create metadata directories if they " +
+          "don't exist. When false, the reader will only read from existing directories.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_CHECKPOINT_CREATE_DIR_ON_READ =
+    buildConf("spark.sql.streaming.checkpoint.createDirOnRead")
+      .internal()
+      .doc(
+        "When true, the streaming checkpoint metadata log (offsetLog, commitLog) will create " +
+          "the parent directory if it doesn't exist during initialization.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
@@ -7087,6 +7107,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
+
+  def stateStoreCreateMetadataDirOnRead: Boolean =
+    getConf(STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ)
+
+  def streamingCheckpointCreateDirOnRead: Boolean =
+    getConf(STREAMING_CHECKPOINT_CREATE_DIR_ON_READ)
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 

@@ -221,8 +221,11 @@ class StateMetadataPartitionReader(
         } else {
           1
         }
+        val createMetadataDir = SparkSession.getActiveSession
+          .map(_.sessionState.conf.stateStoreCreateMetadataDirOnRead).getOrElse(false)
         OperatorStateMetadataReader.createReader(
-          operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId).read() match {
+          operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId,
+          createMetadataDir = createMetadataDir).read() match {
           case Some(metadata) => metadata
           case None => throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation,
             batchId)

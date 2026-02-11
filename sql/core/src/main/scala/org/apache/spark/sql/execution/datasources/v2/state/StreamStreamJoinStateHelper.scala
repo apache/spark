@@ -79,6 +79,8 @@ object StreamStreamJoinStateHelper {
     // KeyToNumValuesType, KeyWithIndexToValueType
     val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
 
+    val createSchemaDir = session.sessionState.conf.stateStoreCreateMetadataDirOnRead
+
     val (keySchema, valueSchema) =
       if (!usesVirtualColumnFamilies(
         newHadoopConf, stateCheckpointLocation, operatorId)) {
@@ -94,12 +96,13 @@ object StreamStreamJoinStateHelper {
 
         // read the key schema from the keyToNumValues store for the join keys
         val manager = new StateSchemaCompatibilityChecker(
-          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths)
+          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths,
+          createSchemaDir = createSchemaDir)
         val kSchema = manager.readSchemaFile().head.keySchema
 
         // read the value schema from the keyWithIndexToValue store for the values
         val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
-          newHadoopConf, oldSchemaFilePaths)
+          newHadoopConf, oldSchemaFilePaths, createSchemaDir = createSchemaDir)
         val vSchema = manager2.readSchemaFile().head.valueSchema
 
         (kSchema, vSchema)
@@ -109,7 +112,7 @@ object StreamStreamJoinStateHelper {
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
 
         val manager = new StateSchemaCompatibilityChecker(
-          providerId, newHadoopConf, oldSchemaFilePaths)
+          providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = createSchemaDir)
         val kSchema = manager.readSchemaFile().find { schema =>
           schema.colFamilyName == storeNames(0)
         }.map(_.keySchema).get
