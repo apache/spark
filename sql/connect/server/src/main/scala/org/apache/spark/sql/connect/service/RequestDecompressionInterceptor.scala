@@ -71,8 +71,8 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
       private def handleRequestWithDecompression[T](
           userId: String,
           sessionId: String,
-          decompressRequest: () => (T, Option[Long], Option[Long])): Unit = {
-        val (decompressedReq, compressedSize, otherCompressedSize) =
+          decompressRequest: () => (T, Seq[Option[Long]])): Unit = {
+        val (decompressedReq, compressedSizes) =
           try {
             decompressRequest()
           } catch {
@@ -87,16 +87,9 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
               return
           }
 
-        // Set compressed size(s) in context if present
-        var contextToUse = Context.current()
-        compressedSize.foreach { size =>
-          contextToUse =
-            contextToUse.withValue(RequestDecompressionContext.COMPRESSED_SIZE_KEY, size)
-        }
-        otherCompressedSize.foreach { size =>
-          contextToUse =
-            contextToUse.withValue(RequestDecompressionContext.OTHER_COMPRESSED_SIZE_KEY, size)
-        }
+        // Set compressed sizes in context
+        val contextToUse = Context.current().withValue(
+          RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizes)
 
         // Run the rest of the call chain with the context
         val prev = contextToUse.attach()
@@ -110,9 +103,9 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
   }
 
   private def decompressExecutePlanRequest(request: proto.ExecutePlanRequest)
-      : (proto.ExecutePlanRequest, Option[Long], Option[Long]) = {
+      : (proto.ExecutePlanRequest, Seq[Option[Long]]) = {
     if (!request.hasPlan) {
-      return (request, None, None)
+      return (request, Seq.empty)
     }
     val (decompressedReq, size) = decompressPlanGeneric(
       request,
@@ -121,11 +114,11 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
       (r: proto.ExecutePlanRequest) => r.getPlan,
       (req: proto.ExecutePlanRequest, plan: proto.Plan) => req.toBuilder.setPlan(plan).build())
 
-    (decompressedReq, size, None)
+    (decompressedReq, Seq(size))
   }
 
   private def decompressAnalyzePlanRequest(request: proto.AnalyzePlanRequest)
-      : (proto.AnalyzePlanRequest, Option[Long], Option[Long]) = {
+      : (proto.AnalyzePlanRequest, Seq[Option[Long]]) = {
     val userId = request.getUserContext.getUserId
     val sessionId = request.getSessionId
 
@@ -146,49 +139,49 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
           request,
           _.getSchema.getPlan,
           (r, p) => r.toBuilder.setSchema(r.getSchema.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
         val (req, size) = decompress(
           request,
           _.getExplain.getPlan,
           (r, p) => r.toBuilder.setExplain(r.getExplain.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
         val (req, size) = decompress(
           request,
           _.getTreeString.getPlan,
           (r, p) => r.toBuilder.setTreeString(r.getTreeString.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
         val (req, size) = decompress(
           request,
           _.getIsLocal.getPlan,
           (r, p) => r.toBuilder.setIsLocal(r.getIsLocal.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
         val (req, size) = decompress(
           request,
           _.getIsStreaming.getPlan,
           (r, p) => r.toBuilder.setIsStreaming(r.getIsStreaming.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
         val (req, size) = decompress(
           request,
           _.getInputFiles.getPlan,
           (r, p) => r.toBuilder.setInputFiles(r.getInputFiles.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
         val (req, size) = decompress(
           request,
           _.getSemanticHash.getPlan,
           (r, p) => r.toBuilder.setSemanticHash(r.getSemanticHash.toBuilder.setPlan(p)).build())
-        (req, size, None)
+        (req, Seq(size))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
         // Special case: has two Plan fields (target_plan and other_plan)
@@ -204,23 +197,23 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
           (r, p) =>
             r.toBuilder.setSameSemantics(r.getSameSemantics.toBuilder.setOtherPlan(p)).build())
 
-        (finalReq, targetSize, otherSize)
+        (finalReq, Seq(targetSize, otherSize))
 
       // Cases with Relation fields - currently not compressed
       case proto.AnalyzePlanRequest.AnalyzeCase.PERSIST |
           proto.AnalyzePlanRequest.AnalyzeCase.UNPERSIST |
           proto.AnalyzePlanRequest.AnalyzeCase.GET_STORAGE_LEVEL =>
-        (request, None, None)
+        (request, Seq.empty)
 
       // Cases with no Plan or Relation fields - safe to pass through
       case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION |
           proto.AnalyzePlanRequest.AnalyzeCase.DDL_PARSE |
           proto.AnalyzePlanRequest.AnalyzeCase.JSON_TO_DDL =>
-        (request, None, None)
+        (request, Seq.empty)
 
       // No analysis case set - safe to pass through, will be handled in handler
       case proto.AnalyzePlanRequest.AnalyzeCase.ANALYZE_NOT_SET =>
-        (request, None, None)
+        (request, Seq.empty)
 
       case _ =>
         // Unhandled case - fail to catch new cases during testing
@@ -271,32 +264,46 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
 object RequestDecompressionContext {
 
   /**
-   * Context key for storing the compressed size. This is set by RequestDecompressionInterceptor
-   * when a compressed request is encountered, and read by handlers for metrics.
+   * Context key for storing compressed sizes. This is set by RequestDecompressionInterceptor
+   * when compressed requests are encountered, and read by handlers for metrics.
+   *
+   * The sequence contains Option[Long] entries corresponding to each plan in the request:
+   * - For ExecutePlan and single-plan Analyze requests: Seq(Some(size)) if compressed, or
+   *   Seq.empty if not
+   * - For AnalyzePlanRequest SameSemantics with two plans: Seq(target_size, other_size) where
+   *   each is Some(size) if that plan was compressed, None if not
+   *
+   * The sequence length matches the number of plans, with explicit None for uncompressed plans.
    */
-  val COMPRESSED_SIZE_KEY: Context.Key[Long] = Context.key("compressed-size")
+  val COMPRESSED_SIZES_KEY: Context.Key[Seq[Option[Long]]] = Context.key("compressed-sizes")
 
   /**
-   * Context key for storing the other compressed size. This is used for AnalyzePlanRequest
-   * SameSemantics which has two plans: target_plan (size stored in COMPRESSED_SIZE_KEY) and
-   * other_plan (size stored in this key).
+   * Get all compressed sizes from the current gRPC context. Returns empty sequence if no
+   * compressed sizes were set.
    */
-  val OTHER_COMPRESSED_SIZE_KEY: Context.Key[Long] = Context.key("other-compressed-size")
-
-  /**
-   * Get the compressed size from the current gRPC context. Returns None if no compressed size was
-   * set (request was not compressed).
-   */
-  def getCompressedSize: Option[Long] = {
-    Option(COMPRESSED_SIZE_KEY.get())
+  def getCompressedSizes: Seq[Option[Long]] = {
+    Option(COMPRESSED_SIZES_KEY.get()).getOrElse(Seq.empty)
   }
 
   /**
-   * Get the other compressed size from the current gRPC context. Returns None if no other
-   * compressed size was set. This is only set for AnalyzePlanRequest SameSemantics with
-   * compressed other_plan.
+   * Get the first compressed size from the current gRPC context. Returns None if no compressed
+   * size was set (request was not compressed).
+   *
+   * This is the primary size for ExecutePlan and single-plan Analyze requests, and the
+   * target_plan size for SameSemantics requests.
+   */
+  def getCompressedSize: Option[Long] = {
+    getCompressedSizes.headOption.flatten
+  }
+
+  /**
+   * Get the second compressed size from the current gRPC context. Returns None if no second
+   * compressed size was set.
+   *
+   * This is only set for AnalyzePlanRequest SameSemantics with a compressed other_plan.
    */
   def getOtherCompressedSize: Option[Long] = {
-    Option(OTHER_COMPRESSED_SIZE_KEY.get())
+    val sizes = getCompressedSizes
+    if (sizes.length > 1) sizes(1) else None
   }
 }
