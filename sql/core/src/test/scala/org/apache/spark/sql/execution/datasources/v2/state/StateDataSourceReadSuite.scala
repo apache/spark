@@ -1517,7 +1517,6 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
  * deleted state directory.
  */
 class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
-  import testImplicits._
 
   /**
    * Deletes a directory recursively.
@@ -1616,6 +1615,20 @@ class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
         spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("transformWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => runTransformWithStateQuery(checkpointPath),
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
           .load()
           .collect()
       }
