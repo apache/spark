@@ -1751,12 +1751,13 @@ abstract class TimestampKeyStateEncoder(
     UnsafeProjection.create(refs)
   }
 
+  private val keySchemaWithoutTimestamp = StructType(keySchema.fields.dropRight(1))
   protected val keyWithTimestampProjection: UnsafeProjection = {
-    val refs = keySchema.zipWithIndex.map(x =>
+    val refs = keySchemaWithoutTimestamp.zipWithIndex.map(x =>
       BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(
       refs :+ Literal(0L), // placeholder for timestamp
-      DataTypeUtils.toAttributes(StructType(keySchema.dropRight(1))))
+      DataTypeUtils.toAttributes(keySchemaWithoutTimestamp))
   }
 
   protected def decodeKey(keyBytes: Array[Byte], startPos: Int): UnsafeRow = {

@@ -241,6 +241,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // Test iterator - should return all entries ordered by event time
           val iterator = store.iterator()
           val results = iterator.map { pair =>
+            assert(pair.key.numFields() === 3) // key fields + timestamp
+
             val keyString = pair.key.getString(0)
             val partitionId = pair.key.getInt(1)
             // The timestamp will be placed at the end of the key row.
@@ -298,6 +300,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           val iterator = store.prefixScan(keyToRow("key1", 1))
 
           val results = iterator.map { pair =>
+            assert(pair.key.numFields() === 3) // key fields + timestamp
+
             val keyStr = pair.key.getString(0)
             val partitionId = pair.key.getInt(1)
             // The timestamp will be placed at the end of the key row.
