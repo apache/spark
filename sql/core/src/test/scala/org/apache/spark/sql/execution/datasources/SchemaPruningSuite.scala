@@ -369,13 +369,14 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // Multi-field case: should now prune to only first and middle.
     val query2 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
+    // When the whole struct is also selected, no pruning is possible.
     val query3 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle", "friend")
@@ -404,10 +405,10 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // Multi-field case: should now prune to only first and middle.
     val query2 = sql(
       "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = sql(
@@ -1161,5 +1162,102 @@ abstract class SchemaPruningSuite
           |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
     checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
       Row(null, null) :: Row(null, null) :: Nil)
+  }
+
+  // ---- Tests for PruneNestedFieldsThroughGenerateForScan ----
+
+  testSchemaPruning(
+      "SPARK-47230: multi-field nested column prune on explode generator output") {
+    // Two fields from the generator output → should prune to only those fields
+    val query = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.last")
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query, Row("Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: multi-field prune with pass-through columns") {
+    // explode + pass-through of a non-array column
+    val query = spark.table("contacts")
+      .select(col("id"), explode(col("friends")).as("friend"))
+      .select("id", "friend.first", "friend.middle")
+    checkScan(query,
+      "struct<id:int,friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query, Row(0, "Susan", "Z.") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: no pruning when whole struct is referenced directly") {
+    // friend is referenced directly → can't prune
+    val query = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend")
+    checkScan(query,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query, Row(Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: multi-field prune with filter on generator output") {
+    // Filter above Generate that references generator output
+    val query = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .where("friend.first = 'Susan'")
+      .select("friend.first", "friend.last")
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query, Row("Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: all fields selected means no pruning") {
+    // Selecting all three fields → no pruning needed
+    val query = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.middle", "friend.last")
+    checkScan(query,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query, Row("Susan", "Z.", "Smith") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: ordinal stability after pruning non-contiguous fields") {
+    // Select first (ordinal 0) and last (ordinal 2) - skipping middle (ordinal 1)
+    // After pruning the struct becomes <first, last>, ordinals should be 0 and 1
+    val query = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.last")
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query, Row("Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: multi-field prune via lateral explode") {
+    val query = sql(
+      "select friend.first, friend.last from contacts, lateral explode(friends) t(friend)")
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query, Row("Susan", "Smith") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: posexplode multi-field prune") {
+    val query = sql(
+      "select pos, friend.first, friend.middle " +
+        "from contacts, lateral posexplode(friends) t(pos, friend)")
+    checkScan(query,
+      "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query, Row(0, "Susan", "Z.") :: Nil)
+  }
+
+  testSchemaPruning(
+      "SPARK-47230: posexplode pos-only selects minimal-weight field") {
+    // Only pos is referenced; the rule picks the lightest struct field
+    // All three fields are StringType (defaultSize=20), so tie-break by
+    // name: "first" < "last" < "middle"
+    val query = sql(
+      "select pos from contacts, lateral posexplode(friends) t(pos, friend)")
+    checkScan(query,
+      "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query, Row(0) :: Nil)
   }
 }

@@ -37,6 +37,7 @@ class SparkOptimizer(
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     Seq(
+      PruneNestedFieldsThroughGenerateForScan,
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,

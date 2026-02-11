@@ -225,6 +225,437 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(!get3.containsNull)
   }
 
+  test("GetNestedArrayStructFields - basic extraction") {
+    // Test extraction from array<array<struct<a: int, b: string>>>
+    val innerStruct = new StructType()
+      .add("a", IntegerType, nullable = false)
+      .add("b", StringType, nullable = true)
+    val nestedArrayType = ArrayType(
+      ArrayType(innerStruct, containsNull = false), containsNull = false)
+
+    // Create test data: [[{1, "x"}, {2, "y"}], [{3, "z"}]]
+    val testData = Seq(
+      Seq(create_row(1, "x"), create_row(2, "y")),
+      Seq(create_row(3, "z"))
+    )
+    val input = Literal.create(testData, nestedArrayType)
+
+    // Extract field "a" - should get [[1, 2], [3]]
+    val fieldA = innerStruct("a")
+    val extractA = GetNestedArrayStructFields(input, fieldA, 0, 2, containsNull = false)
+    checkEvaluation(extractA, Seq(Seq(1, 2), Seq(3)))
+
+    // Extract field "b" - should get [["x", "y"], ["z"]]
+    val fieldB = innerStruct("b")
+    val extractB = GetNestedArrayStructFields(input, fieldB, 1, 2, containsNull = true)
+    checkEvaluation(extractB, Seq(Seq("x", "y"), Seq("z")))
+  }
+
+  test("GetNestedArrayStructFields - null handling") {
+    val innerStruct = new StructType()
+      .add("a", IntegerType, nullable = true)
+    val nestedArrayType = ArrayType(
+      ArrayType(innerStruct, containsNull = true), containsNull = true)
+
+    // Test with nulls at various levels
+    val testData = Seq(
+      Seq(create_row(1), null, create_row(3)),
+      null,
+      Seq(create_row(null))
+    )
+    val input = Literal.create(testData, nestedArrayType)
+
+    val fieldA = innerStruct("a")
+    val extract = GetNestedArrayStructFields(input, fieldA, 0, 1, containsNull = true)
+    checkEvaluation(extract, Seq(Seq(1, null, 3), null, Seq(null)))
+
+    // Test with null input
+    val nullInput = Literal.create(null, nestedArrayType)
+    checkEvaluation(GetNestedArrayStructFields(nullInput, fieldA, 0, 1, containsNull = true), null)
+  }
+
+  test("GetNestedArrayStructFields - triple nesting") {
+    // Test array<array<array<struct<x: int>>>>
+    val innerStruct = new StructType().add("x", IntegerType, nullable = false)
+    val tripleArrayType = ArrayType(
+      ArrayType(
+        ArrayType(innerStruct, containsNull = false),
+        containsNull = false),
+      containsNull = false)
+
+    // [[[{1}, {2}]], [[{3}], [{4}, {5}]]]
+    val testData = Seq(
+      Seq(Seq(create_row(1), create_row(2))),
+      Seq(Seq(create_row(3)), Seq(create_row(4), create_row(5)))
+    )
+    val input = Literal.create(testData, tripleArrayType)
+
+    val fieldX = innerStruct("x")
+    val extract = GetNestedArrayStructFields(input, fieldX, 0, 1, containsNull = false)
+    checkEvaluation(extract, Seq(Seq(Seq(1, 2)), Seq(Seq(3), Seq(4, 5))))
+  }
+
+  test("GetNestedArrayStructFields - dataType preserves nesting") {
+    val innerStruct = new StructType()
+      .add("a", IntegerType)
+      .add("b", StringType)
+    val nestedArrayType = ArrayType(
+      ArrayType(innerStruct, containsNull = true),
+      containsNull = false)
+
+    val attr = AttributeReference("arr", nestedArrayType)()
+    val fieldA = innerStruct("a")
+    val extract = GetNestedArrayStructFields(attr, fieldA, 0, 2, containsNull = true)
+
+    // Output type should be array<array<int>>
+    val expectedType = ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = false)
+    assert(extract.dataType === expectedType)
+  }
+
+  test("GetNestedArrayStructFields - SelectedField integration") {
+    val innerStruct = new StructType()
+      .add("a", IntegerType)
+      .add("b", StringType)
+    val nestedArrayType = ArrayType(
+      ArrayType(innerStruct, containsNull = true),
+      containsNull = false)
+
+    val attr = AttributeReference("arr", nestedArrayType)()
+    val fieldA = innerStruct("a")
+    val extract = GetNestedArrayStructFields(attr, fieldA, 0, 2, containsNull = true)
+
+    // SelectedField should recognize this expression and return the appropriate schema
+    SelectedField.unapply(extract) match {
+      case Some(selectedField) =>
+        assert(selectedField.name == "arr")
+        // The data type should preserve the nested array structure with pruned inner struct
+        selectedField.dataType match {
+          case ArrayType(ArrayType(StructType(fields), _), _) =>
+            assert(fields.length == 1)
+            assert(fields.head.name == "a")
+            assert(fields.head.dataType == IntegerType)
+          case other => fail(s"Unexpected data type: $other")
+        }
+      case None => fail("SelectedField should match GetNestedArrayStructFields")
+    }
+  }
+
+  test("NestedArraysZip - depth 1 (same as ArraysZip)") {
+    // At depth 1, NestedArraysZip should behave like ArraysZip
+    val arr1 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val arr2 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 1)
+    val expected = Seq(
+      create_row(1, "a"),
+      create_row(2, "b"),
+      create_row(3, "c")
+    )
+    checkEvaluation(zip, expected)
+
+    // Test max-length semantics (shorter arrays padded with nulls)
+    val arr3 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val arr4 = Literal.create(Seq("a", "b", "c", "d"), ArrayType(StringType))
+    val zip2 = NestedArraysZip(Seq(arr3, arr4), names, 1)
+    val expected2 = Seq(
+      create_row(1, "a"),
+      create_row(2, "b"),
+      create_row(null, "c"),
+      create_row(null, "d")
+    )
+    checkEvaluation(zip2, expected2)
+  }
+
+  test("NestedArraysZip - depth 2") {
+    // array<array<int>> zip array<array<string>> => array<array<struct<x:int, y:string>>>
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2), Seq(3)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("a", "b"), Seq("c")),
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val expected = Seq(
+      Seq(create_row(1, "a"), create_row(2, "b")),
+      Seq(create_row(3, "c"))
+    )
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - depth 2 with different inner lengths") {
+    // Inner arrays have different lengths - should use max-length semantics
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2, 3), Seq(4)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("a"), Seq("b", "c")),
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val expected = Seq(
+      Seq(create_row(1, "a"), create_row(2, null), create_row(3, null)),
+      Seq(create_row(4, "b"), create_row(null, "c"))
+    )
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - null handling at outer level") {
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2), Seq(3)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val nullArr = Literal.create(
+      null,
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    // If any top-level input is null, output is null
+    val zip = NestedArraysZip(Seq(arr1, nullArr), names, 2)
+    checkEvaluation(zip, null)
+  }
+
+  test("NestedArraysZip - null handling at inner level") {
+    // If an inner array is null at some position, that output position is null
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2), null, Seq(3)),
+      ArrayType(ArrayType(IntegerType), containsNull = true)
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("a", "b"), Seq("c"), null),
+      ArrayType(ArrayType(StringType), containsNull = true)
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val expected = Seq(
+      Seq(create_row(1, "a"), create_row(2, "b")),
+      null, // arr1[1] is null
+      null  // arr2[2] is null
+    )
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - dataType") {
+    val arr1Type = ArrayType(ArrayType(IntegerType))
+    val arr2Type = ArrayType(ArrayType(StringType))
+    val arr1 = AttributeReference("a", arr1Type)()
+    val arr2 = AttributeReference("b", arr2Type)()
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+
+    // Output type should be array<array<struct<x:int, y:string>>>
+    val expectedElementStruct = StructType(Seq(
+      StructField("x", IntegerType, nullable = true),
+      StructField("y", StringType, nullable = true)
+    ))
+    val expectedType = ArrayType(ArrayType(expectedElementStruct, containsNull = false))
+    assert(zip.dataType === expectedType)
+  }
+
+  test("NestedArraysZip - depth 3 (triple nesting)") {
+    // array<array<array<int>>> zip array<array<array<string>>>
+    val arr1 = Literal.create(
+      Seq(Seq(Seq(1, 2), Seq(3)), Seq(Seq(4))),
+      ArrayType(ArrayType(ArrayType(IntegerType)))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq(Seq("a", "b"), Seq("c")), Seq(Seq("d"))),
+      ArrayType(ArrayType(ArrayType(StringType)))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 3)
+    val expected = Seq(
+      Seq(Seq(create_row(1, "a"), create_row(2, "b")), Seq(create_row(3, "c"))),
+      Seq(Seq(create_row(4, "d")))
+    )
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - empty arrays") {
+    // Empty outer array
+    val emptyOuter1 = Literal.create(
+      Seq.empty[Seq[Int]],
+      ArrayType(ArrayType(IntegerType))
+    )
+    val emptyOuter2 = Literal.create(
+      Seq.empty[Seq[String]],
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip1 = NestedArraysZip(Seq(emptyOuter1, emptyOuter2), names, 2)
+    checkEvaluation(zip1, Seq.empty)
+
+    // Empty inner arrays
+    val emptyInner1 = Literal.create(
+      Seq(Seq.empty[Int], Seq(1)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val emptyInner2 = Literal.create(
+      Seq(Seq.empty[String], Seq("a")),
+      ArrayType(ArrayType(StringType))
+    )
+
+    val zip2 = NestedArraysZip(Seq(emptyInner1, emptyInner2), names, 2)
+    checkEvaluation(zip2, Seq(Seq.empty, Seq(create_row(1, "a"))))
+  }
+
+  test("NestedArraysZip - single element arrays") {
+    val arr1 = Literal.create(
+      Seq(Seq(42)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("answer")),
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    checkEvaluation(zip, Seq(Seq(create_row(42, "answer"))))
+  }
+
+  test("NestedArraysZip - three input arrays") {
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2), Seq(3)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("a", "b"), Seq("c")),
+      ArrayType(ArrayType(StringType))
+    )
+    val arr3 = Literal.create(
+      Seq(Seq(true, false), Seq(true)),
+      ArrayType(ArrayType(BooleanType))
+    )
+    val names = Seq(Literal("x"), Literal("y"), Literal("z"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2, arr3), names, 2)
+    val expected = Seq(
+      Seq(create_row(1, "a", true), create_row(2, "b", false)),
+      Seq(create_row(3, "c", true))
+    )
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - withDepth factory method") {
+    val arr1 = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
+    val arr2 = Literal.create(Seq(Seq("a")), ArrayType(ArrayType(StringType)))
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip.withDepth(Seq(arr1, arr2), names, 2)
+    checkEvaluation(zip, Seq(Seq(create_row(1, "a"))))
+
+    // Verify depth is set correctly
+    assert(zip.depth === 2)
+  }
+
+  test("NestedArraysZip - auto-detect depth factory") {
+    val arr1 = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
+    val arr2 = Literal.create(Seq(Seq("a")), ArrayType(ArrayType(StringType)))
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names)
+    // Should auto-detect depth as 2
+    assert(zip.depth === 2)
+    checkEvaluation(zip, Seq(Seq(create_row(1, "a"))))
+  }
+
+  test("NestedArraysZip - checkInputDataTypes validation") {
+    // Mismatched depths should fail validation
+    val arr1 = AttributeReference("a", ArrayType(ArrayType(IntegerType)))()
+    val arr2 = AttributeReference("b", ArrayType(StringType))()  // depth 1, not 2
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val result = zip.checkInputDataTypes()
+    assert(result.isFailure)
+  }
+
+  test("NestedArraysZip - withNewChildren preserves properties") {
+    val arr1 = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
+    val arr2 = Literal.create(Seq(Seq("a")), ArrayType(ArrayType(StringType)))
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+
+    // Create new children
+    val newArr1 = Literal.create(Seq(Seq(99)), ArrayType(ArrayType(IntegerType)))
+    val newArr2 = Literal.create(Seq(Seq("z")), ArrayType(ArrayType(StringType)))
+
+    // Use withNewChildren (public method from Expression trait)
+    val newZip = zip.withNewChildren(Seq(newArr1, newArr2)).asInstanceOf[NestedArraysZip]
+    checkEvaluation(newZip, Seq(Seq(create_row(99, "z"))))
+
+    // Depth should be preserved
+    assert(newZip.depth == 2)
+    // Names should be preserved
+    assert(newZip.names == names)
+  }
+
+  test("NestedArraysZip - complex nested types") {
+    // Zipping arrays of arrays of structs
+    val structType = StructType(Seq(
+      StructField("id", IntegerType),
+      StructField("name", StringType)
+    ))
+    val arr1 = Literal.create(
+      Seq(Seq(create_row(1, "a"))),
+      ArrayType(ArrayType(structType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq(100L)),
+      ArrayType(ArrayType(LongType))
+    )
+    val names = Seq(Literal("struct_field"), Literal("long_field"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val expected = Seq(Seq(create_row(create_row(1, "a"), 100L)))
+    checkEvaluation(zip, expected)
+  }
+
+  test("NestedArraysZip - prettyName") {
+    val arr1 = AttributeReference("a", ArrayType(ArrayType(IntegerType)))()
+    val arr2 = AttributeReference("b", ArrayType(ArrayType(StringType)))()
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    assert(zip.prettyName == "nested_arrays_zip")
+  }
+
+  test("NestedArraysZip - mismatched outer lengths at depth 2") {
+    // Outer arrays have different lengths
+    val arr1 = Literal.create(
+      Seq(Seq(1, 2), Seq(3), Seq(4, 5, 6)),
+      ArrayType(ArrayType(IntegerType))
+    )
+    val arr2 = Literal.create(
+      Seq(Seq("a", "b")),  // Only 1 outer element
+      ArrayType(ArrayType(StringType))
+    )
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    // Should extend with nulls at outer level
+    val expected = Seq(
+      Seq(create_row(1, "a"), create_row(2, "b")),
+      null,  // arr2[1] doesn't exist
+      null   // arr2[2] doesn't exist
+    )
+    checkEvaluation(zip, expected)
+  }
+
   test("CreateArray") {
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
