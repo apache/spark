@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+import contextlib
 import copy
 import functools
 import faulthandler
@@ -32,7 +33,19 @@ import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    IO,
+    Iterator,
+    List,
+    Optional,
+    TextIO,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
@@ -860,21 +873,16 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
         )
 
 
-def disable_gc(f: FuncT) -> FuncT:
-    """Mark the function that should disable gc during execution"""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        gc_enabled_originally = gc.isenabled()
+@contextlib.contextmanager
+def disable_gc() -> Generator[None, None, None]:
+    gc_enabled_originally = gc.isenabled()
+    if gc_enabled_originally:
+        gc.disable()
+    try:
+        yield
+    finally:
         if gc_enabled_originally:
-            gc.disable()
-        try:
-            return f(*args, **kwargs)
-        finally:
-            if gc_enabled_originally:
-                gc.enable()
-
-    return cast(FuncT, wrapped)
+            gc.enable()
 
 
 _is_remote_only = None
