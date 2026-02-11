@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.concurrent.atomic.AtomicReference
+
 import scala.util.control.NonFatal
 
-import io.grpc.{Context, Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
+import io.grpc.{Context, Contexts, Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
 
 import org.apache.spark.connect.proto
@@ -44,20 +46,27 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
       headers: Metadata,
       next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
 
-    // Create a listener that will intercept and decompress the message
-    val listener = next.startCall(call, headers)
+    // Create an AtomicReference to hold compressed sizes
+    val compressedSizesRef = new AtomicReference[Seq[Option[Long]]](Seq.empty)
+
+    // Create context with the AtomicReference and start the call within that context
+    val ctx = Context.current().withValue(
+      RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizesRef)
+    val listener = Contexts.interceptCall(ctx, call, headers, next)
 
     new SimpleForwardingServerCallListener[ReqT](listener) {
       override def onMessage(message: ReqT): Unit = {
         message match {
           case req: proto.ExecutePlanRequest =>
             handleRequestWithDecompression(
+              compressedSizesRef,
               req.getUserContext.getUserId,
               req.getSessionId,
               () => decompressExecutePlanRequest(req))
 
           case req: proto.AnalyzePlanRequest =>
             handleRequestWithDecompression(
+              compressedSizesRef,
               req.getUserContext.getUserId,
               req.getSessionId,
               () => decompressAnalyzePlanRequest(req))
@@ -69,6 +78,7 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
       }
 
       private def handleRequestWithDecompression[T](
+          compressedSizesRef: AtomicReference[Seq[Option[Long]]],
           userId: String,
           sessionId: String,
           decompressRequest: () => (T, Seq[Option[Long]])): Unit = {
@@ -87,18 +97,9 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
               return
           }
 
-        // Set compressed sizes in context
-        val contextToUse = Context
-          .current()
-          .withValue(RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizes)
-
-        // Run the rest of the call chain with the context
-        val prev = contextToUse.attach()
-        try {
-          super.onMessage(decompressedReq.asInstanceOf[ReqT])
-        } finally {
-          contextToUse.detach(prev)
-        }
+        // Set compressed sizes in the AtomicReference
+        compressedSizesRef.set(compressedSizes)
+        super.onMessage(decompressedReq.asInstanceOf[ReqT])
       }
     }
   }
@@ -259,8 +260,8 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
 }
 
 /**
- * Context holder for passing decompression metrics from interceptor to ExecuteHolder. Uses gRPC
- * Context to properly propagate values across async boundaries.
+ * Context holder for passing decompression metrics from interceptor to handlers. Uses gRPC
+ * Context to properly propagate values.
  */
 object RequestDecompressionContext {
 
@@ -276,14 +277,18 @@ object RequestDecompressionContext {
    *
    * The sequence length matches the number of plans, with explicit None for uncompressed plans.
    */
-  val COMPRESSED_SIZES_KEY: Context.Key[Seq[Option[Long]]] = Context.key("compressed-sizes")
+  val COMPRESSED_SIZES_KEY: Context.Key[AtomicReference[Seq[Option[Long]]]] =
+    Context.key("compressed-sizes")
 
   /**
    * Get all compressed sizes from the current gRPC context. Returns empty sequence if no
    * compressed sizes were set.
    */
   def getCompressedSizes: Seq[Option[Long]] = {
-    Option(COMPRESSED_SIZES_KEY.get()).getOrElse(Seq.empty)
+    Option(COMPRESSED_SIZES_KEY.get()) match {
+      case Some(ref) => Option(ref.get()).getOrElse(Seq.empty)
+      case None => Seq.empty
+    }
   }
 
   /**
