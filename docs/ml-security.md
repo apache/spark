@@ -1,7 +1,7 @@
 ---
 layout: global
 title: "ML Model Security"
-displayTitle: "Security Considerations for Machine Learning Models"
+displayTitle: "Spark ML Model Security"
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
