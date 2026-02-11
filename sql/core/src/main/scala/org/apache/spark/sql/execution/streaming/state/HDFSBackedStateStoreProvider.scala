@@ -111,6 +111,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def allColumnFamilyNames: Set[String] =
       Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    override def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+    }
+
+    override def iteratorWithMultiValues(
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+    }
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -324,10 +335,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
     }
 
-    override def initiateTimestampAwareStateOperations(
-        columnFamilyName: String): TimestampAwareStateOperations = {
+    override def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       throw StateStoreErrors.unsupportedOperationException(
-        "initiateEventTimeAwareStateOperations", providerName)
+        "prefixScanWithMultiValues", providerName)
+    }
+
+    override def iteratorWithMultiValues(
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "iteratorWithMultiValues", providerName)
     }
   }
 

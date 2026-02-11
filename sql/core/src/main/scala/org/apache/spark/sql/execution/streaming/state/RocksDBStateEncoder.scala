@@ -34,7 +34,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
@@ -48,11 +48,6 @@ sealed trait RocksDBKeyStateEncoder {
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
-}
-
-sealed trait RocksDBKeyWithTimestampStateEncoder extends RocksDBKeyStateEncoder {
-  def encodeKeyWithTimestamp(row: UnsafeRow, timestamp: Long): Array[Byte]
-  def decodeKeyWithTimestamp(keyBytes: Array[Byte]): (UnsafeRow, Long)
 }
 
 sealed trait RocksDBValueStateEncoder {
@@ -1720,11 +1715,72 @@ class NoPrefixKeyStateEncoder(
   }
 }
 
+object TimestampKeyStateEncoder {
+  val INTERNAL_TIMESTAMP_COLUMN_NAME = "__event_time"
+
+  val SIGN_MASK_FOR_LONG: Long = 0x8000000000000000L
+
+  def finalKeySchema(keySchema: StructType): StructType = {
+    StructType(keySchema.fields)
+      .add(name = INTERNAL_TIMESTAMP_COLUMN_NAME, dataType = LongType, nullable = false)
+  }
+
+  def getByteBufferForBigEndianLong(): ByteBuffer = {
+    ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+  }
+
+  def encodeTimestamp(buff: ByteBuffer, timestamp: Long): Array[Byte] = {
+    // Flip the sign bit to ensure correct lexicographical ordering, even for negative timestamps.
+    // We should flip the sign bit back when decoding the timestamp.
+    val signFlippedTimestamp = timestamp ^ TimestampKeyStateEncoder.SIGN_MASK_FOR_LONG
+    buff.putLong(0, signFlippedTimestamp)
+    buff.array()
+  }
+
+  def decodeTimestamp(buff: ByteBuffer, keyBytes: Array[Byte], startPos: Int): Long = {
+    buff.put(0, keyBytes, startPos, 8)
+    val signFlippedTimestamp = buff.getLong(0)
+    // Flip the sign bit back to get the original timestamp.
+    signFlippedTimestamp ^ TimestampKeyStateEncoder.SIGN_MASK_FOR_LONG
+  }
+}
+
+/**
+ * FIXME: doc...
+ */
 class TimestampAsPrefixKeyStateEncoder(
     dataEncoder: RocksDBDataEncoder,
     keySchema: StructType,
     useColumnFamilies: Boolean = false)
-  extends RocksDBKeyWithTimestampStateEncoder with Logging {
+  extends RocksDBKeyStateEncoder with Logging {
+
+  import TimestampKeyStateEncoder._
+  import org.apache.spark.sql.catalyst.types.DataTypeUtils
+
+  // keySchema includes the event time column as the last field, hence we remove it to project key.
+  private val keySchemaWithoutTimestampWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.dropRight(1)
+  }
+
+  private val keyWithoutTimestampProjection: UnsafeProjection = {
+    val refs = keySchemaWithoutTimestampWithIdx.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  private val keySchemaWithoutTimestampAttrs = DataTypeUtils.toAttributes(
+    StructType(keySchema.dropRight(1)))
+  private val keyWithTimestampProjection: UnsafeProjection = {
+    val refs = keySchema.zipWithIndex.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(
+      refs :+ Literal(0L), // placeholder for timestamp
+      keySchemaWithoutTimestampAttrs)
+  }
+
+  private def extractTimestamp(key: UnsafeRow): Long = {
+    key.getLong(key.numFields - 1)
+  }
 
   override def supportPrefixKeyScan: Boolean = false
 
@@ -1732,30 +1788,20 @@ class TimestampAsPrefixKeyStateEncoder(
     throw new IllegalStateException("This encoder doesn't support key without event time!")
   }
 
-  override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    throw new IllegalStateException("This encoder doesn't support key without event time!")
-  }
-
-  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    throw new IllegalStateException("This encoder doesn't support key without event time!")
-  }
-
-  // TODO: Revisit whether we need to mark this to true to support delete range
-  override def supportsDeleteRange: Boolean = false
-
   // NOTE: We reuse the ByteBuffer to avoid allocating a new one for every encoding/decoding,
   // which means the encoder is not thread-safe. Built-in operators do not access the encoder in
   // multiple threads, but if we are concerned about thread-safety in the future, we can maintain
   // the thread-local of ByteBuffer to retain the reusability of the instance while avoiding
-  // thread-safety issue.
-  private val buffForBigEndianLong = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+  // thread-safety issue. We do not use position - we always put/get at offset 0.
+  private val buffForBigEndianLong = getByteBufferForBigEndianLong()
 
-  override def encodeKeyWithTimestamp(row: UnsafeRow, timestamp: Long): Array[Byte] = {
-    val prefix = encodeKey(row)
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    val prefix = dataEncoder.encodeKey(keyWithoutTimestampProjection(row))
+    val timestamp = extractTimestamp(row)
+
     val byteArray = new Array[Byte](prefix.length + 8)
-
     Platform.copyMemory(
-      encodeTimestamp(timestamp), Platform.BYTE_ARRAY_OFFSET,
+      encodeTimestamp(buffForBigEndianLong, timestamp), Platform.BYTE_ARRAY_OFFSET,
       byteArray, Platform.BYTE_ARRAY_OFFSET, 8)
     Platform.copyMemory(prefix, Platform.BYTE_ARRAY_OFFSET,
       byteArray, Platform.BYTE_ARRAY_OFFSET + 8, prefix.length)
@@ -1763,10 +1809,8 @@ class TimestampAsPrefixKeyStateEncoder(
     byteArray
   }
 
-  override def decodeKeyWithTimestamp(keyBytes: Array[Byte]): (UnsafeRow, Long) = {
-    buffForBigEndianLong.clear()
-    buffForBigEndianLong.put(0, keyBytes, 0, 8)
-    val timestamp = buffForBigEndianLong.getLong(0)
+  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
+    val timestamp = decodeTimestamp(buffForBigEndianLong, keyBytes, 0)
 
     val rowBytesLength = keyBytes.length - 8
     val rowBytes = new Array[Byte](rowBytesLength)
@@ -1777,21 +1821,49 @@ class TimestampAsPrefixKeyStateEncoder(
     )
     val row = dataEncoder.decodeToUnsafeRow(rowBytes, keySchema.length)
 
-    (row, timestamp)
+    val rowWithTimestamp = keyWithTimestampProjection(row)
+    rowWithTimestamp.setLong(keySchema.length - 1, timestamp)
+    rowWithTimestamp
   }
 
-  private def encodeTimestamp(timestamp: Long): Array[Byte] = {
-    buffForBigEndianLong.clear()
-    buffForBigEndianLong.putLong(0, timestamp)
-    buffForBigEndianLong.array()
-  }
+  // TODO: Revisit this to support delete range if needed.
+  override def supportsDeleteRange: Boolean = false
 }
 
+/**
+ * FIXME: doc...
+ */
 class TimestampAsPostfixKeyStateEncoder(
     dataEncoder: RocksDBDataEncoder,
     keySchema: StructType,
     useColumnFamilies: Boolean = false)
-  extends RocksDBKeyWithTimestampStateEncoder with Logging {
+  extends RocksDBKeyStateEncoder with Logging {
+
+  import TimestampKeyStateEncoder._
+  import org.apache.spark.sql.catalyst.types.DataTypeUtils
+
+  // keySchema includes the event time column as the last field, hence we remove it to project key.
+  private val keySchemaWithoutTimestampWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.dropRight(1)
+  }
+
+  private val keyWithoutTimestampProjection: UnsafeProjection = {
+    val refs = keySchemaWithoutTimestampWithIdx.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  private val keySchemaWithoutTimestampAttrs = DataTypeUtils.toAttributes(
+    StructType(keySchema.dropRight(1)))
+  private val keyWithTimestampProjection: UnsafeProjection = {
+    val refs = keySchema.zipWithIndex.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs, keySchemaWithoutTimestampAttrs)
+  }
+
+  private def extractTimestamp(key: UnsafeRow): Long = {
+    key.getLong(key.numFields - 1)
+  }
 
   override def supportPrefixKeyScan: Boolean = true
 
@@ -1799,31 +1871,23 @@ class TimestampAsPostfixKeyStateEncoder(
     dataEncoder.encodeKey(prefixKey)
   }
 
-  override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    throw new IllegalStateException("This encoder doesn't support key without event time!")
-  }
-
-  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    throw new IllegalStateException("This encoder doesn't support key without event time!")
-  }
-
-  override def supportsDeleteRange: Boolean = false
-
   // NOTE: We reuse the ByteBuffer to avoid allocating a new one for every encoding/decoding,
   // which means the encoder is not thread-safe. Built-in operators do not access the encoder in
   // multiple threads, but if we are concerned about thread-safety in the future, we can maintain
   // the thread-local of ByteBuffer to retain the reusability of the instance while avoiding
-  // thread-safety issue.
-  private val buffForBigEndianLong = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+  // thread-safety issue. We do not use position - we always put/get at offset 0.
+  private val buffForBigEndianLong = TimestampKeyStateEncoder.getByteBufferForBigEndianLong()
 
-  override def encodeKeyWithTimestamp(row: UnsafeRow, timestamp: Long): Array[Byte] = {
-    val prefix = encodeKey(row)
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    val prefix = dataEncoder.encodeKey(keyWithoutTimestampProjection(row))
+    val timestamp = extractTimestamp(row)
+
     val byteArray = new Array[Byte](prefix.length + 8)
 
     Platform.copyMemory(prefix, Platform.BYTE_ARRAY_OFFSET,
       byteArray, Platform.BYTE_ARRAY_OFFSET, prefix.length)
     Platform.copyMemory(
-      encodeTimestamp(timestamp), Platform.BYTE_ARRAY_OFFSET,
+      encodeTimestamp(buffForBigEndianLong, timestamp), Platform.BYTE_ARRAY_OFFSET,
       byteArray, Platform.BYTE_ARRAY_OFFSET + prefix.length,
       8
     )
@@ -1831,9 +1895,8 @@ class TimestampAsPostfixKeyStateEncoder(
     byteArray
   }
 
-  override def decodeKeyWithTimestamp(keyBytes: Array[Byte]): (UnsafeRow, Long) = {
+  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
     val rowBytesLength = keyBytes.length - 8
-
     val rowBytes = new Array[Byte](rowBytesLength)
     Platform.copyMemory(
       keyBytes, Platform.BYTE_ARRAY_OFFSET,
@@ -1842,18 +1905,14 @@ class TimestampAsPostfixKeyStateEncoder(
     )
     val row = dataEncoder.decodeToUnsafeRow(rowBytes, keySchema.length)
 
-    buffForBigEndianLong.clear()
-    buffForBigEndianLong.put(0, keyBytes, rowBytesLength, 8)
-    val eventTime = buffForBigEndianLong.getLong(0)
+    val timestamp = decodeTimestamp(buffForBigEndianLong, keyBytes, rowBytesLength)
 
-    (row, eventTime)
+    val rowWithTimestamp = keyWithTimestampProjection(row)
+    rowWithTimestamp.setLong(keySchema.length - 1, timestamp)
+    rowWithTimestamp
   }
 
-  private def encodeTimestamp(timestamp: Long): Array[Byte] = {
-    buffForBigEndianLong.clear()
-    buffForBigEndianLong.putLong(0, timestamp)
-    buffForBigEndianLong.array()
-  }
+  override def supportsDeleteRange: Boolean = false
 }
 
 /**

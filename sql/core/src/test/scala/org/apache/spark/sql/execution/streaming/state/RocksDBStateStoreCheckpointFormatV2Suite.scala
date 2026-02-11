@@ -167,9 +167,14 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
 
-  override def initiateTimestampAwareStateOperations(
-      columnFamilyName: String): TimestampAwareStateOperations = {
-    innerStore.initiateTimestampAwareStateOperations(columnFamilyName)
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.prefixScanWithMultiValues(prefixKey, colFamilyName)
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.iteratorWithMultiValues(colFamilyName)
   }
 }
 

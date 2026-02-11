@@ -93,9 +93,14 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 
-  override def initiateTimestampAwareStateOperations(
-      columnFamilyName: String): TimestampAwareStateOperations = {
-    throw new UnsupportedOperationException("Doesn't support event time aware operations")
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    throw new UnsupportedOperationException("Doesn't support prefix scan with multiple values!")
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    throw new UnsupportedOperationException("Doesn't support iterator with multiple values!")
   }
 
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
