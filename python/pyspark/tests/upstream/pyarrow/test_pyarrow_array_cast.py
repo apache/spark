@@ -65,13 +65,17 @@ from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
+    have_numpy,
     pyarrow_requirement_message,
     pandas_requirement_message,
+    numpy_requirement_message,
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_pyarrow:
     import pyarrow as pa
+if have_numpy:
+    import numpy as np
 
 
 # ============================================================
@@ -215,8 +219,11 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
 
 
 @unittest.skipIf(
-    not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,
+    not have_pyarrow
+    or not have_pandas
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
 )
 class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
     """
@@ -470,12 +477,9 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         Build overrides for known PyArrow version-dependent behaviors (safe=True mode).
 
         PyArrow < 21: str(scalar) for float16 uses numpy's formatting
-        (via np.float16), which varies across numpy versions:
-          - numpy >= 2.4: scientific notation (e.g. "3.277e+04")
-          - numpy <  2.4: decimal (e.g. "32770.0")
+        (via np.float16), which may vary across numpy versions.
         The golden file uses PyArrow >= 21 output (Python float).
-        We compute the expected values dynamically to handle all
-        numpy versions.
+        We compute the expected values dynamically to handle this difference.
         """
         overrides = {}
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
@@ -502,8 +506,7 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         Build overrides for known PyArrow version-dependent behaviors (safe=False mode).
 
         PyArrow < 21: str(scalar) for float16 uses numpy's formatting
-        (via np.float16), which varies across numpy versions.
-        Same dynamic computation approach as safe=True mode.
+        (via np.float16). Same dynamic computation approach as safe=True mode.
         Additional overrides may be needed for different PyArrow versions
         as safe=False behavior varies across versions.
         """
@@ -570,8 +573,11 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
 
 
 @unittest.skipIf(
-    not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,
+    not have_pyarrow
+    or not have_pandas
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
 )
 class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
     """
