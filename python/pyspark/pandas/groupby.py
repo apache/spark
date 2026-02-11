@@ -323,9 +323,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if not self._as_index:
             index_cols = psdf._internal.column_labels
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                column_names = [column.name for column in self._agg_columns]
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 drop = not any(
                     [
@@ -3654,18 +3660,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
         if not self._as_index:
             column_names = [column.name for column in self._agg_columns]
-            for groupkey in self._groupkeys:
-                if groupkey.name not in column_names:
-                    warnings.warn(
-                        "A grouping was used that is not in the columns of the DataFrame and so "
-                        "was excluded from the result. "
-                        "This grouping will be included in a future version. "
-                        "Add the grouping as a column of the DataFrame to silence this warning.",
-                        FutureWarning,
-                    )
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                for groupkey in self._groupkeys:
+                    if groupkey.name not in column_names:
+                        warnings.warn(
+                            "A grouping was used that is not in the columns of the DataFrame and so "
+                            "was excluded from the result. "
+                            "This grouping will be included in a future version. "
+                            "Add the grouping as a column of the DataFrame to silence this warning.",
+                            FutureWarning,
+                        )
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
