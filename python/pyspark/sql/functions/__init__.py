@@ -17,8 +17,8 @@
 
 """PySpark Functions"""
 
-from pyspark.sql.functions.builtin import *  # noqa: F401,F403
-from pyspark.sql.functions import partitioning  # noqa: F401,F403
+from pyspark.sql.functions.builtin import *  # noqa: F403
+from pyspark.sql.functions import partitioning  # noqa: F401
 
 __all__ = [  # noqa: F405
     # Normal functions
