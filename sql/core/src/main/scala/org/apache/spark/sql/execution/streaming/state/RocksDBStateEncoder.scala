@@ -1717,8 +1717,9 @@ class NoPrefixKeyStateEncoder(
 }
 
 /**
- * The common code for key state encoders which include timestamp, specifically
- * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
+ * The singleton instance to provide utility-like methods for key state encoders which include
+ * timestamp, specifically [[TimestampAsPrefixKeyStateEncoder]] and
+ * [[TimestampAsPostfixKeyStateEncoder]].
  */
 object TimestampKeyStateEncoder {
   private val INTERNAL_TIMESTAMP_COLUMN_NAME = "__event_time"
@@ -1729,6 +1730,10 @@ object TimestampKeyStateEncoder {
   }
 }
 
+/**
+ * The abstract base class for key state encoders which include timestamp, specifically
+ * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
+ */
 abstract class TimestampKeyStateEncoder(
     dataEncoder: RocksDBDataEncoder,
     keySchema: StructType)
