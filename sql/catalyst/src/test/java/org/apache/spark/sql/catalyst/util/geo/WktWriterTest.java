@@ -101,6 +101,15 @@ public class WktWriterTest extends WkbTestBase {
     Assertions.assertEquals("POINT(-180 -90)", wkt);
   }
 
+  @Test
+  public void testPointWithNaN() {
+    Point point = new Point(new double[]{Double.NaN, Double.NaN}, 0);
+    StringBuilder sb = new StringBuilder();
+    IllegalArgumentException e = Assertions.assertThrows(
+        IllegalArgumentException.class, () -> point.appendWktContent(sb));
+    Assertions.assertEquals("Coordinate value must not be NaN.", e.getMessage());
+  }
+
   /** Tests for: LINESTRING */
 
   @Test
@@ -153,6 +162,19 @@ public class WktWriterTest extends WkbTestBase {
     LineString lineString = new LineString(points, 0, true, true);
     String wkt = lineString.toString();
     Assertions.assertEquals("LINESTRING ZM (0 0 0 10,1 1 1 20)", wkt);
+  }
+
+  @Test
+  public void testLineStringWithNaN() {
+    List<Point> points = Arrays.asList(
+        new Point(new double[]{0.0, 0.0}, 0),
+        new Point(new double[]{Double.NaN, Double.NaN}, 0),
+        new Point(new double[]{2.0, 2.0}, 0)
+    );
+    LineString lineString = new LineString(points, 0, false, false);
+    IllegalArgumentException e = Assertions.assertThrows(
+        IllegalArgumentException.class, lineString::toString);
+    Assertions.assertEquals("Coordinate value must not be NaN.", e.getMessage());
   }
 
   /** Tests for: POLYGON */
@@ -220,6 +242,21 @@ public class WktWriterTest extends WkbTestBase {
     Polygon polygon = new Polygon(Arrays.asList(ring), 0, true, false);
     String wkt = polygon.toString();
     Assertions.assertEquals("POLYGON Z ((0 0 0,4 0 0,4 4 0,0 4 0,0 0 0))", wkt);
+  }
+
+  @Test
+  public void testPolygonWithNaN() {
+    List<Point> ringPoints = Arrays.asList(
+        new Point(new double[]{0.0, 0.0}, 0),
+        new Point(new double[]{Double.NaN, Double.NaN}, 0),
+        new Point(new double[]{4.0, 4.0}, 0),
+        new Point(new double[]{0.0, 0.0}, 0)
+    );
+    Ring ring = new Ring(ringPoints);
+    Polygon polygon = new Polygon(List.of(ring), 0, false, false);
+    IllegalArgumentException e = Assertions.assertThrows(
+        IllegalArgumentException.class, polygon::toString);
+    Assertions.assertEquals("Coordinate value must not be NaN.", e.getMessage());
   }
 
   /** Tests for: MULTIPOINT */

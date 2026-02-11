@@ -118,6 +118,10 @@ class Point extends GeometryModel {
    * Appends a single coordinate value, formatting integers without decimal point.
    */
   private static void appendCoordinate(StringBuilder sb, double value) {
+    // NaN values are not valid coordinates and should not be formatted to WKT.
+    if (Double.isNaN(value)) {
+      throw new IllegalArgumentException("Coordinate value must not be NaN.");
+    }
     if (value == Math.floor(value) && !Double.isInfinite(value)
         && value >= Long.MIN_VALUE && value <= Long.MAX_VALUE) {
       // For integer values, append as long to avoid decimal point.

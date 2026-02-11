@@ -181,17 +181,25 @@ public abstract class GeometryModel {
    * Appends dimension suffix (Z, M, or ZM) to the WKT type name.
    */
   protected void appendDimensionSuffix(StringBuilder sb) {
-    if (hasZ && hasM) {
-      sb.append(" ZM");
-    } else if (hasZ) {
-      sb.append(" Z");
-    } else if (hasM) {
-      sb.append(" M");
+    if (hasZ || hasM) {
+      sb.append(" ");
+      if (hasZ) {
+        sb.append("Z");
+      }
+      if (hasM) {
+        sb.append("M");
+      }
     }
   }
 
   /**
    * Appends the WKT (Well-Known Text) representation of this geometry to the given StringBuilder.
+   * For non-empty 2D geometries, it appends the coordinate values without a space separator:
+   *   - POINT(...), LINESTRING(...), POLYGON(...), etc.
+   * For non-empty geometries with Z/M, it appends the dimension suffix with a space separator:
+   *   - POINT Z (...), LINESTRING Z (...), POLYGON ZM (...), etc.
+   * If the geometry is empty, it simply appends " EMPTY" in place of the coordinate values:
+   *   - POINT EMPTY, LINESTRING M EMPTY, POLYGON ZM EMPTY, etc.
    */
   protected void toWkt(StringBuilder sb) {
     sb.append(typeId.getWktName());
@@ -200,19 +208,18 @@ public abstract class GeometryModel {
       sb.append(" EMPTY");
     } else {
       if (hasZ || hasM) {
-        sb.append(" (");
-      } else {
-        sb.append("(");
+        sb.append(" ");
       }
+      sb.append("(");
       appendWktContent(sb);
       sb.append(")");
     }
   }
 
   /**
-   * Appends the geometry-specific WKT content (i.e. coordinate values of all child geometries).
-   * Note that this utility method is invoked by `toWkt` when the current geometry is not empty.
-   * All GeometryModel subclasses must implement this method to provide their specific WKT content.
+   * Appends the geometry-specific WKT (Well-Known Text) content. Note that this utility method
+   * is invoked by `toWkt` when the current geometry is not empty. All GeometryModel subclasses
+   * must implement this method in order to provide their specific WKT content.
    */
   protected abstract void appendWktContent(StringBuilder sb);
 
