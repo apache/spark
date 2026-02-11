@@ -119,7 +119,7 @@ case class BatchScanExec(
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
       case k: KeyGroupedPartitioning =>
-        val expressions = spjParams.joinKeyPositions match {
+        val projectedExpressions = spjParams.joinKeyPositions match {
           case Some(projectionPositions) => projectionPositions.map(i => k.expressions(i))
           case _ => k.expressions
         }
@@ -134,14 +134,14 @@ case class BatchScanExec(
           case None =>
             spjParams.joinKeyPositions match {
               case Some(projectionPositions) => k.partitionValues.map{r =>
-                val projectedRow = KeyGroupedPartitioning.project(expressions,
+                val projectedRow = KeyGroupedPartitioning.project(k.expressions,
                   projectionPositions, r)
-                InternalRowComparableWrapper(projectedRow, expressions)
+                InternalRowComparableWrapper(projectedRow, projectedExpressions)
               }.distinct.map(_.row)
               case _ => k.partitionValues
             }
         }
-        k.copy(expressions = expressions, numPartitions = newPartValues.length,
+        k.copy(expressions = projectedExpressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues)
       case p => p
     }
