@@ -40,7 +40,7 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
-    ExecuteOutput execute_output = 9;
+    ExecuteOutputFlows execute_output_flows = 9;
 
     // Reserved field for protocol extensions.
     // Used to support forward-compatibility by carrying additional command types
