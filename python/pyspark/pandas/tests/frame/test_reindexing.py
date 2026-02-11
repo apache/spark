@@ -21,6 +21,7 @@ from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps
 from pyspark.errors import PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -664,19 +665,27 @@ class FrameReindexingMixin:
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pdf = pd.DataFrame([1, 2, 3, 4], index=index)
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.last("1D"), psdf.last("1D"))
-        self.assert_eq(pdf.last(DateOffset(days=1)), psdf.last(DateOffset(days=1)))
-        with self.assertRaisesRegex(TypeError, "'last' only supports a DatetimeIndex"):
-            ps.DataFrame([1, 2, 3, 4]).last("1D")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.last("1D"), psdf.last("1D"))
+            self.assert_eq(pdf.last(DateOffset(days=1)), psdf.last(DateOffset(days=1)))
+            with self.assertRaisesRegex(TypeError, "'last' only supports a DatetimeIndex"):
+                ps.DataFrame([1, 2, 3, 4]).last("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.last("1D")
 
     def test_first(self):
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pdf = pd.DataFrame([1, 2, 3, 4], index=index)
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.first("1D"), psdf.first("1D"))
-        self.assert_eq(pdf.first(DateOffset(days=1)), psdf.first(DateOffset(days=1)))
-        with self.assertRaisesRegex(TypeError, "'first' only supports a DatetimeIndex"):
-            ps.DataFrame([1, 2, 3, 4]).first("1D")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.first("1D"), psdf.first("1D"))
+            self.assert_eq(pdf.first(DateOffset(days=1)), psdf.first(DateOffset(days=1)))
+            with self.assertRaisesRegex(TypeError, "'first' only supports a DatetimeIndex"):
+                ps.DataFrame([1, 2, 3, 4]).first("1D")
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.first("1D")
 
     def test_swaplevel(self):
         # MultiIndex with two levels
@@ -754,14 +763,18 @@ class FrameReindexingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.swapaxes(0, 1), pdf.swapaxes(0, 1))
-        self.assert_eq(psdf.swapaxes(1, 0), pdf.swapaxes(1, 0))
-        self.assert_eq(psdf.swapaxes("index", "columns"), pdf.swapaxes("index", "columns"))
-        self.assert_eq(psdf.swapaxes("columns", "index"), pdf.swapaxes("columns", "index"))
-        self.assert_eq((psdf + 1).swapaxes(0, 1), (pdf + 1).swapaxes(0, 1))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psdf.swapaxes(0, 1), pdf.swapaxes(0, 1))
+            self.assert_eq(psdf.swapaxes(1, 0), pdf.swapaxes(1, 0))
+            self.assert_eq(psdf.swapaxes("index", "columns"), pdf.swapaxes("index", "columns"))
+            self.assert_eq(psdf.swapaxes("columns", "index"), pdf.swapaxes("columns", "index"))
+            self.assert_eq((psdf + 1).swapaxes(0, 1), (pdf + 1).swapaxes(0, 1))
 
-        self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
-        self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
+            self.assertRaises(AssertionError, lambda: psdf.swapaxes(0, 1, copy=False))
+            self.assertRaises(ValueError, lambda: psdf.swapaxes(0, -1))
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.swapaxes(0, 1)
 
     def test_isin(self):
         pdf = pd.DataFrame(
