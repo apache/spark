@@ -37,12 +37,8 @@ from pyspark.sql.streaming.datasource import (
 )
 from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
-from pyspark.testing.sqlutils import (
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.utils import eventually
+from pyspark.testing.utils import eventually, have_pyarrow, pyarrow_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

@@ -56,8 +56,8 @@ from pyspark.sql.pandas.types import (
     to_arrow_schema,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
