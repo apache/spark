@@ -88,8 +88,9 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
           }
 
         // Set compressed sizes in context
-        val contextToUse = Context.current().withValue(
-          RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizes)
+        val contextToUse = Context
+          .current()
+          .withValue(RequestDecompressionContext.COMPRESSED_SIZES_KEY, compressedSizes)
 
         // Run the rest of the call chain with the context
         val prev = contextToUse.attach()
@@ -102,8 +103,8 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     }
   }
 
-  private def decompressExecutePlanRequest(request: proto.ExecutePlanRequest)
-      : (proto.ExecutePlanRequest, Seq[Option[Long]]) = {
+  private def decompressExecutePlanRequest(
+      request: proto.ExecutePlanRequest): (proto.ExecutePlanRequest, Seq[Option[Long]]) = {
     if (!request.hasPlan) {
       return (request, Seq.empty)
     }
@@ -117,8 +118,8 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
     (decompressedReq, Seq(size))
   }
 
-  private def decompressAnalyzePlanRequest(request: proto.AnalyzePlanRequest)
-      : (proto.AnalyzePlanRequest, Seq[Option[Long]]) = {
+  private def decompressAnalyzePlanRequest(
+      request: proto.AnalyzePlanRequest): (proto.AnalyzePlanRequest, Seq[Option[Long]]) = {
     val userId = request.getUserContext.getUserId
     val sessionId = request.getSessionId
 
@@ -264,14 +265,14 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
 object RequestDecompressionContext {
 
   /**
-   * Context key for storing compressed sizes. This is set by RequestDecompressionInterceptor
-   * when compressed requests are encountered, and read by handlers for metrics.
+   * Context key for storing compressed sizes. This is set by RequestDecompressionInterceptor when
+   * compressed requests are encountered, and read by handlers for metrics.
    *
    * The sequence contains Option[Long] entries corresponding to each plan in the request:
-   * - For ExecutePlan and single-plan Analyze requests: Seq(Some(size)) if compressed, or
-   *   Seq.empty if not
-   * - For AnalyzePlanRequest SameSemantics with two plans: Seq(target_size, other_size) where
-   *   each is Some(size) if that plan was compressed, None if not
+   *   - For ExecutePlan and single-plan Analyze requests: Seq(Some(size)) if compressed, or
+   *     Seq.empty if not
+   *   - For AnalyzePlanRequest SameSemantics with two plans: Seq(target_size, other_size) where
+   *     each is Some(size) if that plan was compressed, None if not
    *
    * The sequence length matches the number of plans, with explicit None for uncompressed plans.
    */
