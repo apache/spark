@@ -1051,7 +1051,11 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     case project @ Project(projectList, u: UnionLike)
       if projectList.forall(_.deterministic) && u.children.nonEmpty &&
         canPushProjectionThroughUnion(project) =>
-      u.withNewChildren(pushProjectionThroughUnionLike(projectList, u).toIndexedSeq)
+      val newChildren = pushProjectionThroughUnionLike(projectList, u)
+      u match {
+        case union: Union => union.copy(children = newChildren)
+        case seqUnion: SequentialStreamingUnion => seqUnion.copy(children = newChildren)
+      }
   }
 }
 
