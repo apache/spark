@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state.metadata
 
+import java.io.FileNotFoundException
 import java.util
 
 import scala.jdk.CollectionConverters._
@@ -234,7 +235,7 @@ class StateMetadataPartitionReader(
     } catch {
       // if the operator metadata is not present, catch the exception
       // and return an empty array
-      case ex: Exception =>
+      case ex: FileNotFoundException =>
         logWarning(log"Failed to find operator metadata for " +
           log"path=${MDC(LogKeys.CHECKPOINT_LOCATION, checkpointLocation)} " +
           log"with exception=${MDC(LogKeys.EXCEPTION, ex)}")
