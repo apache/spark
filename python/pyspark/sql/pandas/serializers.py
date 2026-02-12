@@ -158,14 +158,16 @@ class ArrowStreamSerializer(Serializer):
             reader = pa.ipc.open_stream(stream)
             for batch in reader:
                 yield batch
+        elif self._num_dfs == 1:
+            # Grouped loading: yield single dataframe groups
+            for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+                yield batches
         elif self._num_dfs == 2:
             # Cogrouped loading: yield tuples of (left_batches, right_batches)
             for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
                 yield left_batches, right_batches
         else:
-            # Grouped loading: yield single dataframe groups
-            for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
-                yield batches
+            assert False, f"Unexpected num_dfs: {self._num_dfs}"
 
     def _load_group_dataframes(self, stream, num_dfs: int = 1) -> Iterator:
         """

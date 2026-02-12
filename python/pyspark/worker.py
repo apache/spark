@@ -2832,9 +2832,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
         udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0]
 
-        def func(
-            split_index: int, batches: Iterator["pa.RecordBatch"]
-        ) -> Iterator["pa.RecordBatch"]:
+        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             """Apply mapInArrow UDF"""
 
             # Pre-processing
