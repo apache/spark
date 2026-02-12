@@ -323,9 +323,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if not self._as_index:
             index_cols = psdf._internal.column_labels
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                column_names = [column.name for column in self._agg_columns]
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 drop = not any(
                     [
@@ -2597,20 +2603,37 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         We can also propagate non-null values forward or backward in group.
 
-        >>> df.groupby(['A'])['B'].fillna(method='ffill').sort_index()
+        >>> df.groupby(['A'])['B'].fillna(method='ffill').sort_index()  # doctest: +SKIP
         0    2.0
         1    4.0
         2    NaN
         3    3.0
         Name: B, dtype: float64
 
-        >>> df.groupby(['A']).fillna(method='bfill').sort_index()
+        >>> df.groupby(['A']).fillna(method='bfill').sort_index()  # doctest: +SKIP
              B    C  D
         0  2.0  NaN  0
         1  4.0  NaN  1
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._fillna(value=value, method=method, axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `fillna` method is not supported in pandas 3.0.0 and later. "
+                "Use obj.ffill() or obj.bfill() for forward or backward filling instead. "
+                "If you want to fill with a single value, use DataFrame.fillna instead"
+            )
+
+    def _fillna(
+        self,
+        value: Optional[Any] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
         should_resolve = method is not None
         if should_resolve:
             warnings.warn(
@@ -2673,7 +2696,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
-        return self.fillna(method="bfill", limit=limit)
+        return self._fillna(method="bfill", limit=limit)
 
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
@@ -2722,7 +2745,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  NaN  NaN  5
         3  3.0  1.0  4
         """
-        return self.fillna(method="ffill", limit=limit)
+        return self._fillna(method="ffill", limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """
@@ -3637,18 +3660,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
         if not self._as_index:
             column_names = [column.name for column in self._agg_columns]
-            for groupkey in self._groupkeys:
-                if groupkey.name not in column_names:
-                    warnings.warn(
-                        "A grouping was used that is not in the columns of the DataFrame and so "
-                        "was excluded from the result. "
-                        "This grouping will be included in a future version. "
-                        "Add the grouping as a column of the DataFrame to silence this warning.",
-                        FutureWarning,
-                    )
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                for groupkey in self._groupkeys:
+                    if groupkey.name not in column_names:
+                        warnings.warn(
+                            "A grouping was used that is not in the columns of the DataFrame and so "
+                            "was excluded from the result. "
+                            "This grouping will be included in a future version. "
+                            "Add the grouping as a column of the DataFrame to silence this warning.",
+                            FutureWarning,
+                        )
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):

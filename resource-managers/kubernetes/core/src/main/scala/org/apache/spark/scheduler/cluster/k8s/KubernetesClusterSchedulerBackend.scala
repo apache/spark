@@ -55,7 +55,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
-  private val appId = KubernetesConf.getKubernetesAppId()
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -66,19 +65,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
-  private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
-
-  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
-
-  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
+  private val minRegisteredExecutors = initialExecutors * minRegisteredRatio
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
-
-  // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
-  // order of the value of this annotation, ascending.
-  private val podDeletionCostAnnotation = "controller.kubernetes.io/pod-deletion-cost"
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -107,13 +98,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
    * @return The application ID
    */
   override def applicationId(): String = {
-    conf.getOption("spark.app.id").getOrElse(appId)
+    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
   }
 
   override def start(): Unit = {
     super.start()
     // Must be called before setting the executors
     podAllocator.start(applicationId(), this)
+    val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleManager.start(this)
@@ -143,7 +135,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       pollEvents.stop()
     }
 
-    if (shouldDeleteDriverService) {
+    if (conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)) {
       Utils.tryLogNonFatalError {
         kubernetesClient
           .services()
@@ -163,7 +155,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       }
     }
 
-    if (shouldDeleteExecutors) {
+    if (conf.get(KUBERNETES_DELETE_EXECUTORS)) {
 
       podAllocator.stop(applicationId())
 
@@ -195,13 +187,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= initialExecutors * minRegisteredRatio
+    totalRegisteredExecutors.get() >= minRegisteredExecutors
   }
 
   override def getExecutorIds(): Seq[String] = synchronized {
     super.getExecutorIds()
   }
 
+  // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
+  // order of the value of this annotation, ascending.
   private def annotateExecutorDeletionCost(execIds: Seq[String]): Unit = {
     conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).foreach { cost =>
       logInfo(s"Annotating executor pod(s) ${execIds.mkString(",")} with deletion cost $cost")
@@ -217,7 +211,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .forEach { podResource =>
               podResource.patch(PATCH_CONTEXT, new PodBuilder()
                 .withNewMetadata()
-                .addToAnnotations(podDeletionCostAnnotation, cost.toString)
+                .addToAnnotations(POD_DELETION_COST, cost.toString)
                 .endMetadata()
                 .build())
             }
