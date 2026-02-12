@@ -2010,12 +2010,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     col for col in agg_columns if all(col is not gkey for gkey in self._groupkeys)
                 ]
 
-        (
-            psdf,
-            groupkey_labels,
-            groupkey_names,
-            groupkey_psser_names,
-        ) = GroupBy._prepare_group_map_apply(psdf, self._groupkeys, agg_columns)
+        psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
+            psdf, self._groupkeys, agg_columns
+        )
+        groupkey_psser_names = [psser.name for psser in self._groupkeys]
 
         if LooseVersion(pd.__version__) < "3.0.0":
             from pandas.core.common import is_builtin_func  # type: ignore[import-not-found]
@@ -2245,7 +2243,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             psdf[agg_columns]._internal.resolved_copy.spark_frame.drop(*HIDDEN_COLUMNS).schema
         )
 
-        psdf, groupkey_labels, groupkey_names, _ = GroupBy._prepare_group_map_apply(
+        psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
             psdf, self._groupkeys, agg_columns
         )
 
@@ -2285,15 +2283,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     @staticmethod
     def _prepare_group_map_apply(
         psdf: DataFrame, groupkeys: List[Series], agg_columns: List[Series]
-    ) -> Tuple[DataFrame, List[Label], List[str], List[str]]:
+    ) -> Tuple[DataFrame, List[Label], List[str]]:
         groupkey_labels: List[Label] = [
             verify_temp_column_name(psdf, "__groupkey_{}__".format(i))
             for i in range(len(groupkeys))
         ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
-        groupkey_psser_names = [psser.name for psser in groupkeys]
-        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names, groupkey_psser_names  # type: ignore[return-value]
+        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names  # type: ignore[return-value]
 
     @staticmethod
     def _spark_group_map_apply(
@@ -2800,7 +2797,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 if label not in self._column_labels_to_exclude
             ]
 
-        psdf, groupkey_labels, _, _ = GroupBy._prepare_group_map_apply(
+        psdf, groupkey_labels, _ = GroupBy._prepare_group_map_apply(
             psdf,
             self._groupkeys,
             agg_columns,
@@ -3182,7 +3179,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
 
-        psdf, groupkey_labels, groupkey_names, _ = GroupBy._prepare_group_map_apply(
+        psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
             self._psdf, self._groupkeys, agg_columns=self._agg_columns
         )
 
