@@ -1123,7 +1123,7 @@ def _test() -> None:
     globs = pyspark.sql.streaming.listener.__dict__.copy()
     try:
         spark = SparkSession._getActiveSessionOrCreate()
-    except Py4JError:  # noqa: F821
+    except Py4JError:
         spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
 
     globs["spark"] = spark

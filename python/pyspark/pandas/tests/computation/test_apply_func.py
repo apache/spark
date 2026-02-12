@@ -154,7 +154,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.apply(identify2, axis=1)
@@ -229,7 +229,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.pandas_on_spark.apply_batch(identify2)
@@ -425,7 +425,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.pandas_on_spark.transform_batch(identify2)

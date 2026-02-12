@@ -2406,7 +2406,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
+  test("SPARK-36338: AttachDistributedSequence should append unique sequence IDs") {
     val ids = spark.range(10).repartition(5).select(
       Column.internalFn("distributed_sequence_id").alias("default_index"), col("id"))
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
