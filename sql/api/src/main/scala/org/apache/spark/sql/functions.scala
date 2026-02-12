@@ -6228,7 +6228,7 @@ object functions {
   def theta_union(c1: Column, c2: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union", c1, c2, lgNomEntries)
 
-/**
+  /**
    * Subtracts two binary representations of Datasketches TupleSketch objects with double summary
    * data type in the input columns using a Datasketches AnotB object. Returns elements in the
    * first sketch that are not in the second sketch.
