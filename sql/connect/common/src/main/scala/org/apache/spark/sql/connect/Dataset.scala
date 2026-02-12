@@ -676,6 +676,12 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  override def followedBy(other: sql.Dataset[T]): Dataset[T] = {
+    throw new UnsupportedOperationException(
+      "followedBy (SequentialStreamingUnion) is not yet supported in Spark Connect")
+  }
+
+  /** @inheritdoc */
   def intersect(other: sql.Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT) { builder =>
       builder.setIsAll(false)

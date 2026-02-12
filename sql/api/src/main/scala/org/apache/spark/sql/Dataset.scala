@@ -1961,6 +1961,56 @@ abstract class Dataset[T] extends Serializable {
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T]
 
   /**
+   * Returns a new Dataset where rows from this Dataset are processed to completion before
+   * processing rows from the other Dataset sequentially. This is used for backfill-to-live
+   * streaming scenarios where historical data should be processed completely before switching to
+   * live data.
+   *
+   * Unlike [[union]] which processes all sources concurrently in streaming queries,
+   * `followedBy` processes each source sequentially:
+   *  1. First Dataset (this) processes until complete
+   *  2. Second Dataset (other) begins processing
+   *
+   * Requirements for streaming queries:
+   *  - Both Datasets must be streaming sources
+   *  - Both sources must have explicit names (via `.name()`)
+   *  - The first source (this) must support bounded execution (e.g., Delta, file sources)
+   *  - Stateful operators (aggregations, joins, etc.) must be applied AFTER followedBy,
+   *    not before
+   *
+   * State preservation: Stateful operators applied AFTER followedBy preserve their state across
+   * source transitions, enabling seamless backfill-to-live scenarios.
+   *
+   * Example:
+   * {{{
+   *   val historical = spark.readStream
+   *     .format("delta")
+   *     .load("/historical")
+   *     .name("historical")
+   *
+   *   val live = spark.readStream
+   *     .format("kafka")
+   *     .option("subscribe", "events")
+   *     .name("live")
+   *
+   *   // Correct: stateful operations after followedBy
+   *   historical.followedBy(live)
+   *     .groupBy("userId").count()
+   *     .writeStream
+   *     .trigger(Trigger.RealTime)
+   *     .start()
+   * }}}
+   *
+   * This function resolves columns by position.
+   *
+   * @note
+   *   This API is experimental and package-protected while under development.
+   * @group typedrel
+   * @since 4.1.0
+   */
+  private[sql] def followedBy(other: Dataset[T]): Dataset[T]
+
+  /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset. This is
    * equivalent to `INTERSECT` in SQL.
    *

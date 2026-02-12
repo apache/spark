@@ -1179,6 +1179,11 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  override def followedBy(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
+    SequentialStreamingUnion(logicalPlan, other.logicalPlan)
+  }
+
+  /** @inheritdoc */
   def intersect(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Intersect(logicalPlan, other.logicalPlan, isAll = false)
   }

@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, AgnosticExpress
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, ProductEncoder}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -2220,6 +2221,46 @@ class DatasetSuite extends QueryTest
     val group1 = cached.groupBy("x").agg(min(col("y")) as "value")
     val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
     checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
+  }
+
+  test("followedBy creates SequentialStreamingUnion logical plan") {
+    val stream1 = new MemoryStream[(Int, Int)](0, spark)
+    val stream2 = new MemoryStream[(Int, Int)](1, spark)
+    val df1 = stream1.toDF().toDF("a", "b")
+    val df2 = stream2.toDF().toDF("a", "b")
+
+    val result = df1.followedBy(df2)
+
+    // Check that the logical plan contains SequentialStreamingUnion
+    val analyzed = result.queryExecution.analyzed
+    val sequentialUnions = analyzed.collect {
+      case su: SequentialStreamingUnion => su
+    }
+    assert(sequentialUnions.nonEmpty, "Should contain SequentialStreamingUnion")
+    assert(sequentialUnions.head.children.length == 2, "Should have 2 children")
+    assert(!sequentialUnions.head.byName, "Default should be byName=false")
+  }
+
+  test("followedBy chaining creates flattened SequentialStreamingUnion") {
+    val stream1 = new MemoryStream[(Int, Int)](0, spark)
+    val stream2 = new MemoryStream[(Int, Int)](1, spark)
+    val stream3 = new MemoryStream[(Int, Int)](2, spark)
+    val df1 = stream1.toDF().toDF("a", "b")
+    val df2 = stream2.toDF().toDF("a", "b")
+    val df3 = stream3.toDF().toDF("a", "b")
+
+    val result = df1.followedBy(df2).followedBy(df3)
+
+    // Check that chaining gets flattened
+    val analyzed = result.queryExecution.analyzed
+    val sequentialUnions = analyzed.collect {
+      case su: SequentialStreamingUnion => su
+    }
+    assert(sequentialUnions.nonEmpty, "Should contain SequentialStreamingUnion")
+    assert(sequentialUnions.head.children.length == 3, "Should flatten to 3 children")
+    // Ensure no nested SequentialStreamingUnions
+    assert(!sequentialUnions.head.children.exists(_.isInstanceOf[SequentialStreamingUnion]),
+      "Should not have nested SequentialStreamingUnion children")
   }
 
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
