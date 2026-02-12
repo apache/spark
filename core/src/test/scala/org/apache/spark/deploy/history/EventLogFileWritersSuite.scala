@@ -231,7 +231,9 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
 
     // Simulate an error by writing to a closed stream that causes checkError to return true
     errorStream.throwOnWrite = true
+    // scalastyle:off println
     printWriter.println("test") // This will set the error flag
+    // scalastyle:on println
 
     writer.setWriterForTest(printWriter)
 
@@ -259,7 +261,9 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
     val printWriter = new PrintWriter(errorStream)
 
     // First write something successfully
+    // scalastyle:off println
     printWriter.println("test")
+    // scalastyle:on println
     printWriter.flush()
 
     // Now set up to error on close
