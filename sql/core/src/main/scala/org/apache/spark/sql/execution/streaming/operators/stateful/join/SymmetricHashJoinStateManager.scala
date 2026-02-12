@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 trait SymmetricHashJoinStateManager {
@@ -118,25 +118,24 @@ class SymmetricHashJoinStateManagerV4(
     // pass the information. The information is in SQLConf.
     allowMultipleEventTimeColumns = false)
 
-  // This state format version has a huge performance gain on eviction, especially when we evict
-  // only a smaller part of the state. This is actually trading off performance from some
-  // scenarios of insertion and retrieval. Joins which do not have event time column do not do
-  // eviction, hence these joins won't gain any benefit from this state format version.
- assert(eventTimeColIdxOpt.isDefined,
-   s"Event time column is required for join state manager v4 with state format version " +
-   s"$stateFormatVersion")
-
-  private val eventTimeColIdx = eventTimeColIdxOpt.get
-
+  private val random = new scala.util.Random(System.currentTimeMillis())
+  private val bucketSizeForNoEventTime = 1024
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
-    val idx = eventTimeColIdx
-    val attr = inputValueAttributes(idx)
+    eventTimeColIdxOpt match {
+      case Some(idx) =>
+        val attr = inputValueAttributes(idx)
 
-    if (attr.dataType.isInstanceOf[StructType]) {
-      // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
-      row.getStruct(idx, 2).getLong(1)
-    } else {
-      row.getLong(idx)
+        if (attr.dataType.isInstanceOf[StructType]) {
+          // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
+          row.getStruct(idx, 2).getLong(1)
+        } else {
+          row.getLong(idx)
+        }
+
+      case _ =>
+        // Need a strategy about bucketing when event time is not available
+        // - first attempt: random bucketing
+        random.nextInt(bucketSizeForNoEventTime)
     }
   }
 
@@ -222,19 +221,9 @@ class SymmetricHashJoinStateManagerV4(
 
   override def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit = {
     val eventTime = extractEventTimeFn(value)
-    val numValuesFromSecondaryIndex = tsWithKey.get(eventTime, key)
-
-    if (numValuesFromSecondaryIndex == 0) {
-      // Primary store does not have this (key, eventTime), so we can put this without getting.
-      keyWithTsToValues.put(key, eventTime, Seq((value, matched)))
-      // Same with secondary index.
-      tsWithKey.put(eventTime, key, 1)
-    } else {
-      // Primary store already has this (key, eventTime), so we need to get existing values first.
-      keyWithTsToValues.append(key, eventTime, value, matched)
-      // Update secondary index to contain the new number of values.
-      tsWithKey.put(eventTime, key, numValuesFromSecondaryIndex + 1)
-    }
+    // We always do blind merge for appending new value.
+    keyWithTsToValues.append(key, eventTime, value, matched)
+    tsWithKey.add(eventTime, key)
   }
 
   override def getJoinedRows(
@@ -523,14 +512,9 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   private class TsWithKeyTypeStore {
-    private val valueStructType = StructType(Seq(StructField("numValues", IntegerType)))
-    private val reusedValueRowTemplate: UnsafeRow = {
-      val valueRowGenerator = UnsafeProjection.create(
-        Seq(Literal(-1)), Seq(AttributeReference("numValues", IntegerType)()))
-      val row = new SpecificInternalRow(Seq[DataType](IntegerType))
-      row.setInt(0, -1)
-      valueRowGenerator(row)
-    }
+    private val valueStructType = StructType(Array(StructField("__dummy__", NullType)))
+    private val EMPTY_ROW =
+      UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
     // Set up virtual column family name in the store if it is being used
     private val colFamilyName = getStateStoreName(joinSide, TsWithKeyType)
@@ -546,7 +530,8 @@ class SymmetricHashJoinStateManagerV4(
       colFamilyName,
       keySchema,
       valueStructType,
-      TimestampAsPrefixKeyStateEncoderSpec(keySchemaWithTimestamp)
+      TimestampAsPrefixKeyStateEncoderSpec(keySchemaWithTimestamp),
+      useMultipleValuesPerKey = true
     )
 
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
@@ -554,15 +539,8 @@ class SymmetricHashJoinStateManagerV4(
         keyWithTimestampProjection, keySchemaWithTimestamp, key, timestamp)
     }
 
-    def put(timestamp: Long, key: UnsafeRow, numValues: Int): Unit = {
-      reusedValueRowTemplate.setLong(0, numValues)
-      stateStore.put(createKeyRow(key, timestamp), reusedValueRowTemplate, colFamilyName)
-    }
-
-    def get(timestamp: Long, key: UnsafeRow): Int = {
-      Option(stateStore.get(createKeyRow(key, timestamp), colFamilyName)).map { valueRow =>
-        valueRow.getInt(0)
-      }.getOrElse(0)
+    def add(timestamp: Long, key: UnsafeRow): Unit = {
+      stateStore.merge(createKeyRow(key, timestamp), EMPTY_ROW, colFamilyName)
     }
 
     def remove(key: UnsafeRow, timestamp: Long): Unit = {
@@ -573,20 +551,58 @@ class SymmetricHashJoinStateManagerV4(
 
     // NOTE: This assumes we consume the whole iterator to trigger completion.
     def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
-      val evictIterator = stateStore.iterator(colFamilyName)
+      val evictIterator = stateStore.iteratorWithMultiValues(colFamilyName)
       new NextIterator[EvictedKeysResult]() {
+        var currentKeyRow: UnsafeRow = null
+        var currentEventTime: Long = -1L
+        var count: Int = 0
+        var isBeyondUpperBound: Boolean = false
+
         override protected def getNext(): EvictedKeysResult = {
-          if (evictIterator.hasNext) {
+          var ret: EvictedKeysResult = null
+          while (evictIterator.hasNext && ret == null && !isBeyondUpperBound) {
             val kv = evictIterator.next()
             val keyRow = keyWithoutTimestampProjection(kv.key)
             val ts = TimestampKeyStateEncoder.extractTimestamp(kv.key)
-            if (ts <= endTimestamp) {
-              val numValues = kv.value.getInt(0)
-              EvictedKeysResult(keyRow, ts, numValues)
+
+            if (keyRow == currentKeyRow && ts == currentEventTime) {
+              // new value with same (key, ts)
+              count += 1
+            } else if (ts > endTimestamp) {
+              // we found the timestamp beyond the range - we shouldn't continue further
+              isBeyondUpperBound = true
+
+              // We don't need to construct the last (key, ts) into EvictedKeysResult - the code
+              // after loop will handle that if there is leftover. That said, we do not reset the
+              // current (key, ts) info here.
+            } else if (currentKeyRow == null && currentEventTime == -1L) {
+              // first value to process
+              currentKeyRow = keyRow.copy()
+              currentEventTime = ts
+              count = 1
             } else {
-              finished = true
-              null
+              // construct the last (key, ts) into EvictedKeysResult
+              ret = EvictedKeysResult(currentKeyRow, currentEventTime, count)
+
+              // register the next (key, ts) to process
+              currentKeyRow = keyRow.copy()
+              currentEventTime = ts
+              count = 1
             }
+          }
+
+          if (ret != null) {
+            ret
+          } else if (count > 0) {
+            // there is a final leftover (key, ts) to return
+            ret = EvictedKeysResult(currentKeyRow, currentEventTime, count)
+
+            // we shouldn't continue further
+            currentKeyRow = null
+            currentEventTime = -1L
+            count = 0
+
+            ret
           } else {
             finished = true
             null
