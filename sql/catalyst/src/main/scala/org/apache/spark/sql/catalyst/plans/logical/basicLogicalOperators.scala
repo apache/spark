@@ -603,6 +603,12 @@ trait UnionLike extends LogicalPlan { self: UnionBase =>
    * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
    */
   def isSameType(other: UnionLike): Boolean
+
+  /**
+   * Creates a new instance of this UnionLike with the specified children.
+   * Implementations should delegate to their case class copy() method.
+   */
+  def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): UnionLike
 }
 
 /**
@@ -624,6 +630,9 @@ case class Union(
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def isSameType(other: UnionLike): Boolean = other.isInstanceOf[Union]
+
+  override def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): Union =
+    copy(children = newChildren)
 
   override lazy val maxRows: Option[Long] = {
     val sum = children.foldLeft(Option(BigInt(0))) {

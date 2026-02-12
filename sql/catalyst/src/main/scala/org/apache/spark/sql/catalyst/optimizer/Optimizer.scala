@@ -1051,11 +1051,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     case project @ Project(projectList, u: UnionLike)
       if projectList.forall(_.deterministic) && u.children.nonEmpty &&
         canPushProjectionThroughUnion(project) =>
-      val newChildren = pushProjectionThroughUnionLike(projectList, u)
-      u match {
-        case union: Union => union.copy(children = newChildren)
-        case seqUnion: SequentialStreamingUnion => seqUnion.copy(children = newChildren)
-      }
+      u.withNewChildrenSeq(pushProjectionThroughUnionLike(projectList, u))
   }
 }
 
@@ -1907,11 +1903,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    // Use pattern matching to call the concrete copy method with new children count
-    union match {
-      case u: Union => u.copy(children = flattened.toSeq)
-      case su: SequentialStreamingUnion => su.copy(children = flattened.toSeq)
-    }
+    union.withNewChildrenSeq(flattened.toSeq)
   }
 }
 

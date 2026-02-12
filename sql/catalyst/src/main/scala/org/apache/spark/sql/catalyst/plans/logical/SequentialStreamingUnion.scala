@@ -77,6 +77,9 @@ case class SequentialStreamingUnion(
 
   override def isSameType(other: UnionLike): Boolean = other.isInstanceOf[SequentialStreamingUnion]
 
+  override def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): SequentialStreamingUnion =
+    copy(children = newChildren)
+
   final override val nodePatterns: Seq[TreePattern] = Seq(SEQUENTIAL_STREAMING_UNION)
 
   /**
