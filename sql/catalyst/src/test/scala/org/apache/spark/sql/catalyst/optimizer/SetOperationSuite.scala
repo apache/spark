@@ -434,7 +434,7 @@ class SetOperationSuite extends PlanTest {
     comparePlans(optimized2, expected.analyze)
   }
 
-  test("SequentialStreamingUnion: flatten through Distinct") {
+  test("SequentialStreamingUnion: flatten nested unions under Distinct") {
     val streamRel1 = testRelation.copy(isStreaming = true)
     val streamRel2 = testRelation2.copy(isStreaming = true)
     val streamRel3 = testRelation3.copy(isStreaming = true)
@@ -449,7 +449,7 @@ class SetOperationSuite extends PlanTest {
     comparePlans(optimized, expected.analyze)
   }
 
-  test("SequentialStreamingUnion: flatten through Deduplicate") {
+  test("SequentialStreamingUnion: flatten nested unions under Deduplicate") {
     val streamRel1 = testRelation.copy(isStreaming = true)
     val streamRel2 = testRelation2.copy(isStreaming = true)
     val streamRel3 = testRelation3.copy(isStreaming = true)
@@ -501,5 +501,38 @@ class SetOperationSuite extends PlanTest {
         streamRel2.select(($"a" + $"b").as("ab")) :: Nil,
         byName = false, allowMissingCol = false).analyze
     comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: do not merge with regular Union") {
+    // Use the same base relation but mark instances as streaming or non-streaming
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val batchRel1 = testRelation.copy(isStreaming = false)
+    val batchRel2 = testRelation.copy(isStreaming = false)
+
+    // Ensure SequentialStreamingUnion and regular Union don't flatten into each other
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val batchUnion = Union(batchRel1, batchRel2)
+
+    // Create a query with both types of unions - they should remain separate
+    val combined = seqUnion.select($"a").union(batchUnion.select($"a"))
+    val optimized = Optimize.execute(combined.analyze)
+
+    // The SequentialStreamingUnion should push projections to its children
+    // and stay as a SequentialStreamingUnion. The regular Union's children
+    // will be flattened into the outer Union, but importantly, the
+    // SequentialStreamingUnion children should NOT be merged with batch children
+    val expectedSeqUnion = SequentialStreamingUnion(
+      streamRel1.select($"a") :: streamRel2.select($"a") :: Nil,
+      byName = false, allowMissingCol = false)
+    // The batch union gets flattened - its children become direct children of outer Union
+    // The optimizer adds aliases to maintain proper attribute references
+    val expected = Union(
+      expectedSeqUnion ::
+      batchRel1.select($"a".as("a")) ::
+      batchRel2.select($"a".as("a")) :: Nil,
+      byName = false, allowMissingCol = false)
+
+    comparePlans(optimized, expected.analyze)
   }
 }

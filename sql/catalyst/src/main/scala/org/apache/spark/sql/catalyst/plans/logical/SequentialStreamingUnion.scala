@@ -35,6 +35,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * 2. Second child begins processing
  * 3. And so on...
  *
+ * IMPORTANT: Child ordering IS semantically significant. Children are processed sequentially
+ * in the exact order specified. Optimizer rules must preserve this ordering.
+ *
  * Requirements:
  * - Minimum 2 children required
  * - All children must be streaming sources
@@ -68,9 +71,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 case class SequentialStreamingUnion(
     children: Seq[LogicalPlan],
     byName: Boolean,
-    allowMissingCol: Boolean) extends UnionBase {
+    allowMissingCol: Boolean) extends UnionBase with UnionLike {
   assert(!allowMissingCol || byName,
     "`allowMissingCol` can be true only if `byName` is true.")
+
+  override def isSameType(other: UnionLike): Boolean = other.isInstanceOf[SequentialStreamingUnion]
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SEQUENTIAL_STREAMING_UNION)
 
