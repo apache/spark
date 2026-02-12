@@ -71,7 +71,7 @@ if have_pandas:
     from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
+    import pyarrow as pa
 
 
 class ArrowTestsMixin:

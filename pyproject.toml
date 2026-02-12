@@ -38,7 +38,8 @@ exclude = [
 
 [tool.ruff.lint]
 extend-select = [
-    "G010"  # logging-warn
+    "G010",  # logging-warn
+    "RUF100",  # unused-noqa
 ]
 ignore = [
     "E402", # Module top level import is disabled for optional import check, etc.

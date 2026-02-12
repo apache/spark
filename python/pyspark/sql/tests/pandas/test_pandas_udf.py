@@ -390,7 +390,7 @@ class PandasUDFTestsMixin:
             # intToDecimalCoercionEnabled is not required for this case
             with self.sql_conf(
                 {
-                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled  # noqa: E501
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled
                 }
             ):
                 result = df.withColumn("decimal_val", high_precision_udf("id")).collect()

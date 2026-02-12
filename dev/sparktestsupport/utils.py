@@ -159,6 +159,18 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     )
 
 
+def determine_dangling_python_tests(changed_files):
+    """
+    Given a list of changed files, return the set of Python tests that are not associated with any
+    module.
+    """
+    dangling_tests = set()
+    for filename in changed_files:
+        if modules.root.missing_potential_python_test(filename):
+            dangling_tests.add(filename)
+    return dangling_tests
+
+
 def determine_tags_to_exclude(changed_modules):
     tags = []
     for m in modules.all_modules:

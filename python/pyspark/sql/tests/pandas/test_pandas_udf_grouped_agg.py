@@ -215,7 +215,7 @@ class GroupedAggPandasUDFTestsMixin:
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
             @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
-            def mean_and_std_udf(v):  # noqa: F811
+            def mean_and_std_udf(v):
                 return {v.mean(): v.std()}
 
         self.check_error(

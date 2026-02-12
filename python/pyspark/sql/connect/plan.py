@@ -1976,7 +1976,7 @@ class WriteOperation(LogicalPlan):
                 tsm = self.table_save_method.lower()
                 if tsm == "save_as_table":
                     plan.write_operation.table.save_method = (
-                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE  # noqa: E501
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE
                     )
                 elif tsm == "insert_into":
                     plan.write_operation.table.save_method = (

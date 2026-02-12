@@ -23,7 +23,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   // sarutak/oracle-free is a custom fork of gvenzl/oracle-free which allows to set timeout for
   // password initialization. See SPARK-54076 for details.
   lazy override val imageName =
-    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "sarutak/oracle-free:23.26.0-slim")
+    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "sarutak/oracle-free:23.26.1-slim")
   val oracle_password = "Th1s1sThe0racle#Pass"
   override val env = Map(
     "ORACLE_PWD" -> oracle_password, // oracle images uses this

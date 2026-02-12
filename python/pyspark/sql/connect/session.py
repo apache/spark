@@ -774,7 +774,7 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
