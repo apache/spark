@@ -336,6 +336,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
+    if (!fileManager.exists(metadataPath)) {
+      return Array.empty
+    }
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
       // Batches must be files
       .filter(f => f.isFile)
@@ -360,6 +363,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
    * @return array of batches ids
    */
   def listBatchesOnDisk: Array[Long] = {
+    if (!fileManager.exists(metadataPath)) {
+      return Array.empty
+    }
     fileManager.list(metadataPath, batchFilesFilter)
       .map(f => pathToBatchId(f.getPath)).sorted
   }

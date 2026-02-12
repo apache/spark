@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import java.io.{File, FileNotFoundException, FileWriter}
+import java.io.{File, FileWriter}
 import java.nio.ByteOrder
 import java.util.UUID
 
@@ -1710,7 +1710,7 @@ class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
           .collect()
       }
       assertCauseChainContains(e2,
-        classOf[FileNotFoundException])
+        classOf[StataDataSourceCommittedBatchUnavailable])
 
       assert(!commitsDir.exists(),
         "State data source reader should not recreate the deleted commits directory")
