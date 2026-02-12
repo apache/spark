@@ -27,7 +27,7 @@ from pyspark.serializers import (
     write_with_length,
 )
 from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
-from pyspark.sql.types import _parse_datatype_json_string, StructType
+from pyspark.sql.types import _parse_datatype_json_string, from_arrow_schema, StructType
 from pyspark.sql.worker.utils import worker_run
 from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
@@ -35,6 +35,8 @@ from pyspark.worker_util import (
     pickleSer,
     utf8_deserializer,
 )
+
+import pyarrow as pa
 
 
 def _main(infile: IO, outfile: IO) -> None:
@@ -125,6 +127,11 @@ def _main(infile: IO, outfile: IO) -> None:
                 # Here we cannot use _parse_datatype_string to parse the DDL string schema.
                 # as it requires an active Spark session.
                 is_ddl_string = True
+            if isinstance(schema, pa.schema):
+                # Convert Arrow schema to Spark schema for compatibility, 
+                # as the data source API in Python allows data source to 
+                # return Arrow schema directly.
+                schema = from_arrow_schema(schema)
         else:
             schema = user_specified_schema  # type: ignore
 

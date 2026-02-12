@@ -37,6 +37,7 @@ from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
+    import pyarrow as pa
     from pyarrow import RecordBatch
     from pyspark.sql.session import SparkSession
 
@@ -115,7 +116,7 @@ class DataSource(ABC):
         """
         return cls.__name__
 
-    def schema(self) -> Union[StructType, str]:
+    def schema(self) -> Union[StructType, str, "pa.schema"]:
         """
         Returns the schema of the data source.
 
@@ -142,6 +143,16 @@ class DataSource(ABC):
 
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
+
+        Returns a PyArrow schema:
+
+        >>> def schema(self):
+        ...   return pa.schema([
+                pa.field("a", pa.int64()),
+                pa.field("b", pa.string()),
+            ])
+
+
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
