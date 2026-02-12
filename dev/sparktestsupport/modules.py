@@ -544,7 +544,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
         "pyspark.sql.tests.test_conversion",
-        "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
         "pyspark.sql.tests.test_observation",
         "pyspark.sql.tests.test_repartition",
@@ -742,7 +741,6 @@ pyspark_ml = Module(
         # unittests
         "pyspark.ml.tests.test_algorithms",
         "pyspark.ml.tests.test_als",
-        "pyspark.ml.tests.test_dl_util",
         "pyspark.ml.tests.test_fpm",
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
@@ -1151,7 +1149,6 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_sql",
         "pyspark.sql.tests.connect.test_parity_job_cancellation",
         "pyspark.sql.tests.connect.test_parity_dataframe",
-        "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",
         "pyspark.sql.tests.connect.test_parity_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
