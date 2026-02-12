@@ -632,27 +632,19 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        uname -a
+        lsb_release -a
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
         do
           $py --version
           $py -m pip list
           echo ""
         done
-    - name: Install Conda for pip packaging test
-      if: contains(matrix.modules, 'pyspark-errors')
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        miniforge-version: latest
-        activate-environment: ""
-        auto-activate: false
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
-          export PATH=$CONDA/bin:$PATH
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
@@ -934,6 +926,7 @@ jobs:
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        lsb_release -a
         if [[ "$BRANCH" == 'branch-3.5' || "$BRANCH" == 'branch-4.0' ]]; then
           python3.9 --version
           python3.9 -m pip list
@@ -1113,7 +1106,9 @@ jobs:
       run: python3.9 -m pip list
     - name: List Python packages
       if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
-      run: python3.11 -m pip list
+      run: |
+        lsb_release -a
+        python3.11 -m pip list
     - name: Install dependencies for documentation generation
       run: |
         # Keep the version of Bundler here in sync with the following locations:

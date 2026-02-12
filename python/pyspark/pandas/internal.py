@@ -1567,7 +1567,7 @@ class InternalFrame:
         if retain_index:
             index_nlevels = pdf.index.nlevels
             index_columns = [SPARK_INDEX_NAME_FORMAT(i) for i in range(index_nlevels)]
-            pdf.index.names = index_columns  # type: ignore[assignment]
+            pdf.index.names = index_columns
             reset_index = pdf.reset_index()
         else:
             index_nlevels = 0

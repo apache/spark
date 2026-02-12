@@ -1269,6 +1269,7 @@ def read_excel(
         return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
     if isinstance(sampled, dict):
+        assert sampled is not None
         return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
     else:
         return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
@@ -1607,7 +1608,7 @@ def to_datetime(
     errors: str = "raise",
     format: Optional[str] = None,
     unit: Optional[str] = None,
-    infer_datetime_format: bool = False,
+    infer_datetime_format: Union[bool, _NoValueType] = _NoValue,
     origin: str = "unix",
 ):
     """
@@ -1747,19 +1748,29 @@ def to_datetime(
         "microseconds": "us",
     }
 
+    kwargs = dict(
+        errors=errors,
+        format=format,
+        unit=unit,
+        origin=origin,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        kwargs["infer_datetime_format"] = (
+            infer_datetime_format if infer_datetime_format is not _NoValue else False
+        )
+    else:
+        if infer_datetime_format is not _NoValue:
+            raise TypeError(
+                "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
+            )
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
     ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
-        return pd.to_datetime(
-            pser_or_pdf,
-            errors=errors,
-            format=format,
-            unit=unit,
-            infer_datetime_format=infer_datetime_format,
-            origin=origin,
-        )
+        return pd.to_datetime(pser_or_pdf, **kwargs)
 
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
@@ -1774,14 +1785,7 @@ def to_datetime(
 
         psdf = arg[list_cols]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
-    return pd.to_datetime(
-        arg,
-        errors=errors,
-        format=format,
-        unit=unit,
-        infer_datetime_format=infer_datetime_format,
-        origin=origin,
-    )
+    return pd.to_datetime(arg, **kwargs)
 
 
 def date_range(
@@ -2337,10 +2341,10 @@ def get_dummies(
             values = values[1:]
 
         def column_name(v: Any) -> Name:
-            if prefix is None or prefix[i] == "":  # type: ignore[index]
+            if prefix is None or prefix[i] == "":
                 return v
             else:
-                return "{}{}{}".format(prefix[i], prefix_sep, v)  # type: ignore[index]
+                return "{}{}{}".format(prefix[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -2609,9 +2613,7 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(  # type: ignore[assignment]
-                map(str, _range(len(concat_psdf.columns)))
-            )
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
 
         if sort:
             concat_psdf = concat_psdf.sort_index()

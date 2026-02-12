@@ -585,7 +585,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 bround.__doc__ = pysparkfuncs.bround.__doc__
@@ -604,7 +604,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
@@ -616,7 +616,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
@@ -698,7 +698,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 floor.__doc__ = pysparkfuncs.floor.__doc__
@@ -833,7 +833,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("round", col, scale)
 
 
 round.__doc__ = pysparkfuncs.round.__doc__
@@ -1577,9 +1577,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 any_value.__doc__ = pysparkfuncs.any_value.__doc__
@@ -1591,9 +1589,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 first_value.__doc__ = pysparkfuncs.first_value.__doc__
@@ -1605,9 +1601,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls  # type: ignore[arg-type]
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 last_value.__doc__ = pysparkfuncs.last_value.__doc__
@@ -4581,6 +4575,96 @@ def theta_intersection_agg(
 theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
 
 
+def tuple_sketch_agg_double(
+    key: "ColumnOrName",
+    summary: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_sketch_agg_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, key, summary, _lgNomEntries, _mode)
+
+
+tuple_sketch_agg_double.__doc__ = pysparkfuncs.tuple_sketch_agg_double.__doc__
+
+
+def tuple_sketch_agg_integer(
+    key: "ColumnOrName",
+    summary: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_sketch_agg_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, key, summary, _lgNomEntries, _mode)
+
+
+tuple_sketch_agg_integer.__doc__ = pysparkfuncs.tuple_sketch_agg_integer.__doc__
+
+
+def tuple_union_agg_double(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_agg_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col, _lgNomEntries, _mode)
+
+
+tuple_union_agg_double.__doc__ = pysparkfuncs.tuple_union_agg_double.__doc__
+
+
+def tuple_union_agg_integer(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_agg_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col, _lgNomEntries, _mode)
+
+
+tuple_union_agg_integer.__doc__ = pysparkfuncs.tuple_union_agg_integer.__doc__
+
+
+def tuple_intersection_agg_double(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_agg_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+tuple_intersection_agg_double.__doc__ = pysparkfuncs.tuple_intersection_agg_double.__doc__
+
+
+def tuple_intersection_agg_integer(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_agg_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+tuple_intersection_agg_integer.__doc__ = pysparkfuncs.tuple_intersection_agg_integer.__doc__
+
+
 def kll_sketch_agg_bigint(
     col: "ColumnOrName",
     k: Optional[Union[int, Column]] = None,
@@ -4820,6 +4904,140 @@ def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 theta_difference.__doc__ = pysparkfuncs.theta_difference.__doc__
+
+
+def tuple_sketch_estimate_double(col: "ColumnOrName") -> Column:
+    fn = "tuple_sketch_estimate_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+tuple_sketch_estimate_double.__doc__ = pysparkfuncs.tuple_sketch_estimate_double.__doc__
+
+
+def tuple_sketch_estimate_integer(col: "ColumnOrName") -> Column:
+    fn = "tuple_sketch_estimate_integer"
+    return _invoke_function_over_columns(fn, col)
+
+
+tuple_sketch_estimate_integer.__doc__ = pysparkfuncs.tuple_sketch_estimate_integer.__doc__
+
+
+def tuple_sketch_summary_double(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_sketch_summary_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+tuple_sketch_summary_double.__doc__ = pysparkfuncs.tuple_sketch_summary_double.__doc__
+
+
+def tuple_sketch_summary_integer(
+    col: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_sketch_summary_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(mode))
+
+
+tuple_sketch_summary_integer.__doc__ = pysparkfuncs.tuple_sketch_summary_integer.__doc__
+
+
+def tuple_sketch_theta_double(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_sketch_theta_double", col)
+
+
+tuple_sketch_theta_double.__doc__ = pysparkfuncs.tuple_sketch_theta_double.__doc__
+
+
+def tuple_sketch_theta_integer(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_sketch_theta_integer", col)
+
+
+tuple_sketch_theta_integer.__doc__ = pysparkfuncs.tuple_sketch_theta_integer.__doc__
+
+
+def tuple_union_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_double.__doc__ = pysparkfuncs.tuple_union_double.__doc__
+
+
+def tuple_union_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_integer.__doc__ = pysparkfuncs.tuple_union_integer.__doc__
+
+
+def tuple_intersection_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_double.__doc__ = pysparkfuncs.tuple_intersection_double.__doc__
+
+
+def tuple_intersection_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_integer.__doc__ = pysparkfuncs.tuple_intersection_integer.__doc__
+
+
+def tuple_difference_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_double", col1, col2)
+
+
+tuple_difference_double.__doc__ = pysparkfuncs.tuple_difference_double.__doc__
+
+
+def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_integer", col1, col2)
+
+
+tuple_difference_integer.__doc__ = pysparkfuncs.tuple_difference_integer.__doc__
 
 
 # Predicates Function
@@ -5064,7 +5282,7 @@ def st_geomfromwkb(
     else:
         srid = _enum_to_value(srid)
         srid = lit(srid) if isinstance(srid, int) else srid
-        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("st_geomfromwkb", wkb, srid)
 
 
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
