@@ -9865,15 +9865,35 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            # Get `top` & `freq` for each columns
-            tops = []
-            freqs = []
-            # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
-            #   for every columns is too expensive.
-            for column in exprs_string:
-                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
-                tops.append(str(top))
-                freqs.append(str(freq))
+            # Get `top` & `freq` for each column in a single pass using unpivot approach
+            # This replaces the loop that invoked a separate Spark job for each column (SPARK-37711)
+            n_cols = len(column_names)
+
+            # Build the stack expression to unpivot all columns into (column_name, value) pairs
+            # stack(n, 'col1', col1, 'col2', col2, ...) creates rows with column_name and value
+            stack_args = ", ".join([f"'{col_name}', `{col_name}`" for col_name in column_names])
+            stack_expr = f"stack({n_cols}, {stack_args}) as (column_name, value)"
+
+            # Unpivot, group by (column_name, value), and count occurrences
+            unpivoted = sdf.selectExpr(stack_expr)
+            value_counts = unpivoted.groupBy("column_name", "value").count()
+
+            # Use window function to rank values by count within each column
+            # When counts tie, pick the first value alphabetically (matches pandas behavior)
+            window = Window.partitionBy("column_name").orderBy(F.desc("count"), F.asc("value"))
+            top_values = (
+                value_counts.withColumn("rank", F.row_number().over(window))
+                .filter(F.col("rank") == 1)
+                .select("column_name", "value", F.col("count").alias("freq"))
+                .collect()
+            )
+
+            # Build a dictionary for fast lookup: column_name -> (top_value, frequency)
+            top_freq_dict = {row.column_name: (row.value, row.freq) for row in top_values}
+
+            # Extract tops and freqs in the original column order
+            tops = [str(top_freq_dict[col_name][0]) for col_name in column_names]
+            freqs = [str(top_freq_dict[col_name][1]) for col_name in column_names]
 
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
