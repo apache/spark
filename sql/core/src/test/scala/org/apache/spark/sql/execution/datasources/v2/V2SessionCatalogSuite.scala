@@ -1163,7 +1163,9 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> "`a`.`b`")
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`a`.`b`.`c`")
     )
   }
 

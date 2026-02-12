@@ -168,8 +168,7 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
-          ident.namespace().toImmutableArraySeq)
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(asMultipartIdentifier)
     }
 
     /**
@@ -195,8 +194,7 @@ private[sql] object CatalogV2Implicits {
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
-          ident.namespace().toImmutableArraySeq)
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(asMultipartIdentifier)
     }
 
     def toQualifiedNameParts(catalog: CatalogPlugin): Seq[String] = {

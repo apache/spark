@@ -2582,7 +2582,7 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`global_temp`.`ns1`.`ns2`"))
+        "identifier" -> "`global_temp`.`ns1`.`ns2`.`tbl`"))
   }
 
   test("table name same as catalog can be used") {
@@ -2616,7 +2616,9 @@ class DataSourceV2SQLSuiteV1Filter
           checkError(
             exception = analysisException(sql),
             condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-            parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> ""))
+            parameters = Map(
+              "sessionCatalog" -> "spark_catalog",
+              "identifier" -> "`t`"))
         }
 
         verify(s"select * from $t")
