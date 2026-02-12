@@ -218,7 +218,7 @@ class PandasToArrowConversion:
     @classmethod
     def convert(
         cls,
-        data: Union["pd.DataFrame", List[Union["pd.Series", "pd.DataFrame"]]],
+        data: Union["pd.DataFrame", Sequence[Union["pd.Series", "pd.DataFrame"]]],
         schema: StructType,
         *,
         timezone: Optional[str] = None,
@@ -290,12 +290,13 @@ class PandasToArrowConversion:
 
         # Normalize input: reorder DataFrame columns by schema names if needed,
         # then extract columns as a list for uniform iteration.
-        if isinstance(data, list):
-            columns = data
-        else:
+        columns: List[Union["pd.Series", "pd.DataFrame"]]
+        if isinstance(data, pd.DataFrame):
             if assign_cols_by_name and any(isinstance(c, str) for c in data.columns):
                 data = data[schema.names]
             columns = [data.iloc[:, i] for i in range(len(schema.fields))]
+        else:
+            columns = list(data)
 
         def series_to_array(series: "pd.Series", ret_type: DataType, field_name: str) -> "pa.Array":
             """Convert a pandas Series to an Arrow Array (closure over conversion params).
