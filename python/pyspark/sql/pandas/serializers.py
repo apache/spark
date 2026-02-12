@@ -114,9 +114,30 @@ class ArrowCollectSerializer(Serializer):
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
+
+    Parameters
+    ----------
+    write_start_stream : bool
+        If True, writes the START_ARROW_STREAM marker before the first
+        output batch. Default False.
+    num_dfs : int
+        Number of dataframes per group.
+        For num_dfs=0, plain batch stream without group-count protocol.
+        For num_dfs=1, grouped loading (1 dataframe per group).
+        For num_dfs=2, cogrouped loading (2 dataframes per group).
+        Default 0.
     """
 
+    def __init__(self, write_start_stream: bool = False, num_dfs: int = 0) -> None:
+        super().__init__()
+        assert num_dfs in (0, 1, 2), "num_dfs must be 0, 1, or 2"
+        self._write_start_stream: bool = write_start_stream
+        self._num_dfs: int = num_dfs
+
     def dump_stream(self, iterator, stream):
+        """Optionally prepend START_ARROW_STREAM, then write batches."""
+        if self._write_start_stream:
+            iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
         writer = None
@@ -130,40 +151,21 @@ class ArrowStreamSerializer(Serializer):
                 writer.close()
 
     def load_stream(self, stream):
-        import pyarrow as pa
+        """Load batches: plain stream if num_dfs=0, grouped otherwise."""
+        if self._num_dfs == 0:
+            import pyarrow as pa
 
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
-            yield batch
-
-    def __repr__(self):
-        return "ArrowStreamSerializer"
-
-
-class ArrowStreamGroupSerializer(ArrowStreamSerializer):
-    """
-    Configurable Arrow stream serializer for UDF execution.
-
-    Intended as the single base class that all UDFs will use.
-
-    Parameters
-    ----------
-    num_dfs : int
-        Number of dataframes per group.
-        For num_dfs=0, plain batch stream without group-count protocol.
-        For num_dfs=1, grouped loading (1 dataframe per group).
-        For num_dfs=2, cogrouped loading (2 dataframes per group).
-    write_start_stream : bool
-        If True, writes the START_ARROW_STREAM marker before the first
-        output batch. Default False so subclasses that override dump_stream
-        are not affected.
-    """
-
-    def __init__(self, num_dfs: int = 0, write_start_stream: bool = False) -> None:
-        super().__init__()
-        assert num_dfs in (0, 1, 2), "num_dfs must be 0, 1, or 2"
-        self._num_dfs: int = num_dfs
-        self._write_start_stream: bool = write_start_stream
+            reader = pa.ipc.open_stream(stream)
+            for batch in reader:
+                yield batch
+        elif self._num_dfs == 2:
+            # Cogrouped loading: yield tuples of (left_batches, right_batches)
+            for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
+                yield left_batches, right_batches
+        else:
+            # Grouped loading: yield single dataframe groups
+            for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
+                yield batches
 
     def _load_group_dataframes(self, stream, num_dfs: int = 1) -> Iterator:
         """
@@ -206,27 +208,14 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
         yield from itertools.chain([first], batch_iterator)
 
-    def load_stream(self, stream) -> Iterator["pa.RecordBatch"]:
-        """Load batches: plain stream if num_dfs=0, grouped otherwise."""
-        if self._num_dfs == 0:
-            yield from super().load_stream(stream)
-        else:
-            yield from self._load_group_dataframes(stream, num_dfs=self._num_dfs)
-
-    def dump_stream(self, iterator: Iterator, stream) -> None:
-        """Optionally prepend START_ARROW_STREAM, then write batches."""
-        if self._write_start_stream:
-            iterator = self._write_stream_start(iterator, stream)
-        return super().dump_stream(iterator, stream)
-
-    def __repr__(self) -> str:
-        return "ArrowStreamGroupSerializer(num_dfs=%d, write_start_stream=%s)" % (
-            self._num_dfs,
+    def __repr__(self):
+        return "ArrowStreamSerializer(write_start_stream=%s, num_dfs=%d)" % (
             self._write_start_stream,
+            self._num_dfs,
         )
 
 
-class ArrowStreamUDFSerializer(ArrowStreamGroupSerializer):
+class ArrowStreamUDFSerializer(ArrowStreamSerializer):
     """
     Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
@@ -407,7 +396,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
         super().dump_stream(batch_iter, stream)
 
 
-class ArrowStreamPandasSerializer(ArrowStreamGroupSerializer):
+class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
 
@@ -805,7 +794,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class ArrowStreamArrowUDFSerializer(ArrowStreamGroupSerializer):
+class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
     """
