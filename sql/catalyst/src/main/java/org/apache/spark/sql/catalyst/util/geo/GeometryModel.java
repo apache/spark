@@ -217,6 +217,15 @@ public abstract class GeometryModel {
   }
 
   /**
+   * Appends coordinates wrapped in parentheses for use in Multi* containers.
+   */
+  protected void appendMultiWktElement(StringBuilder sb) {
+    sb.append("(");
+    appendWktContent(sb);
+    sb.append(")");
+  }
+
+  /**
    * Appends the geometry-specific WKT (Well-Known Text) content. Note that this utility method
    * is invoked by `toWkt` when the current geometry is not empty. All GeometryModel subclasses
    * must implement this method in order to provide their specific WKT content.

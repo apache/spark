@@ -64,13 +64,4 @@ class Polygon extends GeometryModel {
       rings.get(i).appendCoordinatesToWkt(sb);
     }
   }
-
-  /**
-   * Appends the polygon coordinates wrapped in parentheses for use in MultiPolygon.
-   */
-  void appendCoordinatesToWkt(StringBuilder sb) {
-    sb.append("(");
-    appendWktContent(sb);
-    sb.append(")");
-  }
 }

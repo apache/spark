@@ -57,7 +57,7 @@ class MultiPolygon extends GeometryModel {
       if (p.isEmpty()) {
         sb.append("EMPTY");
       } else {
-        p.appendCoordinatesToWkt(sb);
+        p.appendMultiWktElement(sb);
       }
     }
   }

@@ -56,13 +56,4 @@ class LineString extends GeometryModel {
       points.get(i).appendWktContent(sb);
     }
   }
-
-  /**
-   * Appends the linestring coordinates wrapped in parentheses for use in MultiLineString.
-   */
-  void appendCoordinatesToWkt(StringBuilder sb) {
-    sb.append("(");
-    appendWktContent(sb);
-    sb.append(")");
-  }
 }

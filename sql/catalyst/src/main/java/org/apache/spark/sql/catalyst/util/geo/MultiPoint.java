@@ -57,9 +57,7 @@ class MultiPoint extends GeometryModel {
       if (p.isEmpty()) {
         sb.append("EMPTY");
       } else {
-        sb.append("(");
-        p.appendWktContent(sb);
-        sb.append(")");
+        p.appendMultiWktElement(sb);
       }
     }
   }

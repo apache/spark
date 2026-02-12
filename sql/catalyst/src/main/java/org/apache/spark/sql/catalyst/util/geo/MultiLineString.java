@@ -57,7 +57,7 @@ class MultiLineString extends GeometryModel {
       if (ls.isEmpty()) {
         sb.append("EMPTY");
       } else {
-        ls.appendCoordinatesToWkt(sb);
+        ls.appendMultiWktElement(sb);
       }
     }
   }
