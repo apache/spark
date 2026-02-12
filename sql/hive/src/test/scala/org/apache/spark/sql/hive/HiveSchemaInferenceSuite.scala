@@ -107,6 +107,7 @@ class HiveSchemaInferenceSuite
           locationUri = Option(dir.toURI),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
+          serdeName = None,
           serde = serde.serde,
           compressed = false,
           properties = Map("serialization.format" -> "1")),
