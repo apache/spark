@@ -26,7 +26,6 @@ import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputEvent, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
 import org.apache.spark.sql.streaming.util.{MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils, TTLProcessorUtils}
-import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Integration test suite for transformWithState operator repartitioning.
