@@ -382,10 +382,10 @@ class SymmetricHashJoinStateManagerV4(
     private val colFamilyName = getStateStoreName(joinSide, KeyWithTsToValuesType)
 
     private val keySchemaWithTimestamp = TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
-    private val keyWithTimestampProjection: UnsafeProjection =
-      TimestampKeyStateEncoder.getKeyWithTimestampProjection(keySchema)
-    private val keyWithoutTimestampProjection: UnsafeProjection =
-      TimestampKeyStateEncoder.getKeyWithoutTimestampProjection(keySchemaWithTimestamp)
+    private val detachTimestampProjection: UnsafeProjection =
+      TimestampKeyStateEncoder.getDetachTimestampProjection(keySchemaWithTimestamp)
+    private val attachTimestampProjection: UnsafeProjection =
+      TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
     // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
     stateStore.createColFamilyIfAbsent(
@@ -398,7 +398,7 @@ class SymmetricHashJoinStateManagerV4(
 
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
       TimestampKeyStateEncoder.attachTimestamp(
-        keyWithTimestampProjection, keySchemaWithTimestamp, key, timestamp)
+        attachTimestampProjection, keySchemaWithTimestamp, key, timestamp)
     }
 
     def append(key: UnsafeRow, timestamp: Long, value: UnsafeRow, matched: Boolean): Unit = {
@@ -502,7 +502,7 @@ class SymmetricHashJoinStateManagerV4(
       val iter = stateStore.iteratorWithMultiValues(colFamilyName)
       val reusableKeyAndTsToValuePair = KeyAndTsToValuePair()
       iter.map { kv =>
-        val keyRow = keyWithoutTimestampProjection(kv.key)
+        val keyRow = detachTimestampProjection(kv.key)
         val ts = TimestampKeyStateEncoder.extractTimestamp(kv.key)
         val value = valueRowConverter.convertValue(kv.value)
 
@@ -520,10 +520,10 @@ class SymmetricHashJoinStateManagerV4(
     private val colFamilyName = getStateStoreName(joinSide, TsWithKeyType)
 
     private val keySchemaWithTimestamp = TimestampKeyStateEncoder.keySchemaWithTimestamp(keySchema)
-    private val keyWithTimestampProjection: UnsafeProjection =
-      TimestampKeyStateEncoder.getKeyWithTimestampProjection(keySchema)
-    private val keyWithoutTimestampProjection: UnsafeProjection =
-      TimestampKeyStateEncoder.getKeyWithoutTimestampProjection(keySchemaWithTimestamp)
+    private val detachTimestampProjection: UnsafeProjection =
+      TimestampKeyStateEncoder.getDetachTimestampProjection(keySchemaWithTimestamp)
+    private val attachTimestampProjection: UnsafeProjection =
+      TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
     // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
     stateStore.createColFamilyIfAbsent(
@@ -536,7 +536,7 @@ class SymmetricHashJoinStateManagerV4(
 
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
       TimestampKeyStateEncoder.attachTimestamp(
-        keyWithTimestampProjection, keySchemaWithTimestamp, key, timestamp)
+        attachTimestampProjection, keySchemaWithTimestamp, key, timestamp)
     }
 
     def add(timestamp: Long, key: UnsafeRow): Unit = {
@@ -562,7 +562,7 @@ class SymmetricHashJoinStateManagerV4(
           var ret: EvictedKeysResult = null
           while (evictIterator.hasNext && ret == null && !isBeyondUpperBound) {
             val kv = evictIterator.next()
-            val keyRow = keyWithoutTimestampProjection(kv.key)
+            val keyRow = detachTimestampProjection(kv.key)
             val ts = TimestampKeyStateEncoder.extractTimestamp(kv.key)
 
             if (keyRow == currentKeyRow && ts == currentEventTime) {
