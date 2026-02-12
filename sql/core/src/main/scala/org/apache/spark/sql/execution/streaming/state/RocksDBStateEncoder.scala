@@ -1838,6 +1838,8 @@ class TimestampAsPrefixKeyStateEncoder(
     useColumnFamilies: Boolean = false)
   extends TimestampKeyStateEncoder(dataEncoder, keySchema) with Logging {
 
+  import TimestampKeyStateEncoder._
+
   override def supportPrefixKeyScan: Boolean = false
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
