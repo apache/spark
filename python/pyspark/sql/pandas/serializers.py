@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
-from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -55,6 +55,19 @@ from pyspark.sql.types import (
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
+
+
+def _normalize_packed(packed):
+    """
+    Normalize UDF output to a uniform tuple-of-tuples form.
+
+    Iterator UDFs yield a single (series, spark_type) tuple directly,
+    while batched UDFs return a tuple of tuples ((s1, t1), (s2, t2), ...).
+    This function normalizes both forms to a tuple of tuples.
+    """
+    if len(packed) == 2 and isinstance(packed[1], DataType):
+        return (packed,)
+    return tuple(packed)
 
 
 class SpecialLengths:
@@ -439,30 +452,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
 
         def create_batch(
-            packed: Union[
-                Tuple["pd.Series", DataType],
-                Tuple[Tuple["pd.Series", DataType], ...],
-            ],
+            series_tuples: Tuple[Tuple["pd.Series", DataType], ...],
         ) -> "pa.RecordBatch":
-            """
-            Create batch from UDF output.
-
-            Parameters
-            ----------
-            packed : tuple
-                - For iterator UDFs: single (series, spark_type) tuple
-                - For batched UDFs: tuple of tuples ((s1, t1), (s2, t2), ...)
-            """
-            # Normalize: iterator UDFs yield (series, spark_type) directly,
-            # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
-            series_tuples: Tuple[Tuple[Union["pd.Series", "pd.DataFrame"], DataType], ...]
-            if len(packed) == 2 and isinstance(packed[1], DataType):
-                # single UDF result: wrap in tuple
-                series_tuples = (packed,)
-            else:
-                # multiple UDF results: already iterable of tuples
-                series_tuples = tuple(packed)
-
             series_data = [s for s, _ in series_tuples]
             types = [t for _, t in series_tuples]
             schema = StructType([StructField(f"_{i}", t) for i, t in enumerate(types)])
@@ -475,7 +466,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
 
-        super().dump_stream(map(create_batch, iterator), stream)
+        super().dump_stream(
+            (create_batch(_normalize_packed(packed)) for packed in iterator), stream
+        )
 
     def load_stream(self, stream):
         """
@@ -545,30 +538,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         import pandas as pd
 
         def create_batch(
-            packed: Union[
-                Tuple[Union["pd.Series", "pd.DataFrame"], DataType],
-                Tuple[Tuple[Union["pd.Series", "pd.DataFrame"], DataType], ...],
-            ],
+            series_tuples: Tuple[Tuple["pd.Series", DataType], ...],
         ) -> "pa.RecordBatch":
-            """
-            Create batch from UDF output.
-
-            Parameters
-            ----------
-            packed : tuple
-                - For iterator UDFs: single (series, spark_type) tuple
-                - For batched UDFs: tuple of tuples ((s1, t1), (s2, t2), ...)
-            """
-            # Normalize: iterator UDFs yield (series, spark_type) directly,
-            # batched UDFs return tuple of tuples ((s1, t1), (s2, t2), ...)
-            series_tuples: Tuple[Tuple[Union["pd.Series", "pd.DataFrame"], DataType], ...]
-            if len(packed) == 2 and isinstance(packed[1], DataType):
-                # single UDF result: wrap in tuple
-                series_tuples = (packed,)
-            else:
-                # multiple UDF results: already iterable of tuples
-                series_tuples = tuple(packed)
-
             # When struct_in_pandas="dict", UDF must return DataFrame for struct types
             if self._struct_in_pandas == "dict":
                 for s, spark_type in series_tuples:
@@ -595,7 +566,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             )
 
         batches = self._write_stream_start(
-            (create_batch(series) for series in iterator),
+            (create_batch(_normalize_packed(packed)) for packed in iterator),
             stream,
         )
         return ArrowStreamSerializer.dump_stream(self, batches, stream)
@@ -627,23 +598,24 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         import pyarrow as pa
 
         def create_batch(
-            packed: Union[
-                Tuple["pa.Array", "pa.DataType"],
-                List[Tuple["pa.Array", "pa.DataType"]],
-            ],
+            arr_tuples: List[Tuple["pa.Array", "pa.DataType"]],
         ) -> "pa.RecordBatch":
-            # Normalize: single UDF (arr, type) -> [(arr, type)]
-            if len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                packed = [packed]  # type: ignore[list-item]
             arrs = [
                 coerce_arrow_array(
                     arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast
                 )
-                for arr, arrow_type in packed
+                for arr, arrow_type in arr_tuples
             ]
             return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
-        batches = self._write_stream_start(map(create_batch, iterator), stream)
+        def normalize(packed):
+            if len(packed) == 2 and isinstance(packed[1], pa.DataType):
+                return [packed]
+            return list(packed)
+
+        batches = self._write_stream_start(
+            (create_batch(normalize(packed)) for packed in iterator), stream
+        )
         return ArrowStreamSerializer.dump_stream(self, batches, stream)
 
     def __repr__(self):
@@ -1279,8 +1251,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_pdf = pd.concat(pdfs, ignore_index=True)
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
-            # Create batch from list of (DataFrame, spark_type) tuples
-            # Each DataFrame is wrapped as a StructArray
+            # Create batch from list of DataFrames, each wrapped as a StructArray.
+            # Schema fields map to: _0=count, _1=output data, _2=state data
+            # (types defined in __init__: result_count_df_type, pdf_schema, result_state_df_type)
             data = [count_pdf, merged_pdf, merged_state_pdf]
             schema = StructType(
                 [

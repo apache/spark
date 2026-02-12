@@ -45,7 +45,12 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
 class ScoreUDT(UserDefinedType):
@@ -150,6 +155,7 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+@unittest.skipIf(not have_pandas, pandas_requirement_message)
 class PandasToArrowConversionTests(unittest.TestCase):
     def test_convert(self):
         """Test basic DataFrame/Series to Arrow RecordBatch conversion."""

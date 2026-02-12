@@ -236,7 +236,9 @@ class PandasToArrowConversion:
         Parameters
         ----------
         data : pd.DataFrame or list of pd.Series/pd.DataFrame
-            Input data - either a DataFrame or a list of Series/DataFrames.
+            Input data - either a single DataFrame, or a list of Series/DataFrames
+            (one per schema field). A list of DataFrames is used when UDFs return struct
+            types as DataFrames (e.g., applyInPandas with state).
         schema : StructType
             Spark schema defining the types for each column
         timezone : str, optional
@@ -257,6 +259,8 @@ class PandasToArrowConversion:
             Whether this conversion is for a UDTF. UDTFs use broader Arrow exception
             handling to allow more type coercions (e.g., struct field casting via
             ArrowTypeError), and convert errors to UDTF_ARROW_TYPE_CAST_ERROR.
+            # TODO(SPARK-55502): Unify UDTF and regular UDF conversion paths to
+            #   eliminate the is_udtf flag.
             Regular UDFs only catch ArrowInvalid to preserve legacy behavior where
             e.g. string→decimal must raise an error. (default False)
 
@@ -272,7 +276,7 @@ class PandasToArrowConversion:
 
         # Handle empty schema (0 columns)
         # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
-        if not schema.fields:
+        if len(schema.fields) == 0:
             num_rows = len(data[0]) if isinstance(data, list) and data else len(data)
             return pa.RecordBatch.from_pydict({"_": [None] * num_rows}).select([])
 
@@ -388,6 +392,7 @@ class PandasToArrowConversion:
                     ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
                     is_udtf=is_udtf,
                 )
+                # Wrap the nested RecordBatch as a single StructArray column
                 return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
             return series_to_array(col, field.dataType, field.name)
 
