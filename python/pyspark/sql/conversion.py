@@ -801,25 +801,25 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, TimestampType):
 
-            def convert_timestample(value: Any) -> Any:
+            def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value.astimezone().replace(tzinfo=None)
 
-            return convert_timestample
+            return convert_timestamp
 
         elif isinstance(dataType, TimestampNTZType):
 
-            def convert_timestample_ntz(value: Any) -> Any:
+            def convert_timestamp_ntz(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value
 
-            return convert_timestample_ntz
+            return convert_timestamp_ntz
 
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
