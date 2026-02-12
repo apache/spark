@@ -1728,6 +1728,34 @@ object TimestampKeyStateEncoder {
     StructType(keySchema.fields)
       .add(name = INTERNAL_TIMESTAMP_COLUMN_NAME, dataType = LongType, nullable = false)
   }
+
+  def getAttachTimestampProjection(keyWithoutTimestampSchema: StructType): UnsafeProjection = {
+    val refs = keyWithoutTimestampSchema.zipWithIndex.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(
+      refs :+ Literal(0L), // placeholder for timestamp
+      DataTypeUtils.toAttributes(StructType(keyWithoutTimestampSchema)))
+  }
+
+  def getDetachTimestampProjection(keyWithTimestampSchema: StructType): UnsafeProjection = {
+    val refs = keyWithTimestampSchema.zipWithIndex.dropRight(1).map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  def attachTimestamp(
+      attachTimestampProjection: UnsafeProjection,
+      keyWithTimestampSchema: StructType,
+      key: UnsafeRow,
+      timestamp: Long): UnsafeRow = {
+    val rowWithTimestamp = attachTimestampProjection(key)
+    rowWithTimestamp.setLong(keyWithTimestampSchema.length - 1, timestamp)
+    rowWithTimestamp
+  }
+
+  def extractTimestamp(key: UnsafeRow): Long = {
+    key.getLong(key.numFields - 1)
+  }
 }
 
 /**
@@ -1739,26 +1767,12 @@ abstract class TimestampKeyStateEncoder(
     keySchema: StructType)
   extends RocksDBKeyStateEncoder with Logging {
 
-  protected val keyWithoutTimestampProjection: UnsafeProjection = {
-    // keySchema includes the event time column as the last field, hence we remove it to
-    // project key.
-    val keySchemaWithoutTimestampWithIdx: Seq[(StructField, Int)] = {
-      keySchema.zipWithIndex.dropRight(1)
-    }
+  protected val detachTimestampProjection: UnsafeProjection =
+    TimestampKeyStateEncoder.getDetachTimestampProjection(keySchema)
 
-    val refs = keySchemaWithoutTimestampWithIdx.map(x =>
-      BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(refs)
-  }
-
-  private val keySchemaWithoutTimestamp = StructType(keySchema.fields.dropRight(1))
-  protected val keyWithTimestampProjection: UnsafeProjection = {
-    val refs = keySchemaWithoutTimestamp.zipWithIndex.map(x =>
-      BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(
-      refs :+ Literal(0L), // placeholder for timestamp
-      DataTypeUtils.toAttributes(keySchemaWithoutTimestamp))
-  }
+  protected val attachTimestampProjection: UnsafeProjection =
+    TimestampKeyStateEncoder.getAttachTimestampProjection(
+      StructType(keySchema.fields.dropRight(1)))
 
   protected def decodeKey(keyBytes: Array[Byte], startPos: Int): UnsafeRow = {
     val rowBytesLength = keyBytes.length - 8
@@ -1768,7 +1782,9 @@ abstract class TimestampKeyStateEncoder(
       rowBytes, Platform.BYTE_ARRAY_OFFSET,
       rowBytesLength
     )
-    dataEncoder.decodeToUnsafeRow(rowBytes, keySchema.length)
+    // The encoded row does not include the timestamp (it's stored separately),
+    // so decode with keySchema.length - 1 fields.
+    dataEncoder.decodeToUnsafeRow(rowBytes, keySchema.length - 1)
   }
 
   // NOTE: We reuse the ByteBuffer to avoid allocating a new one for every encoding/decoding,
@@ -1796,13 +1812,15 @@ abstract class TimestampKeyStateEncoder(
   }
 
   protected def attachTimestamp(key: UnsafeRow, timestamp: Long): UnsafeRow = {
-    val rowWithTimestamp = keyWithTimestampProjection(key)
-    rowWithTimestamp.setLong(keySchema.length - 1, timestamp)
-    rowWithTimestamp
+    TimestampKeyStateEncoder.attachTimestamp(attachTimestampProjection, keySchema, key, timestamp)
   }
 
-  protected def extractTimestamp(key: UnsafeRow): Long = {
-    key.getLong(key.numFields - 1)
+  protected def detachTimestamp(key: UnsafeRow): UnsafeRow = {
+    detachTimestampProjection(key)
+  }
+
+  def extractTimestamp(key: UnsafeRow): Long = {
+    TimestampKeyStateEncoder.extractTimestamp(key)
   }
 }
 
@@ -1827,7 +1845,7 @@ class TimestampAsPrefixKeyStateEncoder(
   }
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    val prefix = dataEncoder.encodeKey(keyWithoutTimestampProjection(row))
+    val prefix = dataEncoder.encodeKey(detachTimestamp(row))
     val timestamp = extractTimestamp(row)
 
     val byteArray = new Array[Byte](prefix.length + 8)
@@ -1872,7 +1890,7 @@ class TimestampAsPostfixKeyStateEncoder(
   }
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    val prefix = dataEncoder.encodeKey(keyWithoutTimestampProjection(row))
+    val prefix = dataEncoder.encodeKey(detachTimestamp(row))
     val timestamp = extractTimestamp(row)
 
     val byteArray = new Array[Byte](prefix.length + 8)
