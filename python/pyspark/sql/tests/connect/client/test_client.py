@@ -158,7 +158,7 @@ if should_test_connect:
             buf = sink.getvalue()
             resp.arrow_batch.data = buf.to_pybytes()
             resp.arrow_batch.row_count = 2
-            return [resp]
+            return iter([resp])
 
         def Interrupt(self, req: proto.InterruptRequest, metadata):
             self.req = req

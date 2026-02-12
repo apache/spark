@@ -145,7 +145,7 @@ class GroupbyApplyFuncMixin:
 
         def add_max2(
             x,
-        ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:  # noqa: F405
+        ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:
             return x + x.min()
 
         actual = psdf.groupby("b").apply(add_max2).sort_index()
