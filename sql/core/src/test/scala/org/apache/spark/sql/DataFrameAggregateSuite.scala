@@ -3596,6 +3596,611 @@ class DataFrameAggregateSuite extends QueryTest
     val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
     assert(n == 5L)
   }
+
+  test("SPARK-54179: tuple_sketch_agg_double basic functionality") {
+    val df = Seq((1, 1.5), (2, 2.5), (3, 3.5), (1, 0.5), (2, 1.0)).toDF("key", "summary")
+
+    // Test with default parameters
+    val sketch1 = df.agg(tuple_sketch_agg_double($"key", $"summary")).collect()(0)(0)
+    assert(sketch1 != null)
+    assert(sketch1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with explicit lgNomEntries
+    val sketch2 = df.agg(tuple_sketch_agg_double($"key", $"summary", 10)).collect()(0)(0)
+    assert(sketch2 != null)
+    assert(sketch2.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with lgNomEntries and mode
+    val sketch3 = df.agg(tuple_sketch_agg_double($"key", $"summary", 10, "sum")).collect()(0)(0)
+    assert(sketch3 != null)
+
+    // Test with column names
+    val sketch4 = df.agg(tuple_sketch_agg_double("key", "summary")).collect()(0)(0)
+    assert(sketch4 != null)
+  }
+
+  test("SPARK-54179: tuple_sketch_agg_integer basic functionality") {
+    val df = Seq((1, 10), (2, 20), (3, 30), (1, 5), (2, 15)).toDF("key", "summary")
+
+    // Test with default parameters
+    val sketch1 = df.agg(tuple_sketch_agg_integer($"key", $"summary")).collect()(0)(0)
+    assert(sketch1 != null)
+    assert(sketch1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with explicit lgNomEntries
+    val sketch2 = df.agg(tuple_sketch_agg_integer($"key", $"summary", 10)).collect()(0)(0)
+    assert(sketch2 != null)
+
+    // Test with lgNomEntries and mode
+    val sketch3 = df.agg(tuple_sketch_agg_integer($"key", $"summary", 10, "max")).collect()(0)(0)
+    assert(sketch3 != null)
+
+    // Test with column names
+    val sketch4 = df.agg(tuple_sketch_agg_integer("key", "summary", 10, "min")).collect()(0)(0)
+    assert(sketch4 != null)
+  }
+
+  test("SPARK-54179: tuple_sketch_estimate and summary functions - double") {
+    val df = Seq((1, 1.5), (2, 2.5), (3, 3.5), (1, 0.5), (2, 1.0)).toDF("key", "summary")
+    val sketchDf = df.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+
+    // Test estimate
+    val estimate = sketchDf.select(tuple_sketch_estimate_double($"sketch")).collect()(0)(0)
+    assert(estimate == 3.0)
+
+    // Test summary with default mode (sum)
+    val summary1 = sketchDf.select(tuple_sketch_summary_double($"sketch")).collect()(0)(0)
+    assert(summary1 == 9.0)
+
+    // Test summary with explicit mode
+    val summary2 = sketchDf.select(tuple_sketch_summary_double($"sketch", "min")).collect()(0)(0)
+    assert(summary2 == 2.0)
+
+    // Test theta
+    val theta = sketchDf.select(tuple_sketch_theta_double($"sketch")).collect()(0)(0)
+    assert(theta != null)
+    assert(theta.asInstanceOf[Double] > 0.0 && theta.asInstanceOf[Double] <= 1.0)
+
+    // Test with column names
+    val estimate2 = sketchDf.select(tuple_sketch_estimate_double("sketch")).collect()(0)(0)
+    assert(estimate2 != null)
+  }
+
+  test("SPARK-54179: tuple_sketch_estimate and summary functions - integer") {
+    val df = Seq((1, 10), (2, 20), (3, 30), (1, 5), (2, 15)).toDF("key", "summary")
+    val sketchDf = df.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+
+    // Test estimate
+    val estimate = sketchDf.select(tuple_sketch_estimate_integer($"sketch")).collect()(0)(0)
+    assert(estimate == 3.0)
+
+    // Test summary with default mode (sum)
+    val summary1 = sketchDf.select(tuple_sketch_summary_integer($"sketch")).collect()(0)(0)
+    assert(summary1 == 80)
+
+    // Test summary with explicit mode
+    val summary2 = sketchDf.select(tuple_sketch_summary_integer($"sketch", "max")).collect()(0)(0)
+    assert(summary2 == 35)
+
+    // Test theta
+    val theta = sketchDf.select(tuple_sketch_theta_integer($"sketch")).collect()(0)(0)
+    assert(theta != null)
+    assert(theta.asInstanceOf[Double] > 0.0 && theta.asInstanceOf[Double] <= 1.0)
+
+    // Test with column names
+    val summary3 = sketchDf.select(tuple_sketch_summary_integer("sketch", "min")).collect()(0)(0)
+    assert(summary3 == 15)
+  }
+
+  test("SPARK-54179: tuple_union_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5)).toDF("key", "summary")
+    val df2 = Seq((3, 3.5), (4, 4.5)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test union with default parameters
+    val union1 = joined.select(tuple_union_double($"sketch", $"sketch2")).collect()(0)(0)
+    assert(union1 != null)
+    assert(union1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test union with lgNomEntries
+    val union2 = joined.select(tuple_union_double($"sketch", $"sketch2", 10)).collect()(0)(0)
+    assert(union2 != null)
+
+    // Test union with lgNomEntries and mode
+    val union3 =
+      joined.select(tuple_union_double($"sketch", $"sketch2", 10, "sum")).collect()(0)(0)
+    assert(union3 != null)
+
+    // Test with column names
+    val union4 = joined.select(tuple_union_double("sketch", "sketch2")).collect()(0)(0)
+    assert(union4 != null)
+
+    // Verify estimate from union
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(tuple_union_double($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+  }
+
+  test("SPARK-54179: tuple_union_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20)).toDF("key", "summary")
+    val df2 = Seq((3, 30), (4, 40)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test union with default parameters
+    val union1 = joined.select(tuple_union_integer($"sketch", $"sketch2")).collect()(0)(0)
+    assert(union1 != null)
+
+    // Test union with lgNomEntries and mode
+    val union2 = joined
+      .select(tuple_union_integer($"sketch", $"sketch2", 10, "max"))
+      .collect()(0)(0)
+    assert(union2 != null)
+
+    // Test with column names
+    val union3 = joined.select(tuple_union_integer("sketch", "sketch2", 10)).collect()(0)(0)
+    assert(union3 != null)
+
+    // Verify estimate from union
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(tuple_union_integer($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 4.0)
+  }
+
+  test("SPARK-54179: tuple_intersection_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5)).toDF("key", "summary")
+    val df2 = Seq((2, 1.0), (3, 2.0), (4, 3.0)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_double($"sketch", $"sketch2"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+    assert(intersection1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_double($"sketch", $"sketch2", "sum"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names
+    val intersection3 = joined
+      .select(tuple_intersection_double("sketch", "sketch2", "min"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(tuple_intersection_double($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+  }
+
+  test("SPARK-54179: tuple_intersection_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30)).toDF("key", "summary")
+    val df2 = Seq((2, 15), (3, 25), (4, 35)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test intersection with default mode
+    val intersection1 = joined
+      .select(tuple_intersection_integer($"sketch", $"sketch2"))
+      .collect()(0)(0)
+    assert(intersection1 != null)
+
+    // Test intersection with mode
+    val intersection2 = joined
+      .select(tuple_intersection_integer($"sketch", $"sketch2", "max"))
+      .collect()(0)(0)
+    assert(intersection2 != null)
+
+    // Test with column names
+    val intersection3 = joined
+      .select(tuple_intersection_integer("sketch", "sketch2"))
+      .collect()(0)(0)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection (keys 2 and 3 are common)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(tuple_intersection_integer($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 2.0)
+  }
+
+  test("SPARK-54179: tuple_difference_double basic functionality") {
+    val df1 = Seq((1, 1.5), (2, 2.5), (3, 3.5)).toDF("key", "summary")
+    val df2 = Seq((2, 1.0), (3, 2.0)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_double($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test difference
+    val difference = joined
+      .select(tuple_difference_double($"sketch", $"sketch2"))
+      .collect()(0)(0)
+    assert(difference != null)
+    assert(difference.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_double("sketch", "sketch2"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (only key 1 is unique to df1)
+    val estimate = joined
+      .select(tuple_sketch_estimate_double(tuple_difference_double($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 1.0)
+  }
+
+  test("SPARK-54179: tuple_difference_integer basic functionality") {
+    val df1 = Seq((1, 10), (2, 20), (3, 30)).toDF("key", "summary")
+    val df2 = Seq((2, 15), (3, 25)).toDF("key", "summary")
+
+    val sketch1Df = df1.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+    val sketch2Df = df2.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+
+    val joined = sketch1Df.crossJoin(sketch2Df.withColumnRenamed("sketch", "sketch2"))
+
+    // Test difference
+    val difference = joined
+      .select(tuple_difference_integer($"sketch", $"sketch2"))
+      .collect()(0)(0)
+    assert(difference != null)
+
+    // Test with column names
+    val difference2 = joined
+      .select(tuple_difference_integer("sketch", "sketch2"))
+      .collect()(0)(0)
+    assert(difference2 != null)
+
+    // Verify estimate from difference (only key 1 is unique to df1)
+    val estimate = joined
+      .select(tuple_sketch_estimate_integer(tuple_difference_integer($"sketch", $"sketch2")))
+      .collect()(0)(0)
+    assert(estimate == 1.0)
+  }
+
+  test("SPARK-54179: tuple_union_agg_double basic functionality") {
+    val df1 = Seq((1, 1, 1.5), (1, 2, 2.5)).toDF("id", "key", "summary")
+    val df2 = Seq((1, 3, 3.5), (1, 4, 4.5)).toDF("id", "key", "summary")
+
+    val sketch1Df = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .alias("sketch"))
+    val sketch2Df = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .alias("sketch"))
+
+    val combined = sketch1Df.union(sketch2Df)
+
+    // Test union_agg with default parameters
+    val union1 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_double($"sketch"))
+      .collect()(0)(1)
+    assert(union1 != null)
+    assert(union1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test union_agg with lgNomEntries
+    val union2 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_double($"sketch", 10))
+      .collect()(0)(1)
+    assert(union2 != null)
+
+    // Test union_agg with lgNomEntries and mode
+    val union3 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_double($"sketch", 10, "sum"))
+      .collect()(0)(1)
+    assert(union3 != null)
+
+    // Test with column name
+    val union4 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_double("sketch"))
+      .collect()(0)(1)
+    assert(union4 != null)
+
+    // Verify estimate from union_agg (keys 1, 2, 3, 4 should all be present)
+    val estimateResult = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_double($"sketch").alias("union_sketch"))
+      .select(tuple_sketch_estimate_double($"union_sketch"))
+      .collect()(0)(0)
+    assert(estimateResult == 4.0)
+  }
+
+  test("SPARK-54179: tuple_union_agg_integer basic functionality") {
+    val df1 = Seq((1, 1, 10), (1, 2, 20)).toDF("id", "key", "summary")
+    val df2 = Seq((1, 3, 30), (1, 4, 40)).toDF("id", "key", "summary")
+
+    val sketch1Df = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .alias("sketch"))
+    val sketch2Df = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .alias("sketch"))
+
+    val combined = sketch1Df.union(sketch2Df)
+
+    // Test union_agg with default parameters
+    val union1 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_integer($"sketch"))
+      .collect()(0)(1)
+    assert(union1 != null)
+
+    // Test union_agg with lgNomEntries and mode
+    val union2 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_integer($"sketch", 10, "max"))
+      .collect()(0)(1)
+    assert(union2 != null)
+
+    // Test with column name
+    val union3 = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_integer("sketch", 10))
+      .collect()(0)(1)
+    assert(union3 != null)
+
+    // Verify estimate from union_agg (keys 1, 2, 3, 4 should all be present)
+    val estimateResult = combined
+      .groupBy("id")
+      .agg(tuple_union_agg_integer($"sketch").alias("union_sketch"))
+      .select(tuple_sketch_estimate_integer($"union_sketch"))
+      .collect()(0)(0)
+    assert(estimateResult == 4.0)
+  }
+
+  test("SPARK-54179: tuple_intersection_agg_double basic functionality") {
+    val df1 = Seq((1, 1, 1.5), (1, 2, 2.5), (1, 3, 3.5)).toDF("id", "key", "summary")
+    val df2 = Seq((1, 2, 1.0), (1, 3, 2.0), (1, 4, 3.0)).toDF("id", "key", "summary")
+
+    val sketch1Df = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .alias("sketch"))
+    val sketch2Df = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .alias("sketch"))
+
+    val combined = sketch1Df.union(sketch2Df)
+
+    // Test intersection_agg with default mode
+    val intersection1 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_double($"sketch"))
+      .collect()(0)(1)
+    assert(intersection1 != null)
+    assert(intersection1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test intersection_agg with mode
+    val intersection2 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_double($"sketch", "sum"))
+      .collect()(0)(1)
+    assert(intersection2 != null)
+
+    // Test with column name
+    val intersection3 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_double("sketch", "min"))
+      .collect()(0)(1)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection_agg (keys 2 and 3 are common)
+    val estimateResult = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_double($"sketch").alias("intersection_sketch"))
+      .select(tuple_sketch_estimate_double($"intersection_sketch"))
+      .collect()(0)(0)
+    assert(estimateResult == 2.0)
+  }
+
+  test("SPARK-54179: tuple_intersection_agg_integer basic functionality") {
+    val df1 = Seq((1, 1, 10), (1, 2, 20), (1, 3, 30)).toDF("id", "key", "summary")
+    val df2 = Seq((1, 2, 15), (1, 3, 25), (1, 4, 35)).toDF("id", "key", "summary")
+
+    val sketch1Df = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .alias("sketch"))
+    val sketch2Df = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .alias("sketch"))
+
+    val combined = sketch1Df.union(sketch2Df)
+
+    // Test intersection_agg with default mode
+    val intersection1 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_integer($"sketch"))
+      .collect()(0)(1)
+    assert(intersection1 != null)
+
+    // Test intersection_agg with mode
+    val intersection2 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_integer($"sketch", "max"))
+      .collect()(0)(1)
+    assert(intersection2 != null)
+
+    // Test with column name
+    val intersection3 = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_integer("sketch"))
+      .collect()(0)(1)
+    assert(intersection3 != null)
+
+    // Verify estimate from intersection_agg (keys 2 and 3 are common)
+    val estimateResult = combined
+      .groupBy("id")
+      .agg(tuple_intersection_agg_integer($"sketch").alias("intersection_sketch"))
+      .select(tuple_sketch_estimate_integer($"intersection_sketch"))
+      .collect()(0)(0)
+    assert(estimateResult == 2.0)
+  }
+
+  test("SPARK-54179: tuple_sketch_agg + operations + estimate comprehensive test - double") {
+    val df1 = Seq((1, "a", 1.0), (1, "a", 2.0), (1, "b", 3.0), (1, "c", 4.0))
+      .toDF("id", "key", "summary")
+    df1.createOrReplaceTempView("tuple_df1")
+
+    val df2 = Seq((1, "a", 0.5), (1, "c", 1.5), (1, "d", 2.5), (1, "e", 3.5))
+      .toDF("id", "key", "summary")
+    df2.createOrReplaceTempView("tuple_df2")
+
+    // Test tuple_sketch_agg and estimate via DataFrame
+    val res1 = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary").as("sketch"))
+      .withColumn("estimate", tuple_sketch_estimate_double($"sketch"))
+      .withColumn("summary_total", tuple_sketch_summary_double($"sketch"))
+
+    val row1 = res1.collect()(0)
+    assert(row1.getAs[Double]("estimate") >= 3.0) // at least 3 distinct keys
+    assert(row1.getAs[Double]("summary_total") > 0.0)
+
+    // Test via SQL
+    val res2 = sql("""
+      SELECT
+        id,
+        tuple_sketch_agg_double(key, summary) as sketch,
+        tuple_sketch_estimate_double(tuple_sketch_agg_double(key, summary)) as estimate,
+        tuple_sketch_summary_double(tuple_sketch_agg_double(key, summary)) as summary_total
+      FROM tuple_df1
+      GROUP BY id
+    """)
+
+    val row2 = res2.collect()(0)
+    assert(row2.getAs[Double]("estimate") >= 3.0)
+    assert(row2.getAs[Double]("summary_total") > 0.0)
+
+    // Test union operations
+    val sketch1 = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .as("sketch"))
+    val sketch2 = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_double($"key", $"summary")
+        .as("sketch"))
+
+    val unionResult = sketch1
+      .union(sketch2)
+      .groupBy("id")
+      .agg(tuple_union_agg_double($"sketch").as("union_sketch"))
+      .withColumn("union_estimate", tuple_sketch_estimate_double($"union_sketch"))
+
+    val unionRow = unionResult.collect()(0)
+    assert(unionRow.getAs[Double]("union_estimate") >= 5.0) // union should have 5 distinct keys
+
+    // Test intersection
+    val joined = sketch1.crossJoin(sketch2.withColumnRenamed("sketch", "sketch2"))
+    val intersectionResult = joined
+      .withColumn("intersection_sketch", tuple_intersection_double($"sketch", $"sketch2"))
+      .withColumn("intersection_estimate", tuple_sketch_estimate_double($"intersection_sketch"))
+
+    val intersectionRow = intersectionResult.collect()(0)
+    assert(intersectionRow.getAs[Double]("intersection_estimate") >= 2.0) // a and c are common
+
+    // Test difference
+    val differenceResult = joined
+      .withColumn("difference_sketch", tuple_difference_double($"sketch", $"sketch2"))
+      .withColumn("difference_estimate", tuple_sketch_estimate_double($"difference_sketch"))
+
+    val differenceRow = differenceResult.collect()(0)
+    assert(differenceRow.getAs[Double]("difference_estimate") >= 1.0) // b is unique to df1
+  }
+
+  test("SPARK-54179: tuple_sketch_agg + operations + estimate comprehensive test - integer") {
+    val df1 = Seq((1, "a", 10), (1, "a", 20), (1, "b", 30), (1, "c", 40))
+      .toDF("id", "key", "summary")
+
+    val df2 = Seq((1, "a", 5), (1, "c", 15), (1, "d", 25), (1, "e", 35))
+      .toDF("id", "key", "summary")
+
+    // Test tuple_sketch_agg and estimate
+    val res1 = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary").as("sketch"))
+      .withColumn("estimate", tuple_sketch_estimate_integer($"sketch"))
+      .withColumn("summary_total", tuple_sketch_summary_integer($"sketch"))
+
+    val row1 = res1.collect()(0)
+    assert(row1.getAs[Double]("estimate") >= 3.0)
+    assert(row1.getAs[Long]("summary_total") > 0)
+
+    // Test with different modes
+    val resMax = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary", 12, "max").as("sketch"))
+      .withColumn("summary_max", tuple_sketch_summary_integer($"sketch", "max"))
+
+    val rowMax = resMax.collect()(0)
+    assert(rowMax.getAs[Long]("summary_max") > 0)
+
+    // Test union with mode
+    val sketch1 = df1
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .as("sketch"))
+    val sketch2 = df2
+      .groupBy("id")
+      .agg(tuple_sketch_agg_integer($"key", $"summary")
+        .as("sketch"))
+
+    val unionResult = sketch1
+      .union(sketch2)
+      .groupBy("id")
+      .agg(tuple_union_agg_integer($"sketch", 12, "sum").as("union_sketch"))
+      .withColumn("union_estimate", tuple_sketch_estimate_integer($"union_sketch"))
+
+    val unionRow = unionResult.collect()(0)
+    assert(unionRow.getAs[Double]("union_estimate") >= 5.0)
+  }
+
+  test("SPARK-54179: tuple_sketch with null values") {
+    val df = Seq((1, Some(10)), (2, Some(20)), (3, None)).toDF("key", "summary")
+
+    // Null summaries should be handled
+    val sketch = df.agg(tuple_sketch_agg_integer($"key", $"summary").alias("sketch"))
+    val estimate = sketch
+      .select(tuple_sketch_estimate_integer($"sketch"))
+      .collect()(0)(0)
+    assert(estimate != null)
+    assert(estimate.asInstanceOf[Double] == 2.0)
+  }
 }
 
 case class B(c: Option[Double])
