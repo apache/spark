@@ -1276,7 +1276,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        concurrent.futures.wait(self._release_futures)
+        concurrent.futures.wait(self._release_futures, timeout=10)
         ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
