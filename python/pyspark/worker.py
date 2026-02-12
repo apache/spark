@@ -230,15 +230,17 @@ def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
         The expected Python/PyArrow type for each element
         (e.g. pa.RecordBatch, pa.Array).
     """
-    label: str = "{}.{}".format(expected_type.__module__.split(".")[0], expected_type.__name__)
+
+    package = getattr(inspect.getmodule(expected_type), "__package__", "")
+    label: str = f"{package}.{expected_type.__name__}"
 
     def check_element(element: Any) -> Any:
         if not isinstance(element, expected_type):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={
-                    "expected": "iterator of {}".format(label),
-                    "actual": "iterator of {}".format(type(element).__name__),
+                    "expected": f"iterator of {label}",
+                    "actual": f"iterator of {type(element).__name__}",
                 },
             )
         return element
@@ -248,7 +250,7 @@ def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={
-                    "expected": "iterator of {}".format(label),
+                    "expected": f"iterator of {label}",
                     "actual": type(result).__name__,
                 },
             )
