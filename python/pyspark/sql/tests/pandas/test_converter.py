@@ -38,6 +38,9 @@ if have_pandas:
     from pandas.testing import assert_series_equal
     from pyspark.sql.pandas.types import _create_converter_from_pandas, _create_converter_to_pandas
 
+if have_pyarrow:
+    import pyarrow as pa  # noqa: F401
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
