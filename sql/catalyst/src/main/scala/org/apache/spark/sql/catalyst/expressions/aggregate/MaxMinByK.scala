@@ -51,25 +51,14 @@ case class MaxMinByK(
     this(valueExpr, orderingExpr, kExpr, reverse, 0, 0)
 
   final val MAX_K = 100000
-  lazy val k: Int = {
-    if (!kExpr.foldable) {
+  lazy val k: Int = kExpr match {
+    case Literal(v: Int, IntegerType) if v > 0 && v <= MAX_K => v
+    case Literal(v: Int, IntegerType) =>
       throw new IllegalArgumentException(
-        s"The third argument of $prettyName must be a foldable expression, got: $kExpr")
-    }
-    val kValue = kExpr.eval() match {
-      case i: Int if i > 0 => i
-      case l: Long if l > 0 && l <= Int.MaxValue => l.toInt
-      case s: Short if s > 0 => s.toInt
-      case b: Byte if b > 0 => b.toInt
-      case other =>
-        throw new IllegalArgumentException(
-          s"The third argument of $prettyName must be a positive integer, got: $other")
-    }
-    if (kValue > MAX_K) {
+        s"The third argument of $prettyName must be in range [1, $MAX_K], got: $v")
+    case _ =>
       throw new IllegalArgumentException(
-        s"The third argument of $prettyName must be at most $MAX_K, got: $kValue")
-    }
-    kValue
+        s"The third argument of $prettyName must be a constant integer, got: $kExpr")
   }
 
   override def first: Expression = valueExpr
@@ -86,7 +75,7 @@ case class MaxMinByK(
   override def inputTypes: Seq[AbstractDataType] = Seq(
     AnyDataType,
     AnyDataType,
-    IntegralType
+    IntegerType
   )
 
   private lazy val valuesAttr = AttributeReference(
@@ -119,36 +108,40 @@ case class MaxMinByK(
   override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!kExpr.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "k",
-          "inputType" -> kExpr.dataType.catalogString,
-          "inputExpr" -> kExpr.sql
-        )
-      )
-    } else {
-      val orderingCheck =
-        TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
-      if (orderingCheck.isSuccess) {
-        try {
-          val _ = k
-          TypeCheckResult.TypeCheckSuccess
-        } catch {
-          case _: IllegalArgumentException =>
-            DataTypeMismatch(
-              errorSubClass = "VALUE_OUT_OF_RANGE",
-              messageParameters = Map(
-                "exprName" -> toSQLId("k"),
-                "valueRange" -> s"[1, $MAX_K]",
-                "currentValue" -> kExpr.sql
-              )
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (!kExpr.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "k",
+              "inputType" -> kExpr.dataType.catalogString,
+              "inputExpr" -> kExpr.sql
             )
+          )
+        } else {
+          val orderingCheck =
+            TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
+          if (orderingCheck.isSuccess) {
+            try {
+              val _ = k
+              TypeCheckResult.TypeCheckSuccess
+            } catch {
+              case _: IllegalArgumentException =>
+                DataTypeMismatch(
+                  errorSubClass = "VALUE_OUT_OF_RANGE",
+                  messageParameters = Map(
+                    "exprName" -> toSQLId("k"),
+                    "valueRange" -> s"[1, $MAX_K]",
+                    "currentValue" -> kExpr.sql
+                  )
+                )
+            }
+          } else {
+            orderingCheck
+          }
         }
-      } else {
-        orderingCheck
-      }
+      case failure => failure
     }
   }
 
