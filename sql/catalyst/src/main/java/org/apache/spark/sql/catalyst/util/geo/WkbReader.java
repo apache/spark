@@ -36,7 +36,7 @@ import java.util.List;
 public class WkbReader {
   private ByteBuffer buffer;
   private final int validationLevel;
-  private final boolean geographyMode;
+  private final boolean isGeography;
   private byte[] currentWkb;
 
   // Geography coordinate bounds.
@@ -46,14 +46,13 @@ public class WkbReader {
   private static final double MAX_LATITUDE = 90.0;
   // Default WKB reader settings.
   private static final int DEFAULT_VALIDATION_LEVEL = 1; // basic validation
-  private static final boolean DEFAULT_GEOGRAPHY_MODE = false; // no geography bounds checking
 
   /**
    * Constructor for WkbReader with default validation level (1 = basic validation)
    * and geometry mode (no geography coordinate bounds checking).
    */
   public WkbReader() {
-    this(DEFAULT_VALIDATION_LEVEL, DEFAULT_GEOGRAPHY_MODE);
+    this(DEFAULT_VALIDATION_LEVEL, false);
   }
 
   /**
@@ -61,25 +60,25 @@ public class WkbReader {
    * @param validationLevel validation level (0 = no validation, 1 = basic validation)
    */
   public WkbReader(int validationLevel) {
-    this(validationLevel, DEFAULT_GEOGRAPHY_MODE);
+    this(validationLevel, false);
   }
 
   /**
    * Constructor for WkbReader with default validation level and geography mode.
-   * @param geographyMode if true, validates geography coordinate bounds for longitude and latitude
+   * @param isGeography if true, validates geography coordinate bounds for longitude and latitude
    */
-  public WkbReader(boolean geographyMode) {
-    this(DEFAULT_VALIDATION_LEVEL, geographyMode);
+  public WkbReader(boolean isGeography) {
+    this(DEFAULT_VALIDATION_LEVEL, isGeography);
   }
 
   /**
    * Constructor for WkbReader with specified validation level and geography mode.
    * @param validationLevel validation level (0 = no validation, 1 = basic validation)
-   * @param geographyMode if true, validates geography coordinate bounds for longitude and latitude
+   * @param isGeography if true, validates geography coordinate bounds for longitude and latitude
    */
-  public WkbReader(int validationLevel, boolean geographyMode) {
+  public WkbReader(int validationLevel, boolean isGeography) {
     this.validationLevel = validationLevel;
-    this.geographyMode = geographyMode;
+    this.isGeography = isGeography;
   }
 
   // ========== Coordinate Validation Helpers ==========
@@ -120,7 +119,7 @@ public class WkbReader {
    * level > 0, longitude must be between -180 and 180, and latitude must be between -90 and 90.
    */
   private void validateGeographyBounds(Point point, long pos) {
-    if (geographyMode && validationLevel > 0 && !point.isEmpty()) {
+    if (isGeography && validationLevel > 0 && !point.isEmpty()) {
       if (!isValidLongitude(point.getX()) || !isValidLatitude(point.getY())) {
         throw new WkbParseException("Invalid coordinate value found", pos, currentWkb);
       }
