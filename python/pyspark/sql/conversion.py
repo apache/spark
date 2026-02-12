@@ -1354,6 +1354,7 @@ class ArrowArrayToPandasConversion:
             LongType,
             TimestampType,
             TimestampNTZType,
+            UserDefinedType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1483,13 +1484,22 @@ class ArrowArrayToPandasConversion:
                 "date_as_object": True,
             }
             series = arr.to_pandas(**pandas_options)
+        elif isinstance(spark_type, UserDefinedType):
+            udt: UserDefinedType = spark_type
+            series = arr.to_pandas(date_as_object=True)
+            series = series.apply(
+                lambda v: v
+                if hasattr(v, "__UDT__")
+                else udt.deserialize(v)
+                if v is not None
+                else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         UserDefinedType,
         #         VariantType,
         #         GeographyType,
         #         GeometryType,
