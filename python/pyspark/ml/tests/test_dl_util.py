@@ -65,7 +65,9 @@ class TestFunctionPickler(unittest.TestCase):
                 self.assertEqual(file_path_to_save, pickled_fn_path)
 
             with open(pickled_fn_path, "rb") as f:
-                self._check_if_test_function_pickled(f, TestFunctionPickler._test_function, 10, x, y)
+                self._check_if_test_function_pickled(
+                    f, TestFunctionPickler._test_function, 10, x, y
+                )
             os.remove(pickled_fn_path)
 
             if save_dir != "":
