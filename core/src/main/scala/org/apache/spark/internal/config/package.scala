@@ -651,7 +651,7 @@ package object config {
       .doc("Maximum time to wait for the ShuffleManager to be initialized when receiving " +
         "shuffle migration requests. If the ShuffleManager is not initialized within this " +
         "timeout, the migration request will be rejected and the sender should retry.")
-      .version("4.1.0")
+      .version("4.2.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "Timeout should be positive.")
       .createWithDefaultString("30s")
