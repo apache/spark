@@ -19,6 +19,7 @@ from functools import total_ordering
 import itertools
 import os
 import re
+from pathlib import Path
 
 all_modules = []
 
@@ -88,6 +89,19 @@ class Module(object):
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
+
+    def missing_potential_python_test(self, filename):
+        """
+        Check if the given filename is missing from the module if it is a Python test file.
+
+        Return True if it is a test file and is not included in the module.
+        """
+        path = Path(filename)
+        last_part = path.parts[-1]
+        if not re.match(r"test_.*\.py", last_part):
+            return False
+        module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
+        return not any(module_path.endswith(test) for test in self.python_test_goals)
 
     def __repr__(self):
         return "Module<%s>" % self.name
