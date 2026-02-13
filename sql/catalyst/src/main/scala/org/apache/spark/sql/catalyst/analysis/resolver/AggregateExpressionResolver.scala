@@ -121,7 +121,8 @@ class AggregateExpressionResolver(
             // Allow when the mismatch is only because child was cast
             val mismatchDueToCast = listAgg.orderExpressions.size == 1 &&
               (listAgg.child match {
-                case Cast(castChild, _, _, _) => listAgg.orderExpressions.head.child.semanticEquals(castChild)
+                case Cast(castChild, _, _, _) =>
+                  listAgg.orderExpressions.head.child.semanticEquals(castChild)
                 case _ => false
               })
             if (!mismatchDueToCast) {
