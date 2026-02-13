@@ -73,7 +73,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type, TimestampType
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, TimestampType
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -2852,8 +2852,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         import pyarrow as pa
-        from pyspark.sql.pandas.types import to_arrow_schema
-
         combined_return_type = StructType(
             [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
         )
