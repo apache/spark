@@ -2862,12 +2862,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         def func(
             split_index: int, batches: Iterator[pa.RecordBatch]
         ) -> Iterator[pa.RecordBatch]:
-            """Apply scalar Arrow UDFs: extract → call → assemble → enforce → verify."""
+            """Apply scalar Arrow UDFs"""
 
             def process_batch(input_batch: pa.RecordBatch) -> pa.RecordBatch:
-                """Apply UDFs, enforce schema, and verify row count."""
-                # Extract columns by offsets, group into args/kwargs, apply each UDF
-                # Assemble UDF results, enforce schema, verify row count
                 output_batch = pa.RecordBatch.from_arrays(
                     [
                         udf_func(
