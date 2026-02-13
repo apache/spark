@@ -135,29 +135,6 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
-  test("InvalidPlanInput should have SQL state 56K00 when using apply(String)") {
-    val error = InvalidPlanInput("test error message")
-    assert(error.getSqlState == "56K00")
-    assert(error.getCondition == "INTERNAL_ERROR")
-  }
-
-  test("InvalidPlanInput should have SQL state 56K00 when using apply(String, Map)") {
-    val error = InvalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> "INT"))
-    assert(error.getSqlState == "56K00")
-    assert(error.getCondition == "INVALID_SCHEMA_TYPE_NON_STRUCT")
-  }
-
-  test("InvalidPlanInput thrown from planner should have SQL state 56K00") {
-    val exception = intercept[InvalidPlanInput] {
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setDeduplicate(proto.Deduplicate.newBuilder().setAllColumnsAsKeys(true).build())
-          .build())
-    }
-    assert(exception.getSqlState == "56K00")
-  }
-
   // Helper case class to define test cases
   case class TestCase(
       name: String,

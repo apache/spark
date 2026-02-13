@@ -118,7 +118,7 @@ object IllegalStateErrors {
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.STATE_CONSISTENCY_CLEANER_ALREADY_SET",
       messageParameters = Map(
         "key" -> key,
-        "queryKey" -> queryKey.toString))
+        "queryKey" -> queryKey))
 
   def eventSendAfterShutdown(key: String): SparkIllegalStateException =
     new SparkIllegalStateException(

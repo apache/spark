@@ -5498,39 +5498,9 @@
       "Spark Connect encountered an illegal state condition."
     ],
     "subClass" : {
-      "DATA_INTEGRITY_CHUNK_INDEX_MISMATCH" : {
-        "message" : [
-          "Chunk index mismatch: expected <expectedChunkIndex>, but got <actualChunkIndex>."
-        ]
-      },
       "DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS" : {
         "message" : [
           "Cursor out of bounds: <cursor> exceeds batch size <batchSize>."
-        ]
-      },
-      "DATA_INTEGRITY_OPERATION_ID_MISMATCH" : {
-        "message" : [
-          "Operation ID mismatch in response: expected <expectedOperationId>, but got <actualOperationId>."
-        ]
-      },
-      "DATA_INTEGRITY_ROW_COUNT_MISMATCH" : {
-        "message" : [
-          "Row count mismatch: expected <expectedRowCount>, but got <actualRowCount>."
-        ]
-      },
-      "DATA_INTEGRITY_ROW_OFFSET_MISMATCH" : {
-        "message" : [
-          "Row offset mismatch: expected <expectedRowOffset>, but got <actualRowOffset>."
-        ]
-      },
-      "DATA_INTEGRITY_SCHEMA_MISMATCH" : {
-        "message" : [
-          "Schema mismatch in ArrowBatch: expected schema with <expectedFieldCount> fields, but got <actualFieldCount> fields."
-        ]
-      },
-      "EXECUTION_STATE_CANNOT_RESTART_EXECUTION" : {
-        "message" : [
-          "Cannot restart execution: <reason>."
         ]
       },
       "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS" : {
@@ -5543,24 +5513,9 @@
           "ExecuteHolder for graph ID <graphId> already exists."
         ]
       },
-      "EXECUTION_STATE_ILLEGAL_OPERATION_TYPE" : {
-        "message" : [
-          "Illegal operation type: <operationType>."
-        ]
-      },
       "EXECUTION_STATE_OPERATION_ORPHANED" : {
         "message" : [
           "Operation <key> has been orphaned."
-        ]
-      },
-      "EXECUTION_STATE_RESPONSES_ALREADY_RECEIVED" : {
-        "message" : [
-          "Responses have already been received; cannot restart."
-        ]
-      },
-      "SESSION_MANAGEMENT_SERVER_SESSION_ID_CHANGED" : {
-        "message" : [
-          "Server session ID changed from <previousSessionId> to <newSessionId>."
         ]
       },
       "SESSION_MANAGEMENT_SERVICE_NOT_STARTED" : {
@@ -5571,16 +5526,6 @@
       "SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED" : {
         "message" : [
           "Session <key> is already closed."
-        ]
-      },
-      "SESSION_MANAGEMENT_SESSION_ID_MISMATCH" : {
-        "message" : [
-          "Session ID mismatch: expected <expectedSessionId>, but got <actualSessionId>."
-        ]
-      },
-      "STATE_CONSISTENCY_BATCH_ALREADY_COMPLETED" : {
-        "message" : [
-          "Batch has already been completed."
         ]
       },
       "STATE_CONSISTENCY_CLEANER_ALREADY_SET" : {
@@ -5608,11 +5553,6 @@
           "Invalid session state transition for sessionId <sessionId>: current state <fromState> cannot transition to <toState>. Valid states: <validStates>."
         ]
       },
-      "STREAMING_QUERY_DATAFRAME_CACHE_ERROR" : {
-        "message" : [
-          "DataFrame cache error: <details>."
-        ]
-      },
       "STREAMING_QUERY_UNEXPECTED_RETURN_VALUE" : {
         "message" : [
           "Unexpected return value <value> from Python worker in <context> for session <key>."
@@ -5626,11 +5566,6 @@
       "STREAM_LIFECYCLE_EVENT_SEND_AFTER_SHUTDOWN" : {
         "message" : [
           "Cannot send event after shutdown for session <key>."
-        ]
-      },
-      "STREAM_LIFECYCLE_INNER_ITERATOR_UNSET" : {
-        "message" : [
-          "Inner iterator is not set. Reattach must be called before proceeding."
         ]
       }
     },
