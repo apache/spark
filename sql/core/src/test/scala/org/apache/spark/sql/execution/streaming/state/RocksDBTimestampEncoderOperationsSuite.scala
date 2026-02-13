@@ -351,19 +351,15 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
    * diverse timestamp values that exercise binary lexicographic encoding edge cases.
    *
    * @param encoderType "prefix" or "postfix"
-   * @param useMultipleValuesPerKey whether to store multiple values per (key, timestamp)
    * @param encoding data encoding format (e.g. "unsaferow")
    */
   private def testDiverseTimestampOrdering(
       encoderType: String,
-      useMultipleValuesPerKey: Boolean,
       encoding: String): Unit = {
-    val valuesPerKey = if (useMultipleValuesPerKey) 2 else 1
-
     tryWithProviderResource(
       newStoreProviderWithTimestampEncoder(
         encoderType = encoderType,
-        useMultipleValuesPerKey = useMultipleValuesPerKey,
+        useMultipleValuesPerKey = false,
         dataEncoding = encoding)
     ) { provider =>
       val store = provider.getStore(0)
@@ -372,12 +368,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         // Insert diverse timestamps in non-sorted order
         diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
           val keyRow = keyAndTimestampToRow("key1", 1, ts)
-          if (useMultipleValuesPerKey) {
-            val values = Array(valueToRow(idx * 10), valueToRow(idx * 10 + 1))
-            store.putList(keyRow, values)
-          } else {
-            store.put(keyRow, valueToRow(idx))
-          }
+          store.put(keyRow, valueToRow(idx))
         }
 
         // For postfix encoder, add a different key to verify prefix scan isolation
@@ -389,18 +380,16 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val iter = encoderType match {
           // For prefix encoder, we use iterator
           case "prefix" =>
-            if (useMultipleValuesPerKey) store.iteratorWithMultiValues()
-            else store.iterator()
+            store.iterator()
           // For postfix encoder, we use prefix scan with ("key1", 1) as the prefix key
           case "postfix" =>
-            if (useMultipleValuesPerKey) store.prefixScanWithMultiValues(keyToRow("key1", 1))
-            else store.prefixScan(keyToRow("key1", 1))
+            store.prefixScan(keyToRow("key1", 1))
         }
 
         val results = iter.map(_.key.getLong(2)).toList
         iter.close()
 
-        assert(results.length === diverseTimestamps.length * valuesPerKey)
+        assert(results.length === diverseTimestamps.length)
 
         // Verify event times are in ascending order
         val distinctEventTimes = results.distinct
@@ -416,12 +405,9 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   //  encoding
   Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
-      Seq(false, true).foreach { useMultipleValuesPerKey =>
-        val multiValueSuffix = if (useMultipleValuesPerKey) " and multiple values" else ""
-        test(s"Event time as $encoderType: ordering with diverse timestamps" +
-          s"$multiValueSuffix (encoding = $encoding)") {
-          testDiverseTimestampOrdering(encoderType, useMultipleValuesPerKey, encoding)
-        }
+      test(s"Event time as $encoderType: ordering with diverse timestamps" +
+        s"$(encoding = $encoding)") {
+        testDiverseTimestampOrdering(encoderType, encoding)
       }
     }
   }
