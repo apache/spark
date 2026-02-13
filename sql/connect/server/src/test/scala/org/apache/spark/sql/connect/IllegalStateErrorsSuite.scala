@@ -56,8 +56,7 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
     assert(error.getMessage.contains(currentStatus.toString))
   }
 
-  test(
-    "executionStateTransitionInvalidSessionNotStarted should construct error correctly") {
+  test("executionStateTransitionInvalidSessionNotStarted should construct error correctly") {
     val sessionId = "session-456"
     val sessionStatus = SessionStatus.Pending
     val eventStatus = ExecuteStatus.Started
@@ -75,8 +74,7 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
   test("executeHolderAlreadyExists should construct error correctly") {
     val operationId = "op-789"
     val error = IllegalStateErrors.executeHolderAlreadyExists(operationId)
-    assert(
-      error.getCondition.contains("EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS"))
+    assert(error.getCondition.contains("EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS"))
     assert(error.getMessage.contains(operationId))
   }
 
@@ -108,11 +106,8 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
     val fromState = SessionStatus.Started
     val toState = SessionStatus.Closed
     val validStates = List(SessionStatus.Pending, SessionStatus.Started)
-    val error = IllegalStateErrors.sessionStateTransitionInvalid(
-      sessionId,
-      fromState,
-      toState,
-      validStates)
+    val error =
+      IllegalStateErrors.sessionStateTransitionInvalid(sessionId, fromState, toState, validStates)
     val expectedCondition =
       "STATE_CONSISTENCY_SESSION_STATE_TRANSITION_INVALID"
     assert(error.getCondition.contains(expectedCondition))

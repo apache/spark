@@ -5505,12 +5505,12 @@
       },
       "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS" : {
         "message" : [
-          "ExecuteHolder for operation <operationId> already exists."
+          "ExecuteHolder with opId=<operationId> already exists!"
         ]
       },
       "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS_GRAPH" : {
         "message" : [
-          "ExecuteHolder for graph ID <graphId> already exists."
+          "Pipeline execution for graph ID <graphId> already exists. Stop the existing execution before starting a new one."
         ]
       },
       "EXECUTION_STATE_OPERATION_ORPHANED" : {
@@ -5520,7 +5520,7 @@
       },
       "SESSION_MANAGEMENT_SERVICE_NOT_STARTED" : {
         "message" : [
-          "SparkConnectService has not been started yet."
+          "Attempting to stop the Spark Connect service that has not been started."
         ]
       },
       "SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED" : {
@@ -5535,12 +5535,12 @@
       },
       "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_OPERATION_STATUS_MISMATCH" : {
         "message" : [
-          "Invalid execution state transition: Operation <operationId> has status <currentStatus> which is not in valid statuses <validStatuses> for event <eventStatus>."
+          "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
         ]
       },
       "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED" : {
         "message" : [
-          "Invalid execution state transition: Session <sessionId> has status <sessionStatus> but must be Started for event <eventStatus>."
+          "sessionId: <sessionId> with status <sessionStatus> is not Started for event <eventStatus>"
         ]
       },
       "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {
@@ -5550,7 +5550,7 @@
       },
       "STATE_CONSISTENCY_SESSION_STATE_TRANSITION_INVALID" : {
         "message" : [
-          "Invalid session state transition for sessionId <sessionId>: current state <fromState> cannot transition to <toState>. Valid states: <validStates>."
+          "sessionId: <sessionId> with status <fromState> is not within statuses <validStates> for event <toState>"
         ]
       },
       "STREAMING_QUERY_UNEXPECTED_RETURN_VALUE" : {
@@ -5560,7 +5560,7 @@
       },
       "STREAM_LIFECYCLE_ALREADY_COMPLETED" : {
         "message" : [
-          "Stream already completed: cannot call <operation>."
+          "Stream <operation> can't be called after stream completed"
         ]
       },
       "STREAM_LIFECYCLE_EVENT_SEND_AFTER_SHUTDOWN" : {

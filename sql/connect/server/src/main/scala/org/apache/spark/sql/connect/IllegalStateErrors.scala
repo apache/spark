@@ -30,9 +30,7 @@ object IllegalStateErrors {
   def cursorOutOfBounds(cursor: Long, batchSize: Long): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS",
-      messageParameters = Map(
-        "cursor" -> cursor.toString,
-        "batchSize" -> batchSize.toString))
+      messageParameters = Map("cursor" -> cursor.toString, "batchSize" -> batchSize.toString))
 
   def executionStateTransitionInvalidOperationStatus(
       operationId: String,
@@ -106,19 +104,12 @@ object IllegalStateErrors {
       context: String): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.STREAMING_QUERY_UNEXPECTED_RETURN_VALUE",
-      messageParameters = Map(
-        "key" -> key,
-        "value" -> value.toString,
-        "context" -> context))
+      messageParameters = Map("key" -> key, "value" -> value.toString, "context" -> context))
 
-  def cleanerAlreadySet(
-      key: String,
-      queryKey: String): SparkIllegalStateException =
+  def cleanerAlreadySet(key: String, queryKey: String): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.STATE_CONSISTENCY_CLEANER_ALREADY_SET",
-      messageParameters = Map(
-        "key" -> key,
-        "queryKey" -> queryKey))
+      messageParameters = Map("key" -> key, "queryKey" -> queryKey))
 
   def eventSendAfterShutdown(key: String): SparkIllegalStateException =
     new SparkIllegalStateException(
