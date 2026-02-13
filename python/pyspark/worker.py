@@ -54,13 +54,13 @@ from pyspark.sql.conversion import (
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
+    ArrowStreamSerializer,
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     ArrowStreamGroupUDFSerializer,
     GroupPandasUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
-    ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
@@ -215,6 +215,48 @@ def report_times(outfile, boot, init, finish, processing_time_ms):
 def chain(f, g):
     """chain two functions together"""
     return lambda *a: g(f(*a))
+
+
+def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
+    """
+    Create a result verifier that checks both iterability and element types.
+
+    Returns a function that takes a UDF result, verifies it is iterable,
+    and lazily type-checks each element via map.
+
+    Parameters
+    ----------
+    expected_type : type
+        The expected Python/PyArrow type for each element
+        (e.g. pa.RecordBatch, pa.Array).
+    """
+
+    package = getattr(inspect.getmodule(expected_type), "__package__", "")
+    label: str = f"{package}.{expected_type.__name__}"
+
+    def check_element(element: Any) -> Any:
+        if not isinstance(element, expected_type):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": f"iterator of {label}",
+                    "actual": f"iterator of {type(element).__name__}",
+                },
+            )
+        return element
+
+    def check(result: Any) -> Iterator:
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": f"iterator of {label}",
+                    "actual": type(result).__name__,
+                },
+            )
+        return map(check_element, result)
+
+    return check
 
 
 def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
@@ -561,41 +603,6 @@ def wrap_arrow_array_iter_udf(f, return_type, runner_conf):
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={
                     "expected": "iterator of pyarrow.Array",
-                    "actual": "iterator of {}".format(type(elem).__name__),
-                },
-            )
-
-        return elem
-
-    return lambda *iterator: map(
-        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
-    )
-
-
-def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
-    def verify_result(result):
-        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": "iterator of pyarrow.RecordBatch",
-                    "actual": type(result).__name__,
-                },
-            )
-        return result
-
-    def verify_element(elem):
-        import pyarrow as pa
-
-        if not isinstance(elem, pa.RecordBatch):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": "iterator of pyarrow.RecordBatch",
                     "actual": "iterator of {}".format(type(elem).__name__),
                 },
             )
@@ -1423,7 +1430,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return args_offsets, wrap_arrow_batch_iter_udf(func, return_type, runner_conf)
+        return func
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
@@ -2766,7 +2773,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 runner_conf.arrow_max_records_per_batch
             )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-            ser = ArrowStreamUDFSerializer()
+            ser = ArrowStreamSerializer(write_start_stream=True)
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
@@ -2827,25 +2834,46 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         for i in range(num_udfs)
     ]
 
+    if eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
+        import pyarrow as pa
+
+        assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
+        udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0]
+
+        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            """Apply mapInArrow UDF"""
+
+            # Pre-processing
+            input_batches: Iterator[pa.RecordBatch] = map(
+                ArrowBatchTransformer.flatten_struct, batches
+            )
+
+            # invoke the UDF
+            output_batches = udf_func(input_batches)
+
+            # Post-processing
+            verified: Iterator[pa.RecordBatch] = verify_result(pa.RecordBatch)(output_batches)
+            yield from map(ArrowBatchTransformer.wrap_struct, verified)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
     )
     is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-    is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
-    if is_scalar_iter or is_map_pandas_iter or is_map_arrow_iter:
+    if is_scalar_iter or is_map_pandas_iter:
         # TODO: Better error message for num_udfs != 1
         if is_scalar_iter:
             assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
         if is_map_pandas_iter:
             assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
-        if is_map_arrow_iter:
-            assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
         arg_offsets, udf = udfs[0]
 
-        def func(_, iterator):
+        def func(_, iterator):  # type: ignore[misc]
             num_input_rows = 0
 
             def map_batch(batch):
