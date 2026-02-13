@@ -1829,7 +1829,7 @@ abstract class TimestampKeyStateEncoder(
  * timestamp ordering.
  *
  * The encoder expects the provided key schema to have [original key fields..., timestamp field].
- * The key has to be conformed to this schema when putting/getting from the state store. The schema
+ * The key has to conform to this schema when putting/getting from the state store. The schema
  * needs to be built via calling [[TimestampKeyStateEncoder.keySchemaWithTimestamp()]].
  */
 class TimestampAsPrefixKeyStateEncoder(
