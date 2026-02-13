@@ -2852,15 +2852,12 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         import pyarrow as pa
-        combined_return_type = StructType(
-            [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
-        )
+        col_names = ["_%d" % i for i in range(len(udfs))]
         combined_arrow_schema = to_arrow_schema(
-            combined_return_type,
+            StructType([StructField(n, rt) for n, (_, _, _, rt) in zip(col_names, udfs)]),
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
-        col_names = ["_%d" % i for i in range(len(udfs))]
 
         def func(
             split_index: int, batches: Iterator[pa.RecordBatch]
