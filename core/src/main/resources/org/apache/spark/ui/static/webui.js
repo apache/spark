@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, collapseTableAndButton, loadMore, loadNew, toggleDagViz, togglePlanViz, clickPhysicalPlanDetails */
 /* eslint-disable no-unused-vars */
 var uiRoot = "";
 var appBasePath = "";
