@@ -2343,7 +2343,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
 
                 def raise_conversion_error(original_exception):
                     raise PySparkRuntimeError(
-                        errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                        errorClass="UDTF_ARROW_DATA_CONVERSION_ERROR",
                         messageParameters={
                             "data": str(data),
                             "schema": return_type.simpleString(),
