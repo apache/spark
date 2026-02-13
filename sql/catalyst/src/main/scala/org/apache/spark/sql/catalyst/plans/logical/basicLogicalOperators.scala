@@ -567,51 +567,6 @@ abstract class UnionBase extends LogicalPlan {
 }
 
 /**
- * Trait for union operators that support standard optimizer rules like flattening and
- * projection push-down.
- *
- * IMPORTANT: Child order preservation semantics:
- * - Optimizer rules operating on UnionLike MUST preserve the order of children
- * - Some implementations (e.g., SequentialStreamingUnion) have semantically significant
- *   child ordering where children are processed sequentially in order
- * - Other implementations (e.g., Union) have no semantic ordering - children are processed
- *   in parallel and their order is insignificant for correctness
- * - Order-dependent optimizations (e.g., reordering children for performance) should ONLY
- *   be applied to specific implementations where order is not significant, NOT to UnionLike
- *   in general
- *
- * Optimizer rules that are safe for all UnionLike implementations:
- * - Flattening nested unions (preserves child order within the flattened sequence)
- * - Pushing projections down to children (each child maintains its position)
- * - Collapsing adjacent projects (order-preserving transformation)
- *
- * IMPORTANT: Union and SequentialStreamingUnion should never be merged with each other
- * as they have different execution semantics. Use `isSameType` to check compatibility.
- *
- * This trait provides:
- * - byName: controls whether column resolution is by name vs position
- * - allowMissingCol: allows children to have different columns (requires byName)
- * - children: inherited from LogicalPlan via UnionBase
- * - isSameType: checks if another UnionLike can be merged with this one
- */
-trait UnionLike extends LogicalPlan { self: UnionBase =>
-  def byName: Boolean
-  def allowMissingCol: Boolean
-
-  /**
-   * Returns true if the other UnionLike is the same concrete type as this one.
-   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
-   */
-  def isSameType(other: UnionLike): Boolean
-
-  /**
-   * Creates a new instance of this UnionLike with the specified children.
-   * Implementations should delegate to their case class copy() method.
-   */
-  def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): UnionLike
-}
-
-/**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
  * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
@@ -626,13 +581,8 @@ trait UnionLike extends LogicalPlan { self: UnionBase =>
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
-    allowMissingCol: Boolean = false) extends UnionBase with UnionLike {
+    allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
-
-  override def isSameType(other: UnionLike): Boolean = other.isInstanceOf[Union]
-
-  override def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): Union =
-    copy(children = newChildren)
 
   override lazy val maxRows: Option[Long] = {
     val sum = children.foldLeft(Option(BigInt(0))) {

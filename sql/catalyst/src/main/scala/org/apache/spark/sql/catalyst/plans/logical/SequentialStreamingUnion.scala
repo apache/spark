@@ -71,14 +71,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 case class SequentialStreamingUnion(
     children: Seq[LogicalPlan],
     byName: Boolean,
-    allowMissingCol: Boolean) extends UnionBase with UnionLike {
+    allowMissingCol: Boolean) extends UnionBase {
   assert(!allowMissingCol || byName,
     "`allowMissingCol` can be true only if `byName` is true.")
-
-  override def isSameType(other: UnionLike): Boolean = other.isInstanceOf[SequentialStreamingUnion]
-
-  override def withNewChildrenSeq(newChildren: Seq[LogicalPlan]): SequentialStreamingUnion =
-    copy(children = newChildren)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SEQUENTIAL_STREAMING_UNION)
 
