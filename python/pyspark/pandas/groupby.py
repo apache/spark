@@ -58,6 +58,7 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
@@ -1808,7 +1809,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             numeric_only=True,
         )
 
-    def apply(self, func: Callable, *args: Any, **kwargs: Any) -> Union[DataFrame, Series]:
+    def apply(
+        self,
+        func: Callable,
+        *args: Any,
+        include_groups: Union[bool, _NoValueType] = _NoValue,
+        **kwargs: Any,
+    ) -> Union[DataFrame, Series]:
         """
         Apply function `func` group-wise and combine the results together.
 
@@ -1963,6 +1970,24 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if include_groups is _NoValue:
+                include_groups = True
+            if include_groups:
+                warnings.warn(
+                    "DataFrameGroupBy.apply operated on the grouping columns. "
+                    "This behavior is deprecated, and in a future version of pandas "
+                    "the grouping columns will be excluded from the operation. "
+                    "Either pass `include_groups=False` to exclude the groupings or "
+                    "explicitly select the grouping columns after groupby to silence this warning.",
+                    FutureWarning,
+                )
+        else:
+            if include_groups is _NoValue:
+                include_groups = False
+            if include_groups:
+                raise ValueError("include_groups=True is no longer allowed.")
+
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
@@ -1980,10 +2005,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for label in psdf._internal.column_labels
                 if label not in self._column_labels_to_exclude
             ]
+            if not include_groups:
+                agg_columns = [
+                    col for col in agg_columns if all(col is not gkey for gkey in self._groupkeys)
+                ]
 
         psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
             psdf, self._groupkeys, agg_columns
         )
+        groupkey_psser_names = [psser.name for psser in self._groupkeys]
 
         if LooseVersion(pd.__version__) < "3.0.0":
             from pandas.core.common import is_builtin_func  # type: ignore[import-not-found]
@@ -2014,8 +2044,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             sample_limit = limit + 1 if limit else 2
             pdf = psdf.head(sample_limit)._to_internal_pandas()
             groupkeys = [
-                pdf[groupkey_name].rename(psser.name)
-                for groupkey_name, psser in zip(groupkey_names, self._groupkeys)
+                pdf[groupkey_name].rename(name)
+                for groupkey_name, name in zip(groupkey_names, groupkey_psser_names)
             ]
             grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
@@ -2086,10 +2116,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return_schema = StructType([field.struct_field for field in data_fields])
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
+            groupkeys = [
+                pdf[groupkey_name].rename(name)
+                for groupkey_name, name in zip(groupkey_names, groupkey_psser_names)
+            ]
+            grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
-                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
+                pdf_or_ser = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pdf_or_ser = pdf.groupby(groupkey_names).apply(pandas_apply, *args, **kwargs)
+                pdf_or_ser = grouped.apply(pandas_apply, *args, **kwargs)
                 if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
                     pdf_or_ser = pdf_or_ser.stack()
 

@@ -801,25 +801,25 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, TimestampType):
 
-            def convert_timestample(value: Any) -> Any:
+            def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value.astimezone().replace(tzinfo=None)
 
-            return convert_timestample
+            return convert_timestamp
 
         elif isinstance(dataType, TimestampNTZType):
 
-            def convert_timestample_ntz(value: Any) -> Any:
+            def convert_timestamp_ntz(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value
 
-            return convert_timestample_ntz
+            return convert_timestamp_ntz
 
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
@@ -1354,6 +1354,7 @@ class ArrowArrayToPandasConversion:
             LongType,
             TimestampType,
             TimestampNTZType,
+            UserDefinedType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1483,13 +1484,22 @@ class ArrowArrayToPandasConversion:
                 "date_as_object": True,
             }
             series = arr.to_pandas(**pandas_options)
+        elif isinstance(spark_type, UserDefinedType):
+            udt: UserDefinedType = spark_type
+            series = arr.to_pandas(date_as_object=True)
+            series = series.apply(
+                lambda v: v
+                if hasattr(v, "__UDT__")
+                else udt.deserialize(v)
+                if v is not None
+                else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         UserDefinedType,
         #         VariantType,
         #         GeographyType,
         #         GeometryType,
