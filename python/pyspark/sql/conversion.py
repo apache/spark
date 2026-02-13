@@ -1355,6 +1355,7 @@ class ArrowArrayToPandasConversion:
             TimestampType,
             TimestampNTZType,
             UserDefinedType,
+            VariantType,
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
@@ -1494,13 +1495,17 @@ class ArrowArrayToPandasConversion:
                 if v is not None
                 else None
             )
+        elif isinstance(spark_type, VariantType):
+            series = arr.to_pandas(date_as_object=True)
+            series = series.apply(
+                lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
+            )
         # elif isinstance(
         #     spark_type,
         #     (
         #         ArrayType,
         #         MapType,
         #         StructType,
-        #         VariantType,
         #         GeographyType,
         #         GeometryType,
         #     ),
