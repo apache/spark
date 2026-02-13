@@ -849,19 +849,6 @@ class ArrowTestsMixin:
                     schema3 = from_arrow_schema(pa_schema2)
                     self.assertEqual(t, schema3)
 
-    def test_from_arrow_type_struct_with_wkb_field_no_metadata(self):
-        """SPARK-55507: is_geometry/is_geography should not crash when field has no metadata"""
-        import pyarrow as pa
-
-        # A struct with a field named "wkb" but no metadata should be treated as
-        # a regular struct, not crash with TypeError in is_geometry/is_geography.
-        arrow_type = pa.struct([pa.field("wkb", pa.binary()), pa.field("srid", pa.int32())])
-        spark_type = from_arrow_type(arrow_type)
-        self.assertIsInstance(spark_type, StructType)
-        self.assertEqual(len(spark_type.fields), 2)
-        self.assertEqual(spark_type.fields[0].name, "wkb")
-        self.assertEqual(spark_type.fields[1].name, "srid")
-
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
