@@ -298,12 +298,35 @@ class PandasToArrowConversion:
         else:
             columns = list(data)
 
-        def series_to_array(series: "pd.Series", ret_type: DataType, field_name: str) -> "pa.Array":
-            """Convert a pandas Series to an Arrow Array (closure over conversion params).
+        def convert_column(
+            col: Union["pd.Series", "pd.DataFrame"], field: StructField
+        ) -> "pa.Array":
+            """Convert a single column (Series or DataFrame) to an Arrow Array.
 
-            Uses field_name for error messages instead of series.name to avoid
+            Uses field.name for error messages instead of series.name to avoid
             copying the Series via rename() — a ~20% overhead on the hot path.
             """
+            if isinstance(col, pd.DataFrame):
+                assert isinstance(field.dataType, StructType)
+                nested_batch = cls.convert(
+                    col,
+                    field.dataType,
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    arrow_cast=arrow_cast,
+                    prefers_large_types=prefers_large_types,
+                    assign_cols_by_name=assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                    ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+                    is_udtf=is_udtf,
+                )
+                # Wrap the nested RecordBatch as a single StructArray column
+                return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
+
+            series = col
+            field_name = field.name
+            ret_type = field.dataType
+
             if isinstance(series.dtype, pd.CategoricalDtype):
                 series = series.astype(series.dtype.categories.dtype)
 
@@ -374,28 +397,6 @@ class PandasToArrowConversion:
                             "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     raise PySparkValueError(error_msg) from e
-
-        def convert_column(
-            col: Union["pd.Series", "pd.DataFrame"], field: StructField
-        ) -> "pa.Array":
-            """Convert a single column (Series or DataFrame) to an Arrow Array."""
-            if isinstance(col, pd.DataFrame):
-                assert isinstance(field.dataType, StructType)
-                nested_batch = cls.convert(
-                    col,
-                    field.dataType,
-                    timezone=timezone,
-                    safecheck=safecheck,
-                    arrow_cast=arrow_cast,
-                    prefers_large_types=prefers_large_types,
-                    assign_cols_by_name=assign_cols_by_name,
-                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-                    ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
-                    is_udtf=is_udtf,
-                )
-                # Wrap the nested RecordBatch as a single StructArray column
-                return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
-            return series_to_array(col, field.dataType, field.name)
 
         arrays = [convert_column(col, field) for col, field in zip(columns, schema.fields)]
         return pa.RecordBatch.from_arrays(arrays, schema.names)
