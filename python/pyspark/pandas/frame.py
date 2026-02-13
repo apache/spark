@@ -9286,7 +9286,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 mask = pandas_udf(filter_func, BooleanType())(old_col)
                 updated_col = (
-                    F.when(new_col.isNull() | (mask != True), old_col).otherwise(new_col)
+                    F.when(new_col.isNull() | mask.isNull() | ~mask, old_col).otherwise(new_col)
                     if overwrite
                     else F.when(old_col.isNull() & mask, new_col).otherwise(old_col)
                 )

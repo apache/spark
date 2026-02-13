@@ -667,9 +667,8 @@ class FrameCombineMixin:
         right_psdf = ps.from_pandas(right_pdf)
 
         # Only update values > 25
-        filter_func = lambda x: x > 25
-        left_pdf.update(right_pdf, filter_func=filter_func)
-        left_psdf.update(right_psdf, filter_func=filter_func)
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 25)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 25)
 
         self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
 
@@ -682,9 +681,8 @@ class FrameCombineMixin:
         right_psdf = ps.from_pandas(right_pdf)
 
         # Only update where new value > 150 (and old is null)
-        filter_func = lambda x: x > 150
-        left_pdf.update(right_pdf, overwrite=False, filter_func=filter_func)
-        left_psdf.update(right_psdf, overwrite=False, filter_func=filter_func)
+        left_pdf.update(right_pdf, overwrite=False, filter_func=lambda x: x > 150)
+        left_psdf.update(right_psdf, overwrite=False, filter_func=lambda x: x > 150)
 
         self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
 
@@ -724,17 +722,15 @@ class FrameCombineMixin:
         right_psdf = ps.DataFrame({"B": [100, 200, 300]})
 
         # Filter only values < 25 - should find overlaps at positions 0 and 1
-        filter_func = lambda x: x < 25
         with self.assertRaisesRegex(ValueError, "Data overlaps."):
-            left_psdf.update(right_psdf, filter_func=filter_func, errors="raise")
+            left_psdf.update(right_psdf, filter_func=lambda x: x < 25, errors="raise")
 
         # Filter only values > 100 - no overlaps since no original values > 100
         left_psdf2 = ps.DataFrame({"A": [1, 2, 3], "B": [10, 20, 30]})
         right_psdf2 = ps.DataFrame({"B": [100, 200, 300]})
-        filter_func2 = lambda x: x > 100
 
         # Should not raise - no values in original DataFrame match filter
-        left_psdf2.update(right_psdf2, filter_func=filter_func2, errors="raise")
+        left_psdf2.update(right_psdf2, filter_func=lambda x: x > 100, errors="raise")
 
     def test_update_filter_func_all_false(self):
         # Test filter_func that returns all False
@@ -745,12 +741,11 @@ class FrameCombineMixin:
         right_psdf = ps.from_pandas(right_pdf)
 
         # Filter that matches nothing
-        filter_func = lambda x: x > 1000
         original_left_pdf = left_pdf.copy()
         original_left_psdf = left_psdf.copy()
 
-        left_pdf.update(right_pdf, filter_func=filter_func)
-        left_psdf.update(right_psdf, filter_func=filter_func)
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 1000)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 1000)
 
         # DataFrame should be unchanged
         self.assert_eq(left_pdf.sort_index(), original_left_pdf.sort_index())
@@ -765,9 +760,8 @@ class FrameCombineMixin:
         right_psdf = ps.from_pandas(right_pdf)
 
         # Filter values > 10 (nulls will not match)
-        filter_func = lambda x: x > 10
-        left_pdf.update(right_pdf, filter_func=filter_func)
-        left_psdf.update(right_psdf, filter_func=filter_func)
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 10)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 10)
 
         self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
 
