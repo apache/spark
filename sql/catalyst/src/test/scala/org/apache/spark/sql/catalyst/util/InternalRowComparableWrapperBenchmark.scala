@@ -48,8 +48,11 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark("internal row comparable wrapper", partitionNum, output = output)
 
     benchmark.addCase("toSet") { _ =>
+      val internalRowComparableWrapperFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+          Seq(IntegerType, IntegerType))
       val distinct = partitions
-        .map(new InternalRowComparableWrapper(_, Seq(IntegerType, IntegerType)))
+        .map(internalRowComparableWrapperFactory)
         .toSet
       assert(distinct.size == bucketNum)
     }

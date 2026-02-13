@@ -3144,4 +3144,22 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select($"dd" / ($"num" + 3)),
       Seq((Duration.ofDays(2))).toDF())
   }
+
+  test("Column.transform: built-in functions") {
+    val df = Seq("  hello  ", "  world  ").toDF("text")
+
+    checkAnswer(
+      df.select($"text".transform(trim).transform(upper)),
+      Seq("HELLO", "WORLD").toDF()
+    )
+  }
+
+  test("Column.transform: lambda functions") {
+    val df = Seq(10, 20, 30).toDF("value")
+
+    checkAnswer(
+      df.select($"value".transform(_ + 5).transform(_ * 2).transform(_ - 10)),
+      Seq(20, 40, 60).toDF()
+    )
+  }
 }

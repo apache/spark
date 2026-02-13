@@ -21,11 +21,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A ManagedBuffer implementation that contains 0, 1, 2, 3, ..., (len-1).
@@ -38,7 +38,7 @@ public class TestManagedBuffer extends ManagedBuffer {
   private NettyManagedBuffer underlying;
 
   public TestManagedBuffer(int len) {
-    Preconditions.checkArgument(len <= Byte.MAX_VALUE);
+    JavaUtils.checkArgument(len <= Byte.MAX_VALUE, "length exceeds limit " + Byte.MAX_VALUE);
     this.len = len;
     byte[] byteArray = new byte[len];
     for (int i = 0; i < len; i ++) {

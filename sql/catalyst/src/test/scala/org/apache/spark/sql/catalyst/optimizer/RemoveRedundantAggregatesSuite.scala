@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDAF}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
@@ -288,5 +288,24 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("SPARK-36194: Negative case: child distinct keys is empty") {
     val originalQuery = Distinct(x.groupBy($"a", $"b")($"a", TrueLiteral)).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    object OptimizeNonRemovedRedundantAgg extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
+        PropagateEmptyRelation,
+        RemoveRedundantAggregates) :: Nil
+    }
+
+    val query = relation
+      .groupBy()(Literal(1).as("col1"), Literal(2).as("col2"), Literal(3).as("col3"))
+      .groupBy($"col1")(max($"col1"))
+      .analyze
+    val expected = relation
+      .groupBy()(Literal(1).as("col1"), Literal(2).as("col2"), Literal(3).as("col3"))
+      .groupBy($"col1")(max($"col1"))
+      .analyze
+    val optimized = OptimizeNonRemovedRedundantAgg.execute(query)
+    comparePlans(optimized, expected)
   }
 }

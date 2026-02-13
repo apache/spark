@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -43,6 +43,10 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.catalyst.dsl.expressions._
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf
+      .set(SQLConf.MANAGE_PARSER_CACHES.key, true.toString)
 
   private lazy val parser = new SparkSqlParser()
 
@@ -1024,6 +1028,140 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           fragment = sql,
           start = 0,
           stop = sql.length - 1))
+    }
+  }
+
+  private def awfulQuery(depth: Int): String = {
+    if (depth == 0) {
+      s"rand()"
+    } else {
+      s"case when ${awfulQuery(depth - 1)} > 0.5 " +
+      s"then ${awfulQuery(depth - 1)} " +
+      s"else ${awfulQuery(depth - 1)} " +
+      "end"
+    }
+  }
+
+  test("SPARK-47404: Managed parsers killswitch works") {
+    val initialSize = AbstractParser.getDFACacheNumStates
+    val mediumQuery = s"select ${awfulQuery(2)} from range(10)"
+
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (10000).toString,
+        SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> false.toString) {
+        parser.parsePlan(mediumQuery)
+      }
+      val disabledSize = AbstractParser.getDFACacheNumStates
+      // There should be no change to the state of the managed caches when not enabled
+      assert(disabledSize == initialSize)
+
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> true.toString) {
+        parser.parsePlan(mediumQuery)
+      }
+      val enabledSize = AbstractParser.getDFACacheNumStates
+      // Now the cache should be populated
+      assert(enabledSize > initialSize)
+    }
+  }
+
+  test("SPARK-47404: Always release Antlr cache when cache limit is 0") {
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val initialCacheSize = AbstractParser.getDFACacheNumStates
+    assert(initialCacheSize > 0)
+
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> 0.toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  test("SPARK-47404: Release ANTLR cache based on threshold") {
+    val smallQuery = "select id from range(10)"
+    val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+
+    // Chose this value based on the observed size of the parser cache being ~27k states after
+    // parsing `bigQuery` on my machine.
+    val threshold = 10000
+
+    // Fill the cache a little
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(smallQueryCacheSize > 0)
+    assert(smallQueryCacheSize < threshold)
+
+    // Parse a big query to fill the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan(bigQuery)
+    }
+    val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(bigQueryCacheSize > threshold)
+
+    // Parse a small query to release the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  test("SPARK-47404: Release Antlr cache based on memory ratio") {
+    val smallQuery = "select id from range(10)"
+    val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+
+    val driverMemory = Runtime.getRuntime.maxMemory()
+    // `bigQuery` fills the cache to about 27k states
+    val stateThreshold = 15000
+    // Calculate what ratio will give us this threshold based on driver memory
+    val ratio = stateThreshold * AbstractParser.BYTES_PER_DFA_STATE * 100.0 / driverMemory
+
+    // Fill the cache a little
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(smallQueryCacheSize > 0)
+    assert(smallQueryCacheSize < stateThreshold)
+
+    // Parse a big query to fill the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
+      parser.parsePlan(bigQuery)
+    }
+    val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(bigQueryCacheSize > smallQueryCacheSize)
+
+    // Parse a small query to release the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  Seq(
+    (-1, -1, false),
+    (10000, -1, true),
+    (-1, 1, true),
+    (10000, 1, true)
+  ).foreach { case (threshold, ratio, shouldFlush) =>
+    test(s"SPARK-47404: Antlr cache combined thresholds. States: $threshold, Ratio: $ratio") {
+      // The cache should be flushed if either of the thresholds are exceeded.
+      val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+      withSQLConf(
+          SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString,
+          SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+        parser.parsePlan(bigQuery)
+        val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+        if (shouldFlush) {
+          assert(bigQueryCacheSize == 0)
+        } else {
+          assert(bigQueryCacheSize > 0)
+        }
+      }
     }
   }
 }

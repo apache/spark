@@ -141,6 +141,13 @@ case class QualifiedColType(
   def getV2Default(statement: String): ColumnDefaultValue =
     default.map(_.toV2(statement, colName)).orNull
 
+  /**
+   * Returns true if the default value's type has been coerced to match this column's dataType.
+   */
+  def isDefaultValueTypeCoerced: Boolean = default.forall { d =>
+    ColumnDefinition.isDefaultValueTypeMatched(d.child.dataType, dataType)
+  }
+
   override def children: Seq[Expression] = default.toSeq
 
   override protected def withNewChildrenInternal(
@@ -166,6 +173,7 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
+ * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -174,7 +182,8 @@ case class InsertIntoStatement(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    byName: Boolean = false) extends UnaryParsedStatement {
+    byName: Boolean = false,
+    withSchemaEvolution: Boolean = false) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")

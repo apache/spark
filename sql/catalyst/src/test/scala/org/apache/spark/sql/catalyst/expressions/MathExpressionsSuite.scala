@@ -963,4 +963,51 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
+
+  test("context independent foldable math expressions") {
+    // Create some base literals
+    val intLit = Literal(5)
+    val doubleLit = Literal(10.5)
+    val decimalLit = Literal(Decimal(7.5))
+
+    // Create math expressions using these literals
+    val expressions = Seq(
+      // Basic arithmetic
+      Add(intLit, Literal(10)),
+      Subtract(doubleLit, Literal(2.5)),
+      Multiply(intLit, Literal(2)),
+      Divide(decimalLit, Literal(Decimal(2.5))),
+      Remainder(intLit, Literal(2)),
+
+      // Unary operations
+      UnaryMinus(intLit),
+      Abs(Literal(-10)),
+
+      // Math functions
+      Log(doubleLit),
+      Log10(doubleLit),
+      Log2(doubleLit),
+      Exp(doubleLit),
+      Sqrt(doubleLit),
+      Floor(doubleLit),
+      Ceil(doubleLit),
+
+      // Trig functions
+      Sin(doubleLit),
+      Cos(doubleLit),
+      Tan(doubleLit),
+      Asin(Literal(0.5)),
+      Acos(Literal(0.5)),
+      Atan(doubleLit),
+
+      // Nested expressions
+      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0)))
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
 }

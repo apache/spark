@@ -16,9 +16,8 @@
 #
 
 import tempfile
-import unittest
 
-from pyspark.sql import is_remote, Row
+from pyspark.sql import Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
@@ -30,8 +29,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 class FPMTestsMixin:
     def test_fp_growth(self):
-        if is_remote():
-            self.skipTest("Do not support Spark Connect.")
         df = self.spark.createDataFrame(
             [
                 ["r z h k p"],
@@ -107,12 +104,6 @@ class FPMTests(FPMTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_fpm import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

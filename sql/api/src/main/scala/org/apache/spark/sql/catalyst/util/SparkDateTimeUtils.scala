@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField.{MICRO_OF_DAY, NANO_OF_DAY}
+import java.time.temporal.ChronoField.NANO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -145,42 +145,42 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
-    instantToMicrosOfDay(instant, getZoneId(timezone))
+  def instantToNanosOfDay(instant: Instant, timezone: String): Long = {
+    instantToNanosOfDay(instant, getZoneId(timezone))
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, zoneId: ZoneId): Long = {
+  def instantToNanosOfDay(instant: Instant, zoneId: ZoneId): Long = {
     val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
-    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+    localDateTime.toLocalTime.getLong(NANO_OF_DAY)
   }
 
   /**
-   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   * Truncates a time value (in nanoseconds) to the specified fractional precision `p`.
    *
    * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
-   * thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
+   * thousand-nanosecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
    * `123000` microseconds (12:34:56.123).
    *
-   * @param micros
-   *   The original time in microseconds.
+   * @param nanos
+   *   The original time in nanoseconds.
    * @param p
    *   The fractional second precision (range 0 to 6).
    * @return
-   *   The truncated microsecond value, preserving only `p` fractional digits.
+   *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
-  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+  def truncateTimeToPrecision(nanos: Long, p: Int): Long = {
     assert(
-      p >= TimeType.MIN_PRECISION && p <= TimeType.MICROS_PRECISION,
+      TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
-        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}].")
-    val scale = TimeType.MICROS_PRECISION - p
+        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
+    val scale = TimeType.NANOS_PRECISION - p
     val factor = math.pow(10, scale).toLong
-    (micros / factor) * factor
+    (nanos / factor) * factor
   }
 
   /**
@@ -717,14 +717,62 @@ trait SparkDateTimeUtils {
    */
   def stringToTime(s: UTF8String): Option[Long] = {
     try {
-      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      // Check for the AM/PM suffix.
+      val trimmed = s.trimRight
+      val numChars = trimmed.numChars()
+      var (isAM, isPM, hasSuffix) = (false, false, false)
+      if (numChars > 2) {
+        val lc = trimmed.getChar(numChars - 1)
+        if (lc == 'M' || lc == 'm') {
+          val slc = trimmed.getChar(numChars - 2)
+          isAM = slc == 'A' || slc == 'a'
+          isPM = slc == 'P' || slc == 'p'
+          hasSuffix = isAM || isPM
+        }
+      }
+      val timeString = if (hasSuffix) {
+        trimmed.substring(0, numChars - 2)
+      } else {
+        trimmed
+      }
+
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(timeString)
+
       // If the input string can't be parsed as a time, or it contains not only
       // the time part or has time zone information, return None.
       if (segments.isEmpty || !justTime || zoneIdOpt.isDefined) {
         return None
       }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+
+      // Unpack the segments.
+      var (hr, min, sec, ms) = (segments(3), segments(4), segments(5), segments(6))
+
+      // Handle AM/PM conversion in separate cases.
+      if (!hasSuffix) {
+        // For 24-hour format, validate hour range: 0-23.
+        if (hr < 0 || hr > 23) {
+          return None
+        }
+      } else {
+        // For 12-hour format, validate hour range: 1-12.
+        if (hr < 1 || hr > 12) {
+          return None
+        }
+        // For 12-hour format, convert to 24-hour format.
+        if (isAM) {
+          // AM: 12:xx:xx becomes 00:xx:xx, 1-11:xx:xx stays the same.
+          if (hr == 12) {
+            hr = 0
+          }
+        } else {
+          // PM: 12:xx:xx stays 12:xx:xx, 1-11:xx:xx becomes 13-23:xx:xx.
+          if (hr != 12) {
+            hr += 12
+          }
+        }
+      }
+
+      val localTime = LocalTime.of(hr, min, sec, MICROSECONDS.toNanos(ms).toInt)
       Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None

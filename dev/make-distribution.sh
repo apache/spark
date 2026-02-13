@@ -133,7 +133,7 @@ if [ $(command -v git) ]; then
     unset GITREV
 fi
 
-if [ "$SBT_ENABLED" == "true" && ! "$(command -v "$SBT")" ]; then
+if [ "$SBT_ENABLED" == "true" ] && [ ! "$(command -v "$SBT")" ]; then
   echo -e "Could not locate SBT command: '$SBT'."
   echo -e "Specify the SBT command with the --sbt flag"
   exit -1;
@@ -203,14 +203,6 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
 cp -r "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
-
-# Only create the hive-jackson directory if they exist.
-if [ -f "$DISTDIR"/jars/jackson-core-asl-1.9.13.jar ]; then
-  for f in "$DISTDIR"/jars/jackson-*-asl-*.jar; do
-    mkdir -p "$DISTDIR"/hive-jackson
-    mv $f "$DISTDIR"/hive-jackson/
-  done
-fi
 
 # Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
@@ -330,9 +322,11 @@ if [ "$MAKE_TGZ" == "true" ]; then
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"
     # Set the Spark Connect system variable in these scripts to enable it by default.
+    awk 'NR==1{print; print "export SPARK_CONNECT_BEELINE=${SPARK_CONNECT_BEELINE:-1}"; next} {print}' "$TARDIR/bin/beeline" > tmp && cat tmp > "$TARDIR/bin/beeline"
     awk 'NR==1{print; print "export SPARK_CONNECT_MODE=${SPARK_CONNECT_MODE:-1}"; next} {print}' "$TARDIR/bin/pyspark" > tmp && cat tmp > "$TARDIR/bin/pyspark"
     awk 'NR==1{print; print "export SPARK_CONNECT_MODE=${SPARK_CONNECT_MODE:-1}"; next} {print}' "$TARDIR/bin/spark-shell" > tmp && cat tmp > "$TARDIR/bin/spark-shell"
     awk 'NR==1{print; print "export SPARK_CONNECT_MODE=${SPARK_CONNECT_MODE:-1}"; next} {print}' "$TARDIR/bin/spark-submit" > tmp && cat tmp > "$TARDIR/bin/spark-submit"
+    awk 'NR==1{print; print "if [%SPARK_CONNECT_BEELINE%] == [] set SPARK_CONNECT_BEELINE=1"; next} {print}' "$TARDIR/bin/beeline.cmd" > tmp && cat tmp > "$TARDIR/bin/beeline.cmd"
     awk 'NR==1{print; print "if [%SPARK_CONNECT_MODE%] == [] set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/pyspark2.cmd" > tmp && cat tmp > "$TARDIR/bin/pyspark2.cmd"
     awk 'NR==1{print; print "if [%SPARK_CONNECT_MODE%] == [] set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-shell2.cmd" > tmp && cat tmp > "$TARDIR/bin/spark-shell2.cmd"
     awk 'NR==1{print; print "if [%SPARK_CONNECT_MODE%] == [] set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-submit2.cmd" > tmp && cat tmp > "$TARDIR/bin/spark-submit2.cmd"

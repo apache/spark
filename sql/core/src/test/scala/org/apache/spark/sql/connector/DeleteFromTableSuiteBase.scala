@@ -18,11 +18,15 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.CheckInvariant
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  protected def enforceCheckConstraintOnDelete: Boolean = true
 
   test("delete from table containing added column with default value") {
     createAndInitTable("pk INT NOT NULL, dep STRING", """{ "pk": 1, "dep": "hr" }""")
@@ -64,28 +68,32 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete from table with table constraints") {
-    sql(
-      s"""
-         |CREATE TABLE $tableNameAsString (
-         | pk INT NOT NULL PRIMARY KEY,
-         | id INT UNIQUE,
-         | dep STRING,
-         | CONSTRAINT pk_check CHECK (pk > 0))
-         | PARTITIONED BY (dep)
-         |""".stripMargin)
-      append("pk INT NOT NULL, id INT, dep STRING",
-        """{ "pk": 1, "id": 2, "dep": "hr" }
-          |{ "pk": 2, "id": 4, "dep": "eng" }
-          |{ "pk": 3, "id": 6, "dep": "eng" }
-          |""".stripMargin)
-      sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
-      sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(2, 4, "eng")))
+    createAndInitTable(
+      "pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 2, "dep": "hr" }
+        |{ "pk": 2, "id": 4, "dep": "eng" }
+        |{ "pk": 3, "id": 6, "dep": "eng" }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_pk CHECK (pk > 0)")
+    val df = sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
+    val checkInvariant = df.queryExecution.analyzed.collectFirst {
+      case f: Filter =>
+        f.condition.collectFirst {
+          case c: CheckInvariant => c
+        }
+    }.flatten
+    if (enforceCheckConstraintOnDelete) {
+      assert(checkInvariant.isDefined, "Check invariant should be present in the delete plan")
+    } else {
+      assert(checkInvariant.isEmpty, "Check invariant should not be present in the delete plan")
+    }
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
+    sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(2, 4, "eng")))
   }
 
   test("delete from table containing struct column with default value") {

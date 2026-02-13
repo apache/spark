@@ -37,8 +37,8 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.types.{
-  StringTypeBinaryLcase, StringTypeWithCollation}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{StringTypeBinaryLcase, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -292,6 +292,8 @@ case class ILike(
 sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with Predicate {
   override def nullIntolerant: Boolean = true
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected def patterns: Seq[UTF8String]
 
@@ -578,20 +580,33 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   final lazy val collationId: Int = str.dataType.asInstanceOf[StringType].collationId
 
+  private lazy val legacySplitTruncate =
+    SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
+
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val pattern = CollationSupport.collationAwareRegex(regex.asInstanceOf[UTF8String], collationId)
-    val strings = string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
+    val pattern = CollationSupport.collationAwareRegex(
+      regex.asInstanceOf[UTF8String], collationId, legacySplitTruncate)
+    val strings = if (legacySplitTruncate) {
+      string.asInstanceOf[UTF8String].splitLegacyTruncate(pattern, limit.asInstanceOf[Int])
+    } else {
+      string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
+    }
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
+    val pattern = ctx.freshName("pattern")
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split(
-         |CollationSupport.collationAwareRegex($regex, $collationId),$limit));""".stripMargin
+      s"""
+         |UTF8String $pattern =
+         |  CollationSupport.collationAwareRegex($regex, $collationId, $legacySplitTruncate);
+         |${ev.value} = new $arrayClass($legacySplitTruncate ?
+         |  $str.splitLegacyTruncate($pattern, $limit) : $str.split($pattern, $limit));
+         |""".stripMargin
     })
   }
 

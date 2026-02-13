@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
+import java.util.concurrent.{ScheduledFuture => JScheduledFuture}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
 
@@ -37,7 +38,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.TestUtils.{createTempJsonFile, createTempScriptWithExpectedOutput}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
-import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
+import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, RegisteredWorker, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.SHUFFLE_SERVICE_DB_BACKEND
@@ -46,7 +47,7 @@ import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
-import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with PrivateMethodTester {
@@ -383,7 +384,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     // Create the executor's working directory
     val executorDir = new File(worker.workDir, appId + "/" + execId)
 
-    if (!executorDir.exists && !executorDir.mkdirs()) {
+    if (!executorDir.exists && !Utils.createDirectory(executorDir)) {
       throw new IOException("Failed to create directory " + executorDir)
     }
     executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))
@@ -404,5 +405,42 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
       makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my worker"))
     }.getMessage
     assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-54312: heartbeat task and workdir cleanup task should only be scheduled once " +
+    "across multiple registrations") {
+    val worker = spy(makeWorker())
+    val masterWebUiUrl = "https://1.2.3.4:8080"
+    val masterAddress = RpcAddress("1.2.3.4", 1234)
+    val masterRef = mock(classOf[RpcEndpointRef])
+    when(masterRef.address).thenReturn(masterAddress)
+
+    def getHeartbeatTask(worker: Worker): Option[JScheduledFuture[_]] = {
+      val _heartbeatTask =
+        PrivateMethod[Option[JScheduledFuture[_]]](Symbol("heartbeatTask"))
+      worker.invokePrivate(_heartbeatTask())
+    }
+
+    def getWorkDirCleanupTask(worker: Worker): Option[JScheduledFuture[_]] = {
+      val _workDirCleanupTask =
+        PrivateMethod[Option[JScheduledFuture[_]]](Symbol("workDirCleanupTask"))
+      worker.invokePrivate(_workDirCleanupTask())
+    }
+
+    // Tasks should not be scheduled yet before registration
+    assert(getHeartbeatTask(worker).isEmpty && getWorkDirCleanupTask(worker).isEmpty)
+
+    val msg = RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate = false)
+    // Simulate first registration - this should schedule both tasks
+    worker.receive(msg)
+    val heartbeatTask = getHeartbeatTask(worker)
+    val workDirCleanupTask = getWorkDirCleanupTask(worker)
+    assert(heartbeatTask.isDefined && workDirCleanupTask.isDefined)
+
+    // Simulate disconnection and re-registration
+    worker.receive(msg)
+    // After re-registration, the task references should be the same (not rescheduled)
+    assert(getHeartbeatTask(worker) == heartbeatTask)
+    assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
 }

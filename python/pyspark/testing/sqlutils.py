@@ -63,7 +63,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         return jars[0]
 
 
-test_not_compiled_message = None
+test_not_compiled_message = ""
 try:
     from pyspark.sql.utils import require_test_compiled
 
@@ -71,7 +71,7 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
-test_compiled = test_not_compiled_message is None
+test_compiled = not test_not_compiled_message
 
 
 class SQLTestUtils:
@@ -134,7 +134,7 @@ class SQLTestUtils:
                 self.spark.sql("DROP TABLE IF EXISTS %s" % t)
 
     @contextmanager
-    def tempView(self, *views):
+    def temp_view(self, *views):
         """
         A convenient context manager to test with some specific views. This drops the given views
         if it exists.
@@ -146,6 +146,20 @@ class SQLTestUtils:
         finally:
             for v in views:
                 self.spark.catalog.dropTempView(v)
+
+    @contextmanager
+    def temp_func(self, *functions):
+        """
+        A convenient context manager to test with some specific temporary functions.
+        This drops the temporary functions if it exists.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for f in functions:
+                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS %s" % f)
 
     @contextmanager
     def function(self, *functions):
@@ -194,7 +208,8 @@ class SQLTestUtils:
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedSQLTestCase, cls).setUpClass()
+        super().setUpClass()
+
         cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
@@ -204,6 +219,14 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        super(ReusedSQLTestCase, cls).tearDownClass()
-        cls.spark.stop()
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        try:
+            cls.spark.stop()
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        finally:
+            super().tearDownClass()
+
+    def tearDown(self):
+        try:
+            self.spark._jsparkSession.cleanupPythonWorkerLogs()
+        finally:
+            super().tearDown()

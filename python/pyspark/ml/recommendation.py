@@ -72,7 +72,7 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
     )
 
     def __init__(self, *args: Any):
-        super(_ALSModelParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(blockSize=4096)
 
     @since("1.4.0")
@@ -159,7 +159,7 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     )
 
     def __init__(self, *args: Any):
-        super(_ALSParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             rank=10,
             maxIter=10,
@@ -395,7 +395,7 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
-        super(ALS, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)

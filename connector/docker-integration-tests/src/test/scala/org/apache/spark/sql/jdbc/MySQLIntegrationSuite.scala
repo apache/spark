@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
+class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {

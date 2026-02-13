@@ -34,13 +34,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[sql] class AvroFileFormat extends FileFormat
-  with DataSourceRegister with Logging with Serializable {
+  with DataSourceRegister
+  with SessionStateHelper
+  with Logging
+  with Serializable {
 
   AvroFileFormat.registerCustomAvroTypes()
 
@@ -73,7 +76,7 @@ private[sql] class AvroFileFormat extends FileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
+    AvroUtils.prepareWrite(getSqlConf(spark), job, options, dataSchema)
   }
 
   override def buildReader(

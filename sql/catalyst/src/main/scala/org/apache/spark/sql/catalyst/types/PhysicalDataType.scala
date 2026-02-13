@@ -23,8 +23,8 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -40,8 +40,8 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType(StringType.collationId)
-    case CharType(_) => PhysicalStringType(StringType.collationId)
+    case v: VarcharType => PhysicalStringType(v.collationId)
+    case c: CharType => PhysicalStringType(c.collationId)
     case s: StringType => PhysicalStringType(s.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
@@ -59,6 +59,8 @@ object PhysicalDataType {
     case StructType(fields) => PhysicalStructType(fields)
     case MapType(keyType, valueType, valueContainsNull) =>
       PhysicalMapType(keyType, valueType, valueContainsNull)
+    case _: GeometryType => PhysicalGeometryType
+    case _: GeographyType => PhysicalGeographyType
     case VariantType => PhysicalVariantType
     case _ => UninitializedPhysicalType
   }
@@ -411,3 +413,19 @@ object UninitializedPhysicalType extends PhysicalDataType {
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
+
+case class PhysicalGeographyType() extends PhysicalDataType {
+  private[sql] type InternalType = GeographyVal
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
+}
+
+object PhysicalGeographyType extends PhysicalGeographyType
+
+case class PhysicalGeometryType() extends PhysicalDataType {
+  private[sql] type InternalType = GeometryVal
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
+}
+
+object PhysicalGeometryType extends PhysicalGeometryType

@@ -249,18 +249,24 @@ private[parquet] class ParquetRowConverter(
       }
     }
     parquetType.getFields.asScala.map { parquetField =>
-      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
+      Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
         catalystFieldIdxByFieldId.get(fieldId.intValue())
-      }.getOrElse {
+      }.orElse {
         // field doesn't have id, just match by name
-        catalystFieldIdxByName(parquetField.getName)
+        catalystFieldIdxByName.get(parquetField.getName)
+      }.map { catalystFieldIndex =>
+        val catalystField = catalystType(catalystFieldIndex)
+        // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
+        val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
+        // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
+        newConverter(parquetField, catalystField.dataType, rowUpdater)
+      }.getOrElse {
+        // This should only happen if we are reading an arbitrary field from a struct for its levels
+        // that is not otherwise requested.
+        val catalystType = SparkShreddingUtils.parquetTypeToSparkType(parquetField)
+        newConverter(parquetField, catalystType, NoopUpdater)
       }
-      val catalystField = catalystType(catalystFieldIndex)
-      // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
-      val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
-      // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField, catalystField.dataType, rowUpdater)
     }.toArray
   }
 
@@ -309,6 +315,13 @@ private[parquet] class ParquetRowConverter(
     }
 
     catalystType match {
+      case NullType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation] =>
+        val parentUpdater = updater
+        // A converter that throws upon any add... call, as we don't expect any value for NullType.
+        new PrimitiveConverter with HasParentContainerUpdater {
+          override def updater: ParentContainerUpdater = parentUpdater
+        }
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
@@ -863,7 +876,11 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for unshredded Variant */
+  /**
+   * Parquet converter for unshredded Variant. We use this converter when the
+   * `spark.sql.variant.allowReadingShredded` config is set to false. This option just exists to
+   * fall back to legacy logic which will eventually be removed.
+   */
   private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
@@ -877,29 +894,27 @@ private[parquet] class ParquetRowConverter(
         // We may allow more than two children in the future, so consider this unsupported.
         throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
-      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val Seq(value, metadata) = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
-            .find(parquetType.getFieldName(_) == colName)
-        if (idx.isEmpty) {
-          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
-        }
-        val child = parquetType.getType(idx.get)
+          .find(parquetType.getFieldName(_) == colName)
+          .getOrElse(throw QueryCompilationErrors.invalidVariantMissingFieldError(colName))
+        val child = parquetType.getType(idx)
         if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
-            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
           throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
         }
-        child
+        idx
       }
-      Array(
-        // Converter for value
-        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+      val result = new Array[Converter with HasParentContainerUpdater](2)
+      result(value) =
+        newConverter(parquetType.getType(value), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        }),
-
-        // Converter for metadata
-        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+        })
+      result(metadata) =
+        newConverter(parquetType.getType(metadata), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentMetadata = value
-      }))
+        })
+      result
     }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)

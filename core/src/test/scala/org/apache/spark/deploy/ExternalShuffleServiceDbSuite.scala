@@ -17,10 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io._
 import java.nio.charset.StandardCharsets
-
-import com.google.common.io.CharStreams
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -110,7 +107,7 @@ abstract class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       blockResolver = blockHandler.getBlockResolver
 
       val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
-      val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
+      val block0 = Utils.toString(block0Stream)
       block0Stream.close()
       assert(sortBlock0 == block0)
       // pass

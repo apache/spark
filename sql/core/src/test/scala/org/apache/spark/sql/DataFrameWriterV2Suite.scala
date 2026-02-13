@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
@@ -165,19 +165,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").append()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Append: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").append()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -270,19 +275,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Overwrite: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -375,19 +385,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {

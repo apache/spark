@@ -18,11 +18,11 @@ package org.apache.spark.deploy.k8s.integrationtest.backend.cloud
 
 import io.fabric8.kubernetes.client.{Config, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.utils.Utils
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants
 import org.apache.spark.deploy.k8s.integrationtest.backend.IntegrationTestBackend
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkStringUtils
 import org.apache.spark.util.Utils.checkAndGetK8sMasterUrl
 
 private[spark] class KubeConfigBackend(var context: String)
@@ -44,11 +44,11 @@ private[spark] class KubeConfigBackend(var context: String)
     // If an explicit master URL was specified then override that detected from the
     // K8S config if it is different
     var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL)).orNull
-    if (StringUtils.isNotBlank(masterUrl)) {
+    if (SparkStringUtils.isNotBlank(masterUrl)) {
       // Clean up master URL which would have been specified in Spark format into a normal
       // K8S master URL
       masterUrl = checkAndGetK8sMasterUrl(masterUrl).replaceFirst("k8s://", "")
-      if (!StringUtils.equals(config.getMasterUrl, masterUrl)) {
+      if (!config.getMasterUrl.equals(masterUrl)) {
         logInfo(s"Overriding K8S master URL ${config.getMasterUrl} from K8S config file " +
           s"with user specified master URL ${masterUrl}")
         config.setMasterUrl(masterUrl)

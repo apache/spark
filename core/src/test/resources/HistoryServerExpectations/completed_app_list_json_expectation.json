@@ -1,5 +1,20 @@
 [ {
   "attempts" : [ {
+    "appSparkVersion" : "4.2.0-SNAPSHOT",
+    "completed" : true,
+    "duration" : 2006,
+    "endTime" : "2025-12-27T14:15:12.221GMT",
+    "endTimeEpoch" : 1766844912221,
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "<script>alert('XSS')</script>",
+    "startTime" : "2025-12-27T14:15:10.215GMT",
+    "startTimeEpoch" : 1766844910215
+  } ],
+  "id" : "local-1766844910796",
+  "name" : "<script>alert('XSS')</script>"
+}, {
+  "attempts" : [ {
     "appSparkVersion" : "3.3.0-SNAPSHOT",
     "completed" : true,
     "duration" : 86045,

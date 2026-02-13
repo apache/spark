@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -405,6 +405,8 @@ package object dsl extends SQLConfHelper {
 
       def globalLimit(limitExpr: Expression): LogicalPlan = GlobalLimit(limitExpr, logicalPlan)
 
+      def limitAll(): LogicalPlan = LimitAll(logicalPlan)
+
       def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
 
       def join(
@@ -564,6 +566,19 @@ package object dsl extends SQLConfHelper {
       }
 
       def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
+
+      def withWatermark(
+          uuid: java.util.UUID,
+          expr: NamedExpression,
+          delayThreshold: CalendarInterval): LogicalPlan = {
+        EventTimeWatermark(uuid, expr.toAttribute, delayThreshold, logicalPlan)
+      }
+
+      def unresolvedWithWatermark(
+          expr: NamedExpression,
+          delayThreshold: CalendarInterval): LogicalPlan = {
+        UnresolvedEventTimeWatermark(expr, delayThreshold, logicalPlan)
+      }
     }
   }
 }

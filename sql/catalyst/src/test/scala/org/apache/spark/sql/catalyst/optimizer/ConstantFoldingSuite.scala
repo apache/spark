@@ -437,6 +437,19 @@ class ConstantFoldingSuite extends PlanTest {
       Optimize.execute(oneRowScalarSubquery),
       oneRowScalarSubquery)
   }
+
+  test("SPARK-53360: Once strategy with ConstantFolding's idempotence should not be broken") {
+    val emptyRelation = LocalRelation($"a".int)
+    val nullIntLit = Literal(null, IntegerType)
+
+    Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
+      comparePlans(
+        Optimize.execute(testRelation
+          .select(comparison($"a",
+            Multiply(ScalarSubquery(emptyRelation), Literal(1, IntegerType))).as("o")).analyze),
+        testRelation.select(comparison($"a", nullIntLit).as("o")).analyze)
+    }
+  }
 }
 
 case class SerializableBoxedInt(intVal: Int) {

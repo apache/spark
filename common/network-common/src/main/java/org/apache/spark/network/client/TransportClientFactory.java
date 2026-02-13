@@ -21,16 +21,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -100,9 +99,9 @@ public class TransportClientFactory implements Closeable {
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps) {
-    this.context = Preconditions.checkNotNull(context);
+    this.context = Objects.requireNonNull(context);
     this.conf = context.getConf();
-    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
+    this.clientBootstraps = new ArrayList<>(Objects.requireNonNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
@@ -193,9 +192,9 @@ public class TransportClientFactory implements Closeable {
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
-        MDC.of(LogKeys.STATUS$.MODULE$, resolvMsg),
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress),
-        MDC.of(LogKeys.TIME$.MODULE$, hostResolveTimeMs));
+        MDC.of(LogKeys.STATUS, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT, resolvedAddress),
+        MDC.of(LogKeys.TIME, hostResolveTimeMs));
     } else {
       logger.trace("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -210,7 +209,7 @@ public class TransportClientFactory implements Closeable {
           return cachedClient;
         } else {
           logger.info("Found inactive connection to {}, creating a new one.",
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress));
+            MDC.of(LogKeys.HOST_PORT, resolvedAddress));
         }
       }
       // If this connection should fast fail when last connection failed in last fast fail time
@@ -314,7 +313,7 @@ public class TransportClientFactory implements Closeable {
               logger.debug("{} successfully completed TLS handshake to ", address);
             } else {
               logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
-                MDC.of(LogKeys.HOST_PORT$.MODULE$, address));
+                MDC.of(LogKeys.HOST_PORT, address));
               cf.channel().close();
             }
           }
@@ -340,17 +339,17 @@ public class TransportClientFactory implements Closeable {
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
       logger.error("Exception while bootstrapping client after {} ms", e,
-        MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, bootstrapTimeMs));
+        MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
-      Throwables.throwIfUnchecked(e);
+      if (e instanceof RuntimeException re) throw re;
       throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
-      MDC.of(LogKeys.ELAPSED_TIME$.MODULE$, (postBootstrap - preConnect) / 1000000),
-      MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, (postBootstrap - preBootstrap) / 1000000));
+      MDC.of(LogKeys.HOST_PORT, address),
+      MDC.of(LogKeys.ELAPSED_TIME, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }

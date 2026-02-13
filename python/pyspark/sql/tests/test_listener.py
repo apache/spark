@@ -17,8 +17,6 @@
 
 import os
 import unittest
-from typing import cast
-
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import (
     SQLTestUtils,
@@ -89,7 +87,7 @@ class QueryExecutionListenerTests(
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_query_execution_listener_on_collect_with_arrow(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
@@ -107,12 +105,6 @@ class QueryExecutionListenerTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_listener import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

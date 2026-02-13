@@ -30,4 +30,11 @@ fi
 export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
 export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH"
 
-exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkPipelines "$@"
+SDP_CLI_PY_FILE_PATH=$("${PYSPARK_PYTHON}" - <<'EOF'
+import pyspark, os
+from pathlib import Path
+print(Path(os.path.dirname(pyspark.__file__)) / "pipelines" / "cli.py")
+EOF
+)
+
+exec "${SPARK_HOME}"/bin/spark-class org.apache.spark.deploy.SparkPipelines "$SDP_CLI_PY_FILE_PATH" "$@"

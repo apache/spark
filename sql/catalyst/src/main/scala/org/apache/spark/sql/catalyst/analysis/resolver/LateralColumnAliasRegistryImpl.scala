@@ -81,13 +81,15 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
 
   /**
    * Creates a new LCA resolution scope for each [[Alias]] resolution. Executes the lambda and
-   * registers the resolved alias for later LCA resolution.
+   * registers top-level resolved aliases for later LCA resolution.
    */
-  def withNewLcaScope(body: => Alias): Alias = {
+  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias = {
     currentAttributeDependencyLevelStack.push(0)
     try {
       val resolvedAlias = body
-      registerAlias(resolvedAlias)
+      if (isTopLevelAlias) {
+        registerAlias(resolvedAlias)
+      }
       resolvedAlias
     } finally {
       currentAttributeDependencyLevelStack.pop()

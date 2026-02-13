@@ -209,4 +209,58 @@ class ColumnTestSuite extends ConnectFunSuite {
   testColName(structType1, _.struct(structType1))
   import org.apache.spark.util.ArrayImplicits._
   testColName(structType2, _.struct(structType2.fields.toImmutableArraySeq: _*))
+
+  test("transform with named function") {
+    val a = fn.col("a")
+    def addOne(c: Column): Column = c + 1
+    val transformed = a.transform(addOne)
+    assert(transformed == (a + 1))
+  }
+
+  test("transform with lambda") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => c * 2)
+    assert(transformed == (a * 2))
+  }
+
+  test("transform chaining") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => c + 1).transform(c => c * 2)
+    assert(transformed == ((a + 1) * 2))
+  }
+
+  test("transform with complex lambda") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => fn.when(c > 10, c * 2).otherwise(c))
+    val expected = fn.when(a > 10, a * 2).otherwise(a)
+    assert(transformed == expected)
+  }
+
+  test("transform with built-in functions") {
+    val a = fn.col("a")
+    val transformed = a.transform(fn.trim).transform(fn.upper)
+    val expected = fn.upper(fn.trim(a))
+    assert(transformed == expected)
+  }
+
+  test("transform with arithmetic operations") {
+    val a = fn.col("a")
+    val transformed = a.transform(_ + 10).transform(_ * 2).transform(_ - 5)
+    assert(transformed == (((a + 10) * 2) - 5))
+  }
+
+  test("transform mixing named functions and lambdas") {
+    val a = fn.col("a")
+    def triple(c: Column): Column = c * 3
+    val transformed = a.transform(triple).transform(c => c + 10)
+    assert(transformed == ((a * 3) + 10))
+  }
+
+  test("transform with nested transform") {
+    val a = fn.col("a")
+    val transformed = a.transform(_.transform(fn.upper))
+    val expected = fn.upper(a)
+    assert(transformed == expected)
+  }
+
 }

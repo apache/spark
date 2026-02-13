@@ -330,6 +330,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.numCompactThreads</td>
+    <td>25% of available cores</td>
+    <td>
+      Number of threads that will be used by history server to compact event logs.
+    </td>
+    <td>4.1.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.maxDiskUsage</td>
     <td>10g</td>
     <td>
@@ -392,6 +400,14 @@ Security options for the Spark History Server are covered more detail in the
       Please read the section of "Applying compaction of old event log files" for more details.
     </td>
     <td>3.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.eventLog.rolling.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up rolling event log locations on demand manner before listing files.
+    </td>
+    <td>4.1.0</td>
   </tr>
   <tr>
     <td>spark.history.store.hybridStore.enabled</td>

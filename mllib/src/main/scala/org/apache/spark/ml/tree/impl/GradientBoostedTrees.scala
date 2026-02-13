@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.TIMER
 import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.feature.Instance

@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
+import org.apache.spark.api.python.PythonErrorUtils
 import org.apache.spark.util.Utils
 
 class PythonRunnerSuite extends SparkFunSuite {
@@ -63,5 +64,32 @@ class PythonRunnerSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] { PythonRunner.formatPaths("two,three,four:five:six") }
     intercept[IllegalArgumentException] { PythonRunner.formatPaths("hdfs:/some.py,foo.py") }
     intercept[IllegalArgumentException] { PythonRunner.formatPaths("foo.py,hdfs:/some.py") }
+  }
+
+  test("SPARK-54052: PythonErrorUtils should have corresponding methods in SparkThrowable") {
+    // Find default methods in SparkThrowable
+    val defaultMethods = classOf[SparkThrowable]
+      .getMethods
+      .filter(m => m.getDeclaringClass == classOf[SparkThrowable])
+      .map(_.getName)
+      .toSet
+
+    // Find methods defined in PythonErrorUtils object
+    val utilsMethods = PythonErrorUtils.getClass
+      .getDeclaredMethods
+      .filterNot(_.isSynthetic)
+      .map(_.getName)
+      .filterNot(_.contains("$"))
+      .toSet
+
+    // Compare
+    assert(
+      utilsMethods == defaultMethods,
+      s"""
+         |PythonErrorUtils methods and SparkThrowable default methods differ!
+         |Missing in PythonErrorUtils: ${defaultMethods.diff(utilsMethods).mkString(", ")}
+         |Extra in PythonErrorUtils: ${utilsMethods.diff(defaultMethods).mkString(", ")}
+         |""".stripMargin
+    )
   }
 }

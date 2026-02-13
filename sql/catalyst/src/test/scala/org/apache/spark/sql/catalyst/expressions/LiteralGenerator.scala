@@ -24,8 +24,9 @@ import java.util.concurrent.TimeUnit
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertions._
 
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY, NANOS_PER_MICROS}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localTimeToNanos, nanosToMicros}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -125,8 +126,8 @@ object LiteralGenerator {
 
   lazy val timeLiteralGen: Gen[Literal] = {
     // Valid range for TimeType is [00:00:00, 23:59:59.999999]
-    val minTime = DateTimeUtils.localTimeToNanos(LocalTime.MIN)
-    val maxTime = DateTimeUtils.localTimeToNanos(LocalTime.MAX)
+    val minTime = nanosToMicros(localTimeToNanos(LocalTime.MIN)) * NANOS_PER_MICROS
+    val maxTime = nanosToMicros(localTimeToNanos(LocalTime.MAX)) * NANOS_PER_MICROS
     for { t <- Gen.choose(minTime, maxTime) }
       yield Literal(t, TimeType())
   }

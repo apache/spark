@@ -27,7 +27,7 @@ import scala.util.{Failure, Success => ScalaSuccess, Try}
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -267,6 +267,10 @@ class BarrierTaskContext private[spark] (
 
   override private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = {
     taskContext.markTaskCompleted(error)
+  }
+
+  override private[spark] def getTaskFailure: Option[Throwable] = {
+    taskContext.getTaskFailure
   }
 
   override private[spark] def fetchFailed: Option[FetchFailedException] = {

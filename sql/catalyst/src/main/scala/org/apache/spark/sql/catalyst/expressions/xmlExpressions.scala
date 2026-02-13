@@ -162,9 +162,6 @@ case class SchemaOfXml(
     new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
   }
 
-  @transient
-  private lazy val xml = child.eval().asInstanceOf[UTF8String]
-
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.foldable) {
       DataTypeMismatch(

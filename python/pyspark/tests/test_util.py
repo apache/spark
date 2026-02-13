@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import gc
 import os
 import time
 import unittest
@@ -22,7 +23,7 @@ from unittest.mock import patch
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
-from pyspark.util import _parse_memory
+from pyspark.util import _parse_memory, disable_gc
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import PySparkTestCase, eventually, timeout
 from pyspark.find_spark_home import _find_spark_home
@@ -148,6 +149,23 @@ class UtilTests(PySparkTestCase):
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
 
+    def test_disable_gc(self):
+        self.assertTrue(gc.isenabled())
+        with disable_gc():
+            self.assertFalse(gc.isenabled())
+        self.assertTrue(gc.isenabled())
+
+    @eventually(timeout=180, catch_timeout=True)
+    @timeout(timeout=1)
+    def test_retry_timeout_test(self):
+        import random
+
+        if random.random() < 0.5:
+            print("hanging for 1 hour")
+            time.sleep(3600)  # Simulate a long-running operation
+        else:
+            print("succeeding immediately")
+
 
 class HandleWorkerExceptionTests(unittest.TestCase):
     exception_bytes = b"ValueError: test_message"
@@ -190,12 +208,6 @@ class HandleWorkerExceptionTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_util import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

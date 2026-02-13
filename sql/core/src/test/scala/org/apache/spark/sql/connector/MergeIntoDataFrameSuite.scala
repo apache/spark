@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.classic.MergeIntoWriter
+import org.apache.spark.sql.connector.catalog.Column
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.StringType
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
@@ -969,6 +975,102 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
       assert(writer1.notMatchedActions.length === 1)
       assert(writer1.notMatchedBySourceActions.length === 1)
       assert(writer1.schemaEvolutionEnabled)
+    }
+  }
+
+  test("SPARK-54157: version is refreshed when source is V2 table") {
+    val sourceTable = "cat.ns1.source_table"
+    withTable(sourceTable) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      // create source table
+      val sourceIdent = Identifier.of(Array("ns1"), "source_table")
+      val columns = Array(
+        Column.create("pk", IntegerType, false),
+        Column.create("salary", IntegerType),
+        Column.create("dep", StringType))
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withProperties(extraTableProps)
+        .build()
+      catalog.createTable(sourceIdent, tableInfo)
+
+      sql(s"INSERT INTO $sourceTable VALUES (1, 101, 'support'), (3, 301, 'support')")
+
+      // create source DataFrame without executing it
+      val sourceDF = spark.table(sourceTable)
+
+      // insert more data into source table
+      sql(s"INSERT INTO $sourceTable VALUES (4, 401, 'finance')")
+
+      // use source in merge - should refresh and see all data including new insert
+      sourceDF
+        .mergeInto(tableNameAsString, $"source_table.pk" === col(tableNameAsString + ".pk"))
+        .whenMatched()
+        .updateAll()
+        .whenNotMatched()
+        .insertAll()
+        .merge()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "support"), // update
+          Row(2, 200, "software"), // unchanged
+          Row(3, 301, "support"), // insert
+          Row(4, 401, "finance"))) // insert
+    }
+  }
+
+  test("SPARK-54444: any schema changes after analysis are prohibited") {
+    val sourceTable = "cat.ns1.source_table"
+    withTable(sourceTable) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      // create source table
+      val sourceIdent = Identifier.of(Array("ns1"), "source_table")
+      val columns = Array(
+        Column.create("pk", IntegerType, false),
+        Column.create("salary", IntegerType),
+        Column.create("dep", StringType))
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withProperties(extraTableProps)
+        .build()
+      catalog.createTable(sourceIdent, tableInfo)
+
+      sql(s"INSERT INTO $sourceTable VALUES (1, 101, 'support'), (3, 301, 'support')")
+
+      // create source DataFrame without executing it
+      val sourceDF = spark.table(sourceTable)
+
+      // derive another DataFrame from pre-analyzed source
+      val filteredSourceDF = sourceDF.filter("pk < 10")
+
+      // add column
+      sql(s"ALTER TABLE $sourceTable ADD COLUMN new_col INT")
+
+      // insert more data into source table
+      sql(s"INSERT INTO $sourceTable VALUES (4, 401, 'finance', 4)")
+
+      // merge should fail as commands must operate on current schema
+      val e = intercept[AnalysisException] {
+        filteredSourceDF
+          .mergeInto(tableNameAsString, $"source_table.pk" === col(tableNameAsString + ".pk"))
+          .withSchemaEvolution()
+          .whenMatched()
+          .updateAll()
+          .whenNotMatched()
+          .insertAll()
+          .merge()
+      }
+      assert(e.message.contains("incompatible changes to table `cat`.`ns1`.`source_table`"))
     }
   }
 }

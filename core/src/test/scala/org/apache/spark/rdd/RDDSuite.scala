@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   var tempDir: File = _
@@ -365,7 +366,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("repartitioned RDDs perform load balancing") {
     // Coalesce partitions
-    val input = Array.fill(1000)(1)
+    val input = createArray(1000, 1)
     val initialPartitions = 10
     val data = sc.parallelize(input.toImmutableArraySeq, initialPartitions)
 
@@ -393,9 +394,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       }
     }
 
-    testSplitPartitions(Array.fill(100)(1).toImmutableArraySeq, 10, 20)
-    testSplitPartitions((Array.fill(10000)(1) ++ Array.fill(10000)(2)).toImmutableArraySeq, 20, 100)
-    testSplitPartitions(Array.fill(1000)(1).toImmutableArraySeq, 250, 128)
+    testSplitPartitions(createArray(100, 1).toImmutableArraySeq, 10, 20)
+    testSplitPartitions(
+      (createArray(10000, 1) ++ createArray(10000, 2)).toImmutableArraySeq, 20, 100)
+    testSplitPartitions(createArray(1000, 1).toImmutableArraySeq, 250, 128)
   }
 
   test("coalesced RDDs") {

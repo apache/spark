@@ -397,8 +397,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     }
   }
 
-  private val bh = BroadcastHashJoinExec.toString
-  private val bl = BroadcastNestedLoopJoinExec.toString
+  private val bh = classOf[BroadcastHashJoinExec].getSimpleName
+  private val bl = classOf[BroadcastNestedLoopJoinExec].getSimpleName
 
   private def assertJoinBuildSide(sqlStr: String, joinMethod: String, buildSide: BuildSide): Any = {
     val executedPlan = stripAQEPlan(sql(sqlStr).queryExecution.executedPlan)

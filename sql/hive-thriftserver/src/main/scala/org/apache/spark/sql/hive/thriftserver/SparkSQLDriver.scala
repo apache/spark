@@ -21,20 +21,20 @@ import java.util.{ArrayList => JArrayList, Arrays, List => JList}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.parser.NamedParameterContext
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
+import org.apache.spark.util.Utils
 
 
 private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
@@ -67,8 +67,28 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
         new VariableSubstitution().substitute(command)
       }
       sparkSession.sparkContext.setJobDescription(substitutorCommand)
-      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
-      // The SQL command has been executed above via `executePlan`, therefore we don't need to
+
+      // Parse with an empty parameter context to enable pre-parsing phase that scans for
+      // parameter markers. If any parameter markers (:name or ?) are found in the SQL,
+      // the pre-parser will throw UNBOUND_SQL_PARAMETER with proper position information.
+      val emptyParamContext = NamedParameterContext(Map.empty)
+      val logicalPlan = sparkSession.sessionState.sqlParser.parsePlanWithParameters(
+        substitutorCommand, emptyParamContext)
+      val conf = sparkSession.sessionState.conf
+
+      val shuffleCleanupMode =
+        if (conf.getConf(SQLConf.THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+          org.apache.spark.sql.execution.RemoveShuffleFiles
+        } else {
+          org.apache.spark.sql.execution.DoNotCleanup
+        }
+
+      val execution = new QueryExecution(
+        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
+        logicalPlan,
+        shuffleCleanupModeOpt = Some(shuffleCleanupMode))
+
+      // the above execution already has an execution ID, therefore we don't need to
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {
         case _: CommandResult =>
@@ -86,7 +106,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
           throw st
         case cause: Throwable =>
           logError(log"Failed in [${MDC(COMMAND, command)}]", cause)
-          throw new QueryExecutionException(ExceptionUtils.getStackTrace(cause))
+          throw new QueryExecutionException(Utils.stackTraceToString(cause))
     }
   }
 

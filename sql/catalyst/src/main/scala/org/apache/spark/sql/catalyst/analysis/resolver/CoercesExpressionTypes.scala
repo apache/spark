@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   TypeCoercion
 }
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 
 /**
  * [[CoercesExpressionTypes]] is extended by resolvers that need to apply type coercion.
@@ -57,27 +58,42 @@ trait CoercesExpressionTypes extends SQLConfHelper {
    *
    * In the end, we apply [[DefaultCollationTypeCoercion]].
    * See [[DefaultCollationTypeCoercion]] doc for more info.
+   *
+   * Additionally, we copy the tags and origin in case the call to this method didn't come from
+   * [[ExpressionResolver]], where they are copied generically.
    */
   def coerceExpressionTypes(
       expression: Expression,
       expressionTreeTraversal: ExpressionTreeTraversal): Expression = {
-    val coercedExpressionOnce = applyTypeCoercion(
-      expression = expression,
-      expressionTreeTraversal = expressionTreeTraversal
-    )
-    // This is a hack necessary because fixed-point analyzer sometimes requires multiple passes to
-    // resolve type coercion. Instead, in single pass, we apply type coercion twice on the same
-    // node in order to ensure that types are resolved.
-    val coercedExpressionTwice = applyTypeCoercion(
-      expression = coercedExpressionOnce,
-      expressionTreeTraversal = expressionTreeTraversal
-    )
+    withOrigin(expression.origin) {
+      val coercedExpressionOnce = applyTypeCoercion(
+        expression = expression,
+        expressionTreeTraversal = expressionTreeTraversal
+      )
 
-    expressionTreeTraversal.defaultCollation match {
-      case Some(defaultCollation) =>
-        DefaultCollationTypeCoercion(coercedExpressionTwice, defaultCollation)
-      case None =>
-        coercedExpressionTwice
+      // If the expression isn't changed by the first iteration of type coercion,
+      // second iteration won't be effective either.
+      val expressionAfterTypeCoercion = if (coercedExpressionOnce.eq(expression)) {
+        coercedExpressionOnce
+      } else {
+        // This is a hack necessary because fixed-point analyzer sometimes requires multiple passes
+        // to resolve type coercion. Instead, in single pass, we apply type coercion twice on the
+        // same node in order to ensure that types are resolved.
+        applyTypeCoercion(
+          expression = coercedExpressionOnce,
+          expressionTreeTraversal = expressionTreeTraversal
+        )
+      }
+
+      val coercionResult = expressionTreeTraversal.defaultCollation match {
+        case Some(defaultCollation) =>
+          DefaultCollationTypeCoercion(expressionAfterTypeCoercion, defaultCollation)
+        case None =>
+          expressionAfterTypeCoercion
+      }
+
+      coercionResult.copyTagsFrom(expression)
+      coercionResult
     }
   }
 

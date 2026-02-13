@@ -31,12 +31,14 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.ArrowPythonRunner
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, TransformWithStateExecBase, TransformWithStateVariableInfo}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExecBase, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
@@ -95,9 +97,9 @@ case class TransformWithStateInPySparkExec(
   override def shortName: String = if (
     userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS
   ) {
-    "transformWithStateInPandasExec"
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME
   } else {
-    "transformWithStateInPySparkExec"
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
   }
 
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
@@ -152,7 +154,6 @@ case class TransformWithStateInPySparkExec(
     val runner = new TransformWithStateInPySparkPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
-      sessionLocalTimeZone,
       groupingKeySchema,
       driverProcessorHandle
     )
@@ -180,6 +181,7 @@ case class TransformWithStateInPySparkExec(
    */
   override protected def doExecute(): RDD[InternalRow] = {
     metrics
+    validateStateStoreProvider(isStreaming)
 
     if (!hasInitialState) {
       if (isStreaming) {
@@ -345,9 +347,9 @@ case class TransformWithStateInPySparkExec(
       val initData =
         groupAndProject(initStateIterator, initialStateGroupingAttrs,
           initialState.output, initDedupAttributes)
-      // group input rows and initial state rows by the same grouping key
-      val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
-        new CoGroupedIterator(data, initData, groupingAttributes)
+      // concatenate input rows and initial state rows iterators
+      val inputIter: Iterator[((InternalRow, Iterator[InternalRow]), Boolean)] =
+          initData.map { item => (item, true) } ++ data.map { item => (item, false) }
 
       val evalType = {
         if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
@@ -372,7 +374,7 @@ case class TransformWithStateInPySparkExec(
         batchTimestampMs,
         eventTimeWatermarkForEviction
       )
-      executePython(groupedData, output, runner)
+      executePython(inputIter, output, runner)
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
@@ -387,7 +389,7 @@ case class TransformWithStateInPySparkExec(
           store.abort()
         }
       }
-      setStoreMetrics(store)
+      setStoreMetrics(store, isStreaming)
       setOperatorMetrics()
     }).map { row =>
       numOutputRows += 1

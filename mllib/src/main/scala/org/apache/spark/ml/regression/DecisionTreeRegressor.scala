@@ -22,7 +22,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -190,7 +190,7 @@ class DecisionTreeRegressionModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Node.dummyNode, -1)
 
-  override def estimatedSize: Long = getEstimatedSize()
+  private[spark] override def estimatedSize: Long = getEstimatedSize()
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction

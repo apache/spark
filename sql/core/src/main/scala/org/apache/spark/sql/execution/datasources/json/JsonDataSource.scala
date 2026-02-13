@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.InputStream
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Text
@@ -222,7 +221,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
           CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
         }
       } { inputStream =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+        UTF8String.fromBytes(inputStream.readAllBytes())
       }
     }
     val streamParser = parser.options.encoding

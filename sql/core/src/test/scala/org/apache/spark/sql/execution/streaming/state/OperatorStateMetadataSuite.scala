@@ -22,8 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, LongOffset, MemoryStream, OffsetSeq, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}
@@ -469,6 +470,79 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           }
         )
       }
+    }
+  }
+
+  test("Restart with stateful operator but empty state directory triggers error") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val stream = inputData.toDF()
+
+      // Run a streaming query with stateful operator
+      testStream(stream.dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        StopStream)
+
+      // Delete the state directory to simulate deleted state files
+      val stateDir = new Path(checkpointDir.toString, "state")
+      val fileManager = CheckpointFileManager.create(stateDir, hadoopConf)
+      fileManager.delete(stateDir)
+
+      // Restart the query - should fail with empty state directory error
+      testStream(stream.dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 4),
+        ExpectFailure[SparkRuntimeException] { t =>
+          def formatPairString(pair: (Long, String)): String =
+            s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+          checkError(
+            t.asInstanceOf[SparkRuntimeException],
+            "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
+            "42K03",
+            Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
+        }
+      )
+    }
+  }
+
+  test("Restart with stateful operator added to previously stateless query triggers error") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+
+      // Run a stateless streaming query first
+      testStream(inputData.toDF().select($"value" * 2 as "doubled"))(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        StopStream)
+
+      // Delete the state directory if it exists (it shouldn't for stateless query)
+      val stateDir = new Path(checkpointDir.toString, "state")
+      val fileManager = CheckpointFileManager.create(stateDir, hadoopConf)
+      if (fileManager.exists(stateDir)) {
+        fileManager.delete(stateDir)
+      }
+
+      // Restart with a stateful operator added - should fail
+      testStream(inputData.toDF().dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 4),
+        ExpectFailure[SparkRuntimeException] { t =>
+          def formatPairString(pair: (Long, String)): String =
+            s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+          checkError(
+            t.asInstanceOf[SparkRuntimeException],
+            "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
+            "42K03",
+            Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
+        }
+      )
     }
   }
 }

@@ -28,8 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
-import org.apache.spark.internal.{MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -488,7 +488,7 @@ case class AdaptiveSparkPlanExec(
       maxFields: Int,
       printNodeId: Boolean,
       printOutputColumns: Boolean): Unit = {
-    append("   " * depth)
+    append("   ".repeat(depth))
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,
@@ -718,7 +718,7 @@ case class AdaptiveSparkPlanExec(
   private def setLogicalLinkForNewQueryStage(stage: QueryStageExec, plan: SparkPlan): Unit = {
     val link = plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(
       plan.logicalLink.orElse(plan.collectFirst {
-        case p if p.getTagValue(TEMP_LOGICAL_PLAN_TAG).isDefined =>
+        case p if p.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
           p.getTagValue(TEMP_LOGICAL_PLAN_TAG).get
         case p if p.logicalLink.isDefined => p.logicalLink.get
       }))
@@ -835,7 +835,7 @@ case class AdaptiveSparkPlanExec(
    */
   private def cleanUpTempTags(plan: SparkPlan): Unit = {
     plan.foreach {
-      case plan: SparkPlan if plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).isDefined =>
+      case plan: SparkPlan if plan.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
         plan.unsetTagValue(TEMP_LOGICAL_PLAN_TAG)
       case _ =>
     }
@@ -897,7 +897,7 @@ case class AdaptiveSparkPlanExec(
     val e = if (originalErrors.size == 1) {
       originalErrors.head
     } else {
-      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors.head)
+      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors)
       originalErrors.tail.foreach(se.addSuppressed)
       se
     }

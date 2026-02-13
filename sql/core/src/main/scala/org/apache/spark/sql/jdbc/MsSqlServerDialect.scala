@@ -265,7 +265,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       val limitClause = dialect.getLimitClause(limit)
 
       options.prepareQuery +
-        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery}" +
+        s"SELECT $limitClause $columnList FROM $tableOrQuery" +
         s" $whereClause $groupByClause $orderByClause"
     }
   }
@@ -286,6 +286,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   }
 
   override def supportsLimit: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }
 
 private object MsSqlServerDialect {

@@ -785,3 +785,59 @@ select -0, -0.0
 struct<0:int,0.0:decimal(1,1)>
 -- !query output
 0	0.0
+
+
+-- !query
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
+-- !query schema
+struct<c1:string,c2:string,c3:string>
+-- !query output
+S"par"k	S"par"k	S""par""k
+
+
+-- !query
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
+-- !query schema
+struct<c1:string,c2:string,c3:string>
+-- !query output
+S'par'k	S'par'k	S''par''k
+
+
+-- !query
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
+-- !query schema
+struct<c1:string,c2:string,c3:string,c4:string,c5:string,c6:string>
+-- !query output
+Spark	Spark	Spark	Spark	Spark	Spark
+
+
+-- !query
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.consecutiveStringLiterals.enabled	true
+
+
+-- !query
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
+-- !query schema
+struct<c1:string,c2:string,c3:string>
+-- !query output
+Spark	S"par"k	S""par""k
+
+
+-- !query
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
+-- !query schema
+struct<c1:string,c2:string,c3:string>
+-- !query output
+Spark	S'par'k	S''par''k
+
+
+-- !query
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
+-- !query schema
+struct<c1:string,c2:string,c3:string,c4:string,c5:string,c6:string>
+-- !query output
+Spark	Spark	Spark	Spark	Spark	Spark

@@ -110,7 +110,7 @@ class MockDataset(DataFrame):
 
 class HasFake(Params):
     def __init__(self):
-        super(HasFake, self).__init__()
+        super().__init__()
         self.fake = Param(self, "fake", "fake param")
 
     def getFake(self):
@@ -119,7 +119,7 @@ class HasFake(Params):
 
 class MockTransformer(Transformer, HasFake):
     def __init__(self):
-        super(MockTransformer, self).__init__()
+        super().__init__()
         self.dataset_index = None
 
     def _transform(self, dataset):
@@ -137,7 +137,7 @@ class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParam
     )
 
     def __init__(self, shiftVal=1):
-        super(MockUnaryTransformer, self).__init__()
+        super().__init__()
         self._setDefault(shift=1)
         self._set(shift=shiftVal)
 
@@ -161,7 +161,7 @@ class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParam
 
 class MockEstimator(Estimator, HasFake):
     def __init__(self):
-        super(MockEstimator, self).__init__()
+        super().__init__()
         self.dataset_index = None
 
     def _fit(self, dataset):
@@ -198,7 +198,7 @@ class DummyLogisticRegression(
         regParam=0.0,
         rawPredictionCol="rawPrediction",
     ):
-        super(DummyLogisticRegression, self).__init__()
+        super().__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -229,7 +229,7 @@ class DummyLogisticRegressionModel(
     DefaultParamsWritable,
 ):
     def __init__(self):
-        super(DummyLogisticRegressionModel, self).__init__()
+        super().__init__()
 
     def _transform(self, dataset):
         # A dummy transform impl which always predict label 1

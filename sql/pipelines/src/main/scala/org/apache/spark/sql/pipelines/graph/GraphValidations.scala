@@ -47,12 +47,91 @@ trait GraphValidations extends Logging {
             "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES",
             Map(
               "tableName" -> dest.unquotedString,
-              "queries" -> flows.map(_.identifier).mkString(",")
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
             )
           )
       }
 
     multiQueryTables
+  }
+
+  /**
+   * Validate that each resolved flow is correctly either a streaming flow or non-streaming flow,
+   * depending on the flow type (ex. once flow vs non-once flow) and the dataset type the flow
+   * writes to (ex. streaming table vs materialized view).
+   */
+  protected[graph] def validateFlowStreamingness(): Unit = {
+    flowsTo.foreach { case (destTableIdentifier, flowsToDataset) =>
+      // The identifier should correspond to exactly one of a table or view
+      val destTableOpt = table.get(destTableIdentifier)
+      val destViewOpt = view.get(destTableIdentifier)
+
+      val resolvedFlowsToDataset: Seq[ResolvedFlow] = flowsToDataset.collect {
+        case rf: ResolvedFlow => rf
+      }
+
+      resolvedFlowsToDataset.foreach { resolvedFlow: ResolvedFlow =>
+        // A flow must be successfully analyzed, thus resolved, in order to determine if it is
+        // streaming or not. Unresolved flows will throw an exception anyway via
+        // [[validateSuccessfulFlowAnalysis]], so don't check them here.
+        if (resolvedFlow.once) {
+          // Once flows by definition should be batch flows, not streaming.
+          if (resolvedFlow.df.isStreaming) {
+            throw new AnalysisException(
+              errorClass = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_ONCE_FLOW",
+              messageParameters = Map(
+                "flowIdentifier" -> resolvedFlow.identifier.quotedString
+              )
+            )
+          }
+        } else {
+          destTableOpt.foreach { destTable =>
+            if (destTable.isStreamingTable) {
+              if (!resolvedFlow.df.isStreaming) {
+                throw new AnalysisException(
+                  errorClass = "INVALID_FLOW_QUERY_TYPE.BATCH_RELATION_FOR_STREAMING_TABLE",
+                  messageParameters = Map(
+                    "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                    "tableIdentifier" -> destTableIdentifier.quotedString
+                  )
+                )
+              }
+            } else {
+              if (resolvedFlow.df.isStreaming) {
+                // This check intentionally does NOT prevent materialized views from reading from
+                // a streaming table using a _batch_ read, which is still considered valid.
+                throw new AnalysisException(
+                  errorClass = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_MATERIALIZED_VIEW",
+                  messageParameters = Map(
+                    "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                    "tableIdentifier" -> destTableIdentifier.quotedString
+                  )
+                )
+              }
+            }
+          }
+
+          destViewOpt.foreach {
+            case _: PersistedView =>
+              if (resolvedFlow.df.isStreaming) {
+                throw new AnalysisException(
+                  errorClass = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_PERSISTED_VIEW",
+                  messageParameters = Map(
+                    "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                    "viewIdentifier" -> destTableIdentifier.quotedString
+                  )
+                )
+              }
+            case _: TemporaryView =>
+              // Temporary views' flows are allowed to be either streaming or batch, so no
+              // validation needs to be done for them
+          }
+        }
+      }
+    }
   }
 
   /** Throws an exception if the flows in this graph are not topologically sorted. */
@@ -74,7 +153,7 @@ trait GraphValidations extends Logging {
           throw new AnalysisException(
             "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED",
             Map(
-              "flowName" -> f.identifier.unquotedString,
+              "flowName" -> f.displayName,
               "inputName" -> unvisitedInput.unquotedString
             )
           )
@@ -255,10 +334,12 @@ trait GraphValidations extends Logging {
               throw new AnalysisException(
                 errorClass = "INVALID_TEMP_OBJ_REFERENCE",
                 messageParameters = Map(
-                  "persistedViewName" -> persistedView.identifier.toString,
-                  "temporaryViewName" -> tempView.identifier.toString
+                  "objName" -> persistedView.identifier.toString,
+                  "obj" -> "view",
+                  "tempObjName" -> tempView.identifier.toString,
+                  "tempObj" -> "temporary view"
                 ),
-                cause = null
+                cause = None
               )
             case _ =>
           }

@@ -40,17 +40,17 @@ public class TestMemoryConsumer extends MemoryConsumer {
 
   public void use(long size) {
     long got = taskMemoryManager.acquireExecutionMemory(size, this);
-    used += got;
+    used.getAndAdd(got);
   }
 
   public void free(long size) {
-    used -= size;
+    used.getAndAdd(-size);
     taskMemoryManager.releaseExecutionMemory(size, this);
   }
 
   @VisibleForTesting
   public void freePage(MemoryBlock page) {
-    used -= page.size();
+    used.getAndAdd(-page.size());
     taskMemoryManager.freePage(page, this);
   }
 }

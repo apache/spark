@@ -22,9 +22,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
@@ -1505,6 +1507,139 @@ class DataFrameSetOperationsSuite extends QueryTest
           _.isInstanceOf[UnionExec], false, 1)
         checkAnswer(nonColumnarUnion,
           Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-52921: union partitioning - reused shuffle") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+      val df2 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+
+      val union = df1.repartition($"a").union(df2.repartition($"a"))
+      val unionExec = union.queryExecution.executedPlan.collect {
+        case u: UnionExec => u
+      }
+      assert(unionExec.size == 1)
+
+      val shuffle = df1.repartition($"a").queryExecution.executedPlan.collect {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(shuffle.size == 1)
+
+      val reuseShuffle = union.queryExecution.executedPlan.collect {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reuseShuffle.size == 1)
+
+      val childPartitioning = shuffle.head.outputPartitioning
+      val partitioning = unionExec.head.outputPartitioning
+      assert(partitioning == childPartitioning)
+    }
+  }
+
+  test("SPARK-52921: union partitioning - semantic equality") {
+    val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
+
+    val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+      df1.repartition($"a").union(df2.repartition($"d")).collect()
+    }
+
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+
+        val union = df1.repartition($"a").union(df2.repartition($"d"))
+        val unionExec = union.queryExecution.executedPlan.collect {
+          case u: UnionExec => u
+        }
+        assert(unionExec.size == 1)
+
+        val shuffle = df1.repartition($"a").queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffle.size == 1)
+
+        val childPartitioning = shuffle.head.outputPartitioning
+        val partitioning = unionExec.head.outputPartitioning
+        if (enabled) {
+          assert(partitioning == childPartitioning)
+        }
+
+        checkAnswer(union, correctResult)
+
+        // Avoid unnecessary shuffle if union output partitioning is enabled
+        val shuffledUnion = union.repartition($"a")
+        val shuffleNumBefore = union.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+        val shuffleNumAfter = shuffledUnion.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+
+        if (enabled) {
+          assert(shuffleNumBefore.size == shuffleNumAfter.size)
+        } else {
+          assert(shuffleNumBefore.size + 1 == shuffleNumAfter.size)
+        }
+        checkAnswer(union, shuffledUnion)
+      }
+    }
+  }
+
+  test("SPARK-52921: union partitioning - range partitioning") {
+    val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
+
+    val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+      df1.repartitionByRange($"a").union(df2.repartitionByRange($"d")).collect()
+    }
+
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+
+        val union = df1.repartitionByRange($"a").union(df2.repartitionByRange($"d"))
+        val unionExec = union.queryExecution.executedPlan.collect {
+          case u: UnionExec => u
+        }
+        assert(unionExec.size == 1)
+
+        // For range partitioning, even children have the same partitioning,
+        // the union output partitioning is still UnknownPartitioning.
+        val partitioning = unionExec.head.outputPartitioning
+        assert(partitioning.isInstanceOf[UnknownPartitioning])
+
+        checkAnswer(union, correctResult)
+      }
+    }
+  }
+
+  test("SPARK-53550: union partitioning should compare canonicalized attributes") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("person_base", "person_a", "person_b", "person_c") {
+        // scalastyle:off line.size.limit
+        sql(
+          """create or replace temp view person_base(id, name, age) as values
+            |(0, "mike", 30),
+            |(1, "jim", 20);
+            |""".stripMargin)
+        sql(
+          """create or replace temp view person_a as
+            |SELECT name, avg(age) as avg_age FROM person_base GROUP BY name;""".stripMargin)
+        sql(
+          """create or replace temp view person_b as
+            |SELECT p1.name, p2.avg_age FROM person_base p1 JOIN person_a p2 ON p1.name = p2.name;""".stripMargin)
+        sql(
+          """create or replace temp view person_c as
+            |SELECT * FROM person_a UNION SELECT * FROM person_b;""".stripMargin)
+        val df = sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name")
+        // scalastyle:on line.size.limit
+        checkAnswer(df, Row("jim", 20) :: Row("mike", 30) :: Nil)
       }
     }
   }

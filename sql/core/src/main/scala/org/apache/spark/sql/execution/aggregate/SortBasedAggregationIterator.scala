@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.concurrent.duration.NANOSECONDS
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -38,7 +40,8 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    aggTime: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -122,6 +125,7 @@ class SortBasedAggregationIterator(
     // Now, we will start to find all rows belonging to this group.
     // We create a variable to track if we see the next group.
     var findNextPartition = false
+    val startNs = System.nanoTime()
     // firstRowInNextGroup is the first row of this group. We first process it.
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
 
@@ -142,6 +146,7 @@ class SortBasedAggregationIterator(
         firstRowInNextGroup = currentRow.copy()
       }
     }
+    aggTime += NANOSECONDS.toMillis(System.nanoTime() - startNs)
     // We have not seen a new group. It means that there is no new row in the input
     // iter. The current group is the last group of the iter.
     if (!findNextPartition) {

@@ -32,7 +32,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  ARRAYS_ZIP,
+  CONCAT,
+  MAP_FROM_ENTRIES,
+  TreePattern
+}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -116,6 +121,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 
@@ -1141,6 +1147,8 @@ case class MapFromEntries(child: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): MapFromEntries =
     copy(child = newChild)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_FROM_ENTRIES)
 }
 
 case class MapSort(base: Expression)
@@ -1250,7 +1258,7 @@ case class MapSort(base: Expression)
        |    ${CodeGenerator.getValue(values, valueType, i)});
        |}
        |
-       |java.util.Arrays.sort($sortArray, new java.util.Comparator<Object>() {
+       |java.util.Arrays.parallelSort($sortArray, new java.util.Comparator<Object>() {
        |  @Override public int compare(Object $o1entry, Object $o2entry) {
        |    Object $o1 = (($simpleEntryType) $o1entry).getKey();
        |    Object $o2 = (($simpleEntryType) $o2entry).getKey();
@@ -1395,7 +1403,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
     if (elementType != NullType) {
-      java.util.Arrays.sort(data, if (ascending) lt else gt)
+      java.util.Arrays.parallelSort(data, if (ascending) lt else gt)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
@@ -1437,7 +1445,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
         s"""
            |if ($order) {
            |  $javaType[] $array = $base.to${primitiveTypeName}Array();
-           |  java.util.Arrays.sort($array);
+           |  java.util.Arrays.parallelSort($array);
            |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($array);
            |} else
            """.stripMargin
@@ -1449,7 +1457,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
          |{
          |  Object[] $array = $base.toObjectArray($elementTypeTerm);
          |  final int $sortOrder = $order ? 1 : -1;
-         |  java.util.Arrays.sort($array, new java.util.Comparator() {
+         |  java.util.Arrays.parallelSort($array, new java.util.Comparator() {
          |    @Override public int compare(Object $o1, Object $o2) {
          |      if ($o1 == null && $o2 == null) {
          |        return 0;
@@ -2405,6 +2413,8 @@ case class ArrayJoin(
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def eval(input: InternalRow): Any = {
     val arrayEval = array.eval(input)
     if (arrayEval == null) return null
@@ -2805,20 +2815,26 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class Get(
-    left: Expression,
-    right: Expression,
-    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+case class Get(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(left: Expression, right: Expression) =
-    this(left, right, GetArrayItem(left, right, failOnError = false))
+  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
+    case _: ArrayType => Seq(ArrayType, IntegerType)
+    // Do not apply implicit cast if the first arguement is not array type.
+    case _ => Nil
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), Seq(ArrayType, IntegerType))
+  }
+
+  override lazy val replacement: Expression = GetArrayItem(left, right, failOnError = false)
 
   override def prettyName: String = "get"
 
-  override def parameters: Seq[Expression] = Seq(left, right)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(replacement = newChild)
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }
 
 /**
@@ -3143,6 +3159,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override def nullable: Boolean = children.exists(_.nullable)
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = doConcat(input)
 

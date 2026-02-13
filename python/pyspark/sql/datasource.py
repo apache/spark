@@ -32,6 +32,7 @@ from typing import (
 )
 
 from pyspark.sql import Row
+from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
@@ -43,13 +44,13 @@ __all__ = [
     "DataSource",
     "DataSourceReader",
     "DataSourceStreamReader",
-    "SimpleDataSourceStreamReader",
     "DataSourceWriter",
     "DataSourceArrowWriter",
     "DataSourceStreamWriter",
+    "DataSourceStreamArrowWriter",
+    "SimpleDataSourceStreamReader",
     "DataSourceRegistration",
     "InputPartition",
-    "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
     "Filter",
     "EqualTo",
@@ -714,9 +715,35 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(self) -> dict:
+    def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
         """
-        Returns the most recent offset available.
+        Returns the most recent offset available given a read limit. The start offset can be used
+        to figure out how much new data should be read given the limit.
+
+        The `start` will be provided from the return value of :meth:`initialOffset()` for
+        the very first micro-batch, and for subsequent micro-batches, the start offset is the
+        ending offset from the previous micro-batch. The source can return the `start` parameter
+        as it is, if there is no data to process.
+
+        :class:`ReadLimit` can be used by the source to limit the amount of data returned in this
+        call. The implementation should implement :meth:`getDefaultReadLimit()` to provide the
+        proper :class:`ReadLimit` if the source can limit the amount of data returned based on the
+        source options.
+
+        The engine can still call :meth:`latestOffset()` with :class:`ReadAllAvailable` even if the
+        source produces the different read limit from :meth:`getDefaultReadLimit()`, to respect the
+        semantic of trigger. The source must always respect the given readLimit provided by the
+        engine; e.g. if the readLimit is :class:`ReadAllAvailable`, the source must ignore the read
+        limit configured through options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        start : dict
+            The start offset of the microbatch to continue reading from.
+        limit : :class:`ReadLimit`
+            The limit on the amount of data to be returned by this call.
 
         Returns
         -------
@@ -726,13 +753,57 @@ class DataSourceStreamReader(ABC):
 
         Examples
         --------
-        >>> def latestOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        >>> from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadMaxRows
+        >>> def latestOffset(self, start, limit):
+        ...     # Assume the source has 10 new records between start and latest offset
+        ...     if isinstance(limit, ReadAllAvailable):
+        ...        return {"index": start["index"] + 10}
+        ...     else:  # e.g., limit is ReadMaxRows(5)
+        ...        return {"index": start["index"] + min(10, limit.maxRows)}
         """
+        # NOTE: Previous Spark versions didn't have start offset and read limit parameters for this
+        # method. While Spark will ensure the backward compatibility for existing data sources, the
+        # new data sources are strongly encouraged to implement this new method signature.
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={"feature": "latestOffset"},
         )
+
+    def getDefaultReadLimit(self) -> ReadLimit:
+        """
+        Returns the read limits potentially passed to the data source through options when creating
+        the data source. See the built-in implementations of :class:`ReadLimit` for available read
+        limits.
+
+        Implementing this method is optional. By default, it returns :class:`ReadAllAvailable`,
+        which means there is no limit on the amount of data returned by :meth:`latestOffset()`.
+
+        .. versionadded:: 4.2.0
+        """
+        return ReadAllAvailable()
+
+    def reportLatestOffset(self) -> Optional[dict]:
+        """
+        Returns the most recent offset available. The information is used to report the latest
+        offset in the streaming query status.
+        The source can return `None`, if there is no data to process or the source does not support
+        to this method.
+
+        .. versionadded:: 4.2.0
+
+        Returns
+        -------
+        dict or None
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+            Returns `None` if the source does not support reporting latest offset.
+
+        Examples
+        --------
+        >>> def reportLatestOffset(self):
+        ...     return {"partition-1": {"index": 100}, "partition-2": {"index": 200}}
+        """
+        return None
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
@@ -1094,6 +1165,59 @@ class DataSourceStreamWriter(ABC):
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.
+        """
+        ...
+
+
+class DataSourceStreamArrowWriter(DataSourceStreamWriter):
+    """
+    A base class for data stream writers that process data using PyArrow's `RecordBatch`.
+
+    Unlike :class:`DataSourceStreamWriter`, which works with an iterator of Spark Rows, this class
+    is optimized for using the Arrow format when writing streaming data. It can offer better
+    performance when interfacing with systems or libraries that natively support Arrow for
+    streaming use cases.
+
+    .. versionadded: 4.1.0
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        """
+        Writes an iterator of PyArrow `RecordBatch` objects to the streaming sink.
+
+        This method is called on executors to write data to the streaming data sink in
+        each microbatch. It accepts an iterator of PyArrow `RecordBatch` objects and
+        returns a single row representing a commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the :class:`DataSourceStreamArrowWriter.commit` method if all tasks run
+        successfully. If any task fails, the :class:`DataSourceStreamArrowWriter.abort` method
+        will be called with the collected commit messages.
+
+        Parameters
+        ----------
+        iterator : iterator of :class:`RecordBatch`\\s
+            An iterator of PyArrow `RecordBatch` objects representing the input data.
+
+        Returns
+        -------
+        :class:`WriterCommitMessage`
+            a serializable commit message
+
+        Examples
+        --------
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyCommitMessage(WriterCommitMessage):
+        ...     num_rows: int
+        ...     batch_id: int
+        ...
+        >>> def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        ...     total_rows = 0
+        ...     for batch in iterator:
+        ...         total_rows += len(batch)
+        ...     return MyCommitMessage(num_rows=total_rows, batch_id=self.current_batch_id)
         """
         ...
 

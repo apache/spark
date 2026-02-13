@@ -45,7 +45,7 @@ def build_spark_if_necessary
 
   print_header "Building Spark."
   cd(SPARK_PROJECT_ROOT)
-  command = "build/sbt -Phive -Pkinesis-asl clean package"
+  command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
   $spark_package_is_built = true
@@ -168,7 +168,6 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
-  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 

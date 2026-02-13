@@ -48,14 +48,14 @@ class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   override def contains(k: Attribute): Boolean = get(k).isDefined
 
   override def + [B1 >: A](kv: (Attribute, B1)): AttributeMap[B1] =
-    AttributeMap(baseMap.values.toMap + kv)
+    new AttributeMap(baseMap + (kv._1.exprId -> kv))
 
   override def updated[B1 >: A](key: Attribute, value: B1): Map[Attribute, B1] =
-    baseMap.values.toMap + (key -> value)
+    this + (key -> value)
 
   override def iterator: Iterator[(Attribute, A)] = baseMap.valuesIterator
 
-  override def removed(key: Attribute): Map[Attribute, A] = baseMap.values.toMap - key
+  override def removed(key: Attribute): Map[Attribute, A] = new AttributeMap(baseMap - key.exprId)
 
   def ++(other: AttributeMap[A]): AttributeMap[A] = new AttributeMap(baseMap ++ other.baseMap)
 }

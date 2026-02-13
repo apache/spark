@@ -100,7 +100,7 @@ class JDBCOptions(
       if (subquery.isEmpty) {
         throw QueryExecutionErrors.emptyOptionError(JDBC_QUERY_STRING)
       } else {
-        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
+        s"(${subquery.trim.replaceAll(";+$", "")}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 
@@ -215,6 +215,10 @@ class JDBCOptions(
   // This only applies to Data Source V2 JDBC
   val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "true").toBoolean
 
+  // An option to allow/disallow pushing down JOIN into JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownJoin = parameters.getOrElse(JDBC_PUSHDOWN_JOIN, "true").toBoolean
+
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
   val keytab = {
@@ -321,6 +325,7 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
   val JDBC_PUSHDOWN_OFFSET = newOption("pushDownOffset")
   val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
+  val JDBC_PUSHDOWN_JOIN = newOption("pushDownJoin")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
   val JDBC_TABLE_COMMENT = newOption("tableComment")

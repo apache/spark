@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import unittest
 
 import numpy as np
 
@@ -193,50 +192,55 @@ class RegressionTestsMixin:
             np.allclose(model.predict(Vectors.dense(0.0, 5.0)), 0.21249999999999963, atol=1e-4)
         )
 
-        # Model summary
-        summary = model.summary
-        self.assertTrue(isinstance(summary, LinearRegressionSummary))
-        self.assertTrue(isinstance(summary, LinearRegressionTrainingSummary))
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 4)
-        self.assertEqual(summary.residuals.columns, ["residuals"])
-        self.assertEqual(summary.residuals.count(), 4)
+        def check_summary():
+            # Model summary
+            summary = model.summary
+            self.assertTrue(isinstance(summary, LinearRegressionSummary))
+            self.assertTrue(isinstance(summary, LinearRegressionTrainingSummary))
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 4)
+            self.assertEqual(summary.residuals.columns, ["residuals"])
+            self.assertEqual(summary.residuals.count(), 4)
 
-        self.assertEqual(summary.degreesOfFreedom, 1)
-        self.assertEqual(summary.numInstances, 4)
-        self.assertEqual(summary.objectiveHistory, [0.0])
-        self.assertTrue(
-            np.allclose(
-                summary.coefficientStandardErrors,
-                [1.2859821149611763, 0.6248749874975031, 3.1645497310044184],
-                atol=1e-4,
+            self.assertEqual(summary.degreesOfFreedom, 1)
+            self.assertEqual(summary.numInstances, 4)
+            self.assertEqual(summary.objectiveHistory, [0.0])
+            self.assertTrue(
+                np.allclose(
+                    summary.coefficientStandardErrors,
+                    [1.2859821149611763, 0.6248749874975031, 3.1645497310044184],
+                    atol=1e-4,
+                )
             )
-        )
-        self.assertTrue(
-            np.allclose(
-                summary.devianceResiduals, [-0.7424621202458727, 0.7875000000000003], atol=1e-4
+            self.assertTrue(
+                np.allclose(
+                    summary.devianceResiduals, [-0.7424621202458727, 0.7875000000000003], atol=1e-4
+                )
             )
-        )
-        self.assertTrue(
-            np.allclose(
-                summary.pValues,
-                [0.7020630236843428, 0.8866003086182783, 0.9298746994547682],
-                atol=1e-4,
+            self.assertTrue(
+                np.allclose(
+                    summary.pValues,
+                    [0.7020630236843428, 0.8866003086182783, 0.9298746994547682],
+                    atol=1e-4,
+                )
             )
-        )
-        self.assertTrue(
-            np.allclose(
-                summary.tValues,
-                [0.5054502643838291, 0.1800360108036021, -0.11060025272186746],
-                atol=1e-4,
+            self.assertTrue(
+                np.allclose(
+                    summary.tValues,
+                    [0.5054502643838291, 0.1800360108036021, -0.11060025272186746],
+                    atol=1e-4,
+                )
             )
-        )
-        self.assertTrue(np.allclose(summary.explainedVariance, 0.07997500000000031, atol=1e-4))
-        self.assertTrue(np.allclose(summary.meanAbsoluteError, 0.4200000000000002, atol=1e-4))
-        self.assertTrue(np.allclose(summary.meanSquaredError, 0.20212500000000005, atol=1e-4))
-        self.assertTrue(np.allclose(summary.rootMeanSquaredError, 0.44958314025327956, atol=1e-4))
-        self.assertTrue(np.allclose(summary.r2, 0.4427212572373862, atol=1e-4))
-        self.assertTrue(np.allclose(summary.r2adj, -0.6718362282878414, atol=1e-4))
+            self.assertTrue(np.allclose(summary.explainedVariance, 0.07997500000000031, atol=1e-4))
+            self.assertTrue(np.allclose(summary.meanAbsoluteError, 0.4200000000000002, atol=1e-4))
+            self.assertTrue(np.allclose(summary.meanSquaredError, 0.20212500000000005, atol=1e-4))
+            self.assertTrue(
+                np.allclose(summary.rootMeanSquaredError, 0.44958314025327956, atol=1e-4)
+            )
+            self.assertTrue(np.allclose(summary.r2, 0.4427212572373862, atol=1e-4))
+            self.assertTrue(np.allclose(summary.r2adj, -0.6718362282878414, atol=1e-4))
+
+        check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, LinearRegressionSummary))
@@ -318,36 +322,40 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
-        # Model summary
-        self.assertTrue(model.hasSummary)
+        def check_summary():
+            # Model summary
+            self.assertTrue(model.hasSummary)
+
+            summary = model.summary
+            self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
+            self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
+            self.assertEqual(summary.numIterations, 1)
+            self.assertEqual(summary.numInstances, 4)
+            self.assertEqual(summary.rank, 3)
+            self.assertTrue(
+                np.allclose(
+                    summary.tValues,
+                    [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
+                    atol=1e-4,
+                ),
+                summary.tValues,
+            )
+            self.assertTrue(
+                np.allclose(
+                    summary.pValues,
+                    [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
+                    atol=1e-4,
+                ),
+                summary.pValues,
+            )
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 4)
+            self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
+            self.assertEqual(summary.residuals().count(), 4)
+
+        check_summary()
 
         summary = model.summary
-        self.assertIsInstance(summary, GeneralizedLinearRegressionSummary)
-        self.assertIsInstance(summary, GeneralizedLinearRegressionTrainingSummary)
-        self.assertEqual(summary.numIterations, 1)
-        self.assertEqual(summary.numInstances, 4)
-        self.assertEqual(summary.rank, 3)
-        self.assertTrue(
-            np.allclose(
-                summary.tValues,
-                [0.3725037662281711, -0.49418209022924164, 2.6589353685797654],
-                atol=1e-4,
-            ),
-            summary.tValues,
-        )
-        self.assertTrue(
-            np.allclose(
-                summary.pValues,
-                [0.7729938686180984, 0.707802691825973, 0.22900885781807023],
-                atol=1e-4,
-            ),
-            summary.pValues,
-        )
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 4)
-        self.assertEqual(summary.residuals().columns, ["devianceResiduals"])
-        self.assertEqual(summary.residuals().count(), 4)
-
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, GeneralizedLinearRegressionSummary)
         self.assertNotIsInstance(summary2, GeneralizedLinearRegressionTrainingSummary)
@@ -685,12 +693,6 @@ class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_regression import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

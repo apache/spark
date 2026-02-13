@@ -117,4 +117,37 @@ private[spark] object Python {
     .version("4.1.0")
     .booleanConf
     .createWithDefault(false)
+
+  val PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS =
+    ConfigBuilder("spark.python.worker.tracebackDumpIntervalSeconds")
+      .doc("The interval (in seconds) for Python workers to dump their tracebacks. " +
+        "If it's positive, the Python worker will periodically dump the traceback into " +
+        "its `stderr`. The default is `0` that means it is disabled.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "The interval should be 0 or positive.")
+      .createWithDefault(0)
+
+  val PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE =
+    ConfigBuilder("spark.python.factory.idleWorkerMaxPoolSize")
+      .doc("Maximum number of idle Python workers to keep. " +
+        "If unset, the number is unbounded. " +
+        "If set to a positive integer N, at most N idle workers are retained; " +
+        "least-recently used workers are evicted first.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "If set, the idle worker max size must be > 0.")
+      .createOptional
+
+  val PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE =
+    ConfigBuilder("spark.python.daemon.killWorkerOnFlushFailure")
+      .doc("When enabled, exceptions raised during output flush operations in the Python " +
+        "worker managed under Python daemon are not caught, causing the worker to terminate " +
+        "with the exception. This allows Spark to detect the failure and launch a new worker " +
+        "and retry the task. " +
+        "When disabled, flush exceptions are caught and logged but the worker continues, " +
+        "which could cause the worker to get stuck due to protocol mismatch.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }

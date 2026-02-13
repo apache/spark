@@ -20,19 +20,19 @@ package org.apache.spark.sql.artifact
 import java.io.{File, IOException}
 import java.lang.ref.Cleaner
 import java.net.{URI, URL, URLClassLoader}
-import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArrayList}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
+import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.{FilenameUtils, FileUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
@@ -113,7 +113,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     }
   }
 
-  protected val cachedBlockIdList = new CopyOnWriteArrayList[CacheId]
+  private val hashToCachedIdMap = new ConcurrentHashMap[String, RefCountedCacheId]
   protected val jarsList = new CopyOnWriteArrayList[Path]
   protected val pythonIncludeList = new CopyOnWriteArrayList[String]
   protected val sparkContextRelativePaths =
@@ -134,6 +134,10 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * @return
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
+
+  protected[sql] def getCachedBlockId(hash: String): Option[CacheId] = {
+    Option(hashToCachedIdMap.get(hash)).map(_.id)
+  }
 
   private def transferFile(
       source: Path,
@@ -179,19 +183,37 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     if (normalizedRemoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
+        val hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}")
         val blockManager = session.sparkContext.env.blockManager
         val blockId = CacheId(
           sessionUUID = session.sessionUUID,
-          hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
-        val updater = blockManager.TempFileBasedBlockStoreUpdater(
-          blockId = blockId,
-          level = StorageLevel.MEMORY_AND_DISK_SER,
-          classTag = implicitly[ClassTag[Array[Byte]]],
-          tmpFile = tmpFile,
-          blockSize = tmpFile.length(),
-          tellMaster = false)
-        updater.save()
-        cachedBlockIdList.add(blockId)
+          hash = hash)
+        // If the exact same block (same CacheId) already exists, skip re-adding.
+        // This prevents incorrectly removing the existing block from BlockManager.
+        // Note: We only skip if the CacheId matches - if it's a different session's block
+        // (e.g., after clone), we should replace it.
+        val existingBlock = hashToCachedIdMap.get(hash)
+        if (existingBlock == null || existingBlock.id != blockId) {
+          val storageLevel = StorageLevel.fromString(
+            session.conf.get(SQLConf.ARTIFACT_MANAGER_CACHE_STORAGE_LEVEL))
+          val updater = blockManager.TempFileBasedBlockStoreUpdater(
+            blockId = blockId,
+            level = storageLevel,
+            classTag = implicitly[ClassTag[Array[Byte]]],
+            tmpFile = tmpFile,
+            blockSize = tmpFile.length(),
+            tellMaster = false)
+          updater.save()
+          hashToCachedIdMap.put(blockId.hash, new RefCountedCacheId(blockId))
+          if (existingBlock != null) {
+            // Release the old block - this is a legitimate replacement (different CacheId,
+            // e.g., after session clone). The old block will be removed when its ref count
+            // reaches zero.
+            existingBlock.release(blockManager)
+          }
+        } else {
+          logWarning(s"Cache artifact with hash $hash already exists in this session, skipping.")
+        }
       }(finallyBlock = { tmpFile.delete() })
     } else if (normalizedRemoteRelativePath.startsWith(s"classes${File.separator}")) {
       // Move class files to the right directory.
@@ -213,7 +235,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // Disallow overwriting with modified version
       if (Files.exists(target)) {
         // makes the query idempotent
-        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
           return
         }
 
@@ -266,27 +288,38 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * they are from a permanent location.
    */
   private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
+    val failedArtifactExceptions = ListBuffer[SparkRuntimeException]()
+
     artifacts.foreach { artifact =>
-      artifact.storage match {
-        case d: Artifact.LocalFile =>
-          addArtifact(
-            artifact.path,
-            d.path,
-            fragment = None,
-            deleteStagedFile = false)
-        case d: Artifact.InMemory =>
-          val tempDir = Utils.createTempDir().toPath
-          val tempFile = tempDir.resolve(artifact.path.getFileName)
-          val outStream = Files.newOutputStream(tempFile)
-          Utils.tryWithSafeFinallyAndFailureCallbacks {
-            d.stream.transferTo(outStream)
-            addArtifact(artifact.path, tempFile, fragment = None)
-          }(finallyBlock = {
-            outStream.close()
-          })
-        case _ =>
-          throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
+      try {
+        artifact.storage match {
+          case d: Artifact.LocalFile =>
+            addArtifact(
+              artifact.path,
+              d.path,
+              fragment = None,
+              deleteStagedFile = false)
+          case d: Artifact.InMemory =>
+            val tempDir = Utils.createTempDir().toPath
+            val tempFile = tempDir.resolve(artifact.path.getFileName)
+            val outStream = Files.newOutputStream(tempFile)
+            Utils.tryWithSafeFinallyAndFailureCallbacks {
+              d.stream.transferTo(outStream)
+              addArtifact(artifact.path, tempFile, fragment = None)
+            }(finallyBlock = {
+              outStream.close()
+            })
+          case _ =>
+            throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
+        }
+      } catch {
+        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+          failedArtifactExceptions += e
       }
+    }
+
+    if (failedArtifactExceptions.nonEmpty) {
+      throw ArtifactUtils.mergeExceptionsWithSuppressed(failedArtifactExceptions.toSeq)
     }
   }
 
@@ -340,12 +373,29 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
     }
-    val blockManager = sparkContext.env.blockManager
-    val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
-      val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
-      copyBlock(blockId, newBlockId, blockManager)
+
+    // Share cached blocks with the cloned session by copying the references and incrementing
+    // their reference counts. Both the original and cloned ArtifactManager will reference the
+    // same underlying cached data blocks. When either session releases a block, only the ref-count
+    // decreases.
+    // The block is removed from memory only when the ref-count reaches zero.
+    hashToCachedIdMap.forEach { (hash: String, refCountedCacheId: RefCountedCacheId) =>
+      try {
+        refCountedCacheId.acquire()  // Increment ref-count to prevent premature cleanup
+        newArtifactManager.hashToCachedIdMap.put(hash, refCountedCacheId)
+      } catch {
+        case e: SparkRuntimeException if e.getCondition == "BLOCK_ALREADY_RELEASED" =>
+          // The parent session was closed or this block was released during cloning.
+          // This indicates a race condition - we cannot safely complete the clone operation.
+          // With the ref-counting optimization, cloning is fast and this should be rare.
+          throw new SparkRuntimeException(
+            "INTERNAL_ERROR",
+            Map("message" -> (s"Cannot clone ArtifactManager: cached block with hash $hash " +
+              s"was already released. The parent session may have been closed during cloning.")),
+            e)
+      }
     }
 
     // Re-register resources to SparkContext
@@ -370,7 +420,6 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       }
     }
 
-    newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
     newArtifactManager.jarsList.addAll(jarsList)
     newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
     newArtifactManager.sparkContextRelativePaths.addAll(sparkContextRelativePaths)
@@ -384,8 +433,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     artifactPath)
   // Ensure that no reference to `this` is captured/help by the cleanup lambda
   private def getCleanable: Cleaner.Cleanable = cleaner.register(
-    this,
-    () => ArtifactManager.cleanUpGlobalResources(cleanUpStateForGlobalResources)
+    this, new StateCleanupRunner(cleanUpStateForGlobalResources)
   )
   private var cleanable = getCleanable
 
@@ -400,13 +448,32 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // Note that this will only be run once per instance.
     cleanable.clean()
 
+    // Clean-up cached blocks.
+    val blockManager = session.sparkContext.env.blockManager
+    hashToCachedIdMap.values().forEach { refCountedCacheId =>
+      refCountedCacheId.release(blockManager)
+    }
+    hashToCachedIdMap.clear()
+
     // Clean up internal trackers
     jarsList.clear()
     pythonIncludeList.clear()
-    cachedBlockIdList.clear()
     sparkContextRelativePaths.clear()
 
-    // Removed cached classloader
+    // Close and remove cached classloader
+    cachedClassLoader.foreach {
+      case urlClassLoader: URLClassLoader =>
+        try {
+          urlClassLoader.close()
+          logDebug(log"Closed URLClassLoader for session " +
+            log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}")
+        } catch {
+          case e: IOException =>
+            logWarning(log"Failed to close URLClassLoader for session " +
+              log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}", e)
+        }
+      case _ =>
+    }
     cachedClassLoader = None
   }
 
@@ -472,22 +539,9 @@ object ArtifactManager extends Logging {
     val JAR, FILE, ARCHIVE = Value
   }
 
-  private def copyBlock(fromId: CacheId, toId: CacheId, blockManager: BlockManager): CacheId = {
-    require(fromId != toId)
-    blockManager.getLocalBytes(fromId) match {
-      case Some(blockData) =>
-        Utils.tryWithSafeFinallyAndFailureCallbacks {
-          val updater = blockManager.ByteBufferBlockStoreUpdater(
-            blockId = toId,
-            level = StorageLevel.MEMORY_AND_DISK_SER,
-            classTag = implicitly[ClassTag[Array[Byte]]],
-            bytes = blockData.toChunkedByteBuffer(ByteBuffer.allocate),
-            tellMaster = false)
-          updater.save()
-          toId
-        }(finallyBlock = { blockManager.releaseLock(fromId); blockData.dispose() })
-      case None =>
-        throw SparkException.internalError(s"Block $fromId not found in the block manager.")
+  private class StateCleanupRunner(cleanupState: ArtifactStateForCleanup) extends Runnable {
+    override def run(): Unit = {
+      ArtifactManager.cleanUpGlobalResources(cleanupState)
     }
   }
 
@@ -518,13 +572,9 @@ object ArtifactManager extends Logging {
       }
     }
 
-    // Clean up cached relations
-    val blockManager = sparkContext.env.blockManager
-    blockManager.removeCache(sparkSessionUUID)
-
     // Clean up artifacts folder
     try {
-      FileUtils.deleteDirectory(artifactPath.toFile)
+      Utils.deleteRecursively(artifactPath.toFile)
     } catch {
       case e: IOException =>
         logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +
@@ -538,3 +588,28 @@ private[artifact] case class ArtifactStateForCleanup(
   sparkContext: SparkContext,
   jobArtifactState: JobArtifactState,
   artifactPath: Path)
+
+private class RefCountedCacheId(val id: CacheId) {
+  private val rc = new AtomicInteger(1)
+
+  def acquire(): Unit = updateRc(1)
+
+  def release(blockManager: BlockManager): Unit = {
+    val newRc = updateRc(-1)
+    if (newRc == 0) {
+      blockManager.removeBlock(id)
+    }
+  }
+
+  private def updateRc(delta: Int): Int = {
+    rc.updateAndGet { currentRc: Int =>
+      if (currentRc == 0) {
+        throw new SparkRuntimeException(
+          "BLOCK_ALREADY_RELEASED",
+          Map("blockId" -> id.toString)
+        )
+      }
+      currentRc + delta
+    }
+  }
+}

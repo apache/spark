@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
+class JsonInferSchema(private val options: JSONOptions) extends Serializable with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -60,6 +60,13 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
   private val ignoreMissingFiles = options.ignoreMissingFiles
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
   private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: JsonInferSchema => options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = options.hashCode()
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {

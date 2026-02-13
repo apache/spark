@@ -186,3 +186,9 @@ class SslNettyRpcEnvSuite extends NettyRpcEnvSuite with MockitoSugar with TimeLi
     SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }
+
+class AutoNettyRpcEnvSuite extends NettyRpcEnvSuite with MockitoSugar with TimeLimits {
+  override def createSparkConf(): SparkConf = {
+    super.createSparkConf().set("spark.rpc.io.mode", "AUTO")
+  }
+}

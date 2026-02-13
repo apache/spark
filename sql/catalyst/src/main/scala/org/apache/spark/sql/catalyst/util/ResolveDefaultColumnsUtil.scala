@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -33,14 +34,12 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -53,52 +52,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
-
-  /**
-   * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
-   *
-   * The results are stored in the "exists default" metadata of the same columns. For example, in
-   * the event of this statement:
-   *
-   * CREATE TABLE T(a INT, b INT DEFAULT 5 + 5)
-   *
-   * This method constant-folds the "current default" value, stored in the CURRENT_DEFAULT metadata
-   * of the "b" column, to "10", storing the result in the "exists default" value within the
-   * EXISTS_DEFAULT metadata of that same column. Meanwhile the "current default" metadata of this
-   * "b" column retains its original value of "5 + 5".
-   *
-   * The reason for constant-folding the EXISTS_DEFAULT is to make the end-user visible behavior the
-   * same, after executing an ALTER TABLE ADD COLUMNS command with DEFAULT value, as if the system
-   * had performed an exhaustive backfill of the provided value to all previously existing rows in
-   * the table instead. We choose to avoid doing such a backfill because it would be a
-   * time-consuming and costly operation. Instead, we elect to store the EXISTS_DEFAULT in the
-   * column metadata for future reference when querying data out of the data source. In turn, each
-   * data source then takes responsibility to provide the constant-folded value in the
-   * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
-   *
-   * @param tableSchema   represents the names and types of the columns of the statement to process.
-   * @param statementType name of the statement being processed, such as INSERT; useful for errors.
-   * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
-   */
-  def constantFoldCurrentDefaultsToExistDefaults(
-      tableSchema: StructType,
-      statementType: String): StructType = {
-    if (SQLConf.get.enableDefaultColumns) {
-      val newFields: Seq[StructField] = tableSchema.fields.map { field =>
-        if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          val analyzed: Expression = analyze(field, statementType)
-          val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
-          field.copy(metadata = newMetadata)
-        } else {
-          field
-        }
-      }.toImmutableArraySeq
-      StructType(newFields)
-    } else {
-      tableSchema
-    }
-  }
 
   // Fails if the given catalog does not support column default value.
   def validateCatalogForDefaultValue(
@@ -379,27 +332,33 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
-    val expr = Literal.fromSQL(defaultSQL) match {
-      // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
-      // hence we need to add timezone to the cast if necessary
-      case c: Cast if c.child.resolved && c.needsTimeZone =>
-        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
-      case e: Expression => e
-    }
+    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+      case Success(literal) =>
+        val expr = literal match {
+          // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
+          // hence we need to add timezone to the cast if necessary
+          case c: Cast if c.child.resolved && c.needsTimeZone =>
+            c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+          case e: Expression => e
+        }
 
-    // Check invariants
-    if (expr.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        "", field.name, defaultSQL)
-    }
+        // Check invariants
+        if (expr.containsPattern(PLAN_EXPRESSION)) {
+          throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+            "", field.name, defaultSQL)
+        }
 
-    val resolvedExpr = expr match {
-      case _: ExprLiteral => expr
-      case c: Cast if c.resolved => expr
-      case _ =>
+        expr match {
+          case _: ExprLiteral => expr
+          case c: Cast if c.resolved => expr
+          case _ =>
+            fallbackResolveExistenceDefaultValue(field)
+        }
+
+      case Failure(_) =>
+        // If Literal.fromSQL fails, use fallback resolution
         fallbackResolveExistenceDefaultValue(field)
     }
-
     coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
   }
 
@@ -473,7 +432,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val ret = analyzed match {
       case equivalent if equivalent.dataType == supplanted =>
         equivalent
-      case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
+      case _ if Cast.canAssignDefaultValue(analyzed.dataType, supplanted) =>
         Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
       case other =>
         defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(
@@ -573,6 +532,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
     rows.toSeq
   }
 
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, String)] = {
+    cols.filter(_.defaultValue() != null).flatMap { col =>
+      ("", "", "") :: ("# Column Default Values", "", "") ::
+        (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
+    }.toSeq
+  }
+
   /**
    * These define existence default values for the struct fields for efficiency purposes.
    * The caller should avoid using such methods in a loop for efficiency.
@@ -593,24 +560,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     if (default.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statement, colName, default.originalSQL)
-    } else if (default.resolved) {
-      targetTypeOption match {
-        case Some(targetType) =>
-          CharVarcharUtils.replaceCharVarcharWithString(targetType)
-          if (!Cast.canUpCast(default.child.dataType, targetType) &&
-            defaultValueFromWiderTypeLiteral(default.child, targetType, colName).isEmpty) {
-            throw QueryCompilationErrors.defaultValuesDataTypeError(
-              statement, colName, default.originalSQL, targetType, default.child.dataType)
-          }
-        case _ => ()
-      }
-    } else {
-      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-        statement, colName, default.originalSQL, null)
     }
-
-    // Our analysis check passes here. We do not further inspect whether the
-    // expression is `foldable` here, as the plan is not optimized yet.
 
     if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
       // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
@@ -620,6 +570,22 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValueNotConstantError(
         statement, colName, default.originalSQL)
     }
+
+    if (default.resolved) {
+      targetTypeOption.foreach { targetType =>
+        // Type coercion should have already run before this check, so types should match.
+        if (!ColumnDefinition.isDefaultValueTypeMatched(default.child.dataType, targetType)) {
+          throw QueryCompilationErrors.defaultValuesDataTypeError(
+            statement, colName, default.originalSQL, targetType, default.child.dataType)
+        }
+      }
+    } else {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statement, colName, default.originalSQL, null)
+    }
+
+    // Our analysis check passes here. We do not further inspect whether the
+    // expression is `foldable` here, as the plan is not optimized yet.
 
     if (!default.deterministic) {
       throw QueryCompilationErrors.defaultValueNonDeterministicError(
@@ -656,7 +622,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw SparkUnsupportedOperationException()
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
-      V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+      v1Catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
     }
     override def functionExists(ident: Identifier): Boolean = {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)

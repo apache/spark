@@ -25,9 +25,9 @@ import org.scalatest.Assertions
 
 import org.apache.spark.{QueryContextType, SparkThrowable}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.SparkStringUtils.sideBySide
 import org.apache.spark.sql.connect.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.sideBySide
 
 abstract class QueryTest extends ConnectFunSuite with SQLHelper {
 

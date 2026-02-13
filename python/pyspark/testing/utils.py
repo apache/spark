@@ -20,6 +20,7 @@ import struct
 import sys
 import unittest
 import difflib
+import faulthandler
 import functools
 from decimal import Decimal
 from time import time, sleep
@@ -53,48 +54,63 @@ def have_package(name: str) -> bool:
 
 
 have_numpy = have_package("numpy")
-numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+numpy_requirement_message = "" if have_numpy else "No module named 'numpy'"
 
 have_scipy = have_package("scipy")
-scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+scipy_requirement_message = "" if have_scipy else "No module named 'scipy'"
 
 have_sklearn = have_package("sklearn")
-sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+sklearn_requirement_message = "" if have_sklearn else "No module named 'sklearn'"
 
 have_torch = have_package("torch")
-torch_requirement_message = None if have_torch else "No module named 'torch'"
+torch_requirement_message = "" if have_torch else "No module named 'torch'"
 
 have_torcheval = have_package("torcheval")
-torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+torcheval_requirement_message = "" if have_torcheval else "No module named 'torcheval'"
 
 have_deepspeed = have_package("deepspeed")
-deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+deepspeed_requirement_message = "" if have_deepspeed else "No module named 'deepspeed'"
 
 have_plotly = have_package("plotly")
-plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+plotly_requirement_message = "" if have_plotly else "No module named 'plotly'"
 
 have_matplotlib = have_package("matplotlib")
-matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+matplotlib_requirement_message = "" if have_matplotlib else "No module named 'matplotlib'"
 
 have_tabulate = have_package("tabulate")
-tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+tabulate_requirement_message = "" if have_tabulate else "No module named 'tabulate'"
 
 have_graphviz = have_package("graphviz")
-graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+graphviz_requirement_message = "" if have_graphviz else "No module named 'graphviz'"
 
 have_flameprof = have_package("flameprof")
-flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+flameprof_requirement_message = "" if have_flameprof else "No module named 'flameprof'"
 
 have_jinja2 = have_package("jinja2")
-jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+jinja2_requirement_message = "" if have_jinja2 else "No module named 'jinja2'"
 
 have_openpyxl = have_package("openpyxl")
-openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+openpyxl_requirement_message = "" if have_openpyxl else "No module named 'openpyxl'"
 
 have_yaml = have_package("yaml")
-yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
+yaml_requirement_message = "" if have_yaml else "No module named 'yaml'"
 
-pandas_requirement_message = None
+have_grpc = have_package("grpc")
+grpc_requirement_message = "" if have_grpc else "No module named 'grpc'"
+
+have_grpc_status = have_package("grpc_status")
+grpc_status_requirement_message = "" if have_grpc_status else "No module named 'grpc_status'"
+
+
+googleapis_common_protos_requirement_message = ""
+
+try:
+    from google.rpc import error_details_pb2
+except ImportError as e:
+    googleapis_common_protos_requirement_message = str(e)
+have_googleapis_common_protos = not googleapis_common_protos_requirement_message
+
+pandas_requirement_message = ""
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
@@ -103,10 +119,10 @@ except Exception as e:
     # If Pandas version requirement is not satisfied, skip related tests.
     pandas_requirement_message = str(e)
 
-have_pandas = pandas_requirement_message is None
+have_pandas = not pandas_requirement_message
 
 
-pyarrow_requirement_message = None
+pyarrow_requirement_message = ""
 try:
     from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
@@ -115,13 +131,25 @@ except Exception as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     pyarrow_requirement_message = str(e)
 
-have_pyarrow = pyarrow_requirement_message is None
+have_pyarrow = not pyarrow_requirement_message
+
+
+connect_requirement_message = (
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or grpc_requirement_message
+    or googleapis_common_protos_requirement_message
+    or grpc_status_requirement_message
+)
+
+should_test_connect = not connect_requirement_message
+
 
 is_ansi_mode_test = True
 if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
     is_ansi_mode_test = False
 
-ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else ""
 
 
 def read_int(b):
@@ -132,15 +160,15 @@ def write_int(i):
     return struct.pack("!i", i)
 
 
-def timeout(seconds):
+def timeout(timeout):
     def decorator(func):
         def handler(signum, frame):
-            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+            raise TimeoutError(f"Function {func.__name__} timed out after {timeout} seconds")
 
         def wrapper(*args, **kwargs):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, handler)
-            signal.alarm(seconds)
+            signal.alarm(timeout)
             try:
                 result = func(*args, **kwargs)
             finally:
@@ -155,6 +183,10 @@ def timeout(seconds):
 def eventually(
     timeout=30.0,
     catch_assertions=False,
+    catch_timeout=False,
+    quiet=True,
+    interval=0.1,
+    expected_exceptions=tuple(),
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -176,9 +208,29 @@ def eventually(
         If False (default), do not catch AssertionErrors.
         If True, catch AssertionErrors; continue, but save
         error to throw upon timeout.
+    catch_timeout : bool
+        If False (default), do not catch TimeoutError.
+        If True, catch TimeoutError; continue, but save
+        error to throw upon timeout.
+    quiet : bool
+        If True (default), do not print any output.
+        If False, print output.
+    interval : float
+        Number of seconds to wait between attempts.  Default 0.1 seconds.
     """
     assert timeout > 0
     assert isinstance(catch_assertions, bool)
+    assert isinstance(catch_timeout, bool)
+    assert isinstance(quiet, bool)
+    assert isinstance(interval, float)
+    assert isinstance(expected_exceptions, (tuple, list))
+
+    expected_exceptions = list(expected_exceptions)
+    if catch_assertions:
+        expected_exceptions.append(AssertionError)
+    if catch_timeout:
+        expected_exceptions.append(TimeoutError)
+    expected_exceptions = tuple(expected_exceptions)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -191,21 +243,19 @@ def eventually(
             while time() - start_time < timeout:
                 numTries += 1
 
-                if catch_assertions:
-                    try:
-                        lastValue = condition(*args, **kwargs)
-                    except AssertionError as e:
-                        lastValue = e
-                else:
+                try:
                     lastValue = condition(*args, **kwargs)
+                except expected_exceptions as e:
+                    lastValue = e
 
                 if lastValue is True or lastValue is None:
                     return
 
-                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
-                sleep(0.01)
+                if not quiet:
+                    print(f"\nAttempt #{numTries} failed!\n{lastValue}")
+                sleep(interval)
 
-            if isinstance(lastValue, AssertionError):
+            if isinstance(lastValue, expected_exceptions):
                 raise lastValue
             else:
                 raise AssertionError(
@@ -230,7 +280,19 @@ class QuietTest:
         self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
-class PySparkTestCase(unittest.TestCase):
+class PySparkBaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
+
+class PySparkTestCase(PySparkBaseTestCase):
     def setUp(self):
         from pyspark import SparkContext
 
@@ -243,7 +305,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class ReusedPySparkTestCase(unittest.TestCase):
+class ReusedPySparkTestCase(PySparkBaseTestCase):
     @classmethod
     def conf(cls):
         """
@@ -253,6 +315,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         from pyspark import SparkContext
 
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
@@ -263,7 +327,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.sc.stop()
+        try:
+            cls.sc.stop()
+        finally:
+            super().tearDownClass()
 
     def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
@@ -421,6 +488,7 @@ def assertSchemaEqual(
     ignoreColumnOrder: bool = False,
     ignoreColumnName: bool = False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
@@ -553,6 +621,10 @@ def assertSchemaEqual(
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
                 return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "map":
+                return compare_datatypes_ignore_nullable(
+                    dt1.keyType, dt2.keyType
+                ) and compare_datatypes_ignore_nullable(dt1.valueType, dt2.valueType)
             elif dt1.typeName() == "decimal":
                 # Fix for SPARK-51062: Compare precision and scale for decimal types
                 return dt1.precision == dt2.precision and dt1.scale == dt2.scale
@@ -610,6 +682,7 @@ def assertDataFrameEqual(
     showOnlyDiff: bool = False,
     includeDiffRows=False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between `actual` and `expected`
     (DataFrames or lists of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
@@ -996,6 +1069,7 @@ def assertDataFrameEqual(
     def assert_rows_equal(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
+        __tracebackhide__ = True
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []

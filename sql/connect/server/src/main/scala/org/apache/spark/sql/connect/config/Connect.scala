@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkEnv
@@ -304,7 +305,7 @@ object Connect {
       .version("4.0.0")
       .internal()
       .intConf
-      .createWithDefault(16)
+      .createWithDefault(32)
 
   val CONNECT_SESSION_PLAN_CACHE_ENABLED =
     buildConf("spark.connect.session.planCache.enabled")
@@ -316,6 +317,28 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED =
+    buildConf("spark.connect.session.planCache.alwaysCacheDataSourceReadsEnabled")
+      .doc("When true, always cache the translation of Read.DataSource plans" +
+        " in the plan cache. This massively improves the performance of queries that reuse the" +
+        " same Read.DataSource within the same session, since these translations/analyses" +
+        " are usually quite costly.")
+      .version("4.1.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS =
+    buildStaticConf("spark.connect.session.inactiveOperations.cacheExpiration")
+      .doc(
+        "Expiration time for inactive operation IDs cache in Spark Connect Session." +
+          " Operations are cached after completion for a period of time to detect duplicates." +
+          " The time should allow for network late arrivals, at least several minutes.")
+      .version("4.1.0")
+      .internal()
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(30)
 
   val CONNECT_AUTHENTICATE_TOKEN =
     buildStaticConf("spark.connect.authenticate.token")
@@ -381,4 +404,50 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10g")
+
+  val CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE =
+    buildConf("spark.connect.session.resultChunking.maxChunkSize")
+      .doc("The max size of a chunk in responses for a result batch. Result chunking is enabled" +
+        " if this config is set to a value greater than 0 and if the client allows it in" +
+        " ResultChunkingOptions. Otherwise, for example if set to -1, this feature is disabled." +
+        " While spark.connect.grpc.arrow.maxBatchSize determines the max size of a result batch," +
+        " maxChunkSize defines the max size of each individual chunk that is part of the batch" +
+        " that will be sent in a response. This allows the server to send large rows to clients." +
+        " The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      // 90% of the max message size by default to allow for some overhead.
+      .createWithDefault((ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE * 0.9).toInt)
+
+  private[spark] val CONNECT_MAX_PLAN_SIZE =
+    buildStaticConf("spark.connect.maxPlanSize")
+      .doc(
+        "The maximum size of a (decompressed) proto plan that can be executed in Spark " +
+          "Connect. If the size of the plan exceeds this limit, an error will be thrown. " +
+          "The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(512 * 1024 * 1024) // 512 MB
+
+  val CONNECT_SESSION_PLAN_COMPRESSION_THRESHOLD =
+    buildConf("spark.connect.session.planCompression.threshold")
+      .doc("The threshold in bytes for the size of proto plan to be compressed. " +
+        "If the size of proto plan is smaller than this threshold, it will not be compressed. " +
+        "Set to -1 to disable plan compression.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(10 * 1024 * 1024) // 10 MB
+
+  val CONNECT_PLAN_COMPRESSION_DEFAULT_ALGORITHM =
+    buildConf("spark.connect.session.planCompression.defaultAlgorithm")
+      .doc("The default algorithm of proto plan compression.")
+      .version("4.1.0")
+      .internal()
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(ConnectPlanCompressionAlgorithm.values.map(_.toString))
+      .createWithDefault(ConnectPlanCompressionAlgorithm.ZSTD.toString)
 }

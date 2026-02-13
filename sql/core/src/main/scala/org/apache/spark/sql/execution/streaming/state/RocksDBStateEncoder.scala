@@ -36,13 +36,15 @@ import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer,
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StateStoreColumnFamilySchemaUtils}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{SCHEMA_ID_PREFIX_BYTES, STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
+  def supportsDeleteRange: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
@@ -53,6 +55,7 @@ sealed trait RocksDBValueStateEncoder {
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
+  def decodeValues(valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow]
 }
 
 trait StateSchemaProvider extends Serializable {
@@ -63,7 +66,7 @@ trait StateSchemaProvider extends Serializable {
 
 // Test implementation that can be dynamically updated
 class TestStateSchemaProvider extends StateSchemaProvider {
-  private val schemas = mutable.Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
+  private[state] val schemas = mutable.Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
 
   /**
    * Captures a new schema pair (key schema and value schema) for a column family.
@@ -627,7 +630,7 @@ class UnsafeRowDataEncoder(
   override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
     keyStateEncoderSpec match {
       case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
-        decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+        decodeToUnsafeRow(bytes, numFields = keySchema.length - numColsPrefixKey)
       case RangeKeyScanStateEncoderSpec(_, orderingOrdinals) =>
         decodeToUnsafeRow(bytes, keySchema.length - orderingOrdinals.length)
       case _ => throw unsupportedOperationForKeyStateEncoder("decodeRemainingKey")
@@ -1347,14 +1350,16 @@ object RocksDBStateEncoder extends Logging {
    * @param valueSchema Schema defining the structure of values to be encoded
    * @param useMultipleValuesPerKey If true, creates an encoder that can handle multiple values
    *                                per key; if false, creates an encoder for single values
+   * @param delimiterSize Size of the delimiter used between multiple values (in bytes)
    * @return A configured RocksDBValueStateEncoder instance
    */
   def getValueEncoder(
       dataEncoder: RocksDBDataEncoder,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
+      useMultipleValuesPerKey: Boolean,
+      delimiterSize: Int = 1): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(dataEncoder, valueSchema)
+      new MultiValuedStateEncoder(dataEncoder, valueSchema, delimiterSize)
     } else {
       new SingleValueStateEncoder(dataEncoder, valueSchema)
     }
@@ -1470,6 +1475,8 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def supportsDeleteRange: Boolean = false
 }
 
 /**
@@ -1667,6 +1674,8 @@ class RangeKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def supportsDeleteRange: Boolean = true
 }
 
 /**
@@ -1697,6 +1706,8 @@ class NoPrefixKeyStateEncoder(
 
   override def supportPrefixKeyScan: Boolean = false
 
+  override def supportsDeleteRange: Boolean = false
+
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
   }
@@ -1717,7 +1728,8 @@ class NoPrefixKeyStateEncoder(
  */
 class MultiValuedStateEncoder(
     dataEncoder: RocksDBDataEncoder,
-    valueSchema: StructType)
+    valueSchema: StructType,
+    delimiterSize: Int)
   extends RocksDBValueStateEncoder with Logging {
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
@@ -1777,7 +1789,41 @@ class MultiValuedStateEncoder(
             numBytes
           )
           pos += numBytes
-          pos += 1 // eat the delimiter character
+          pos += delimiterSize // eat the delimiter based on actual delimiter size
+          dataEncoder.decodeValue(encodedValue)
+        }
+      }
+    }
+  }
+
+  /** Takes in an iterator of [[ArrayIndexRange]], each index range presents the range of bytes
+   * for the current value in the underlying array. */
+  override def decodeValues(
+      valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow] = {
+    if (valueBytesIterator == null) {
+      Seq().iterator
+    } else {
+      new Iterator[UnsafeRow] {
+        override def hasNext: Boolean = valueBytesIterator.hasNext
+
+        override def next(): UnsafeRow = {
+          // Get the index range of the next value
+          val valueBytesIndex = valueBytesIterator.next()
+          val allValuesBytes = valueBytesIndex.array
+          // convert array index to memory offset
+          var pos = valueBytesIndex.fromIndex + Platform.BYTE_ARRAY_OFFSET
+          // Get value length
+          val numBytes = Platform.getInt(allValuesBytes, pos)
+          pos += java.lang.Integer.BYTES
+
+          // Extract the bytes for this value
+          val encodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(
+            allValuesBytes, pos,
+            encodedValue, Platform.BYTE_ARRAY_OFFSET,
+            numBytes
+          )
+
           dataEncoder.decodeValue(encodedValue)
         }
       }
@@ -1821,6 +1867,11 @@ class SingleValueStateEncoder(
   override def supportsMultipleValuesPerKey: Boolean = false
 
   override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new IllegalStateException("This encoder doesn't support multiple values!")
+  }
+
+  override def decodeValues(
+      valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow] = {
     throw new IllegalStateException("This encoder doesn't support multiple values!")
   }
 }

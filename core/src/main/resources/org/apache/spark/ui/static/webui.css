@@ -30,13 +30,14 @@ h4 {
 }
 
 a,
-a:not([href]) {
+a:not([href]):not([class]) {
   color: #0088cc;
   text-decoration: none;
 }
 
+
 a:hover,
-a:not([href]):hover {
+a:not([href]):not([class]):hover {
   color: #005580;
   text-decoration:underline
 }

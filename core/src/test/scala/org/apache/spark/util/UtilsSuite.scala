@@ -18,11 +18,12 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ThreadInfo
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files => JFiles}
+import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -31,15 +32,14 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
 
-import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.Mockito.when
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
@@ -47,6 +47,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
@@ -133,10 +134,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     assert(Utils.byteStringAsBytes("1") === 1)
     assert(Utils.byteStringAsBytes("1k") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ki") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KB") === ByteUnit.KiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1KiB") === ByteUnit.KiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1m") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mi") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Mb") === ByteUnit.MiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1MiB") === ByteUnit.MiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1g") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1GI") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1gb") === ByteUnit.GiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1giB") === ByteUnit.GiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1t") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Ti") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1tb") === ByteUnit.TiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1Tib") === ByteUnit.TiB.toBytes(1))
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pi") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pb") === ByteUnit.PiB.toBytes(1))
+    assert(Utils.byteStringAsBytes("1pib") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
     // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
@@ -249,8 +265,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        Utils.closeQuietly(mergedStream)
+        Utils.closeQuietly(in)
       }
     }
   }
@@ -344,7 +360,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     } else {
       new FileOutputStream(path)
     }
-    IOUtils.write(content, outputStream)
+    outputStream.write(content)
     outputStream.close()
     content.length
   }
@@ -493,10 +509,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.createDirectory(testDirPath, "scenario1").exists())
 
     // 2. Illegal file path
-    val scenario2 = new File(testDir, "scenario2" * 256)
+    val scenario2 = new File(testDir, "scenario2".repeat(256))
     assert(!Utils.createDirectory(scenario2))
     assert(!scenario2.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2".repeat(256)))
 
     // 3. The parent directory cannot read
     val scenario3 = new File(testDir, "scenario3")
@@ -527,13 +543,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    // JAVA_RUNTIME_VERSION is like "17.0.14+7-LTS"
-    lazy val javaVersion = Runtime.Version.parse(SystemUtils.JAVA_RUNTIME_VERSION)
-    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
+    val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
-    } else if (javaVersion.feature() == 17 && javaVersion.update() >= 14) {
+    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
       // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
       assert(Utils.createDirectory(scenario6))
     } else {
@@ -722,7 +736,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     val tempDir2 = Utils.createTempDir()
     val sourceFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(sourceFile1)
+    Utils.touch(sourceFile1)
     assert(sourceFile1.exists())
     Utils.deleteRecursively(sourceFile1)
     assert(!sourceFile1.exists())
@@ -730,7 +744,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
     val sourceFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(sourceFile2)
+    Utils.touch(sourceFile2)
     assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
@@ -741,14 +755,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
     val tempDir = Utils.createTempDir()
     val sourceFile = new File(tempDir, "foo.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
     assert(sourceFile.exists())
 
     val symlinkFile = new File(tempDir, "bar.txt")
-    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+    Files.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    assert(Files.isSymbolicLink(symlinkFile.toPath))
     Utils.deleteRecursively(tempDir)
 
     // Verify that everything is deleted
@@ -760,13 +774,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sourceDir = new File(tempDir, "sourceDir")
     assert(sourceDir.mkdir())
     val sourceFile = new File(sourceDir, "file.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
 
     val symlinkDir = new File(tempDir, "targetDir")
-    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+    Files.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
+    assert(Files.isSymbolicLink(symlinkDir.toPath))
 
     // Now delete recursively
     Utils.deleteRecursively(tempDir)
@@ -779,7 +793,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.asCharSink(outFile, UTF_8).write("spark.test.fileNameLoadA true\n" +
+      Files.writeString(outFile.toPath, "spark.test.fileNameLoadA true\n" +
         "spark.test.fileNameLoadB 1\n")
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
@@ -809,7 +823,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.asCharSink(sourceFile, UTF_8).write("some text")
+      Files.writeString(sourceFile.toPath, "some text")
 
       val path =
         if (Utils.isWindows) {
@@ -1034,7 +1048,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("Kill process") {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
-    if (SystemUtils.IS_OS_UNIX) {
+    if (Utils.isUnix) {
       def pidExists(pid: Long): Boolean = {
         val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
@@ -1075,7 +1089,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
            |trap "" SIGTERM
            |sleep 10
          """.stripMargin
-      Files.write(cmd.getBytes(UTF_8), file)
+      Files.writeString(file.toPath, cmd)
       file.getAbsoluteFile.setExecutable(true)
 
       process = new ProcessBuilder(file.getAbsolutePath).start()
@@ -1120,7 +1134,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val chi = new ChiSquareTest()
 
     // We expect an even distribution; this array will be rescaled by `chiSquareTest`
-    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val expected = createArray(arraySize * arraySize, 1.0)
     val observed = results.flatten
 
     // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
@@ -1128,6 +1142,40 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("ThreadInfoOrdering") {
+    val task1T = mock[ThreadInfo]
+    when(task1T.getThreadId).thenReturn(11L)
+    when(task1T.getThreadName)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+    when(task1T.toString)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+
+    val task2T = mock[ThreadInfo]
+    when(task2T.getThreadId).thenReturn(12L)
+    when(task2T.getThreadName)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+    when(task2T.toString)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+
+    val connectExecuteOp1T = mock[ThreadInfo]
+    when(connectExecuteOp1T.getThreadId).thenReturn(21L)
+    when(connectExecuteOp1T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+    when(connectExecuteOp1T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+
+    val connectExecuteOp2T = mock[ThreadInfo]
+    when(connectExecuteOp2T.getThreadId).thenReturn(22L)
+    when(connectExecuteOp2T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+    when(connectExecuteOp2T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+
+    val sorted = Seq(connectExecuteOp1T, connectExecuteOp2T, task1T, task2T)
+      .sorted(Utils.threadInfoOrdering)
+    assert(sorted === Seq(task1T, task2T, connectExecuteOp1T, connectExecuteOp2T))
   }
 
   test("redact sensitive information") {
@@ -1592,7 +1640,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   private def callGetTryAgain(t: Try[String]): String = {
-    Utils.getTryWithCallerStacktrace(t)
+    Utils.getTryWithCallerStacktrace(t, isFirstAccess = false)
   }
 
   test("doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
@@ -1621,26 +1669,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!st1.exists(_.getMethodName == "callDoTry"))
     assert(st1.exists(_.getMethodName == "callGetTry"))
 
-    // The original stack trace with callDoTry should be in the suppressed exceptions.
-    // Example:
-    // scalastyle:off line.size.limit
-    // Suppressed: java.lang.Exception: Full stacktrace of original doTryWithCallerStacktrace caller
-    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
-    //   at scala.util.Try$.apply(Try.scala:213)
-    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
-    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
-    //   ... 56 more
-    // scalastyle:on line.size.limit
-    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
-    assert(origSt.isDefined)
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
-    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
-
-    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
-    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
-      .doTryWithCallerStacktraceDepth == 4)
+    // First access (isFirstAccess = true by default) - no suppressed exception
+    assert(!e1.getSuppressed.exists(_.isInstanceOf[Utils.OriginalTryStackTraceException]))
 
     val e2 = intercept[Exception] {
       callGetTryAgain(t)
@@ -1666,6 +1696,24 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(st2.exists(_.getMethodName == "callGetTryAgain"))
     // callGetTry that we called before shouldn't be on the stack trace.
     assert(!st2.exists(_.getMethodName == "callGetTry"))
+
+    // Second access (isFirstAccess = false) - suppressed exception should be added.
+    // The original stack trace with callDoTry should be in the suppressed exceptions.
+    // Example:
+    // scalastyle:off line.size.limit
+    // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
+    //   ... 56 more
+    // scalastyle:on line.size.limit
+    val origSt = e2.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
+    assert(origSt.isDefined, "Suppressed exception should be added on subsequent access")
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
 
     // Unfortunately, this utility is not able to clone the exception, but modifies it in place,
     // so now e1 is also pointing to "callGetTryAgain" instead of "callGetTry".
@@ -1712,20 +1760,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
       //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
       // ...
-      // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
-      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
-      //  at scala.util.Try$.apply(Try.scala:217)
-      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
-      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
-      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
-      //  ...
       // scalastyle:on line.size.limit
 
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1773,7 +1814,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
       assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
-      assert(e.getSuppressed.length == 1)
+      // No suppressed exception - the wrapper is used internally only
+      assert(e.getSuppressed.length == 0)
 
       Utils.getTryWithCallerStacktrace(t)
     }
@@ -1817,7 +1859,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(e.getStackTrace.exists(_.getMethodName == "callGetTry"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
-    assert(e.getSuppressed.length == 1)
+    // No suppressed exception - the wrapper is used internally only
+    assert(e.getSuppressed.length == 0)
   }
 }
 

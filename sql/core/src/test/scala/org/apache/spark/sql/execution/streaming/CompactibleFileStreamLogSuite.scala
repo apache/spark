@@ -22,11 +22,12 @@ import java.nio.charset.StandardCharsets._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CompactibleFileStreamLogSuite extends SharedSparkSession {
 
-  import CompactibleFileStreamLog._
+  import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 
   /** -- testing of `object CompactibleFileStreamLog` begins -- */
 

@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf
 
@@ -32,6 +31,7 @@ import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimeType
+import org.apache.spark.util.Utils
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   import testImplicits._
@@ -195,7 +195,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withTempPath { dir =>
           withTable("spark_19809") {
             sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
-            Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
+            Utils.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
 
             Seq(true, false).foreach { convertMetastoreOrc =>
               withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {

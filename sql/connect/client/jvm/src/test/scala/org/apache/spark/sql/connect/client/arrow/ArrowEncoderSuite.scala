@@ -28,7 +28,6 @@ import scala.reflect.classTag
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row}
@@ -36,21 +35,22 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInfere
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
-import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
-import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
+import org.apache.spark.sql.util.CloseableIterator
 import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.{MaybeNull, SparkStringUtils}
 
 /**
  * Tests for encoding external data to and from arrow.
  */
-class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class ArrowEncoderSuite extends ConnectFunSuite {
   private val allocator = new RootAllocator()
 
   private def newAllocator(name: String): BufferAllocator = {
@@ -217,20 +217,6 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
   }
 
-  private case class MaybeNull(interval: Int) {
-    assert(interval > 1)
-    private var invocations = 0
-    def apply[T](value: T): T = {
-      val result = if (invocations % interval == 0) {
-        null.asInstanceOf[T]
-      } else {
-        value
-      }
-      invocations += 1
-      result
-    }
-  }
-
   private def javaBigDecimal(i: Int): java.math.BigDecimal = {
     javaBigDecimal(i, DecimalType.DEFAULT_SCALE)
   }
@@ -274,6 +260,102 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
       Iterator.tabulate(10)(i => Row(i))
     }
     assert(inspector.numBatches == 1)
+  }
+
+  test("geography round trip") {
+    val point1 = "010100000000000000000031400000000000001C40"
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
+    val point2 = "010100000000000000000035400000000000001E40"
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
+
+    val geographyEncoder = toRowEncoder(new StructType().add("g", "geography(4326)"))
+    roundTripAndCheckIdentical(geographyEncoder) { () =>
+      val maybeNull = MaybeNull(7)
+      Iterator.tabulate(101)(i => Row(maybeNull(Geography.fromWKB(point1, 4326))))
+    }
+
+    val nestedGeographyEncoder = toRowEncoder(
+      new StructType()
+        .add(
+          "s",
+          new StructType()
+            .add("i1", "int")
+            .add("g0", "geography(4326)")
+            .add("i2", "int")
+            .add("g4326", "geography(4326)"))
+        .add("a", "array<geography(4326)>")
+        .add("m", "map<string, geography(ANY)>"))
+
+    roundTripAndCheckIdentical(nestedGeographyEncoder) { () =>
+      val maybeNull5 = MaybeNull(5)
+      val maybeNull7 = MaybeNull(7)
+      val maybeNull11 = MaybeNull(11)
+      val maybeNull13 = MaybeNull(13)
+      val maybeNull17 = MaybeNull(17)
+      Iterator
+        .tabulate(100)(i =>
+          Row(
+            maybeNull5(
+              Row(
+                i,
+                maybeNull7(Geography.fromWKB(point1)),
+                i + 1,
+                maybeNull11(Geography.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j => Geography.fromWKB(point2, 0))),
+            maybeNull13(Map((i.toString, maybeNull17(Geography.fromWKB(point1, 4326)))))))
+    }
+  }
+
+  test("geometry round trip") {
+    val point1 = "010100000000000000000031400000000000001C40"
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
+    val point2 = "010100000000000000000035400000000000001E40"
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
+
+    val geometryEncoder = toRowEncoder(new StructType().add("g", "geometry(0)"))
+    roundTripAndCheckIdentical(geometryEncoder) { () =>
+      val maybeNull = MaybeNull(7)
+      Iterator.tabulate(101)(i => Row(maybeNull(Geometry.fromWKB(point1, 0))))
+    }
+
+    val nestedGeometryEncoder = toRowEncoder(
+      new StructType()
+        .add(
+          "s",
+          new StructType()
+            .add("i1", "int")
+            .add("g0", "geometry(0)")
+            .add("i2", "int")
+            .add("g4326", "geometry(4326)"))
+        .add("a", "array<geometry(0)>")
+        .add("m", "map<string, geometry(ANY)>"))
+
+    roundTripAndCheckIdentical(nestedGeometryEncoder) { () =>
+      val maybeNull5 = MaybeNull(5)
+      val maybeNull7 = MaybeNull(7)
+      val maybeNull11 = MaybeNull(11)
+      val maybeNull13 = MaybeNull(13)
+      val maybeNull17 = MaybeNull(17)
+      Iterator
+        .tabulate(100)(i =>
+          Row(
+            maybeNull5(
+              Row(
+                i,
+                maybeNull7(Geometry.fromWKB(point1, 0)),
+                i + 1,
+                maybeNull11(Geometry.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j => Geometry.fromWKB(point2, 0))),
+            maybeNull13(Map((i.toString, maybeNull17(Geometry.fromWKB(point1, 4326)))))))
+    }
   }
 
   test("variant round trip") {

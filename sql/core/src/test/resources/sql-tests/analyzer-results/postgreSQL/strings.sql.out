@@ -512,7 +512,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`toasttest`, false
 insert into toasttest values(repeat('1234567890',10000))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/toasttest, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/toasttest], Append, `spark_catalog`.`default`.`toasttest`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/toasttest), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -520,7 +520,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into toasttest values(repeat('1234567890',10000))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/toasttest, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/toasttest], Append, `spark_catalog`.`default`.`toasttest`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/toasttest), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -528,7 +528,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into toasttest values(repeat('1234567890',10000))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/toasttest, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/toasttest], Append, `spark_catalog`.`default`.`toasttest`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/toasttest), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -536,7 +536,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into toasttest values(repeat('1234567890',10000))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/toasttest, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/toasttest], Append, `spark_catalog`.`default`.`toasttest`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/toasttest), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 

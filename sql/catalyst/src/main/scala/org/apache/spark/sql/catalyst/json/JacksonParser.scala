@@ -80,6 +80,7 @@ class JacksonParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
@@ -433,6 +434,12 @@ class JacksonParser(
         case VALUE_STRING =>
           val expr = Cast(Literal(parser.getText), dt)
           java.lang.Long.valueOf(expr.eval(EmptyRow).asInstanceOf[Long])
+      }
+
+    case _: TimeType => (parser: JsonParser) =>
+      parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timeFormatter.parse(parser.getText)
       }
 
     case st: StructType =>

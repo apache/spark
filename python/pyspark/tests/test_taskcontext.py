@@ -16,6 +16,7 @@
 #
 import os
 import random
+import socketserver
 import stat
 import sys
 import tempfile
@@ -215,6 +216,20 @@ class TaskContextTests(PySparkTestCase):
         self.assertTrue(result2 == [0, 1, 2, 3])
 
 
+@unittest.skipUnless(
+    hasattr(socketserver, "UnixStreamServer"),
+    "Unix Domain Socket is not supported on this platform.",
+)
+class TaskContextUDSTests(TaskContextTests):
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Enable Unix Domain Socket for the test
+        conf = SparkConf().set("spark.python.unix.domain.socket.enabled", "true")
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext("local[4, 2]", class_name, conf=conf)
+
+
 class TaskContextTestsWithWorkerReuse(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
@@ -301,22 +316,33 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
 class TaskContextTestsWithResources(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
-        self.tempFile.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
+        # Create discovery script for GPU
+        self.gpuTempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.gpuTempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
+        self.gpuTempFile.close()
         os.chmod(
-            self.tempFile.name,
+            self.gpuTempFile.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+        # Create discovery script for FPGA (SPARK-54929)
+        self.fpgaTempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.fpgaTempFile.write(b'echo {\\"name\\": \\"fpga\\", \\"addresses\\": [\\"0\\"]}')
+        self.fpgaTempFile.close()
+        os.chmod(
+            self.fpgaTempFile.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.gpuTempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.cpus", 2)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
+        # Configure FPGA resource (SPARK-54929)
+        conf = conf.set("spark.worker.resource.fpga.discoveryScript", self.fpgaTempFile.name)
+        conf = conf.set("spark.worker.resource.fpga.amount", 1)
+        conf = conf.set("spark.task.resource.fpga.amount", "1")
+        conf = conf.set("spark.executor.resource.fpga.amount", "1")
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
 
     def test_cpus(self):
@@ -326,27 +352,24 @@ class TaskContextTestsWithResources(unittest.TestCase):
         self.assertEqual(cpus, 2)
 
     def test_resources(self):
-        """Test the resources are available."""
+        """Test that multiple resources are all available (SPARK-54929)."""
         rdd = self.sc.parallelize(range(10))
         resources = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
-        self.assertEqual(len(resources), 1)
+        self.assertEqual(len(resources), 2)
         self.assertTrue("gpu" in resources)
         self.assertEqual(resources["gpu"].name, "gpu")
         self.assertEqual(resources["gpu"].addresses, ["0"])
+        self.assertTrue("fpga" in resources)
+        self.assertEqual(resources["fpga"].name, "fpga")
+        self.assertEqual(resources["fpga"].addresses, ["0"])
 
     def tearDown(self):
-        os.unlink(self.tempFile.name)
+        os.unlink(self.gpuTempFile.name)
+        os.unlink(self.fpgaTempFile.name)
         self.sc.stop()
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.tests.test_taskcontext import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

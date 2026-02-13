@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.regex.Pattern
 
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.catalyst.parser.PositionMapper
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
@@ -36,12 +37,32 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkErrorContext: Option[(String, String)] = None) {
+    pysparkErrorContext: Option[(String, String)] = None,
+    positionMapper: Option[PositionMapper] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
-    SQLQueryContext(line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+    // Apply position mapping if available
+    val (mappedStartIndex, mappedStopIndex, originalSqlText) =
+      positionMapper match {
+        case Some(mapper) =>
+          // Map substituted positions back to original SQL positions
+          val mappedStart = startIndex.map(mapper.mapToOriginal)
+          val mappedStop = stopIndex.map(mapper.mapToOriginal)
+          (mappedStart, mappedStop, Some(mapper.originalText))
+        case None =>
+          (startIndex, stopIndex, sqlText)
+      }
+
+    SQLQueryContext(
+      line,
+      startPosition,
+      mappedStartIndex,
+      mappedStopIndex,
+      originalSqlText,
+      objectType,
+      objectName)
   }
 
   def getQueryContext: Array[QueryContext] = {

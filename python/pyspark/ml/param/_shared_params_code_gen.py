@@ -72,7 +72,7 @@ def _gen_param_header(
     )
 
     def __init__(self) -> None:
-        super({Name}, self).__init__()'''
+        super().__init__()'''
 
     if defaultValueStr is not None:
         template += f"""

@@ -30,7 +30,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.{Failure, Success, Try, Using}
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
@@ -39,7 +38,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -47,7 +46,8 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.arrow.ArrowFileReadWrite
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -822,7 +822,7 @@ private[spark] class FileSystemOverwrite extends Logging {
       val filePath = new File(path)
       if (filePath.exists()) {
         if (shouldOverwrite) {
-          FileUtils.deleteDirectory(filePath)
+          Utils.deleteRecursively(filePath)
         } else {
           throw new IOException(errMsg)
         }
@@ -1141,6 +1141,34 @@ private[spark] object ReadWriteUtils {
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].collect()
+    }
+  }
+
+  def saveDataFrame(path: String, df: DataFrame): Unit = {
+    if (localSavingModeState.get()) {
+      df match {
+        case d: org.apache.spark.sql.classic.DataFrame =>
+          val filePath = Paths.get(path)
+          Files.createDirectories(filePath.getParent)
+          ArrowFileReadWrite.save(d, filePath)
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported dataframe type: ${o.getClass.getName}")
+      }
+    } else {
+      df.write.parquet(path)
+    }
+  }
+
+  def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
+    if (localSavingModeState.get()) {
+      spark match {
+        case s: org.apache.spark.sql.classic.SparkSession =>
+          ArrowFileReadWrite.load(s, Paths.get(path))
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported session type: ${o.getClass.getName}")
+      }
+    } else {
+      spark.read.parquet(path)
     }
   }
 }

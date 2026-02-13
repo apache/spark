@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -42,7 +43,8 @@ class InMemoryTable(
     numPartitions: Option[Int] = None,
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
-    override val numRowsPerSplit: Int = Int.MaxValue)
+    override val numRowsPerSplit: Int = Int.MaxValue,
+    override val id: String = UUID.randomUUID().toString)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
@@ -67,40 +69,55 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
-    increaseCurrentVersion()
+    increaseVersion()
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
-    withData(data, schema)
+    withData(data, columns())
+  }
+
+  override def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   override def withData(
       data: Array[BufferedRows],
       writeSchema: StructType): InMemoryTable = {
     dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap.get(key)
-          .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
-            } else {
-              splits
-            }
-            newSplits.last.withRow(row)
-            key -> newSplits
+      data.foreach {
+        bufferedRow => {
+          bufferedRow.rows.foreach { row =>
+            val key = getKey(row, writeSchema)
+            dataMap += dataMap.get(key)
+              .map { splits =>
+                val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                  (splits.last.schema != writeSchema)) {
+                  splits :+ new BufferedRows(key, writeSchema)
+                } else {
+                  splits
+                }
+                newSplits.last.withRow(row)
+                key -> newSplits
+              }
+              .getOrElse(key -> Seq(new BufferedRows(key, writeSchema).withRow(row)))
+            addPartitionKey(key)
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-        addPartitionKey(key)
-      })
+        }
+      }
 
       if (data.exists(_.rows.exists(row => row.numFields == 1 &&
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
-      increaseCurrentVersion()
+      increaseVersion()
       this
     }
+  }
+
+  override def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryTable = {
+    super.alterTableWithData(data, newSchema).asInstanceOf[InMemoryTable]
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -108,6 +125,52 @@ class InMemoryTable(
     InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
 
     new InMemoryWriterBuilderWithOverWrite(info)
+  }
+
+  override def copy(): Table = {
+    val copiedTable = new InMemoryTable(
+      name,
+      columns(),
+      partitioning,
+      properties,
+      constraints,
+      distribution,
+      ordering,
+      numPartitions,
+      advisoryPartitionSize,
+      isDistributionStrictlyRequired,
+      numRowsPerSplit,
+      id)
+
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copiedTable.dataMap.put(key, copiedSplits)
+      }
+    }
+
+    copiedTable.commits ++= commits.map(_.copy())
+
+    copiedTable.setVersion(version())
+    if (validatedVersion() != null) {
+      copiedTable.setValidatedVersion(validatedVersion())
+    }
+
+    copiedTable
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: InMemoryTable =>
+      this.id == that.id && this.version() == that.version()
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hash(id, version())
   }
 
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)

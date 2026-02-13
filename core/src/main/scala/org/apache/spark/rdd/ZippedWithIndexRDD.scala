@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -39,6 +40,17 @@ class ZippedWithIndexRDDPartition(val prev: Partition, val startIndex: Long)
 private[spark]
 class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev) {
 
+  private def getAncestorWithSamePartitionSizes(rdd: RDD[_]): RDD[_] = {
+    rdd match {
+      case c: RDD[_] if c.getStorageLevel != StorageLevel.NONE => c
+      case m: MapPartitionsRDD[_, _] if m.preservesPartitionSizes =>
+        getAncestorWithSamePartitionSizes(m.prev)
+      case m: MapPartitionsWithEvaluatorRDD[_, _] if m.preservesPartitionSizes =>
+        getAncestorWithSamePartitionSizes(m.prev)
+      case _ => rdd
+    }
+  }
+
   /** The start index of each partition. */
   @transient private val startIndices: Array[Long] = {
     val n = prev.partitions.length
@@ -47,8 +59,9 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
     } else if (n == 1) {
       Array(0L)
     } else {
-      prev.context.runJob(
-        prev,
+      val ancestor = getAncestorWithSamePartitionSizes(prev)
+      ancestor.context.runJob(
+        ancestor,
         Utils.getIteratorSize _,
         0 until n - 1 // do not need to count the last partition
       ).scanLeft(0L)(_ + _)

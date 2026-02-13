@@ -28,20 +28,18 @@ import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
  * PipelinesHandler when CreateDataflowGraph is called, and the PipelinesHandler also supports
  * attaching flows/datasets to a graph.
  */
-// TODO(SPARK-51727): Currently DataflowGraphRegistry is a singleton, but it should instead be
-//  scoped to a single SparkSession for proper isolation between pipelines that are run on the
-//  same cluster.
-object DataflowGraphRegistry {
+class DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
 
-  /** Registers a DataflowGraph and generates a unique id to associate with the graph */
+  /**
+   * Registers a GraphRegistrationContext and generates a unique id to associate with the graph
+   */
   def createDataflowGraph(
       defaultCatalog: String,
       defaultDatabase: String,
       defaultSqlConf: Map[String, String]): String = {
     val graphId = java.util.UUID.randomUUID().toString
-    // TODO: propagate pipeline catalog and schema from pipeline spec here.
     dataflowGraphs.put(
       graphId,
       new GraphRegistrationContext(defaultCatalog, defaultDatabase, defaultSqlConf))
@@ -55,7 +53,7 @@ object DataflowGraphRegistry {
 
   /** Retrieves the graph for a given id, and throws if the id could not be found. */
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
-    DataflowGraphRegistry.getDataflowGraph(dataflowGraphId).getOrElse {
+    getDataflowGraph(dataflowGraphId).getOrElse {
       throw new SparkException(
         errorClass = "DATAFLOW_GRAPH_NOT_FOUND",
         messageParameters = Map("graphId" -> dataflowGraphId),

@@ -443,6 +443,35 @@ class MLSuite extends MLHelper {
     }
   }
 
+  test("MLCache close()") {
+    // Test 1: Non-ML session - directories should NOT be created
+    val nonMLSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val mlCache1 = nonMLSessionHolder.mlCache
+
+    assert(!mlCache1.hasCreatedMLDirs.get())
+    mlCache1.close()
+    assert(!mlCache1.hasCreatedMLDirs.get())
+
+    // Test 2: ML session - directories should be created, close should run cleanup
+    val mlSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val mlCache2 = mlSessionHolder.mlCache
+
+    val modelId = trainLogisticRegressionModel(mlSessionHolder)
+    assert(mlCache2.hasCreatedMLDirs.get())
+    assert(mlCache2.get(modelId) != null)
+    mlCache2.close()
+    assert(mlCache2.cachedModel.isEmpty)
+
+    // Test 3: Edge case - register then remove model, close should still run cleanup
+    val edgeCaseSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val mlCache3 = edgeCaseSessionHolder.mlCache
+    val modelId2 = trainLogisticRegressionModel(edgeCaseSessionHolder)
+    mlCache3.remove(modelId2)
+    assert(mlCache3.hasCreatedMLDirs.get())
+    mlCache3.close()
+    assert(mlCache3.cachedModel.isEmpty)
+  }
+
   def trainTreeModel(
       sessionHolder: SessionHolder,
       estimator: proto.MlOperator.Builder): String = {

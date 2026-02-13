@@ -125,7 +125,7 @@ case class UnresolvedCollation(collationName: Seq[String])
 /**
  * An expression that represents a resolved collation name.
  */
-case class ResolvedCollation(collationName: String) extends LeafExpression with Unevaluable {
+case class ResolvedCollation(collationName: String) extends LeafExpression {
   override def nullable: Boolean = false
 
   override def dataType: DataType = StringType(CollationFactory.collationNameToId(collationName))
@@ -133,6 +133,15 @@ case class ResolvedCollation(collationName: String) extends LeafExpression with 
   override def toString: String = collationName
 
   override def sql: String = collationName
+
+  override def eval(input: InternalRow): Any = Literal.create(collationName, dataType).eval(input)
+
+  /** Just a simple passthrough for code generation. */
+  override def genCode(ctx: CodegenContext): ExprCode =
+    Literal.create(collationName, dataType).genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw SparkException.internalError("ResolvedCollation.doGenCode should not be called.")
+  }
 }
 
 // scalastyle:off line.contains.tab

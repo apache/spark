@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -30,6 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
@@ -165,7 +166,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
-      o => UTF8String.fromString(udt.deserialize(o).toString)
+      o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
     case YearMonthIntervalType(startField, endField) =>
       acceptAny[Int](i => UTF8String.fromString(
         IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
@@ -274,7 +275,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case udt: UserDefinedType[_] =>
         val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
         (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+          code"$evPrim = UTF8String.fromString($udtRef.stringifyValue($udtRef.deserialize($c)));"
       case i: YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
@@ -471,7 +472,24 @@ object ToStringBase {
         (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }
+
+  def getBinaryParser: BinaryParser = {
+    val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
+    style match {
+      case Some(BinaryOutputStyle.UTF8) =>
+        (utf8: UTF8String) => utf8.getBytes
+      case Some(BinaryOutputStyle.BASIC) =>
+        (utf8: UTF8String) =>
+          utf8.toString.stripPrefix("[").stripSuffix("]").split(",").map(_.trim.toByte)
+      case Some(BinaryOutputStyle.BASE64) =>
+        (utf8: UTF8String) => java.util.Base64.getDecoder.decode(utf8.getBytes)
+      case Some(BinaryOutputStyle.HEX) =>
+        (utf8: UTF8String) => Hex.unhex(utf8.getBytes)
+      case _ =>
+        (utf8: UTF8String) => SparkStringUtils.fromHexString(utf8.toString)
+    }
+  }
 }
 
 trait BinaryFormatter extends (Array[Byte] => UTF8String) with Serializable
-
+trait BinaryParser extends (UTF8String => Array[Byte]) with Serializable

@@ -543,3 +543,24 @@ Aggregate [a#x], [1 AS a#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`a`.`f1`",
+    "proposal" : "`col1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 66,
+    "fragment" : "a.f1"
+  } ]
+}

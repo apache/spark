@@ -405,8 +405,10 @@ class SparkContext:
 
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal: Any, frame: Any) -> NoReturn:
-            self.cancelAllJobs()
-            raise KeyboardInterrupt()
+            try:
+                self.cancelAllJobs()
+            finally:
+                raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(
@@ -834,8 +836,8 @@ class SparkContext:
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
-            step = c[1] - c[0] if size > 1 else 1  # type: ignore[index]
-            start0 = c[0]  # type: ignore[index]
+            step = c[1] - c[0] if size > 1 else 1
+            start0 = c[0]
 
             def getStart(split: int) -> int:
                 assert numSlices is not None
@@ -2568,7 +2570,8 @@ class SparkContext:
         mappedRDD = rdd.mapPartitions(partitionFunc)
         assert self._jvm is not None
         sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        with _load_from_socket(sock_info, mappedRDD._jrdd_deserializer) as stream:
+            return list(stream)
 
     def show_profiles(self) -> None:
         """Print the profile stats to stdout

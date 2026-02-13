@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.producer.KafkaProducer
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PRODUCER_ID
 
 private[kafka010] class CachedKafkaProducer(

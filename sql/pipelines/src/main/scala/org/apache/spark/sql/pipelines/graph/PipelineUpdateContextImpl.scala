@@ -17,33 +17,52 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.logging.{
-  FlowProgressEventLogger,
-  PipelineEvent,
-  PipelineRunEventBuffer
-}
+import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, PipelineEvent}
 
 /**
  * An implementation of the PipelineUpdateContext trait used in production.
  * @param unresolvedGraph The graph (unresolved) to be executed in this update.
  * @param eventCallback A callback function to be called when an event is added to the event buffer.
+ * @param refreshTables Filter for which tables should be refreshed when performing this update.
+ * @param fullRefreshTables Filter for which tables should be full refreshed
+ *                          when performing this update.
  */
 class PipelineUpdateContextImpl(
     override val unresolvedGraph: DataflowGraph,
-    eventCallback: PipelineEvent => Unit
+    override val eventCallback: PipelineEvent => Unit,
+    override val refreshTables: TableFilter = AllTables,
+    override val fullRefreshTables: TableFilter = NoTables,
+    override val storageRoot: String
 ) extends PipelineUpdateContext {
+
+  PipelineUpdateContextImpl.validateStorageRoot(storageRoot)
 
   override val spark: SparkSession = SparkSession.getActiveSession.getOrElse(
     throw new IllegalStateException("SparkSession is not available")
   )
 
-  override val eventBuffer = new PipelineRunEventBuffer(eventCallback)
-
   override val flowProgressEventLogger: FlowProgressEventLogger =
-    new FlowProgressEventLogger(eventBuffer = eventBuffer)
+    new FlowProgressEventLogger(eventCallback = eventCallback)
 
-  override val refreshTables: TableFilter = AllTables
-  override val fullRefreshTables: TableFilter = NoTables
   override val resetCheckpointFlows: FlowFilter = NoFlows
+}
+
+object PipelineUpdateContextImpl {
+  def validateStorageRoot(storageRoot: String): Unit = {
+    // Use the same validation logic as streaming checkpoint directories
+    val path = new Path(storageRoot)
+
+    val uri = path.toUri
+    if (!path.isAbsolute || uri.getScheme == null || uri.getScheme.isEmpty) {
+      throw new SparkException(
+        errorClass = "PIPELINE_STORAGE_ROOT_INVALID",
+        messageParameters = Map("storage_root" -> storageRoot),
+        cause = null
+      )
+    }
+  }
 }

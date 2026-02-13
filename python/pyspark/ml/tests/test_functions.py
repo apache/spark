@@ -70,7 +70,7 @@ class PredictBatchUDFTestsMixin:
     def setUp(self):
         import pandas as pd
 
-        super(PredictBatchUDFTestsMixin, self).setUp()
+        super().setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
         # 4 scalar columns
@@ -573,12 +573,6 @@ class PredictBatchUDFTests(PredictBatchUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_functions import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

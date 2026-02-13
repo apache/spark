@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorPartitioning
 
 /**
  * This node updates the session window spec of each input rows via analyzing neighbor rows and
@@ -52,10 +52,11 @@ case class UpdatingSessionsExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inMemoryThreshold = conf.sessionWindowBufferInMemoryThreshold
     val spillThreshold = conf.sessionWindowBufferSpillThreshold
+    val spillSizeThreshold = conf.sessionWindowBufferSpillSizeThreshold
 
     child.execute().mapPartitions { iter =>
       new UpdatingSessionsIterator(iter, groupingExpression, sessionExpression,
-        child.output, inMemoryThreshold, spillThreshold)
+        child.output, inMemoryThreshold, spillThreshold, spillSizeThreshold)
     }
   }
 

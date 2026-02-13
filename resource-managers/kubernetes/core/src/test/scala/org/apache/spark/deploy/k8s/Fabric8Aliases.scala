@@ -17,8 +17,7 @@
 package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, PersistentVolumeClaim, PersistentVolumeClaimList, Pod, PodList}
-import io.fabric8.kubernetes.api.model.apps.StatefulSet
-import io.fabric8.kubernetes.api.model.apps.StatefulSetList
+import io.fabric8.kubernetes.api.model.apps.{Deployment, DeploymentList, StatefulSet, StatefulSetList}
 import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, NonNamespaceOperation, PodResource, Resource, RollableScalableResource}
 
 object Fabric8Aliases {
@@ -38,6 +37,10 @@ object Fabric8Aliases {
   type STATEFUL_SETS = MixedOperation[StatefulSet, StatefulSetList, STATEFUL_SET_RES]
   type STATEFUL_SETS_NAMESPACED =
     NonNamespaceOperation[StatefulSet, StatefulSetList, STATEFUL_SET_RES]
+  type DEPLOYMENT_RES = RollableScalableResource[Deployment]
+  type DEPLOYMENTS = MixedOperation[Deployment, DeploymentList, DEPLOYMENT_RES]
+  type DEPLOYMENTS_NAMESPACED =
+    NonNamespaceOperation[Deployment, DeploymentList, DEPLOYMENT_RES]
   type PERSISTENT_VOLUME_CLAIMS = MixedOperation[PersistentVolumeClaim, PersistentVolumeClaimList,
     Resource[PersistentVolumeClaim]]
   type PVC_WITH_NAMESPACE = NonNamespaceOperation[PersistentVolumeClaim, PersistentVolumeClaimList,

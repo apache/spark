@@ -25,6 +25,7 @@ import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Union,
     Optional,
     Tuple,
@@ -84,10 +85,11 @@ def _bin_op(
             float,
             int,
             str,
-            datetime.datetime,
             datetime.date,
-            decimal.Decimal,
+            datetime.time,
+            datetime.datetime,
             datetime.timedelta,
+            decimal.Decimal,
         ),
     ):
         other_expr = LiteralExpression._from_value(other)
@@ -384,7 +386,17 @@ class Column(ParentColumn):
     def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
         other = enum_to_value(other)
         if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+            other,
+            (
+                bool,
+                float,
+                int,
+                str,
+                datetime.date,
+                datetime.time,
+                datetime.datetime,
+                decimal.Decimal,
+            ),
         ):
             other_expr = LiteralExpression._from_value(other)
         else:
@@ -457,6 +469,9 @@ class Column(ParentColumn):
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+        return f(self)
 
     def outer(self) -> ParentColumn:
         return Column(self._expr)

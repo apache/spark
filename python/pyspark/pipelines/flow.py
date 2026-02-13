@@ -33,7 +33,6 @@ class Flow:
     :param spark_conf: A dict where the keys are the Spark configuration property names and the
         values are the property values. These properties will be set on the flow.
     :param source_code_location: The location of the source code that created this flow.
-    :param once: If True, the flow will be executed once per run.
     :param func: The function that defines the flow. This function should return a DataFrame.
     """
 
@@ -41,5 +40,4 @@ class Flow:
     target: str
     spark_conf: Dict[str, str]
     source_code_location: SourceCodeLocation
-    once: bool
     func: QueryFunction

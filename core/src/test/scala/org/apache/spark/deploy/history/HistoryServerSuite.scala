@@ -18,16 +18,14 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Files}
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
-import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
@@ -219,8 +217,8 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   )
 
   if (regenerateGoldenFiles) {
-    FileUtils.deleteDirectory(expRoot)
-    expRoot.mkdirs()
+    Utils.deleteRecursively(expRoot)
+    Utils.createDirectory(expRoot)
   }
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
@@ -246,7 +244,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         }
       }
 
-      val exp = IOUtils.toString(new FileInputStream(goldenFile), StandardCharsets.UTF_8)
+      val exp = Utils.toString(new FileInputStream(goldenFile))
       // compare the ASTs so formatting differences don't cause failures
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
@@ -309,9 +307,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         val expectedFile = {
           new File(logDir, entry.getName)
         }
-        val expected = Files.asCharSource(expectedFile, StandardCharsets.UTF_8).read()
-        val actual = new String(ByteStreams.toByteArray(zipStream), StandardCharsets.UTF_8)
-        actual should be (expected)
+        Utils.toString(zipStream) should be (Files.readString(expectedFile.toPath))
         filesCompared += 1
       }
       entry = zipStream.getNextEntry
@@ -392,6 +388,23 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   test("/version api endpoint") {
     val response = getUrl("version")
     assert(response.contains(SPARK_VERSION))
+  }
+
+  test("SPARK-54857: XSS prevention in application and user names") {
+    implicit val formats = org.json4s.DefaultFormats
+
+    val appId = "local-1766844910796"
+    val response = getUrl(s"applications/$appId")
+    val app = JsonMethods.parse(response)
+
+    // Verify that malicious content is present in JSON (not escaped at API level)
+    (app \ "name").extract[String] should be ("<script>alert('XSS')</script>")
+    val attempt = (app \ "attempts")(0)
+    (attempt \ "sparkUser").extract[String] should be ("<script>alert('XSS')</script>")
+
+    // Verify that the history page HTML properly escapes the content
+    val historyPage = HistoryServerSuite.getUrl(buildPageAttemptUrl(appId, None))
+    historyPage should not include "<script>alert('XSS')</script>"
   }
 
   /**
@@ -658,17 +671,22 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     val multiAttemptAppid = "local-1430917381535"
     val lastAttemptId = Some(2)
     val lastAttemptUrl = buildPageAttemptUrl(multiAttemptAppid, lastAttemptId)
-    Seq(None, Some(1), Some(2)).foreach { attemptId =>
-      val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
-      val (code, location) = getRedirectUrl(url)
-      assert(code === 302, s"Unexpected status code $code for $url")
-      attemptId match {
-        case None =>
-          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
-        case _ =>
-          assert(location.stripSuffix("/") === url.toString)
-      }
-      HistoryServerSuite.getUrl(new URI(location).toURL)
+    // If an application has multiple attempts, the path ends with the last attempt ID is the root
+    // of the context path of the application.
+    Seq((None, 302), (Some(1), 302), (Some(2), 301)).foreach {
+      case (attemptId, expectedCode) =>
+        val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
+        val (code, location) = getRedirectUrl(url)
+        assert(
+          code === expectedCode, s"Unexpected status code $code for $url")
+        attemptId match {
+          case None =>
+            assert(location.stripSuffix("/") === lastAttemptUrl.getPath)
+          case _ =>
+            assert(location.stripSuffix("/") === url.getPath)
+        }
+        HistoryServerSuite.getUrl(
+          new URI(url.getProtocol, url.getAuthority, location, null, null).toURL)
     }
   }
 
@@ -678,13 +696,13 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
     val url = buildPageAttemptUrl(oneAttemptAppId, None)
     val (code, location) = getRedirectUrl(url)
-    assert(code === 302, s"Unexpected status code $code for $url")
-    assert(location === url.toString + "/")
+    assert(code === 301, s"Unexpected status code $code for $url")
+    assert(location === url.getPath + "/")
 
     val url2 = buildPageAttemptUrl(multiAttemptAppid, None)
     val (code2, location2) = getRedirectUrl(url2)
     assert(code2 === 302, s"Unexpected status code $code2 for $url2")
-    assert(location2 === url2.toString + "/2/")
+    assert(location2 === url2.getPath + "/2/")
   }
 
   def getRedirectUrl(url: URL): (Int, String) = {
@@ -742,7 +760,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     conn.setInstanceFollowRedirects(false)
     conn.connect()
     assert(conn.getResponseCode === 302)
-    assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
+    assert(conn.getHeaderField("Location") === "/")
   }
 }
 
@@ -750,7 +768,7 @@ object HistoryServerSuite {
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)
-    val inString = in.map(IOUtils.toString(_, StandardCharsets.UTF_8))
+    val inString = in.map(Utils.toString)
     (code, inString, errString)
   }
 
@@ -766,7 +784,7 @@ object HistoryServerSuite {
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map(IOUtils.toString(_, StandardCharsets.UTF_8))
+      err.map(Utils.toString)
     } catch {
       case io: IOException => None
     }

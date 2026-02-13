@@ -720,7 +720,7 @@ class QueryCompilationErrorsSuite
       },
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
+      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`", "limit" -> "2")
     )
   }
 
@@ -741,7 +741,7 @@ class QueryCompilationErrorsSuite
         },
         condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`", "limit" -> "2")
       )
     }
   }
@@ -954,7 +954,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = intercept[AnalysisException] {
-        converter.convertField(StructField("test", dummyDataType))
+        converter.convertField(StructField("test", dummyDataType), inShredded = false)
       },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")

@@ -80,12 +80,6 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
         val resolvedFlowsToTable = flowsToTable.map { flow =>
           resolvedFlowNodesMap.get(flow.identifier)
         }
-
-        // Assign isStreamingTable (MV or ST) to the table based on the resolvedFlowsToTable
-        val tableWithType = table.copy(
-          isStreamingTableOpt = Option(resolvedFlowsToTable.exists(f => f.df.isStreaming))
-        )
-
         // We mark all tables as virtual to ensure resolution uses incoming flows
         // rather than previously materialized tables.
         val virtualTableInput = VirtualTableInput(
@@ -95,7 +89,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           availableFlows = resolvedFlowsToTable
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
-        Seq(tableWithType)
+        Seq(table)
       case view: View =>
         // For view, add the flow to resolvedInputs and return empty.
         require(upstreamNodes.size == 1, "Found multiple flows to view")
@@ -109,6 +103,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
               s"${upstreamNodes.getClass}"
             )
         }
+      case sink: Sink => Seq(sink)
       case _ =>
         throw new IllegalArgumentException(s"Unsupported node type: ${node.getClass}")
     }
@@ -129,10 +124,10 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       allInputs = allInputs,
       availableInputs = availableResolvedInputs.values.toList,
       configuration = flowToResolve.sqlConf,
-      queryContext = flowToResolve.queryContext
+      queryContext = flowToResolve.queryContext,
+      queryOrigin = flowToResolve.origin
     )
-    val result =
-      flowFunctionResult match {
+    flowFunctionResult match {
         case f if f.dataFrame.isSuccess =>
           // Merge confs from any upstream views into confs for this flow.
           val allFConfs =
@@ -175,7 +170,8 @@ private class FlowResolver(rawGraph: DataflowGraph) {
               allInputs = allInputs,
               availableInputs = availableResolvedInputs.values.toList,
               configuration = newSqlConf,
-              queryContext = flowToResolve.queryContext
+              queryContext = flowToResolve.queryContext,
+              queryOrigin = flowToResolve.origin
             )
           } else {
             f
@@ -201,22 +197,20 @@ private class FlowResolver(rawGraph: DataflowGraph) {
               )
           }
       }
-    result
   }
 
   private def convertResolvedToTypedFlow(
       flow: UnresolvedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
-    val typedFlow = flow match {
-      case f: UnresolvedFlow if f.once => new AppendOnceFlow(flow, funcResult)
-      case f: UnresolvedFlow if funcResult.dataFrame.get.isStreaming =>
+    flow match {
+      case _ if flow.once => new AppendOnceFlow(flow, funcResult)
+      case _ if funcResult.dataFrame.get.isStreaming =>
         // If there's more than 1 flow to this flow's destination, we should not allow it
         // to be planned with an output mode other than Append, as the other flows will
         // then get their results overwritten.
-        val mustBeAppend = rawGraph.flowsTo(f.destinationIdentifier).size > 1
+        val mustBeAppend = rawGraph.flowsTo(flow.destinationIdentifier).size > 1
         new StreamingFlow(flow, funcResult, mustBeAppend = mustBeAppend)
       case _: UnresolvedFlow => new CompleteFlow(flow, funcResult)
     }
-    typedFlow
   }
 }

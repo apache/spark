@@ -39,13 +39,11 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "xml"
 
-  def getXmlOptions(
+  private def getXmlOptions(
       sparkSession: SparkSession,
       parameters: Map[String, String]): XmlOptions = {
-    new XmlOptions(parameters,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
-      true)
+    val conf = getSqlConf(sparkSession)
+    new XmlOptions(parameters, conf.sessionLocalTimeZone, conf.columnNameOfCorruptRecord, true)
   }
 
   override def isSplitable(
@@ -53,8 +51,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val xmlOptions = getXmlOptions(sparkSession, options)
-    val xmlDataSource = XmlDataSource(xmlOptions)
-    xmlDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+    XmlDataSource(xmlOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
   override def inferSchema(
@@ -135,7 +132,8 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => true
 
-    case _: TimeType => false
+    case _: GeometryType | _: GeographyType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

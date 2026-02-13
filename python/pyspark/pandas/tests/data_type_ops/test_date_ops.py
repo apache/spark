@@ -208,31 +208,37 @@ class DateOpsTestsMixin:
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] == pdf["that"], psdf["this"] == psdf["that"])
         self.assert_eq(pdf["this"] == pdf["this"], psdf["this"] == psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] == pdf["this"])
 
     def test_ne(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] != pdf["that"], psdf["this"] != psdf["that"])
         self.assert_eq(pdf["this"] != pdf["this"], psdf["this"] != psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] != pdf["this"])
 
     def test_lt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] < pdf["that"], psdf["this"] < psdf["that"])
         self.assert_eq(pdf["this"] < pdf["this"], psdf["this"] < psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] < pdf["this"])
 
     def test_le(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] <= pdf["that"], psdf["this"] <= psdf["that"])
         self.assert_eq(pdf["this"] <= pdf["this"], psdf["this"] <= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] <= pdf["this"])
 
     def test_gt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] > pdf["that"], psdf["this"] > psdf["that"])
         self.assert_eq(pdf["this"] > pdf["this"], psdf["this"] > psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] > pdf["this"])
 
     def test_ge(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] >= pdf["this"])
 
 
 class DateOpsTests(
@@ -244,13 +250,6 @@ class DateOpsTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.data_type_ops.test_date_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

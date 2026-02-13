@@ -20,14 +20,15 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.HashSet
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 
 /**
- * Stores the resulting operator, output list, grouping attributes and list of aliases from
- * aggregate list, obtained by resolving an [[Aggregate]] operator.
+ * Stores the resulting operator, output list, grouping attributes, list of aliases from
+ * aggregate list and base [[Aggregate]], obtained by resolving an [[Aggregate]] operator.
  */
 case class AggregateResolutionResult(
     operator: LogicalPlan,
     outputList: Seq[NamedExpression],
-    groupingAttributeIds: Option[HashSet[ExprId]],
-    aggregateListAliases: Seq[Alias])
+    groupingAttributeIds: HashSet[ExprId],
+    aggregateListAliases: Seq[Alias],
+    baseAggregate: Aggregate)

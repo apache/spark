@@ -20,13 +20,16 @@ Commonly used utils in pandas-on-Spark.
 
 import functools
 from contextlib import contextmanager
+import json
 import os
+import threading
 from typing import (
     Any,
     Callable,
     Dict,
     Iterator,
     List,
+    Literal,
     Optional,
     Tuple,
     Union,
@@ -38,13 +41,13 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import (
     Axis,
     Label,
@@ -69,6 +72,7 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 
 
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
+SPARK_CONF_PANDAS_STRUCT_MODE = "spark.sql.execution.pandas.structHandlingMode"
 
 
 class PandasAPIOnSparkAdviceWarning(Warning):
@@ -322,7 +326,7 @@ def align_diff_frames(
         ["DataFrame", List[Label], List[Label]], Iterator[Tuple["Series", Label]]
     ],
     this: "DataFrame",
-    that: "DataFrame",
+    that: "DataFrameOrSeries",
     fillna: bool = True,
     how: str = "full",
     preserve_order_column: bool = False,
@@ -742,14 +746,14 @@ def is_name_like_value(
         return True
 
 
-def validate_axis(axis: Optional[Axis] = 0, none_axis: int = 0) -> int:
+def validate_axis(axis: Optional[Axis] = 0, none_axis: Literal[0, 1] = 0) -> Literal[0, 1]:
     """Check the given axis is valid."""
     # convert to numeric axis
     axis = cast(Dict[Optional[Axis], int], {None: none_axis, "index": 0, "columns": 1}).get(
         axis, axis
     )
     if axis in (none_axis, 0, 1):
-        return cast(int, axis)
+        return axis  # type: ignore[return-value]
     else:
         raise ValueError("No axis named {0}".format(axis))
 
@@ -775,10 +779,10 @@ def validate_how(how: str) -> str:
     if how == "outer":
         # 'outer' in pandas equals 'full' in Spark
         how = "full"
-    if how not in ("inner", "left", "right", "full"):
+    if how not in ("inner", "left", "right", "full", "cross"):
         raise ValueError(
-            "The 'how' parameter has to be amongst the following values: ",
-            "['inner', 'left', 'right', 'outer']",
+            "The 'how' parameter has to be amongst the following values: "
+            "['inner', 'left', 'right', 'outer', 'cross']"
         )
     return how
 
@@ -1070,11 +1074,101 @@ def xor(df1: PySparkDataFrame, df2: PySparkDataFrame) -> PySparkDataFrame:
     )
 
 
+_ansi_mode_enabled = threading.local()
+
+
+def _is_in_ansi_mode_context(spark: SparkSession) -> bool:
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+
+        session_id = cast(ConnectSession, spark).session_id
+        return hasattr(_ansi_mode_enabled, session_id)
+    else:
+        return hasattr(_ansi_mode_enabled, "enabled")
+
+
+def _set_ansi_mode_enabled_in_context(spark: SparkSession, enabled: Optional[bool] = None) -> None:
+    if enabled is not None:
+        assert _is_in_ansi_mode_context(spark)
+
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+
+        session_id = cast(ConnectSession, spark).session_id
+        setattr(_ansi_mode_enabled, session_id, enabled)
+    else:
+        _ansi_mode_enabled.enabled = enabled
+
+
+def _get_ansi_mode_enabled_in_context(spark: SparkSession) -> Optional[bool]:
+    assert _is_in_ansi_mode_context(spark)
+
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+
+        session_id = cast(ConnectSession, spark).session_id
+        return getattr(_ansi_mode_enabled, session_id)
+    else:
+        return _ansi_mode_enabled.enabled
+
+
+def _unset_ansi_mode_enabled_in_context(spark: SparkSession) -> None:
+    assert _is_in_ansi_mode_context(spark)
+
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession as ConnectSession
+
+        session_id = cast(ConnectSession, spark).session_id
+        delattr(_ansi_mode_enabled, session_id)
+    else:
+        del _ansi_mode_enabled.enabled
+
+
+@contextmanager
+def ansi_mode_context(spark: SparkSession) -> Iterator[None]:
+    if _is_in_ansi_mode_context(spark):
+        yield
+    else:
+        _set_ansi_mode_enabled_in_context(spark)
+        try:
+            yield
+        finally:
+            _unset_ansi_mode_enabled_in_context(spark)
+
+
 def is_ansi_mode_enabled(spark: SparkSession) -> bool:
-    return (
-        ps.get_option("compute.ansi_mode_support", spark_session=spark)
-        and spark.conf.get("spark.sql.ansi.enabled") == "true"
-    )
+    def _is_ansi_mode_enabled() -> bool:
+        if is_remote():
+            from pyspark.sql.connect.session import SparkSession as ConnectSession
+            from pyspark.pandas.config import _key_format, _options_dict
+
+            client = cast(ConnectSession, spark).client
+            (ansi_mode_support, ansi_enabled) = client.get_config_with_defaults(
+                (
+                    _key_format("compute.ansi_mode_support"),
+                    json.dumps(_options_dict["compute.ansi_mode_support"].default),
+                ),
+                ("spark.sql.ansi.enabled", None),
+            )
+            if ansi_enabled is None:
+                ansi_enabled = spark.conf.get("spark.sql.ansi.enabled")
+                # Explicitly set the default value to reduce the roundtrip for the next time.
+                spark.conf.set("spark.sql.ansi.enabled", ansi_enabled)
+            return json.loads(ansi_mode_support) and ansi_enabled.lower() == "true"
+        else:
+            return (
+                ps.get_option("compute.ansi_mode_support", spark_session=spark)
+                and spark.conf.get("spark.sql.ansi.enabled").lower() == "true"
+            )
+
+    if _is_in_ansi_mode_context(spark):
+        enabled = _get_ansi_mode_enabled_in_context(spark)
+        if enabled is None:
+            enabled = _is_ansi_mode_enabled()
+            _set_ansi_mode_enabled_in_context(spark, enabled)
+        return enabled
+    else:
+        return _is_ansi_mode_enabled()
 
 
 def _test() -> None:

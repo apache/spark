@@ -24,7 +24,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Parquet data source.
@@ -74,16 +74,23 @@ class ParquetOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  def datetimeRebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
+  def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .map(LegacyBehaviorPolicy.withName)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ).toString)
+
+  val inferShreddingForVariant: Boolean = {
+    // VARIANT_WRITE_SHREDDING_ENABLED is a global kill switch.
+    sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+      parameters.get(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key).map(_.toBoolean)
+      .getOrElse(sqlConf.getConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA))
+  }
+
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
-  def int96RebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
-    .get(INT96_REBASE_MODE).map(LegacyBehaviorPolicy.withName)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+  def int96RebaseModeInRead: String = parameters
+    .get(INT96_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ).toString)
 }
 
 

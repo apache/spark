@@ -16,16 +16,16 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.util.UUID
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor, Server, Status, StatusRuntimeException}
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -37,18 +37,19 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
+class SparkConnectClientSuite extends ConnectFunSuite {
 
   private var client: SparkConnectClient = _
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int): Unit = {
+  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
     service = new DummySparkConnectService
-    server = NettyServerBuilder
+    val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
-      .build()
+    interceptors.foreach(serverBuilder.intercept)
+    server = serverBuilder.build()
     server.start()
   }
 
@@ -187,6 +188,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}")
       .build()
+    // Disable plan compression to make sure there is only one RPC request in client.analyze,
+    // so the interceptor can capture the initial header.
+    client.setPlanCompressionOptions(None)
 
     val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
@@ -225,13 +229,15 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
         assert(error.getCondition == testParams.errorClass.get)
         assert(error.getMessageParameters.asScala == testParams.messageParameters)
         assert(error.getQueryContext.isEmpty)
+        assert(error.getSqlState == "23505")
       }
     }
 
@@ -242,11 +248,39 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
       }
+    }
+  }
+
+  test("Legacy error class is set as default") {
+    Seq(
+      ("org.apache.spark.sql.AnalysisException", "_LEGACY_ERROR_TEMP_3100"),
+      ("java.lang.NumberFormatException", "_LEGACY_ERROR_TEMP_3104"),
+      ("java.lang.IllegalArgumentException", "_LEGACY_ERROR_TEMP_3105"),
+      ("java.lang.ArithmeticException", "_LEGACY_ERROR_TEMP_3106"),
+      ("java.lang.UnsupportedOperationException", "_LEGACY_ERROR_TEMP_3107"),
+      ("java.lang.ArrayIndexOutOfBoundsException", "_LEGACY_ERROR_TEMP_3108"),
+      ("java.time.DateTimeException", "_LEGACY_ERROR_TEMP_3109")).foreach {
+      case (className, legacyErrorClass) =>
+        val baseParams = GrpcExceptionConverter.ErrorParams(
+          message = "Test error message",
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          queryContext = Array.empty,
+          sqlState = None)
+
+        val error = GrpcExceptionConverter
+          .errorFactory(className)(baseParams)
+          .asInstanceOf[SparkThrowable]
+        assert(error.asInstanceOf[Exception].getMessage.contains("Test error message"))
+        assert(error.getCondition == legacyErrorClass)
+        assert(error.getSqlState == "XXKCM")
     }
   }
 
@@ -337,130 +371,6 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         checkTestPack(testPack)
       }
     }
-  }
-
-  private class DummyFn(e: => Throwable, numFails: Int = 3) {
-    var counter = 0
-    def fn(): Int = {
-      if (counter < numFails) {
-        counter += 1
-        throw e
-      } else {
-        42
-      }
-    }
-  }
-
-  test("SPARK-44721: Retries run for a minimum period") {
-    // repeat test few times to avoid random flakes
-    for (_ <- 1 to 10) {
-      var totalSleepMs: Long = 0
-
-      def sleep(t: Long): Unit = {
-        totalSleepMs += t
-      }
-
-      val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
-      val retryHandler = new GrpcRetryHandler(RetryPolicy.defaultPolicies(), sleep)
-
-      assertThrows[RetriesExceeded] {
-        retryHandler.retry {
-          dummyFn.fn()
-        }
-      }
-
-      assert(totalSleepMs >= 10 * 60 * 1000) // waited at least 10 minutes
-    }
-  }
-
-  test("SPARK-44275: retry actually retries") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicies = RetryPolicy.defaultPolicies()
-    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
-    val result = retryHandler.retry { dummyFn.fn() }
-
-    assert(result == 42)
-    assert(dummyFn.counter == 3)
-  }
-
-  test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryPolicies = RetryPolicy.defaultPolicies()
-    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
-
-    assertThrows[StatusRuntimeException] {
-      retryHandler.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 1)
-  }
-
-  test("SPARK-44275: retry uses canRetry to filter exceptions") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = RetryPolicy(canRetry = _ => false, name = "TestPolicy")
-    val retryHandler = new GrpcRetryHandler(retryPolicy)
-
-    assertThrows[StatusRuntimeException] {
-      retryHandler.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 1)
-  }
-
-  test("SPARK-44275: retry does not exceed maxRetries") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = RetryPolicy(canRetry = _ => true, maxRetries = Some(1), name = "TestPolicy")
-    val retryHandler = new GrpcRetryHandler(retryPolicy, sleep = _ => {})
-
-    assertThrows[RetriesExceeded] {
-      retryHandler.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 2)
-  }
-
-  def testPolicySpecificError(maxRetries: Int, status: Status): RetryPolicy = {
-    RetryPolicy(
-      maxRetries = Some(maxRetries),
-      name = s"Policy for ${status.getCode}",
-      canRetry = {
-        case e: StatusRuntimeException => e.getStatus.getCode == status.getCode
-        case _ => false
-      })
-  }
-
-  test("Test multiple policies") {
-    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.UNAVAILABLE)
-    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
-
-    // Tolerate 2 UNAVAILABLE errors and 4 INTERNAL errors
-
-    val errors = (List.fill(2)(Status.UNAVAILABLE) ++ List.fill(4)(Status.INTERNAL)).iterator
-
-    new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
-      val e = errors.nextOption()
-      if (e.isDefined) {
-        throw e.get.asRuntimeException()
-      }
-    })
-
-    assert(!errors.hasNext)
-  }
-
-  test("Test multiple policies exceed") {
-    val policy1 = testPolicySpecificError(maxRetries = 2, status = Status.INTERNAL)
-    val policy2 = testPolicySpecificError(maxRetries = 4, status = Status.INTERNAL)
-
-    val errors = List.fill(10)(Status.INTERNAL).iterator
-    var countAttempted = 0
-
-    assertThrows[RetriesExceeded](
-      new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
-        countAttempted += 1
-        val e = errors.nextOption()
-        if (e.isDefined) {
-          throw e.get.asRuntimeException()
-        }
-      }))
-
-    assert(countAttempted == 7)
   }
 
   test("ArtifactManager retries errors") {
@@ -645,6 +555,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .connectionString(s"sc://localhost:${server.getPort}")
       .enableReattachableExecute()
       .build()
+    // Disable plan compression to make sure there is only one RPC request in client.analyze,
+    // so the interceptor can capture the initial header.
+    client.setPlanCompressionOptions(None)
 
     val plan = buildPlan("select * from range(10000000)")
     val dummyUUID = "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
@@ -657,6 +570,151 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       assert(resp.getOperationId == dummyUUID)
     }
   }
+
+  test("Plan compression works correctly for execution") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    // Set plan compression options for testing
+    client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+
+    // Small plan should not be compressed
+    val plan = buildPlan("select * from range(10)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    while (reattachableIter.hasNext) {
+      reattachableIter.next()
+    }
+    assert(service.getAndClearLatestInputPlan().hasRoot)
+
+    // Large plan should be compressed
+    val plan2 = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+    val iter2 = client.execute(plan2)
+    val reattachableIter2 =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter2)
+    while (reattachableIter2.hasNext) {
+      reattachableIter2.next()
+    }
+    assert(service.getAndClearLatestInputPlan().hasCompressedOperation)
+  }
+
+  test("Plan compression works correctly for analysis") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    // Set plan compression options for testing
+    client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+
+    // Small plan should not be compressed
+    val plan = buildPlan("select * from range(10)")
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan))
+    assert(service.getAndClearLatestInputPlan().hasRoot)
+
+    // Large plan should be compressed
+    val plan2 = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan2))
+    assert(service.getAndClearLatestInputPlan().hasCompressedOperation)
+  }
+
+  test("Plan compression will be disabled if the configs are not defined on the server") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    service.setErrorToThrowOnConfig(
+      "spark.connect.session.planCompression.defaultAlgorithm",
+      new StatusRuntimeException(Status.INTERNAL.withDescription("SQL_CONF_NOT_FOUND")))
+
+    // Execute a few queries to make sure the client fetches the configs only once.
+    (1 to 3).foreach { _ =>
+      val plan = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+      val iter = client.execute(plan)
+      val reattachableIter =
+        ExecutePlanResponseReattachableIterator.fromIterator(iter)
+      while (reattachableIter.hasNext) {
+        reattachableIter.next()
+      }
+      assert(service.getAndClearLatestInputPlan().hasRoot)
+    }
+    // The plan compression options should be empty.
+    assert(client.getPlanCompressionOptions.isEmpty)
+    // The client should try to fetch the config only once.
+    assert(service.getAndClearLatestConfigRequests().size == 1)
+  }
+
+  test("SPARK-55243: Binary headers use the correct marshaller") {
+    class HeadersInterceptor extends ServerInterceptor {
+      var headers: Option[Metadata] = None
+
+      override def interceptCall[ReqT, RespT](
+          call: ServerCall[ReqT, RespT],
+          headers: Metadata,
+          next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+        this.headers = Some(headers)
+        next.startCall(call, headers)
+      }
+    }
+
+    def buildClientWithHeader(key: String, value: String): SparkConnectClient = {
+      SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(key, value)
+        .build()
+    }
+
+    val headerInterceptor = new HeadersInterceptor()
+    startDummyServer(0, Seq(headerInterceptor))
+
+    val keyName = "test-bin"
+    val key = Metadata.Key.of(keyName, Metadata.BINARY_BYTE_MARSHALLER)
+    val binaryData = "test-binary-data"
+    val base64EncodedValue = Base64.getEncoder.encodeToString(binaryData.getBytes(UTF_8))
+
+    val plan = buildPlan("select * from range(10)")
+
+    // Successfully set and use base64-encoded -bin key.
+    client = buildClientWithHeader(keyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(key)))
+      val bytes = headerInterceptor.headers.get.get(key)
+      assert(new String(bytes, UTF_8) == binaryData)
+    }
+
+    // Non base64-encoded -bin header throws IllegalArgumentException at construction time.
+    assertThrows[IllegalArgumentException] {
+      buildClientWithHeader(keyName, binaryData)
+    }
+
+    // Non -bin headers keep using the ASCII marshaller.
+    val asciiKeyName = "test"
+    val asciiKey = Metadata.Key.of(asciiKeyName, Metadata.ASCII_STRING_MARSHALLER)
+
+    headerInterceptor.headers = None // Reset captured headers.
+
+    client = buildClientWithHeader(asciiKeyName, base64EncodedValue)
+    client.execute(plan)
+
+    Eventually.eventually(timeout(5.seconds)) {
+      assert(headerInterceptor.headers.exists(_.containsKey(asciiKey)))
+      val value = headerInterceptor.headers.get.get(asciiKey)
+      assert(value == base64EncodedValue)
+      // No BINARY_BYTE_MARSHALLER header.
+      assert(!headerInterceptor.headers.exists(_.containsKey(key)))
+    }
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
@@ -664,8 +722,16 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private var inputPlan: proto.Plan = _
   private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
     mutable.ListBuffer.empty
+  private val inputConfigRequests = mutable.ListBuffer.empty[proto.ConfigRequest]
+  private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
+
+  private var errorToThrowOnConfig: Map[String, Throwable] = Map.empty
+
+  private[sql] def setErrorToThrowOnConfig(key: String, error: Throwable): Unit = synchronized {
+    errorToThrowOnConfig = errorToThrowOnConfig + (key -> error)
+  }
 
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = synchronized {
     val plan = inputPlan
@@ -677,6 +743,13 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     synchronized {
       val requests = inputArtifactRequests.toSeq
       inputArtifactRequests.clear()
+      requests
+    }
+
+  private[sql] def getAndClearLatestConfigRequests(): Seq[proto.ConfigRequest] =
+    synchronized {
+      val requests = inputConfigRequests.clone().toSeq
+      inputConfigRequests.clear()
       requests
     }
 
@@ -787,6 +860,38 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       builder.putStatuses(name, status.setExists(exists).build())
     }
     responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
+  }
+
+  override def config(
+      request: proto.ConfigRequest,
+      responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+    inputConfigRequests.synchronized {
+      inputConfigRequests.append(request)
+    }
+    require(
+      request.getOperation.hasGetOption,
+      "Only GetOption is supported. Other operations " +
+        "can be implemented by following the same procedure below.")
+
+    val responseBuilder = proto.ConfigResponse.newBuilder().setSessionId(request.getSessionId)
+    request.getOperation.getGetOption.getKeysList.asScala.iterator.foreach { key =>
+      if (errorToThrowOnConfig.contains(key)) {
+        val error = errorToThrowOnConfig(key)
+        responseObserver.onError(error)
+        return
+      }
+
+      val kvBuilder = proto.KeyValue.newBuilder()
+      synchronized {
+        sparkConfigs.get(key).foreach { value =>
+          kvBuilder.setKey(key)
+          kvBuilder.setValue(value)
+        }
+      }
+      responseBuilder.addPairs(kvBuilder.build())
+    }
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 

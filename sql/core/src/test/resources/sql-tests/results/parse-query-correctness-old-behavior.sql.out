@@ -614,7 +614,11 @@ EXECUTE IMMEDIATE 'SELECT 1 UNION SELECT 2 UNION SELECT 3' INTO v1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.SparkException
+{
+  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
+}
 
 
 -- !query
@@ -622,7 +626,7 @@ SELECT v1
 -- !query schema
 struct<v1:int>
 -- !query output
-1
+NULL
 
 
 -- !query
@@ -670,7 +674,7 @@ SELECT v1
 -- !query schema
 struct<v1:int>
 -- !query output
-1
+NULL
 
 
 -- !query
@@ -686,7 +690,7 @@ SELECT v1
 -- !query schema
 struct<v1:int>
 -- !query output
-1
+NULL
 
 
 -- !query
@@ -710,7 +714,22 @@ EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 22,
+    "fragment" : "SELECT 1 JOIN SELECT 2"
+  } ]
+}
 
 
 -- !query
@@ -726,7 +745,22 @@ EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 19,
+    "fragment" : "SELECT 1 VALUES (1)"
+  } ]
+}
 
 
 -- !query
@@ -742,7 +776,22 @@ EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'garbage'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 38,
+    "fragment" : "SELECT 1 alias garbage garbage garbage"
+  } ]
+}
 
 
 -- !query
@@ -758,7 +807,22 @@ EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'abc'",
+    "hint" : ": extra input 'abc'"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 17,
+    "fragment" : "SELECT 1 WITH abc"
+  } ]
+}
 
 
 -- !query

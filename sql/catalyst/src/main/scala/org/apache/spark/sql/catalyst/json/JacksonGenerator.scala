@@ -106,6 +106,10 @@ class JacksonGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+  private val timeFormatter = options.timeFormatInWrite match {
+    case TimeFormatter.defaultPattern => TimeFormatter.getFractionFormatter()
+    case customPattern => TimeFormatter(customPattern, isParsing = false)
+  }
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -181,6 +185,11 @@ class JacksonGenerator(
           start,
           end)
         gen.writeString(dtString)
+
+    case _: TimeType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val timeString = timeFormatter.format(row.getLong(ordinal))
+        gen.writeString(timeString)
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>

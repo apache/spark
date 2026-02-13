@@ -24,8 +24,8 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -55,7 +55,10 @@ class BooleanOpsTestsMixin:
 
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(b_pser + pser, b_psser + psser, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser + pser, b_psser + psser, check_exact=False, ignore_null=ignore_null
+            )
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col == "bool":
@@ -74,7 +77,10 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser - True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser - pdf[col], b_psser - psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser - psdf[col])
@@ -91,7 +97,10 @@ class BooleanOpsTestsMixin:
         self.assert_eq(b_pser * False, b_psser * False)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser * pdf[col], b_psser * psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
@@ -100,11 +109,11 @@ class BooleanOpsTestsMixin:
             else:
                 self.assertRaises(TypeError, lambda: b_psser * psser)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser / 0, b_psser / 0)
         self.assert_eq(b_pser / 1, b_psser / 1)
         self.assert_eq(b_pser / 0.1, b_psser / 0.1)
         self.assert_eq(b_pser / b_pser.astype(int), b_psser / b_psser.astype(int))
@@ -116,7 +125,6 @@ class BooleanOpsTestsMixin:
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser / psdf[col])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
 
@@ -124,6 +132,7 @@ class BooleanOpsTestsMixin:
 
         # float is always returned in pandas-on-Spark
         self.assert_eq((b_pser // 1).astype("float"), b_psser // 1)
+        self.assert_eq((b_pser // 0).astype("float"), b_psser // 0)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(b_pser // 0.1, b_psser // 0.1)
@@ -141,6 +150,7 @@ class BooleanOpsTestsMixin:
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser % 0, b_psser % 0)
         self.assert_eq(b_pser % 1, b_psser % 1)
         self.assert_eq(b_pser % 0.1, b_psser % 0.1)
         self.assert_eq(b_pser % b_pser.astype(float), b_psser % b_psser.astype(float))
@@ -148,7 +158,10 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser % True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col], check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(
+                b_pser % pdf[col], b_psser % psdf[col], check_exact=False, ignore_null=ignore_null
+            )
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser % psdf[col])
@@ -238,16 +251,13 @@ class BooleanOpsTestsMixin:
 
     def test_rmod(self):
         psdf = self.psdf
+        pdf = self.pdf
 
         b_psser = psdf["bool"]
-        # 1 % False is 0.0 in pandas
-        self.assert_eq(pd.Series([0, 0, None], dtype=float, name="bool"), 1 % b_psser)
-        # 0.1 / True is 0.1 in pandas
-        self.assert_eq(
-            pd.Series([0.10000000000000009, 0.10000000000000009, None], dtype=float, name="bool"),
-            0.1 % b_psser,
-            check_exact=False,  # [0.1, 0.1, nan] for pandas-on-Spark
-        )
+        b_pser = pdf["bool"]
+        self.assert_eq(1 % b_pser.astype(float), 1 % b_psser)
+        # # Allow float precision diff: pandas:  0.10000000000000009; pandas on spark: 0.1
+        self.assert_eq(0.1 % b_pser, 0.1 % b_psser, almost=True)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % b_psser)
         self.assertRaises(TypeError, lambda: True % b_psser)
 
@@ -261,11 +271,15 @@ class BooleanOpsTestsMixin:
         self.assert_eq(pser & pser, psser & psser)
         self.assert_eq(pser & other_pser, psser & other_psser)
         self.assert_eq(other_pser & pser, other_psser & psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser & None)
 
     def test_rand(self):
         pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True & pser, True & psser)
         self.assert_eq(False & pser, False & psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None & psser)
 
     def test_or(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -275,16 +289,18 @@ class BooleanOpsTestsMixin:
         self.assert_eq(pser | True, psser | True)
         self.assert_eq(pser | False, psser | False)
         self.assert_eq(pser | pser, psser | psser)
-        self.assert_eq(True | pser, True | psser)
-        self.assert_eq(False | pser, False | psser)
 
         self.assert_eq(pser | other_pser, psser | other_psser)
         self.assert_eq(other_pser | pser, other_psser | psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser | None)
 
     def test_ror(self):
         pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None | psser)
 
     def test_xor(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -299,6 +315,8 @@ class BooleanOpsTestsMixin:
 
         with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
             psser ^ "a"
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser ^ None)
 
         with option_context("compute.ops_on_diff_frames", True):
             pser, other_pser = self.pdf["bool"], self.integral_pdf["this"]
@@ -311,6 +329,8 @@ class BooleanOpsTestsMixin:
         self.assert_eq(True ^ pser, True ^ psser)
         self.assert_eq(False ^ pser, False ^ psser)
         self.assert_eq(1 ^ pser, 1 ^ psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None ^ psser)
 
     def test_isnull(self):
         self.assert_eq(self.pdf["bool"].isnull(), self.psdf["bool"].isnull())
@@ -384,7 +404,7 @@ class BooleanOpsTestsMixin:
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class BooleanExtensionOpsTest(OpsTestBase):
+class BooleanExtensionOpsTestsMixin:
     @property
     def boolean_pdf(self):
         return pd.DataFrame(
@@ -727,8 +747,8 @@ class BooleanExtensionOpsTest(OpsTestBase):
 
     def test_rxor(self):
         pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
-        self.check_extension(True | pser, True | psser)
-        self.check_extension(False | pser, False | psser)
+        self.check_extension(True ^ pser, True ^ psser)
+        self.check_extension(False ^ pser, False ^ psser)
         with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
             1 ^ psser
 
@@ -819,13 +839,15 @@ class BooleanOpsTests(
     pass
 
 
+class BooleanExtensionOpsTests(
+    BooleanExtensionOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.pandas.tests.data_type_ops.test_boolean_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

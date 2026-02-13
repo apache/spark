@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
  */
-case class ShuffledHashJoinExec(
+case class ShuffledHashJoinExec private (
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -65,14 +65,35 @@ case class ShuffledHashJoinExec(
     case _ => super.outputOrdering
   }
 
+  private def validCondForIgnoreDupKey(cond: Expression): Boolean = {
+    // to ignore duplicate keys on the build side, the join condition must
+    // have the following properties:
+    // 1) a subtree that is a semantic match to a build-side key, and/or
+    // 2) outside any subtree that is a semantic match to a build-side key,
+    //    all attributes should be from the stream-side.
+    val buildKeysSet = ExpressionSet(buildKeys)
+    val streamedOutputAttrs = AttributeSet(streamedOutput)
+
+    def validCond(cond: Expression): Boolean = {
+      cond match {
+        // don't bother traversing any subtree that has a semantic match to a build key
+        case e: Expression if buildKeysSet.contains(e) => true
+        // all attributes (outside any subtree that matches a build key) should be
+        // from the stream side
+        case a: Attribute if !streamedOutputAttrs.contains(a) => false
+        case e: Expression =>
+          e.children.forall(validCond(_))
+        case _ => true
+      }
+    }
+
+    validCond(cond)
+  }
+
   // Exposed for testing
   @transient lazy val ignoreDuplicatedKey = joinType match {
     case LeftExistence(_) =>
-      // For building hash relation, ignore duplicated rows with same join keys if:
-      // 1. Join condition is empty, or
-      // 2. Join condition only references streamed attributes and build join keys.
-      val streamedOutputAndBuildKeys = AttributeSet(streamedOutput ++ buildKeys)
-      condition.forall(_.references.subsetOf(streamedOutputAndBuildKeys))
+      condition.forall(validCondForIgnoreDupKey(_))
     case _ => false
   }
 
@@ -637,4 +658,28 @@ case class ShuffledHashJoinExec(
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): ShuffledHashJoinExec =
     copy(left = newLeft, right = newRight)
+}
+
+object ShuffledHashJoinExec {
+  def apply(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      joinType: JoinType,
+      buildSide: BuildSide,
+      condition: Option[Expression],
+      left: SparkPlan,
+      right: SparkPlan,
+      isSkewJoin: Boolean = false): ShuffledHashJoinExec = {
+    val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
+
+    new ShuffledHashJoinExec(
+      normalizedLeftKeys,
+      normalizedRightKeys,
+      joinType,
+      buildSide,
+      condition,
+      left,
+      right,
+      isSkewJoin)
+  }
 }

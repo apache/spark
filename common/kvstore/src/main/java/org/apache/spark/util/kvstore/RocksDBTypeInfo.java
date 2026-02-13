@@ -17,14 +17,17 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Preconditions;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.WriteBatch;
-
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+
+import org.rocksdb.RocksDBException;
+import org.rocksdb.WriteBatch;
+
+import org.apache.spark.network.util.JavaUtils;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -164,7 +167,7 @@ class RocksDBTypeInfo {
 
   Index index(String name) {
     Index i = indices.get(name);
-    Preconditions.checkArgument(i != null, "Index %s does not exist for type %s.", name,
+    JavaUtils.checkArgument(i != null, "Index %s does not exist for type %s.", name,
       type.getName());
     return i;
   }
@@ -221,14 +224,7 @@ class RocksDBTypeInfo {
     private final Index parent;
 
     private Index(KVIndex self, KVTypeInfo.Accessor accessor, Index parent) {
-      byte[] name = self.value().getBytes(UTF_8);
-      if (parent != null) {
-        byte[] child = new byte[name.length + 1];
-        child[0] = SECONDARY_IDX_PREFIX;
-        System.arraycopy(name, 0, child, 1, name.length);
-      }
-
-      this.name = name;
+      this.name = self.value().getBytes(UTF_8);
       this.isNatural = self.value().equals(KVIndex.NATURAL_INDEX_NAME);
       this.copy = isNatural || self.copy();
       this.accessor = accessor;
@@ -253,7 +249,7 @@ class RocksDBTypeInfo {
      * same parent index exist.
      */
     byte[] childPrefix(Object value) {
-      Preconditions.checkState(parent == null, "Not a parent index.");
+      JavaUtils.checkState(parent == null, "Not a parent index.");
       return buildKey(name, toParentKey(value));
     }
 
@@ -268,9 +264,9 @@ class RocksDBTypeInfo {
 
     private void checkParent(byte[] prefix) {
       if (prefix != null) {
-        Preconditions.checkState(parent != null, "Parent prefix provided for parent index.");
+        JavaUtils.checkState(parent != null, "Parent prefix provided for parent index.");
       } else {
-        Preconditions.checkState(parent == null, "Parent prefix missing for child index.");
+        JavaUtils.checkState(parent == null, "Parent prefix missing for child index.");
       }
     }
 
@@ -307,8 +303,9 @@ class RocksDBTypeInfo {
     /** The full key in the index that identifies the given entity. */
     byte[] entityKey(byte[] prefix, Object entity) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
         entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
@@ -333,8 +330,9 @@ class RocksDBTypeInfo {
         byte[] naturalKey,
         byte[] prefix) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
 
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {

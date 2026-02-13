@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Deploy.{RECOVERY_COMPRESSION_CODEC, RECOVERY_DIRECTORY}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -177,8 +177,7 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
     val relationResolution = Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      relationResolution,
-      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
+      relationResolution
     )
 
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)

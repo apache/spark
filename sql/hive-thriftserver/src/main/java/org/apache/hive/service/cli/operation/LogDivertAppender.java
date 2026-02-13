@@ -38,7 +38,6 @@ import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.ConsoleAppender;
 import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
 import org.apache.logging.log4j.core.appender.WriterManager;
-import com.google.common.base.Joiner;
 import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.message.Message;
 
@@ -67,17 +66,17 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
      */
-    private static final Pattern verboseExcludeNamePattern = Pattern.compile(Joiner.on("|")
-      .join(new String[] {LOG.getName(), OperationLog.class.getName(),
-      OperationManager.class.getName()}));
+    private static final Pattern verboseExcludeNamePattern = Pattern.compile(String.join("|",
+      LOG.getName(), OperationLog.class.getName(),
+      OperationManager.class.getName()));
 
     /* Patterns that are included in execution logging level.
      * In execution mode, show only select logger messages.
      */
-    private static final Pattern executionIncludeNamePattern = Pattern.compile(Joiner.on("|")
-      .join(new String[] {"org.apache.hadoop.mapreduce.JobSubmitter",
+    private static final Pattern executionIncludeNamePattern = Pattern.compile(String.join("|",
+      "org.apache.hadoop.mapreduce.JobSubmitter",
       "org.apache.hadoop.mapreduce.Job", "SessionState", Task.class.getName(),
-      "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"}));
+      "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"));
 
     /* Patterns that are included in performance logging level.
      * In performance mode, show execution and performance logger messages.

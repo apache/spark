@@ -163,6 +163,10 @@ object InterpretedUnsafeProjection {
 
         case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
+        case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
+
+        case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
+
         case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
         case PhysicalStructType(fields) =>
@@ -268,7 +272,7 @@ object InterpretedUnsafeProjection {
             writer.setNull2Bytes(i)
           }
         }
-      case IntegerType | DateType | FloatType =>
+      case IntegerType | DateType | FloatType | _: YearMonthIntervalType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)

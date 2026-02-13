@@ -17,6 +17,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark._
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
@@ -83,6 +84,26 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       context = ExpectedContext(
         fragment = "divide",
         callSitePattern = getCurrentClassCallSitePattern))
+  }
+
+  test("REMAINDER_BY_ZERO: can't take modulo of an integer by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select 6 % 0").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "6 % 0", start = 7, stop = 11))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select pmod(6, 0)").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "pmod(6, 0)", start = 7, stop = 16))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -247,6 +268,54 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "func" -> "`try_to_timestamp`",
         "message" -> "Text 'abc' could not be parsed at index 0")
     )
+  }
+
+  test("INVALID_DATETIME_PATTERN with constant pattern (constant folding path)") {
+    // Test that invalid pattern letters (like 'I') are properly wrapped with error code
+    // when the pattern is a constant literal. This triggers the formatterOption lazy val
+    // during constant folding optimization phase.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select to_timestamp('20231225143045', 'yyyyMMddHHMIss')").collect()
+      },
+      condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+      parameters = Map(
+        "pattern" -> "'yyyyMMddHHMIss'",
+        "docroot" -> SparkBuildInfo.spark_doc_root),
+      sqlState = "22007"
+    )
+  }
+
+  test("INVALID_DATETIME_PATTERN with non-constant pattern") {
+    withTable("patterns") {
+      sql("create table patterns(pattern string) using parquet")
+      sql("insert into patterns values ('yyyyMMddHHMIss')")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("select to_timestamp('20231225143045', pattern) from patterns").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> "'yyyyMMddHHMIss'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
+  }
+
+  test("INVALID_DATETIME_PATTERN with various invalid pattern letters") {
+    Seq("yyyyMMddHHMIss", "yyyyMMddHHPmss", "yyyyMMddRHmmss").foreach { pattern =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"select to_timestamp('20231225143045', '$pattern')").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> s"'$pattern'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
   }
 
   test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {

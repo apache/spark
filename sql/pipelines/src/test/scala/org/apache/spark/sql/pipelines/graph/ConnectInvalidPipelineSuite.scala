@@ -18,8 +18,9 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
@@ -27,11 +28,11 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * examples are all semantically correct but contain logical errors which should be found
  * when connect is called and thrown when validate() is called.
  */
-class ConnectInvalidPipelineSuite extends PipelineTest {
+class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Missing source") {
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("b", query = readFlowFunc("a"))
+      registerPersistedView("b", query = readFlowFunc("a"))
     }
 
     val dfg = new P().resolveToDataflowGraph()
@@ -41,19 +42,22 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     }
     assert(ex.getMessage.contains("Failed to resolve flows in the pipeline"))
     assertAnalysisException(
-      ex.directFailures(fullyQualifiedIdentifier("b", isView = true)),
+      ex.directFailures(fullyQualifiedIdentifier("b")),
       "TABLE_OR_VIEW_NOT_FOUND"
     )
   }
 
   test("Correctly differentiate between upstream and downstream errors") {
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(spark.range(5).toDF()))
-      registerView("b", query = readFlowFunc("nonExistentFlow"))
-      registerView("c", query = readFlowFunc("b"))
-      registerView("d", query = dfFlowFunc(spark.range(5).toDF()))
-      registerView("e", query = sqlFlowFunc(spark, "SELECT nonExistentColumn FROM RANGE(5)"))
-      registerView("f", query = readFlowFunc("e"))
+      registerPersistedView("a", query = dfFlowFunc(spark.range(5).toDF()))
+      registerPersistedView("b", query = readFlowFunc("nonExistentFlow"))
+      registerPersistedView("c", query = readFlowFunc("b"))
+      registerPersistedView("d", query = dfFlowFunc(spark.range(5).toDF()))
+      registerPersistedView(
+        "e",
+        query = sqlFlowFunc(spark, "SELECT nonExistentColumn FROM RANGE(5)")
+      )
+      registerPersistedView("f", query = readFlowFunc("e"))
     }
 
     val dfg = new P().resolveToDataflowGraph()
@@ -65,65 +69,65 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"Flows with errors: " +
-        s"${fullyQualifiedIdentifier("b", isView = true).unquotedString}," +
-        s" ${fullyQualifiedIdentifier("e", isView = true).unquotedString}"
+        s"${fullyQualifiedIdentifier("b").unquotedString}," +
+        s" ${fullyQualifiedIdentifier("e").unquotedString}"
       )
     )
     assert(
       ex.getMessage.contains(
         s"Flows that failed due to upstream errors: " +
-        s"${fullyQualifiedIdentifier("c", isView = true).unquotedString}, " +
-        s"${fullyQualifiedIdentifier("f", isView = true).unquotedString}"
+        s"${fullyQualifiedIdentifier("c").unquotedString}, " +
+        s"${fullyQualifiedIdentifier("f").unquotedString}"
       )
     )
     assert(
       ex.directFailures.keySet == Set(
-        fullyQualifiedIdentifier("b", isView = true),
-        fullyQualifiedIdentifier("e", isView = true)
+        fullyQualifiedIdentifier("b"),
+        fullyQualifiedIdentifier("e")
       )
     )
     assert(
       ex.downstreamFailures.keySet == Set(
-        fullyQualifiedIdentifier("c", isView = true),
-        fullyQualifiedIdentifier("f", isView = true)
+        fullyQualifiedIdentifier("c"),
+        fullyQualifiedIdentifier("f")
       )
     )
     assertAnalysisException(
-      ex.directFailures(fullyQualifiedIdentifier("b", isView = true)),
+      ex.directFailures(fullyQualifiedIdentifier("b")),
       "TABLE_OR_VIEW_NOT_FOUND"
     )
     assert(
-      ex.directFailures(fullyQualifiedIdentifier("e", isView = true))
+      ex.directFailures(fullyQualifiedIdentifier("e"))
         .isInstanceOf[AnalysisException]
     )
     assert(
-      ex.directFailures(fullyQualifiedIdentifier("e", isView = true))
+      ex.directFailures(fullyQualifiedIdentifier("e"))
         .getMessage
         .contains("nonExistentColumn")
     )
     assert(
-      ex.downstreamFailures(fullyQualifiedIdentifier("c", isView = true))
+      ex.downstreamFailures(fullyQualifiedIdentifier("c"))
         .isInstanceOf[UnresolvedDatasetException]
     )
     assert(
-      ex.downstreamFailures(fullyQualifiedIdentifier("c", isView = true))
+      ex.downstreamFailures(fullyQualifiedIdentifier("c"))
         .getMessage
         .contains(
           s"Failed to read dataset " +
-          s"'${fullyQualifiedIdentifier("b", isView = true).unquotedString}'. " +
+          s"'${fullyQualifiedIdentifier("b").unquotedString}'. " +
           s"Dataset is defined in the pipeline but could not be resolved"
         )
     )
     assert(
-      ex.downstreamFailures(fullyQualifiedIdentifier("f", isView = true))
+      ex.downstreamFailures(fullyQualifiedIdentifier("f"))
         .isInstanceOf[UnresolvedDatasetException]
     )
     assert(
-      ex.downstreamFailures(fullyQualifiedIdentifier("f", isView = true))
+      ex.downstreamFailures(fullyQualifiedIdentifier("f"))
         .getMessage
         .contains(
           s"Failed to read dataset " +
-          s"'${fullyQualifiedIdentifier("e", isView = true).unquotedString}'. " +
+          s"'${fullyQualifiedIdentifier("e").unquotedString}'. " +
           s"Dataset is defined in the pipeline but could not be resolved"
         )
     )
@@ -147,14 +151,14 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("z")))
-      registerView("b", query = sqlFlowFunc(spark, "SELECT x FROM a"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("z")))
+      registerPersistedView("b", query = sqlFlowFunc(spark, "SELECT x FROM a"))
     }
 
     val dfg = new P().resolveToDataflowGraph()
     val ex = intercept[UnresolvedPipelineException] {
       dfg.validate()
-    }.directFailures(fullyQualifiedIdentifier("b", isView = true)).getMessage
+    }.directFailures(fullyQualifiedIdentifier("b")).getMessage
     verifyUnresolveColumnError(ex, "x", Seq("z"))
   }
 
@@ -163,9 +167,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
-      registerView("b", query = dfFlowFunc(Seq("a", "b", "c").toDF("y")))
-      registerView("c", query = sqlFlowFunc(spark, "SELECT * FROM a JOIN b USING (x)"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
+      registerPersistedView("b", query = dfFlowFunc(Seq("a", "b", "c").toDF("y")))
+      registerPersistedView("c", query = sqlFlowFunc(spark, "SELECT * FROM a JOIN b USING (x)"))
     }
 
     val dfg = new P().resolveToDataflowGraph()
@@ -173,7 +177,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
       dfg.validate()
     }
     assert(
-      ex.directFailures(fullyQualifiedIdentifier("c", isView = true))
+      ex.directFailures(fullyQualifiedIdentifier("c"))
         .getMessage
         .contains("USING column `x` cannot be resolved on the right side")
     )
@@ -184,9 +188,12 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
-      registerView("b", query = dfFlowFunc(Seq(true, false).toDF("x")))
-      registerView("c", query = sqlFlowFunc(spark, "SELECT x FROM a UNION SELECT x FROM b"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
+      registerPersistedView("b", query = dfFlowFunc(Seq(true, false).toDF("x")))
+      registerPersistedView(
+        "c",
+        query = sqlFlowFunc(spark, "SELECT x FROM a UNION SELECT x FROM b")
+      )
     }
 
     val dfg = new P().resolveToDataflowGraph()
@@ -195,37 +202,37 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
       dfg.validate()
     }
     assert(
-      ex.directFailures(fullyQualifiedIdentifier("c", isView = true))
+      ex.directFailures(fullyQualifiedIdentifier("c"))
         .getMessage
         .contains("compatible column types") ||
-      ex.directFailures(fullyQualifiedIdentifier("c", isView = true))
-        .getMessage
-        .contains("Failed to merge incompatible data types")
+        ex.directFailures(fullyQualifiedIdentifier("c"))
+          .getMessage
+          .contains("Failed to merge incompatible data types")
     )
   }
 
   test("Self reference") {
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = readFlowFunc("a"))
+      registerPersistedView("a", query = readFlowFunc("a"))
     }
     val e = intercept[CircularDependencyException] {
       new P().resolveToDataflowGraph().validate()
     }
-    assert(e.upstreamDataset == fullyQualifiedIdentifier("a", isView = true))
-    assert(e.downstreamTable == fullyQualifiedIdentifier("a", isView = true))
+    assert(e.upstreamDataset == fullyQualifiedIdentifier("a"))
+    assert(e.downstreamTable == fullyQualifiedIdentifier("a"))
   }
 
   test("Cyclic graph - simple") {
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = readFlowFunc("b"))
-      registerView("b", query = readFlowFunc("a"))
+      registerPersistedView("a", query = readFlowFunc("b"))
+      registerPersistedView("b", query = readFlowFunc("a"))
     }
     val e = intercept[CircularDependencyException] {
       new P().resolveToDataflowGraph().validate()
     }
     val cycle = Set(
-      fullyQualifiedIdentifier("a", isView = true),
-      fullyQualifiedIdentifier("b", isView = true)
+      fullyQualifiedIdentifier("a"),
+      fullyQualifiedIdentifier("b")
     )
     assert(e.upstreamDataset != e.downstreamTable)
     assert(cycle.contains(e.upstreamDataset))
@@ -237,16 +244,19 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
-      registerView("b", query = sqlFlowFunc(spark, "SELECT * FROM a UNION SELECT * FROM d"))
-      registerView("c", query = readFlowFunc("b"))
-      registerView("d", query = readFlowFunc("c"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
+      registerPersistedView(
+        "b",
+        query = sqlFlowFunc(spark, "SELECT * FROM a UNION SELECT * FROM d")
+      )
+      registerPersistedView("c", query = readFlowFunc("b"))
+      registerPersistedView("d", query = readFlowFunc("c"))
     }
     val cycle =
       Set(
-        fullyQualifiedIdentifier("b", isView = true),
-        fullyQualifiedIdentifier("c", isView = true),
-        fullyQualifiedIdentifier("d", isView = true)
+        fullyQualifiedIdentifier("b"),
+        fullyQualifiedIdentifier("c"),
+        fullyQualifiedIdentifier("d")
       )
     val e = intercept[CircularDependencyException] {
       new P().resolveToDataflowGraph().validate()
@@ -341,7 +351,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
       registerTable("b", query = Option(readFlowFunc("a")), sqlConf = Map("x" -> "b-val"))
     }
     val ex = intercept[AnalysisException] { p.resolveToDataflowGraph() }
@@ -354,7 +364,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"'x' is defined by both " +
-        s"'${fullyQualifiedIdentifier("a", isView = true).unquotedString}' " +
+        s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
         s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
       )
     )
@@ -365,8 +375,8 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
-      registerView("b", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "b-val"))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "a-val"))
+      registerPersistedView("b", query = dfFlowFunc(Seq(1).toDF()), sqlConf = Map("x" -> "b-val"))
       registerTable(
         "c",
         query = Option(sqlFlowFunc(spark, "SELECT * FROM a UNION SELECT * FROM b")),
@@ -383,8 +393,8 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     assert(
       ex.getMessage.contains(
         s"'x' is defined by both " +
-        s"'${fullyQualifiedIdentifier("a", isView = true).unquotedString}' " +
-        s"and '${fullyQualifiedIdentifier("b", isView = true).unquotedString}'"
+        s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
+        s"and '${fullyQualifiedIdentifier("b").unquotedString}'"
       )
     )
   }
@@ -394,7 +404,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
-      registerView("a", query = dfFlowFunc(Seq(1).toDF()))
+      registerPersistedView("a", query = dfFlowFunc(Seq(1).toDF()))
       registerTable("b", query = Option(readStreamFlowFunc("a")))
     }
     val ex = intercept[UnresolvedPipelineException] { p.resolveToDataflowGraph().validate() }
@@ -402,7 +412,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
       ex.directFailures(fullyQualifiedIdentifier("b"))
         .getMessage
         .contains(
-          s"View ${fullyQualifiedIdentifier("a", isView = true).quotedString}" +
+          s"View ${fullyQualifiedIdentifier("a").quotedString}" +
           s" is a batch view and must be referenced using SparkSession#read."
         )
     )
@@ -415,7 +425,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
     val p = new TestGraphRegistrationContext(spark) {
       val mem = MemoryStream[Int]
       mem.addData(1)
-      registerView("a", query = dfFlowFunc(mem.toDF()))
+      registerPersistedView("a", query = dfFlowFunc(mem.toDF()))
       registerTable("b", query = Option(readFlowFunc("a")))
     }
     val ex = intercept[UnresolvedPipelineException] { p.resolveToDataflowGraph().validate() }
@@ -423,9 +433,80 @@ class ConnectInvalidPipelineSuite extends PipelineTest {
       ex.directFailures(fullyQualifiedIdentifier("b"))
         .getMessage
         .contains(
-          s"View ${fullyQualifiedIdentifier("a", isView = true).quotedString} " +
+          s"View ${fullyQualifiedIdentifier("a").quotedString} " +
           s"is a streaming view and must be referenced using SparkSession#readStream"
         )
+    )
+  }
+
+  test("Streaming table backed by batch relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerTable("a", query = Option(dfFlowFunc(Seq(1, 2).toDF())))
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.BATCH_RELATION_FOR_STREAMING_TABLE",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
+        "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
+      )
+    )
+  }
+
+  test("Materialized view backed by streaming relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerMaterializedView("a", query = dfFlowFunc(MemoryStream[Int].toDF()))
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_MATERIALIZED_VIEW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("a").quotedString,
+        "tableIdentifier" -> fullyQualifiedIdentifier("a").quotedString
+      )
+    )
+  }
+
+  test("Once flow backed by streaming relation fails validation") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      registerTable("a")
+      registerFlow(
+        destinationName = "a",
+        name = "once_flow",
+        query = dfFlowFunc(MemoryStream[Int].toDF()),
+        once = true
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_ONCE_FLOW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("once_flow").quotedString
+      )
     )
   }
 

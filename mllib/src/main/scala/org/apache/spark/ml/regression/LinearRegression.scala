@@ -433,15 +433,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val model = createModel(parameters, yMean, yStd, featuresMean, featuresStd)
-
-    // Handle possible missing or invalid prediction columns
-    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
-    val trainingSummary = new LinearRegressionTrainingSummary(
-      summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      summaryModel.get(summaryModel.weightCol).getOrElse(""),
-      summaryModel.numFeatures, summaryModel.getFitIntercept,
-      Array(0.0), objectiveHistory)
-    model.setSummary(Some(trainingSummary))
+    model.createSummary(dataset, Array(0.0), objectiveHistory, Array.emptyDoubleArray)
+    model
   }
 
   private def trainWithNormal(
@@ -459,20 +452,16 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // attach returned model.
     val lrModel = copyValues(new LinearRegressionModel(
       uid, model.coefficients.compressed, model.intercept))
-    val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
 
-    val coefficientArray = if (summaryModel.getFitIntercept) {
-      summaryModel.coefficients.toArray ++ Array(summaryModel.intercept)
+    val coefficientArray = if (lrModel.getFitIntercept) {
+      lrModel.coefficients.toArray ++ Array(lrModel.intercept)
     } else {
-      summaryModel.coefficients.toArray
+      lrModel.coefficients.toArray
     }
-    val trainingSummary = new LinearRegressionTrainingSummary(
-      summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      summaryModel.get(summaryModel.weightCol).getOrElse(""),
-      summaryModel.numFeatures, summaryModel.getFitIntercept,
-      model.diagInvAtWA.toArray, model.objectiveHistory, coefficientArray)
-
-    lrModel.setSummary(Some(trainingSummary))
+    lrModel.createSummary(
+      dataset, model.diagInvAtWA.toArray, model.objectiveHistory, coefficientArray
+    )
+    lrModel
   }
 
   private def trainWithConstantLabel(
@@ -497,16 +486,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val intercept = yMean
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
-    // Handle possible missing or invalid prediction columns
-    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
-    val trainingSummary = new LinearRegressionTrainingSummary(
-      summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
-      summaryModel.get(summaryModel.weightCol).getOrElse(""),
-      summaryModel.numFeatures, summaryModel.getFitIntercept,
-      Array(0.0), Array(0.0))
-
-    model.setSummary(Some(trainingSummary))
+    model.createSummary(dataset, Array(0.0), Array(0.0), Array.emptyDoubleArray)
+    model
   }
 
   private def createOptimizer(
@@ -800,6 +782,53 @@ class LinearRegressionModel private[ml] (
   override def toString: String = {
     s"LinearRegressionModel: uid=$uid, numFeatures=$numFeatures"
   }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_],
+    diagInvAtWA: Array[Double],
+    objectiveHistory: Array[Double],
+    coefficientArray: Array[Double]
+  ): Unit = {
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
+
+    val trainingSummary = new LinearRegressionTrainingSummary(
+      summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
+      summaryModel.get(summaryModel.weightCol).getOrElse(""),
+      summaryModel.numFeatures, summaryModel.getFitIntercept,
+      diagInvAtWA, objectiveHistory, coefficientArray)
+
+    setSummary(Some(trainingSummary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Array[Double], Array[Double], Array[Double])](
+      path, (summary.diagInvAtWA, summary.objectiveHistory, summary.coefficientArray),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+        ReadWriteUtils.serializeDoubleArray(data._2, dos)
+        ReadWriteUtils.serializeDoubleArray(data._3, dos)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (
+      diagInvAtWA: Array[Double],
+      objectiveHistory: Array[Double],
+      coefficientArray: Array[Double]
+    )
+    = ReadWriteUtils.loadObjectFromLocal[(Array[Double], Array[Double], Array[Double])](
+      path,
+      dis => {
+        val diagInvAtWA = ReadWriteUtils.deserializeDoubleArray(dis)
+        val objectiveHistory = ReadWriteUtils.deserializeDoubleArray(dis)
+        val coefficientArray = ReadWriteUtils.deserializeDoubleArray(dis)
+        (diagInvAtWA, objectiveHistory, coefficientArray)
+      }
+    )
+    createSummary(dataset, diagInvAtWA, objectiveHistory, coefficientArray)
+  }
 }
 
 private[ml] case class LinearModelData(intercept: Double, coefficients: Vector, scale: Double)
@@ -926,7 +955,7 @@ class LinearRegressionTrainingSummary private[regression] (
     private val fitIntercept: Boolean,
     diagInvAtWA: Array[Double],
     val objectiveHistory: Array[Double],
-    private val coefficientArray: Array[Double] = Array.emptyDoubleArray)
+    override private[regression] val coefficientArray: Array[Double] = Array.emptyDoubleArray)
   extends LinearRegressionSummary(
     predictions,
     predictionCol,
@@ -972,8 +1001,8 @@ class LinearRegressionSummary private[regression] (
     private val weightCol: String,
     private val numFeatures: Int,
     private val fitIntercept: Boolean,
-    private val diagInvAtWA: Array[Double],
-    private val coefficientArray: Array[Double] = Array.emptyDoubleArray)
+    private[regression] val diagInvAtWA: Array[Double],
+    private[regression] val coefficientArray: Array[Double] = Array.emptyDoubleArray)
   extends Summary with Serializable {
 
   @transient private val metrics = {

@@ -445,3 +445,14 @@ WHERE t1.key NOT LIKE 'bb.%'
 struct<key:string>
 -- !query output
 a
+
+
+-- !query
+SELECT *
+FROM
+    ( SELECT col1 FROM VALUES(false) ) LEFT JOIN ( SELECT col1 FROM VALUES(false) ) b USING(col1)
+WHERE b.col1
+-- !query schema
+struct<col1:boolean>
+-- !query output
+

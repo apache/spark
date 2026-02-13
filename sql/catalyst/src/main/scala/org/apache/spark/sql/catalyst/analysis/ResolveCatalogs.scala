@@ -21,10 +21,11 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SqlScriptingContextManager
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -40,35 +41,41 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
-    case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
-      // From scripts we can only create local variables, which must be unqualified,
-      // and must not be DECLARE OR REPLACE.
-      val resolved = if (withinSqlScript) {
-        if (c.replace) {
-          throw new AnalysisException(
-            "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
-            Map("varName" -> toSQLId(nameParts))
-          )
-        }
+    case c @ CreateVariable(identifiers, _, _) =>
+      // We resolve only UnresolvedIdentifiers, and pass on the other nodes
+      val resolved = identifiers.map {
+        case UnresolvedIdentifier(nameParts, _) =>
+          // From scripts we can only create local variables, which must be unqualified,
+          // and must not be DECLARE OR REPLACE.
+          if (withinSqlScript) {
+            if (c.replace) {
+              throw new AnalysisException(
+                "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+                Map("varName" -> toSQLId(nameParts))
+              )
+            }
 
-        if (nameParts.length != 1) {
-          throw new AnalysisException(
-            "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
-            Map("varName" -> toSQLId(nameParts)))
-        }
+            if (nameParts.length != 1) {
+              throw new AnalysisException(
+                "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+                Map("varName" -> toSQLId(nameParts)))
+            }
 
-        SqlScriptingContextManager.get().map(_.getVariableManager)
-          .getOrElse(throw SparkException.internalError(
-              "Scripting local variable manager should be present in SQL script."))
-          .qualify(nameParts.last)
-      } else {
-        val resolvedIdentifier = catalogManager.tempVariableManager.qualify(nameParts.last)
+            SqlScriptingContextManager.get().map(_.getVariableManager)
+              .getOrElse(throw SparkException.internalError(
+                "Scripting local variable manager should be present in SQL script."))
+              .qualify(nameParts.last)
+          } else {
+            val resolvedIdentifier
+            = catalogManager.tempVariableManager.qualify(nameParts.last)
 
-        assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
-        resolvedIdentifier
+            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
+            resolvedIdentifier
+          }
+        case plan => plan
       }
+      c.copy(names = resolved)
 
-      c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       if (withinSqlScript) {
         throw new AnalysisException(
@@ -77,6 +84,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
+
+    case d @ DropFunction(u @ UnresolvedIdentifier(nameParts, _), _) =>
+      d.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
+
+    case r @ RefreshFunction(u @ UnresolvedIdentifier(nameParts, _)) =>
+      r.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
 
     // For CREATE TABLE and REPLACE TABLE statements, resolve the table identifier and include
     // the table columns as output. This allows expressions (e.g., constraints) referencing these
@@ -121,6 +134,32 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
+  /**
+   * Resolves a function identifier, checking for builtin and temp functions first.
+   * Builtin and temp functions are only registered with unqualified names.
+   */
+  private def resolveFunctionIdentifier(
+      nameParts: Seq[String],
+      origin: Origin): ResolvedIdentifier = CurrentOrigin.withOrigin(origin) {
+    if (nameParts.length == 1) {
+      val funcName = FunctionIdentifier(nameParts.head)
+      val sessionCatalog = catalogManager.v1SessionCatalog
+      if (sessionCatalog.isBuiltinFunction(funcName)) {
+        val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.head)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      } else if (sessionCatalog.isTemporaryFunction(funcName)) {
+        val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.head)
+        ResolvedIdentifier(FakeSystemCatalog, ident)
+      } else {
+        val CatalogAndIdentifier(catalog, ident) = nameParts
+        ResolvedIdentifier(catalog, ident)
+      }
+    } else {
+      val CatalogAndIdentifier(catalog, ident) = nameParts
+      ResolvedIdentifier(catalog, ident)
+    }
+  }
+
   private def resolveNamespace(
       catalog: CatalogPlugin,
       ns: Seq[String],
@@ -137,8 +176,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def withinSqlScript: Boolean =
-    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined &&
-      !AnalysisContext.get.isExecuteImmediate
+    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

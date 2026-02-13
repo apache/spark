@@ -20,10 +20,10 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets
 
-import org.apache.commons.io.IOUtils
-
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
+import org.apache.spark.util.Utils
 
 /** A version of [[HDFSMetadataLog]] specialized for saving the initial offsets. */
 private[kafka010] class KafkaSourceInitialOffsetWriter(
@@ -43,7 +43,7 @@ private[kafka010] class KafkaSourceInitialOffsetWriter(
 
   override def deserialize(in: InputStream): KafkaSourceOffset = {
     in.read() // A zero byte is read to support Spark 2.1.0 (SPARK-19517)
-    val content = IOUtils.toString(new InputStreamReader(in, StandardCharsets.UTF_8))
+    val content = Utils.toString(in)
     // HDFSMetadataLog guarantees that it never creates a partial file.
     require(content.nonEmpty)
     if (content(0) == 'v') {

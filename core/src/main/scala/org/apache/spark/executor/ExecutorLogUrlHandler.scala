@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.matching.Regex
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 
 private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extends Logging {

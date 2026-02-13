@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileNameSpec
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -42,7 +43,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     throw new Exception("there should be no custom partition path")
   }
 }
@@ -264,9 +265,9 @@ private class PartitionFileExistCommitProtocol(
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
-    stagingDir.mkdirs()
+    Utils.createDirectory(stagingDir)
     val stagingPartDir = new File(stagingDir, "p1=2")
-    stagingPartDir.mkdirs()
+    Utils.createDirectory(stagingPartDir)
     val conflictTaskFile = new File(stagingPartDir, s"part-00000-$jobId.c000.snappy.parquet")
     conflictTaskFile.createNewFile()
   }

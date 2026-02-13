@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
@@ -34,8 +35,23 @@ class PythonScan(
 ) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-    new PythonMicroBatchStream(ds, shortName, outputSchema, options)
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+      ds, shortName, outputSchema, options)
+    runner.init()
+
+    val supportedFeatures = runner.checkSupportedFeatures()
+
+    if (supportedFeatures.triggerAvailableNow) {
+      new PythonMicroBatchStreamWithTriggerAvailableNow(
+        ds, shortName, outputSchema, options, runner)
+    } else if (supportedFeatures.admissionControl) {
+      new PythonMicroBatchStreamWithAdmissionControl(
+        ds, shortName, outputSchema, options, runner)
+    } else {
+      new PythonMicroBatchStream(ds, shortName, outputSchema, options, runner)
+    }
+  }
 
   override def description: String = "(Python)"
 
@@ -61,6 +77,12 @@ class PythonBatch(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap) extends Batch {
   private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val sessionUUID = {
+    SparkSession.getActiveSession.collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
     ds.getOrCreateReadInfo(shortName, options, outputSchema, isStreaming = false)
@@ -72,6 +94,6 @@ class PythonBatch(
   override def createReaderFactory(): PartitionReaderFactory = {
     val readerFunc = infoInPython.func
     new PythonPartitionReaderFactory(
-      ds.source, readerFunc, outputSchema, jobArtifactUUID)
+      ds.source, readerFunc, outputSchema, jobArtifactUUID, sessionUUID)
   }
 }

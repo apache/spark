@@ -109,6 +109,11 @@ class TableValuedFunction:
 
     variant_explode_outer.__doc__ = PySparkTableValuedFunction.variant_explode_outer.__doc__
 
+    def python_worker_logs(self) -> "DataFrame":
+        return self._fn("python_worker_logs")
+
+    python_worker_logs.__doc__ = PySparkTableValuedFunction.python_worker_logs.__doc__
+
     def _fn(self, name: str, *args: "Column") -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.connect.plan import UnresolvedTableValuedFunction
@@ -127,7 +132,7 @@ def _test() -> None:
         print("Not supported in no-GIL mode", file=sys.stderr)
         sys.exit(0)
 
-    from pyspark.testing import should_test_connect
+    from pyspark.testing.utils import should_test_connect
 
     if not should_test_connect:
         print("Skipping pyspark.sql.connect.tvf doctests", file=sys.stderr)

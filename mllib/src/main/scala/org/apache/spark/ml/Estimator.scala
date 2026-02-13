@@ -106,7 +106,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
 }
 
 
-object EstimatorUtils {
+private[spark] object EstimatorUtils {
   // This warningMessagesBuffer is for collecting warning messages during `estimator.fit`
   // execution in Spark Connect server.
   private[spark] val warningMessagesBuffer = new java.lang.ThreadLocal[ArrayBuffer[String]]() {

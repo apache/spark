@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -105,7 +106,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       new File(parent, child)
     }
 
-    assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
+    assert(Utils.createDirectory(partDir), s"Couldn't create directory $partDir")
     partDir
   }
 
@@ -143,8 +144,8 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
     ParquetFooterReader.readFooter(
-      configuration,
-      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
+      HadoopInputFile.fromPath(
+        new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE), configuration),
       ParquetMetadataConverter.NO_FILTER)
   }
 

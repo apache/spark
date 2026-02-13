@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   MetadataResolver,
   ProhibitedResolver,
@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -77,7 +76,6 @@ class HiveTableRelationResolverSuite extends TestHiveSingleton with SQLTestUtils
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
       relationResolution,
-      new FunctionResolution(spark.sessionState.catalogManager, relationResolution),
       extensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
     val hiveTableRelationResolver = new HiveTableRelationResolver(

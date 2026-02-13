@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
@@ -91,11 +93,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("reorder should handle KeyGroupedPartitioning") {
     // partitioning on the left
-    val plan1 = DummySparkPlan(
+    val plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         years(exprA), bucket(4, exprB), days(exprC)), 4)
     )
-    val plan2 = DummySparkPlan(
+    val plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         years(exprB), bucket(4, exprA), days(exprD)), 4)
     )
@@ -113,7 +115,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // partitioning on the right
-    val plan3 = DummySparkPlan(
+    val plan3 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         bucket(4, exprD), days(exprA), years(exprC)), 4)
     )
@@ -777,9 +779,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("Check with KeyGroupedPartitioning") {
     // simplest case: identity transforms
-    var plan1 = DummySparkPlan(
-      outputPartitioning = KeyGroupedPartitioning(exprA :: exprB :: Nil, 5))
-    var plan2 = DummySparkPlan(
+    var plan1 = new DummySparkPlanWithBatchScanChild(
+      KeyGroupedPartitioning(exprA :: exprB :: Nil, 5))
+    var plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(exprA :: exprC :: Nil, 5))
     var smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
@@ -793,11 +795,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // matching bucket transforms from both sides
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4)
     )
@@ -813,11 +815,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // partition collections
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = PartitioningCollection(Seq(
         KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4),
         KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4))
@@ -843,10 +845,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // bucket + years transforms from both sides
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(bucket(4, exprA) :: years(exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(bucket(4, exprA) :: years(exprC) :: Nil, 4)
     )
     smjExec = SortMergeJoinExec(
@@ -862,11 +864,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
     // by default spark.sql.requireAllClusterKeysForCoPartition is true, so when there isn't
     // exact match on all partition keys, Spark will fallback to shuffle.
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprC) :: Nil, 4)
     )
@@ -883,11 +885,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test(s"KeyGroupedPartitioning with ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} = false") {
-    var plan1 = DummySparkPlan(
+    var plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprB) :: years(exprC) :: Nil, 4)
     )
-    var plan2 = DummySparkPlan(
+    var plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprC) :: years(exprB) :: Nil, 4)
     )
@@ -905,11 +907,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // should also work with distributions with duplicated keys
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: years(exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: years(exprC) :: Nil, 4)
     )
@@ -925,10 +927,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // both partitioning and distribution have duplicated keys
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: bucket(4, exprB) :: days(exprA) :: Nil, 5))
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: bucket(4, exprC) :: days(exprA) :: Nil, 5))
     smjExec = SortMergeJoinExec(
@@ -943,11 +945,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // invalid case: partitioning key positions don't match
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprB) :: bucket(4, exprC) :: Nil, 4)
     )
@@ -964,11 +966,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // invalid case: different number of buckets (we don't support coalescing/repartitioning yet)
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(8, exprC) :: Nil, 4)
     )
@@ -984,10 +986,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
 
     // invalid case: partition key positions match but with different transforms
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(years(exprA) :: bucket(4, exprB) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(days(exprA) :: bucket(4, exprC) :: Nil, 4)
     )
     smjExec = SortMergeJoinExec(
@@ -1003,11 +1005,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
 
     // invalid case: multiple references in transform
-    plan1 = DummySparkPlan(
+    plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
     )
-    plan2 = DummySparkPlan(
+    plan2 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
     )
@@ -1029,11 +1031,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val rightPartValues = Seq(Array[Any](1, 1), Array[Any](2, 2), Array[Any](3, 3))
           .map(new GenericInternalRow(_))
 
-      var plan1 = DummySparkPlan(
+      var plan1 = new DummySparkPlanWithBatchScanChild(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
           leftPartValues.length, leftPartValues)
       )
-      var plan2 = DummySparkPlan(
+      var plan2 = new DummySparkPlanWithBatchScanChild(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
           rightPartValues.length, rightPartValues)
       )
@@ -1051,7 +1053,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       }
 
       // With partition collections
-      plan1 = DummySparkPlan(outputPartitioning =
+      plan1 = new DummySparkPlanWithBatchScanChild(outputPartitioning =
         PartitioningCollection(
           Seq(KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
             leftPartValues.length, leftPartValues),
@@ -1075,7 +1077,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       }
 
       // Nested partition collections
-      plan2 = DummySparkPlan(outputPartitioning =
+      plan2 = new DummySparkPlanWithBatchScanChild(outputPartitioning =
         PartitioningCollection(
           Seq(
             PartitioningCollection(
@@ -1118,7 +1120,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val a1 = AttributeReference("a1", IntegerType)()
 
       val partitionValue = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
-      val plan1 = DummySparkPlan(outputPartitioning = KeyGroupedPartitioning(
+      val plan1 = new DummySparkPlanWithBatchScanChild(outputPartitioning = KeyGroupedPartitioning(
           identity(a1) :: Nil, 4, partitionValue))
       val plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
 
@@ -1196,6 +1198,191 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     TransformExpression(BucketFunction, expr, Some(numBuckets))
   }
 
+  test("ShufflePartitionIdPassThrough - avoid unnecessary shuffle when children are compatible") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val passThrough_a_5 = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5)
+
+      val leftPlan = DummySparkPlan(outputPartitioning = passThrough_a_5)
+      val rightPlan = DummySparkPlan(outputPartitioning = passThrough_a_5)
+      val join = SortMergeJoinExec(exprA :: Nil, exprA :: Nil, Inner, None, leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprA))
+        case other => fail(s"We don't expect shuffle on either side, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough incompatibility - different partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Different number of partitions - should add shuffles
+      val leftPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val rightPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 8))
+      val join = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          // Both sides should be shuffled to default partitions
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprA))
+          assert(p2.expressions == Seq(exprB))
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough incompatibility - key position mismatch") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Key position mismatch - should add shuffles
+      val leftPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val rightPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprC), 5))
+      // Join on different keys than partitioning keys
+      val join = SortMergeJoinExec(exprA :: exprB :: Nil, exprD :: exprC :: Nil, Inner, None,
+        leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          // Both sides shuffled due to key mismatch
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough vs HashPartitioning - always shuffles") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // ShufflePartitionIdPassThrough vs HashPartitioning - always adds shuffles
+      val leftPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val rightPlan = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+      val join = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, _: DummySparkPlan, _), _) =>
+          // Left side shuffled, right side kept as-is
+        case other => fail(s"Expected shuffle on the left side, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough vs SinglePartition - shuffles added") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      // Even when compatible (numPartitions=1), shuffles added due to canCreatePartitioning=false
+      val leftPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 1))
+      val rightPlan = DummySparkPlan(outputPartitioning = SinglePartition)
+      val join = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          // Both sides shuffled due to canCreatePartitioning = false
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+
+  test("ShufflePartitionIdPassThrough - compatible with multiple clustering keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val passThrough_a_5 = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5)
+      val passThrough_b_5 = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5)
+
+      // Both partitioned by exprA, joined on (exprA, exprB)
+      // Should be compatible because exprA positions overlap
+      val leftPlanA = DummySparkPlan(outputPartitioning = passThrough_a_5)
+      val rightPlanA = DummySparkPlan(outputPartitioning = passThrough_a_5)
+      val joinA = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
+        leftPlanA, rightPlanA)
+
+      EnsureRequirements.apply(joinA) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          assert(leftKeys === Seq(exprA, exprB))
+          assert(rightKeys === Seq(exprA, exprB))
+        case other => fail(s"We don't expect shuffle on either side with multiple " +
+          s"clustering keys, but got: $other")
+      }
+
+      // Both sides partitioned by exprB and join on (exprA, exprB)
+      // Should be compatible because partition key exprB matches at position 1 in join keys
+      val leftPlanB = DummySparkPlan(outputPartitioning = passThrough_b_5)
+      val rightPlanB = DummySparkPlan(outputPartitioning = passThrough_b_5)
+      val joinB = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
+        leftPlanB, rightPlanB)
+
+      EnsureRequirements.apply(joinB) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          // No shuffles because exprB (partition key) appears at position 1 in join keys
+          assert(leftKeys === Seq(exprA, exprB))
+          assert(rightKeys === Seq(exprA, exprB))
+        case other => fail(s"Expected no shuffles due to position overlap at position 1, " +
+          s"but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - incompatible when partition key not in join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Partitioned by exprA and exprB respectively, but joining on completely different keys
+      // Should require shuffles because partition keys don't match join keys
+      val leftPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val rightPlan = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
+      val join = SortMergeJoinExec(exprC :: Nil, exprD :: Nil, Inner, None, leftPlan, rightPlan)
+
+      EnsureRequirements.apply(join) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          // Both sides should be shuffled because partition keys not in join keys
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprC))
+          assert(p2.expressions == Seq(exprD))
+        case other => fail(s"Expected shuffles on both sides due to key mismatch, but got: $other")
+      }
+    }
+  }
+
   def years(expr: Expression): TransformExpression = {
     TransformExpression(YearsFunction, Seq(expr))
   }
@@ -1203,4 +1390,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   def days(expr: Expression): TransformExpression = {
     TransformExpression(DaysFunction, Seq(expr))
   }
+
+  private class DummySparkPlanWithBatchScanChild(outputPartitioning: Partitioning)
+    extends DummySparkPlan(
+      children = Seq(BatchScanExec(Seq.empty, null, Seq.empty, table = null)),
+      outputPartitioning = outputPartitioning,
+      requiredChildDistribution = Seq(UnspecifiedDistribution),
+      requiredChildOrdering = Seq(Seq.empty)
+    )
 }

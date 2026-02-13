@@ -72,6 +72,15 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
             df_columns.remove(col)
         assert len(df.columns) == 4
 
+        cdf = self.connect.createDataFrame(data, schema)
+        cdf_schema = cdf.schema
+        assert len(cdf._cached_schema_serialized) > 0
+        assert cdf_schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf_schema.fields) == 4
+        cdf_schema.fields.pop(0)
+        assert cdf.schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf.schema.fields) == 4
+
     def test_cached_schema_to(self):
         rows = [Row(id=x, name=str(x)) for x in range(100)]
         cdf = self.connect.createDataFrame(rows)
@@ -452,13 +461,6 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_dataframe_property import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

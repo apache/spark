@@ -21,10 +21,10 @@ import java.util.Calendar
 
 import scala.jdk.CollectionConverters._
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
-import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
+import software.amazon.kinesis.common.InitialPositionInStream
+import software.amazon.kinesis.metrics.{MetricsConfig, MetricsLevel}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Seconds, StreamingContext, TestSuiteBase}
@@ -101,7 +101,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val customCloudWatchCreds = mock[SparkAWSCredentials]
     val customMetricsLevel = MetricsLevel.NONE
     val customMetricsEnabledDimensions =
-      KinesisClientLibConfiguration.METRICS_ALWAYS_ENABLED_DIMENSIONS.asScala.toSet
+      MetricsConfig.METRICS_ALWAYS_ENABLED_DIMENSIONS.asScala.toSet
 
     val dstream = builder
       .endpointUrl(customEndpointUrl)

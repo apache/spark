@@ -18,8 +18,6 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.spark.network.protocol.Encoders;
 
 /** Request to get the cause of a corrupted block. Returns {@link CorruptionCause} */
@@ -56,15 +54,9 @@ public class DiagnoseCorruption extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("appId", appId)
-      .append("execId", execId)
-      .append("shuffleId", shuffleId)
-      .append("mapId", mapId)
-      .append("reduceId", reduceId)
-      .append("checksum", checksum)
-      .append("algorithm", algorithm)
-      .toString();
+    return "DiagnoseCorruption[appId=" + appId + ",execId=" + execId + ",shuffleId=" + shuffleId +
+        ",mapId=" + mapId + ",reduceId=" + reduceId + ",checksum=" + checksum +
+        ",algorithm=" + algorithm + "]";
   }
 
   @Override

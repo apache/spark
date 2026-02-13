@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
@@ -329,12 +329,6 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  // Please do not delete this function, the tests in `ExecutorAllocationManagerSuite`
-  // need to access `listener.totalRunningTasksPerResourceProfile` with `synchronized`.
-  private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
-    listener.totalRunningTasksPerResourceProfile(id)
-  }
-
   /**
    * This is called at a fixed interval to regulate the number of pending executor requests
    * and number of executors running.
@@ -614,7 +608,7 @@ private[spark] class ExecutorAllocationManager(
       } else {
         executorMonitor.executorsKilled(executorsRemoved.toSeq)
       }
-      logInfo(log"Executors ${MDC(EXECUTOR_IDS, executorsRemoved.mkString(","))}" +
+      logInfo(log"Executors ${MDC(EXECUTOR_IDS, executorsRemoved.mkString(","))} " +
         log"removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {

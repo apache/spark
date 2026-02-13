@@ -123,6 +123,22 @@ object TimezoneAwareExpressionResolver {
   /**
    * Applies a timezone to a [[TimeZoneAwareExpression]] while preserving original tags.
    *
+   * Method is applied recursively to all the nested [[TimeZoneAwareExpression]]s which lack a
+   * timezone until we find one which has it. This is because sometimes type coercion rules (or
+   * other code) can produce multiple [[Cast]]s on top of an expression. For example:
+   *
+   * {{{ SELECT NANVL(1, null); }}}
+   *
+   * Plan:
+   *
+   * {{{
+   * Project [nanvl(cast(1 as double), cast(cast(null as int) as double)) AS nanvl(1, NULL)#0]
+   * +- OneRowRelation
+   * }}}
+   *
+   * As it can be seen, there are multiple nested [[Cast]] nodes and timezone should be applied to
+   * all of them.
+   *
    * This method is particularly useful for cases like resolving [[Cast]] expressions where tags
    * such as [[USER_SPECIFIED_CAST]] need to be preserved.
    *
@@ -133,7 +149,13 @@ object TimezoneAwareExpressionResolver {
   def resolveTimezone(expression: Expression, timeZoneId: String): Expression = {
     expression match {
       case timezoneExpression: TimeZoneAwareExpression if timezoneExpression.timeZoneId.isEmpty =>
-        val withTimezone = timezoneExpression.withTimeZone(timeZoneId)
+        val childrenWithTimeZone = timezoneExpression.children.map { child =>
+          resolveTimezone(child, timeZoneId)
+        }
+        val withNewChildren = timezoneExpression
+          .withNewChildren(childrenWithTimeZone)
+          .asInstanceOf[TimeZoneAwareExpression]
+        val withTimezone = withNewChildren.withTimeZone(timeZoneId)
         withTimezone.copyTagsFrom(timezoneExpression)
         withTimezone
       case other => other

@@ -24,6 +24,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
@@ -61,6 +62,14 @@ class DataSourceRDD(
       private var currentIter: Option[Iterator[Object]] = None
       private var currentIndex: Int = 0
 
+      private val partitionMetricCallback = new PartitionMetricCallback(customMetrics)
+
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      context.addTaskCompletionListener[Unit] { _ =>
+        partitionMetricCallback.execute()
+      }
+
       override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
 
       override def next(): Object = {
@@ -87,14 +96,11 @@ class DataSourceRDD(
               new PartitionIterator[InternalRow](rowReader, customMetrics))
             (iter, rowReader)
           }
-          context.addTaskCompletionListener[Unit] { _ =>
-            // In case of early stopping before consuming the entire iterator,
-            // we need to do one more metric update at the end of the task.
-            CustomMetrics
-              .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
-            iter.forceUpdateMetrics()
-            reader.close()
-          }
+
+          // Once we advance to the next partition, update the metric callback for early finish
+          val previousMetrics = partitionMetricCallback.advancePartition(iter, reader)
+          previousMetrics.foreach(reader.initMetricsValues)
+
           currentIter = Some(iter)
           hasNext
         }
@@ -106,6 +112,35 @@ class DataSourceRDD(
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartitions.flatMap(_.preferredLocations())
+  }
+}
+
+private class PartitionMetricCallback
+    (customMetrics: Map[String, SQLMetric]) {
+  private var iter: MetricsIterator[_] = null
+  private var reader: PartitionReader[_] = null
+
+  def advancePartition(
+      iter: MetricsIterator[_],
+      reader: PartitionReader[_]): Option[Array[CustomTaskMetric]] = {
+    val metrics = execute()
+
+    this.iter = iter
+    this.reader = reader
+
+    metrics
+  }
+
+  def execute(): Option[Array[CustomTaskMetric]] = {
+    if (iter != null && reader != null) {
+      val metrics = reader.currentMetricsValues
+      CustomMetrics.updateMetrics(metrics.toImmutableArraySeq, customMetrics)
+      iter.forceUpdateMetrics()
+      reader.close()
+      Some(metrics)
+    } else {
+      None
+    }
   }
 }
 

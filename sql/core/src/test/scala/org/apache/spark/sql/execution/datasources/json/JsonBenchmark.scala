@@ -109,7 +109,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
   def writeWideColumn(path: String, rowsNum: Int): StructType = {
     spark.sparkContext.range(0, rowsNum, 1)
       .map { i =>
-        val s = "abcdef0123456789ABCDEF" * 20
+        val s = "abcdef0123456789ABCDEF".repeat(20)
         s"""{"a":"$s","b": $i,"c":"$s","d":$i,"e":"$s","f":$i,"x":"$s","y":$i,"z":"$s"}"""
       }
       .toDF().write.text(path)

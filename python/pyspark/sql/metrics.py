@@ -68,6 +68,20 @@ class MetricValue:
     def metric_type(self) -> str:
         return self._type
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this metric value.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'value', and 'type'.
+        """
+        return {
+            "name": self._name,
+            "value": self._value,
+            "type": self._type,
+        }
+
 
 class PlanMetrics:
     """Represents a particular plan node and the associated metrics of this node."""
@@ -96,6 +110,21 @@ class PlanMetrics:
     @property
     def metrics(self) -> List[MetricValue]:
         return self._metrics
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this plan metrics.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'plan_id', 'parent_plan_id', and 'metrics'.
+        """
+        return {
+            "name": self._name,
+            "plan_id": self._id,
+            "parent_plan_id": self._parent_id,
+            "metrics": [m.to_dict() for m in self._metrics],
+        }
 
 
 class CollectedMetrics:

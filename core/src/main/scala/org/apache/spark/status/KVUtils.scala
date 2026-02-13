@@ -25,13 +25,14 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.core.StreamReadConstraints
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.fusesource.leveldbjni.internal.NativeDB
 import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.{FsHistoryProvider, FsHistoryProviderMetadata}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
@@ -74,8 +75,12 @@ private[spark] object KVUtils extends Logging {
   private[spark] class KVStoreScalaSerializer extends KVStoreSerializer {
 
     mapper.registerModule(DefaultScalaModule)
-    mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
+    mapper.setDefaultPropertyInclusion(JsonInclude.Include.NON_ABSENT)
 
+    // SPARK-49872: Remove jackson JSON string length limitation.
+    mapper.getFactory.setStreamReadConstraints(
+      StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+    )
   }
 
   /**
@@ -210,6 +215,20 @@ private[spark] object KVUtils extends Logging {
   def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  /**
+   * Maps all values of KVStoreView to new values using a transformation function
+   * and filtered by a filter function.
+   */
+  def mapToSeqWithFilter[T, B](
+      view: KVStoreView[T],
+      max: Int)
+      (mapFunc: T => B)
+      (filterFunc: B => Boolean): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).filter(filterFunc).take(max).toList
     }
   }
 

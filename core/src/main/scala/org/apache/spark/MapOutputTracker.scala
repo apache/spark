@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{HashMap, ListBuffer, Map, Set}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
@@ -34,7 +34,7 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -100,6 +100,12 @@ private class ShuffleStatus(
   val mapStatusesDeleted = new Array[MapStatus](numPartitions)
 
   /**
+   * Keep the indices of the Map tasks whose checksums are different across retries.
+   * Exposed for testing.
+   */
+  private[spark] val checksumMismatchIndices: Set[Int] = Set()
+
+  /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
    * array is the shuffle partition id (reduce id). Each value in the array is the MergeStatus for
    * a shuffle partition, or null if not available. When push-based shuffle is enabled, this array
@@ -159,9 +165,11 @@ private class ShuffleStatus(
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
-   * will be replaced by the new location.
+   * will be replaced by the new location. Returns true if the checksum in the new MapStatus is
+   * different from a previous registered MapStatus. Otherwise, returns false.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
+  def addMapOutput(mapIndex: Int, status: MapStatus): Boolean = withWriteLock {
+    var isChecksumMismatch: Boolean = false
     val currentMapStatus = mapStatuses(mapIndex)
     if (currentMapStatus == null) {
       _numAvailableMapOutputs += 1
@@ -169,8 +177,19 @@ private class ShuffleStatus(
     } else {
       mapIdToMapIndex.remove(currentMapStatus.mapId)
     }
+    logDebug(s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}")
+
+    val preStatus =
+      if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
+    if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
+      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
+        s"${status.checksumValue} for task ${status.mapId}.")
+      checksumMismatchIndices.add(mapIndex)
+      isChecksumMismatch = true
+    }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
+    isChecksumMismatch
   }
 
   /**
@@ -838,37 +857,34 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
-    shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+  private def getShuffleStatusOrError(shuffleId: Int, caller: String): ShuffleStatus = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) => shuffleStatus
+      case None => throw new ShuffleStatusNotFoundException(shuffleId, caller)
+    }
+  }
+
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
+    getShuffleStatusOrError(shuffleId, "registerMapOutput").addMapOutput(mapIndex, status)
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
   def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: BlockManagerId): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeMapOutput(mapIndex, bmAddress)
-        incrementEpoch()
-      case None =>
-        throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
-    }
+    getShuffleStatusOrError(shuffleId, "unregisterMapOutput").removeMapOutput(mapIndex, bmAddress)
+    incrementEpoch()
   }
 
   /** Unregister all map and merge output information of the given shuffle. */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeOutputsByFilter(x => true)
-        shuffleStatus.removeMergeResultsByFilter(x => true)
-        shuffleStatus.removeShuffleMergerLocations()
-        incrementEpoch()
-      case None =>
-        throw new SparkException(
-          s"unregisterAllMapAndMergeOutput called for nonexistent shuffle ID $shuffleId.")
-    }
+    val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterAllMapAndMergeOutput")
+    shuffleStatus.removeOutputsByFilter(x => true)
+    shuffleStatus.removeMergeResultsByFilter(x => true)
+    shuffleStatus.removeShuffleMergerLocations()
+    incrementEpoch()
   }
 
   def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus): Unit = {
-    shuffleStatuses(shuffleId).addMergeResult(reduceId, status)
+    getShuffleStatusOrError(shuffleId, "registerMergeResult").addMergeResult(reduceId, status)
   }
 
   def registerMergeResults(shuffleId: Int, statuses: Seq[(Int, MergeStatus)]): Unit = {
@@ -880,7 +896,8 @@ private[spark] class MapOutputTrackerMaster(
   def registerShufflePushMergerLocations(
       shuffleId: Int,
       shuffleMergers: Seq[BlockManagerId]): Unit = {
-    shuffleStatuses(shuffleId).registerShuffleMergerLocations(shuffleMergers)
+    getShuffleStatusOrError(shuffleId, "registerShufflePushMergerLocations")
+      .registerShuffleMergerLocations(shuffleMergers)
   }
 
   /**
@@ -899,28 +916,19 @@ private[spark] class MapOutputTrackerMaster(
       reduceId: Int,
       bmAddress: BlockManagerId,
       mapIndex: Option[Int] = None): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
-        if (mergeStatus != null &&
-          (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
-          shuffleStatus.removeMergeResult(reduceId, bmAddress)
-          incrementEpoch()
-        }
-      case None =>
-        throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
+    val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterMergeResult")
+    val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
+    if (mergeStatus != null &&
+      (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
+      shuffleStatus.removeMergeResult(reduceId, bmAddress)
+      incrementEpoch()
     }
   }
 
   def unregisterAllMergeResult(shuffleId: Int): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeMergeResultsByFilter(x => true)
-        incrementEpoch()
-      case None =>
-        throw new SparkException(
-          s"unregisterAllMergeResult called for nonexistent shuffle ID $shuffleId.")
-    }
+    getShuffleStatusOrError(shuffleId, "unregisterAllMergeResult")
+      .removeMergeResultsByFilter(x => true)
+    incrementEpoch()
   }
 
   /** Unregister shuffle data */
@@ -1003,7 +1011,7 @@ private[spark] class MapOutputTrackerMaster(
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
-    shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
+    getShuffleStatusOrError(dep.shuffleId, "getStatistics").withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
@@ -1265,6 +1273,9 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.clear()
   }
 }
+
+case class ShuffleStatusNotFoundException(shuffleId: Int, methodName: String)
+  extends SparkException(s"$methodName called for nonexistent shuffle ID $shuffleId.")
 
 /**
  * Executor-side client for fetching map output info from the driver's MapOutputTrackerMaster.

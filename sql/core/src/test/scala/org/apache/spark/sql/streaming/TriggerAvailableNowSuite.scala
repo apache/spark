@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
-import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, Offset, SerializedOffset, SingleBatchExecutor, Source, StreamingExecutionRelation, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
+  import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, SerializedOffset, SingleBatchExecutor, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -97,7 +98,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
   }
 
   class TestMicroBatchStream extends TestDataFrameProvider {
-    private lazy val memoryStream = MemoryStream[Long](0, spark.sqlContext)
+    private lazy val memoryStream = MemoryStream[Long](0, spark)
 
     override def toDF: DataFrame = memoryStream.toDF()
 

@@ -20,6 +20,7 @@ from pyspark.pipelines.api import (
     materialized_view,
     table,
     temporary_view,
+    create_sink,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "materialized_view",
     "table",
     "temporary_view",
+    "create_sink",
 ]

@@ -30,7 +30,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
@@ -89,27 +89,37 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       executeKey: ExecuteKey,
       request: proto.ExecutePlanRequest,
       sessionHolder: SessionHolder): ExecuteHolder = {
+    val opId = executeKey.operationId
     val executeHolder = executions.compute(
       executeKey,
       (executeKey, oldExecuteHolder) => {
-        // Check if the operation already exists, either in the active execution map, or in the
-        // graveyard of tombstones of executions that have been abandoned. The latter is to prevent
-        // double executions when the client retries, thinking it never reached the server, but in
-        // fact it did, and already got removed as abandoned.
+
+        // Check if the operation already exists, either in the active execution map
         if (oldExecuteHolder != null) {
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-            messageParameters = Map("handle" -> executeKey.operationId))
+            messageParameters = Map("handle" -> opId))
         }
-        if (getAbandonedTombstone(executeKey).isDefined) {
+        // Check if the operation is already in the graveyard of abandoned executions, or was
+        // recently completed. Prevents double execution when client retries on a lost response.
+        if (getAbandonedTombstone(executeKey).isDefined ||
+          sessionHolder.getOperationStatus(opId).isDefined) {
+
+          logInfo(
+            log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Already tombstoned: " +
+              log"${MDC(LogKeys.STATUS, getAbandonedTombstone(executeKey).isDefined)}.")
+          logInfo(
+            log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Seen previously: " +
+              log"${MDC(LogKeys.STATUS, sessionHolder.getOperationStatus(opId).isDefined)}.")
+
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
-            messageParameters = Map("handle" -> executeKey.operationId))
+            messageParameters = Map("handle" -> opId))
         }
         new ExecuteHolder(executeKey, request, sessionHolder)
       })
 
-    sessionHolder.addOperationId(executeHolder.operationId)
+    sessionHolder.addOperationId(opId)
 
     logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeHolder.key)} is created.")
 
@@ -147,11 +157,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
     if (abandoned) {
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+      executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
     }
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
     executions.remove(key)
-    executeHolder.sessionHolder.removeOperationId(executeHolder.operationId)
+    executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
 
     updateLastExecutionTime()
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, PipelineRunEventBuffer}
+import org.apache.spark.sql.pipelines.logging.{FlowProgressEventLogger, PipelineEvent}
 
 trait PipelineUpdateContext {
 
@@ -32,6 +32,11 @@ trait PipelineUpdateContext {
   def fullRefreshTables: TableFilter
 
   def resetCheckpointFlows: FlowFilter
+
+  /**
+   * The root storage location for pipeline metadata, including checkpoints for streaming flows.
+   */
+  def storageRoot: String
 
   /**
    * Filter for which flows should be refreshed when performing this update. Should be a superset of
@@ -50,8 +55,8 @@ trait PipelineUpdateContext {
     UnionFlowFilter(flowFilterForTables, resetCheckpointFlows)
   }
 
-  /** Buffer containing internal events that are emitted during a run of a pipeline. */
-  def eventBuffer: PipelineRunEventBuffer
+  /** Callback to invoke for internal events that are emitted during a run of a pipeline. */
+  def eventCallback: PipelineEvent => Unit
 
   /** Emits internal flow progress events into the event buffer. */
   def flowProgressEventLogger: FlowProgressEventLogger

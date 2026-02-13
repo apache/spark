@@ -37,7 +37,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
   override def requiredChildDistribution: Seq[Distribution] = {
     if (isSkewJoin) {
       // We re-arrange the shuffle partitions to deal with skew join, and the new children
-      // partitioning doesn't satisfy `HashClusteredDistribution`.
+      // partitioning doesn't satisfy `ClusteredDistribution`.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
     } else {
       ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil

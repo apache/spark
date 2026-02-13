@@ -159,6 +159,13 @@ private[spark] object History {
       .doubleConf
       .createWithDefault(0.7d)
 
+  val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
+      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
     .doc("Specifies whether the History Server should periodically clean up driver logs from " +
@@ -221,12 +228,19 @@ private[spark] object History {
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
+  val NUM_COMPACT_THREADS = ConfigBuilder("spark.history.fs.numCompactThreads")
+    .version("4.1.0")
+    .doc("Number of threads that will be used by history server to compact event logs.")
+    .intConf
+    .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+
   val RETAINED_APPLICATIONS = ConfigBuilder("spark.history.retainedApplications")
     .version("1.0.0")
     .doc("The number of applications to retain UI data for in the cache. If this cap is " +
       "exceeded, then the oldest applications will be removed from the cache. If an application " +
       "is not in the cache, it will have to be loaded from disk if it is accessed from the UI.")
     .intConf
+    .checkValue(v => v > 0, "The number of applications to retain should be a positive integer.")
     .createWithDefault(50)
 
   val PROVIDER = ConfigBuilder("spark.history.provider")

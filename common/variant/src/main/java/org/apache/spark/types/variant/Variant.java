@@ -99,6 +99,11 @@ public final class Variant {
     return VariantUtil.getDecimal(value, pos);
   }
 
+  // Get the decimal value, including trailing zeros
+  public BigDecimal getDecimalWithOriginalScale() {
+    return VariantUtil.getDecimalWithOriginalScale(value, pos);
+  }
+
   // Get a float value from the variant.
   public float getFloat() {
     return VariantUtil.getFloat(value, pos);

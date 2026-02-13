@@ -31,7 +31,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
@@ -530,7 +530,13 @@ class BlockManagerMasterEndpoint(
         blockManagerInfo.get(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
           val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-          bm.storageEndpoint.ask[Boolean](replicateMsg)
+          try {
+            bm.storageEndpoint.ask[Boolean](replicateMsg)
+          } catch {
+            case e: Exception =>
+              logWarning(log"Failed to request replication of ${MDC(BLOCK_ID, blockId)} " +
+                log"from ${MDC(BLOCK_MANAGER_ID, candidateBMId)}", e)
+          }
         }
       }
     }
@@ -554,6 +560,7 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo(log"Trying to remove executor ${MDC(EXECUTOR_ID, execId)} from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+    logInfo(log"Removed ${MDC(EXECUTOR_ID, execId)} successfully in removeExecutor")
   }
 
   /**

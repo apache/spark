@@ -593,6 +593,8 @@ abstract class Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @since 2.0.0
    */
   def cacheTable(tableName: String): Unit
@@ -606,6 +608,8 @@ abstract class Catalog {
    *   database.
    * @param storageLevel
    *   storage level to cache table.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @since 2.3.0
    */
   def cacheTable(tableName: String, storageLevel: StorageLevel): Unit
@@ -617,6 +621,9 @@ abstract class Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so uncaching it affects all
+   *   sessions.
    * @since 2.0.0
    */
   def uncacheTable(tableName: String): Unit
@@ -624,6 +631,9 @@ abstract class Catalog {
   /**
    * Removes all cached tables from the in-memory cache.
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so clearing the cache
+   *   affects all sessions.
    * @since 2.0.0
    */
   def clearCache(): Unit

@@ -17,7 +17,6 @@
 #
 
 import os
-import pickle
 import tempfile
 import unittest
 
@@ -85,12 +84,6 @@ class FeatureTestsMixin:
             np.testing.assert_allclose(model.max_abs_values, loaded_model.max_abs_values)
             assert model.n_samples_seen == loaded_model.n_samples_seen
 
-            # Test loading core model as scikit-learn model
-            with open(os.path.join(model_path, "MaxAbsScalerModel.sklearn.pkl"), "rb") as f:
-                sk_model = pickle.load(f)
-                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
-                np.testing.assert_allclose(sk_result, expected_result)
-
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -140,12 +133,6 @@ class FeatureTestsMixin:
             np.testing.assert_allclose(model.mean_values, loaded_model.mean_values)
             np.testing.assert_allclose(model.scale_values, loaded_model.scale_values)
             assert model.n_samples_seen == loaded_model.n_samples_seen
-
-            # Test loading core model as scikit-learn model
-            with open(os.path.join(model_path, "StandardScalerModel.sklearn.pkl"), "rb") as f:
-                sk_model = pickle.load(f)
-                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
-                np.testing.assert_allclose(sk_result, expected_result)
 
     def test_array_assembler(self):
         spark_df = self.spark.createDataFrame(
@@ -208,12 +195,6 @@ class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_legacy_mode_feature import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -36,7 +36,7 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 ```sql
-[ r ] { 'char [ ... ]' | "char [ ... ]" }
+[ r ] { 'char [ ... ]' | "char [ ... ]" } [ ... ]
 ```
 
 #### Parameters
@@ -64,6 +64,10 @@ The following escape sequences are recognized in regular string literals (withou
 - `\<other char>` -> `<other char>`, skip the slash and leave the character as is.
 
 The unescaping rules above can be turned off by setting the SQL config `spark.sql.parser.escapedStringLiterals` to `true`.
+
+Chains of string literals are coalesced into a single string literal.
+This can be useful when constructing strings that are too long to fit on a single line.
+It also allows mixing of string literals and parameter marker into a single string literal.
 
 #### Examples
 
@@ -95,6 +99,20 @@ SELECT r"'\n' represents newline character." AS col;
 +----------------------------------+
 |'\n' represents newline character.|
 +----------------------------------+
+
+SELECT 'Hello' ',' 'World!' AS col;
++-------------+
+|          col|
++-------------+
+|Hello, World!|
++-------------+
+
+EXECUTE IMMEDIATE 'SELECT "Hello, " :p "!" AS col' USING 'World' AS p;
++-------------+
+|          col|
++-------------+
+|Hello, World!|
++-------------+
 ```
 
 ### Binary Literal
@@ -373,7 +391,7 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A datetime literal is used to specify a date or timestamp value.
+A datetime literal is used to specify a date, time or timestamp value.
 
 #### Date Syntax
 
@@ -408,6 +426,44 @@ SELECT DATE '2011-11-11' AS col;
 +----------+
 |2011-11-11|
 +----------+
+```
+
+#### Time Syntax
+
+```sql
+TIME { '[h]h:[m]m[:]' |
+       '[h]h:[m]m:[s]s[.]' |
+       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]'}
+```
+**Note:** defaults to `00` if hour, minute or second is not specified.
+
+#### Time Examples
+
+```sql
+SELECT TIME'12:00' as col;
++--------+
+|col     |
++--------+
+|12:00:00|
++--------+
+SELECT TIME'2:0' as col;
++--------+
+|col     |
++--------+
+|02:00:00|
++--------+
+SELECT TIME'2:0:3' as col;
++--------+
+|col     |
++--------+
+|02:00:03|
++--------+
+SELECT TIME'23:59:59.999999' as col;
++---------------+
+|col            |
++---------------+
+|23:59:59.999999|
++---------------+
 ```
 
 #### Timestamp Syntax

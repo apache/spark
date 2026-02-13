@@ -1064,7 +1064,7 @@ class InternalFrame:
     def to_pandas_frame(self) -> pd.DataFrame:
         """Return as pandas DataFrame."""
         sdf = self.to_internal_spark_frame
-        pdf = sdf.toPandas()
+        pdf = sdf._to_pandas(pandasStructHandlingMode="row")
         if len(pdf) == 0 and len(sdf.schema) > 0:
             pdf = pdf.astype(
                 {field.name: spark_type_to_pandas_dtype(field.dataType) for field in sdf.schema}
@@ -1200,10 +1200,10 @@ class InternalFrame:
 
         :param spark_frame: the new Spark DataFrame
         :param index_fields: the new InternalFields for the index columns.
-                             If None, the original dtyeps are used.
+                             If None, the original dtypes are used.
         :param data_columns: the new column names. If None, the original one is used.
         :param data_fields: the new InternalFields for the data columns.
-                            If None, the original dtyeps are used.
+                            If None, the original dtypes are used.
         :return: the copied InternalFrame.
         """
         if index_fields is None:
@@ -1562,7 +1562,7 @@ class InternalFrame:
         pdf = pdf.copy()
 
         data_columns = [name_like_string(col) for col in pdf.columns]
-        pdf.columns = data_columns
+        pdf.columns = pd.Index(data_columns)
 
         if retain_index:
             index_nlevels = pdf.index.nlevels

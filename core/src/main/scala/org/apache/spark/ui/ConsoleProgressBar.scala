@@ -38,6 +38,8 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private val updatePeriodMSec = sc.conf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
   // Delay to show up a progress bar, in milliseconds
   private val firstDelayMSec = 500L
+  // Get the stderr (which is console for spark-shell) before installing RedirectConsolePlugin
+  private val console = System.err
 
   // The width of terminal
   private val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
@@ -92,7 +94,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     // only refresh if it's changed OR after 1 minute (or the ssh connection will be closed
     // after idle some time)
     if (bar != lastProgressBar || now - lastUpdateTime > 60 * 1000L) {
-      System.err.print(s"$CR$bar$CR")
+      console.print(s"$CR$bar$CR")
       lastUpdateTime = now
     }
     lastProgressBar = bar
@@ -103,7 +105,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    */
   private def clear(): Unit = {
     if (!lastProgressBar.isEmpty) {
-      System.err.printf(s"$CR${" " * TerminalWidth}$CR")
+      console.printf(s"$CR${" ".repeat(TerminalWidth)}$CR")
       lastProgressBar = ""
     }
   }

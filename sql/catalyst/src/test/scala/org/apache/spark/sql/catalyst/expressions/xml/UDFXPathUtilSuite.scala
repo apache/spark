@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import javax.xml.xpath.XPathConstants.STRING
 
 import org.w3c.dom.Node
@@ -79,14 +80,13 @@ class UDFXPathUtilSuite extends SparkFunSuite {
   }
 
   test("embedFailure") {
-    import org.apache.commons.io.FileUtils
     import java.io.File
     val secretValue = String.valueOf(Math.random)
     val tempFile = File.createTempFile("verifyembed", ".tmp")
     tempFile.deleteOnExit()
     val fname = tempFile.getAbsolutePath
 
-    FileUtils.writeStringToFile(tempFile, secretValue, StandardCharsets.UTF_8)
+    Files.writeString(tempFile.toPath(), secretValue, StandardCharsets.UTF_8)
 
     val xml =
       s"""<?xml version="1.0" encoding="utf-8"?>

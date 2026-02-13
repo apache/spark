@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-import unittest
 
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
+from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
 
 
 class FuncTestsMixin(GroupbyStatTestingFuncMixin):
@@ -44,6 +44,12 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
         self._test_stat_func(
             lambda groupby_obj: groupby_obj.var(numeric_only=True), check_exact=False
         )
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.var(numeric_only=None),
+                expected_error=ValueError if using_pandas3 else None,
+            )
 
         pdf, psdf = self.pdf, self.psdf
 
@@ -55,10 +61,16 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             psdf.groupby("A").median().sort_index(),
             expected,
         )
-        self.assert_eq(
-            psdf.groupby("A").median(numeric_only=None).sort_index(),
-            expected,
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                psdf.groupby("A").median(numeric_only=None).sort_index(),
+                expected,
+            )
+        else:
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.median(numeric_only=None),
+                expected_error=ValueError if using_pandas3 else None,
+            )
         self.assert_eq(
             psdf.groupby("A").median(numeric_only=False).sort_index(),
             expected,
@@ -97,6 +109,12 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             pdf.groupby("A").sum().sort_index(),
             check_exact=False,
         )
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            # pandas < 3 raises an error when numeric_only is False or None
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.sum(numeric_only=None),
+                expected_error=ValueError if using_pandas3 else None,
+            )
 
 
 class FuncTests(
@@ -107,12 +125,6 @@ class FuncTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_stat_func import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

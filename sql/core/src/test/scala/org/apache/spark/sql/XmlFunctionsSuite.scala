@@ -551,4 +551,60 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
          | """.stripMargin)
     checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
   }
+
+  test("from_xml/to_xml with TIME type - all precisions") {
+    import java.time.LocalTime
+
+    val testData = Seq(
+      (0, LocalTime.of(14, 30, 45), "14:30:45"),
+      (1, LocalTime.of(14, 30, 45, 100000000), "14:30:45.1"),
+      (2, LocalTime.of(14, 30, 45, 120000000), "14:30:45.12"),
+      (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
+      (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
+      (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, time, timeStr) =>
+      val schema = new StructType().add("time", TimeType(precision))
+
+      // Test from_xml
+      val xmlInput = s"""<record><time>$timeStr</time></record>"""
+      val parseResult = Seq(xmlInput).toDS()
+        .select(from_xml($"value", schema, Map("rowTag" -> "record").asJava))
+        .collect().head.getAs[Row](0).getAs[LocalTime](0)
+      assert(parseResult == time, s"from_xml failed for precision $precision")
+
+      // Test to_xml
+      val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
+      val xmlResult = df.select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava))
+        .collect().head.getString(0)
+      assert(xmlResult.contains(timeStr), s"to_xml failed for precision $precision")
+
+      // Test roundtrip
+      val roundtrip = df
+        .select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava).as("xml"))
+        .select(from_xml($"xml", schema, Map("rowTag" -> "record").asJava).as("struct"))
+        .select($"struct.time").collect().head.getAs[LocalTime](0)
+      assert(roundtrip == time, s"Roundtrip failed for precision $precision")
+    }
+
+    // Test custom format: HH-mm-ss.SSSSSS
+    val customTime = LocalTime.of(14, 30, 45, 123456000)
+    val customSchema = new StructType().add("time", TimeType(6))
+    val customOptions = Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS").asJava
+
+    val customXmlInput = """<record><time>14-30-45.123456</time></record>"""
+    val customParseResult = Seq(customXmlInput).toDS()
+      .select(from_xml($"value", customSchema, customOptions))
+      .collect().head.getAs[Row](0).getAs[LocalTime](0)
+    assert(customParseResult == customTime, "Custom format from_xml failed")
+
+    val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+    val customRoundtrip = customDF
+      .select(to_xml(struct($"time"), customOptions).as("xml"))
+      .select(from_xml($"xml", customSchema, customOptions).as("struct"))
+      .select($"struct.time").collect().head.getAs[LocalTime](0)
+    assert(customRoundtrip == customTime, "Custom format roundtrip failed")
+  }
 }

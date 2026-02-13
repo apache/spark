@@ -58,7 +58,7 @@ private[sql] class AvroDeserializer(
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+      datetimeRebaseMode: String,
       useStableIdForUnionType: Boolean,
       stableIdPrefixForUnionType: String,
       recursiveFieldMaxDepth: Int) = {
@@ -66,7 +66,7 @@ private[sql] class AvroDeserializer(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
-      RebaseSpec(datetimeRebaseMode),
+      RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
@@ -201,6 +201,14 @@ private[sql] class AvroDeserializer(
           updater.setLong(ordinal, micros)
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimestampNTZType.sql}.")
+      }
+
+      case (LONG, _: TimeType) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, micros)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.

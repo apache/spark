@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, RELATIVE_TOLERANCE}
-import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.MavenUtils.LogStringContext
 
 /**
  * Model fitted by [[IterativelyReweightedLeastSquares]].
@@ -64,7 +63,7 @@ private[ml] class IterativelyReweightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double) extends Serializable {
+    val tol: Double) extends Serializable with Logging {
 
   def fit(
       instances: RDD[OffsetInstance],

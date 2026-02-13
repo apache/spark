@@ -204,4 +204,8 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
       assert(vector.getChild(2).getLong(i) == 12345L)
     }
   }
+
+  testVector("null DataType", 0, null) { vector =>
+    assert(vector.dataType == null)
+  }
 }

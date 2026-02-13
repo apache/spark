@@ -33,7 +33,7 @@ private[sql] object SqlScriptingErrors {
   def duplicateLabels(origin: Origin, label: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "LABEL_ALREADY_EXISTS",
+      errorClass = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       cause = null,
       messageParameters = Map("label" -> toSQLId(label)))
   }
@@ -54,10 +54,10 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("endLabel" -> toSQLId(endLabel)))
   }
 
-  def labelNameForbidden(origin: Origin, label: String): Throwable = {
+  def labelOrForVariableNameForbidden(origin: Origin, label: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "LABEL_NAME_FORBIDDEN",
+      errorClass = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       cause = null,
       messageParameters = Map("label" -> toSQLId(label))
     )
@@ -181,6 +181,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> toSQLId(condition)))
   }
 
+  def cursorDeclarationNotAtStartOfCompound(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_CURSOR_DECLARATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,
@@ -226,6 +234,14 @@ private[sql] object SqlScriptingErrors {
     new SqlScriptingException(
       origin = origin,
       errorClass = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
+  def cursorNotSupported(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_CURSOR",
       cause = null,
       messageParameters = Map.empty)
   }

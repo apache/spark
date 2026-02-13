@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -297,5 +298,70 @@ class CollapseProjectSuite extends PlanTest {
         .analyze
       comparePlans(optimized, expected)
     }
+  }
+
+  test("SPARK-53399: Merge Python UDFs with same evalType") {
+    val pythonUdf = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(
+        pythonUdf($"a") as "udf_a", // Always inline
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline
+        $"b" + 2 as "b_plus_2") // Maybe inline
+      .select(
+        $"udf_a",
+        pythonUdf($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        $"b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation
+      .select(
+        $"a", // New passthrough attribute is added due to always inline
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline is kept in lower
+        $"b" + 2 as "b_plus_2") // Maybe inline is kept in lower for now
+      .select(
+        pythonUdf($"a") as "udf_a", // Always inline is moved to upper
+        pythonUdf($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        $"b_plus_2")
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-53399: Don't merge Python UDFs with different evalType") {
+    val pythonUdfA = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val pythonUdfB = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_ARROW_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(
+        pythonUdfA($"a") as "udf_a", // Maybe inline because `evalType` doesn't match to `udf_b`'s
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline
+        $"b" + 2 as "b_plus_2") // Maybe inline
+      .select(
+        $"udf_a",
+        pythonUdfB($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        "b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = query // No always inlines so keep both nodes intact
+
+    comparePlans(optimized, expected)
   }
 }

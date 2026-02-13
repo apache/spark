@@ -30,7 +30,8 @@ class PythonPartitionReaderFactory(
     source: UserDefinedPythonDataSource,
     pickledReadFunc: Array[Byte],
     outputSchema: StructType,
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -45,7 +46,8 @@ class PythonPartitionReaderFactory(
           UserDefinedPythonDataSource.readInputSchema,
           outputSchema,
           metrics,
-          jobArtifactUUID)
+          jobArtifactUUID,
+          sessionUUID)
 
         val part = partition.asInstanceOf[PythonInputPartition]
         evaluatorFactory.createEvaluator().eval(

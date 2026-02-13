@@ -23,7 +23,7 @@ import re
 import inspect
 import warnings
 from collections.abc import Mapping
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 from typing import (
     Any,
     Callable,
@@ -32,10 +32,12 @@ from typing import (
     IO,
     Iterable,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -45,15 +47,18 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pandas.core.accessor import CachedAccessor
-from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
+from pandas.api.extensions import no_default
+from pandas.api.types import (
     is_list_like,
     is_hashable,
     CategoricalDtype,
 )
-from pandas.tseries.frequencies import DateOffset
+from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import (
     functions as F,
     Column as PySparkColumn,
@@ -103,7 +108,9 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.utils import (
+    ansi_mode_context,
     combine_frames,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -141,6 +148,18 @@ if TYPE_CHECKING:
 # pattern every time it is used in _repr_ in Series.
 # This pattern basically seeks the footer string from pandas'
 REPR_PATTERN = re.compile(r"Length: (?P<length>[0-9]+)")
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "Series", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
+
 
 _flex_doc_SERIES = """
 Return {desc} of series and other, element-wise (binary operator `{op_name}`).
@@ -369,6 +388,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
     internally.
 
+    .. versionchanged:: 4.1.0
+        Support construction from a pandas-on-Spark Series input, which can be used with
+        additional parameters index, dtype, and name for overriding the original value.
+
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
     :ivar _psdf: Parent's pandas-on-Spark DataFrame
@@ -376,9 +399,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     Parameters
     ----------
-    data : array-like, dict, or scalar value, pandas Series
+    data : array-like, dict, or scalar value, pandas Series, pandas-on-Spark Series
         Contains data stored in Series
-        Note that if `data` is a pandas Series, other arguments should not be used.
+        Note that if `data` is a Series, index, dtype, or name can also be
+        specified to override the original value.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
         Non-unique index values are allowed. Will default to
@@ -387,12 +411,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dict.
     dtype : numpy.dtype or None
         If None, dtype will be inferred
+    name : str, default None
+        The name to give to the Series.
     copy : boolean, default False
         Copy input data
     """
 
     def __init__(  # type: ignore[no-untyped-def]
-        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        self, data=None, index=None, dtype=None, name=None, copy=False, fastpath=no_default
     ):
         assert data is not None
 
@@ -402,17 +428,35 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert dtype is None
             assert name is None
             assert not copy
-            assert not fastpath
+            assert fastpath is no_default
 
             self._anchor = data
             self._col_label = index
+
+        elif isinstance(data, Series):
+            assert not copy
+            assert fastpath is no_default
+
+            if name:
+                data = data.rename(name)
+
+            if index:
+                data = data.reindex(index)
+
+            if dtype:
+                data = data.astype(dtype)
+
+            anchor = DataFrame(data)
+            self._anchor = anchor
+            self._col_label = anchor._internal.column_labels[0]
+            object.__setattr__(anchor, "_psseries", {self._column_label: self})
         else:
             if isinstance(data, pd.Series):
                 assert index is None
                 assert dtype is None
                 assert name is None
                 assert not copy
-                assert not fastpath
+                assert fastpath is no_default
                 s = data
             else:
                 from pyspark.pandas.indexes.base import Index
@@ -423,9 +467,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         "Try pandas index or array-like."
                     )
 
-                s = pd.Series(
-                    data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
-                )
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0"):
+                    s = pd.Series(
+                        data=data, index=index, dtype=dtype, name=name, copy=copy, fastpath=fastpath
+                    )
+                else:
+                    # fastpath is removed since pandas 3.0.0
+                    s = pd.Series(data=data, index=index, dtype=dtype, name=name, copy=copy)
             internal = InternalFrame.from_pandas(pd.DataFrame(s))
             if s.name is None:
                 internal = internal.copy(column_labels=[None])
@@ -473,9 +521,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
-        "spark", SparkSeriesMethods
-    )
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)
 
     @property
     def dtypes(self) -> Dtype:
@@ -1166,10 +1212,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 else:
                     current = current.when(self.spark.column == F.lit(to_replace), value)
 
-            if hasattr(arg, "__missing__"):
-                tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
+            if isinstance(arg, dict) and hasattr(arg, "__missing__"):
+                tmp_val = arg[np._NoValue]
                 # Remove in case it's set in defaultdict.
-                del arg[np._NoValue]  # type: ignore[attr-defined]
+                del arg[np._NoValue]
                 current = current.otherwise(F.lit(tmp_val))
             else:
                 current = current.otherwise(F.lit(None).cast(self.spark.data_type))
@@ -2053,7 +2099,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def fillna(
         self,
         value: Optional[Any] = None,
-        method: Optional[str] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
         axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
@@ -2061,7 +2107,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """Fill NA/NaN values.
 
         .. note:: the current implementation of 'method' parameter in fillna uses Spark's Window
-            without specifying partition specification. This leads to moveing all data into
+            without specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -2122,7 +2168,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         We can also propagate non-null values forward or backward.
 
-        >>> s.fillna(method='ffill')
+        >>> s.fillna(method='ffill')  # doctest: +SKIP
         0    NaN
         1    2.0
         2    3.0
@@ -2132,7 +2178,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Name: x, dtype: float64
 
         >>> s = ps.Series([np.nan, 'a', 'b', 'c', np.nan], name='x')
-        >>> s.fillna(method='ffill')
+        >>> s.fillna(method='ffill')  # doctest: +SKIP
         0    None
         1       a
         2       b
@@ -2140,6 +2186,28 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4       c
         Name: x, dtype: object
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if method is _NoValue:
+                method = None
+        else:
+            if method is not _NoValue:
+                raise TypeError(
+                    "The `method` parameter is not supported in pandas 3.0.0 and later. "
+                )
+            method = None
+
+        return self._fillna_with_method(
+            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+        )
+
+    def _fillna_with_method(
+        self,
+        value: Optional[Any] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ) -> Optional["Series"]:
         psser = self._fillna(value=value, method=method, axis=axis, limit=limit)
 
         if method is not None:
@@ -2738,7 +2806,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Get the rows for the last 3 days:
 
-        >>> psser.last('3D')
+        >>> psser.last('3D')  # doctest: +SKIP
         2018-04-13    3
         2018-04-15    4
         dtype: int64
@@ -2747,6 +2815,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-11 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._last(offset)
+        else:
+            raise AttributeError(
+                "The `last` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _last(self, offset: Union[str, DateOffset]) -> "Series":
         warnings.warn(
             "last is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -2792,7 +2869,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Get the rows for the first 3 days:
 
-        >>> psser.first('3D')
+        >>> psser.first('3D')  # doctest: +SKIP
         2018-04-09    1
         2018-04-11    2
         dtype: int64
@@ -2801,6 +2878,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-13 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._first(offset)
+        else:
+            raise AttributeError(
+                "The `first` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _first(self, offset: Union[str, DateOffset]) -> "Series":
         warnings.warn(
             "first is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -3172,12 +3258,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         z    3
         dtype: int64
         >>>
-        >>> psser.swapaxes(0, 0)
+        >>> psser.swapaxes(0, 0)  # doctest: +SKIP
         x    1
         y    2
         z    3
         dtype: int64
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._swapaxes(i, j, copy)
+        else:
+            raise AttributeError(
+                "The `swapaxes` method is not supported in pandas 3.0.0 and later. "
+                "Please use the `transpose` method instead"
+            )
+
+    def _swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "Series":
         warnings.warn(
             "'Series.swapaxes' is deprecated and will be removed in a future version. "
             "Please use 'Series.transpose' instead.",
@@ -3310,7 +3405,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         the Series and its shifted self.
 
         .. note:: the current implementation of rank uses Spark's Window without
-            specifying partition specification. This leads to moveing all data into
+            specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -3370,13 +3465,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             lag_scol = F.lag(scol, lag).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
             lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
-            corr = (
-                sdf.withColumn(lag_col_name, lag_scol)
-                .select(F.corr(scol, F.col(lag_col_name)))
-                .head()[0]
-            )
+
+            sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
+            if is_ansi_mode_enabled(sdf.sparkSession):
+                # Compute covariance between the original and lagged columns.
+                # If the covariance is None or zero (indicating no linear relationship),
+                # return NaN, otherwise, proceeding to compute correlation may raise
+                # DIVIDE_BY_ZERO under ANSI mode.
+                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).head()[0]
+                if cov_value is None or cov_value == 0.0:
+                    return np.nan
+            corr = sdf_lag.select(F.corr(scol, F.col(lag_col_name))).head()[0]
+
         return np.nan if corr is None else corr
 
+    @with_ansi_mode_context
     def corr(
         self, other: "Series", method: str = "pearson", min_periods: Optional[int] = None
     ) -> float:
@@ -4066,7 +4169,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         assigned a rank that is the average of the ranks of those values.
 
         .. note:: the current implementation of rank uses Spark's Window without
-            specifying partition specification. This leads to moveing all data into
+            specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -4244,7 +4347,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         DataFrame (default is the element in the same column of the previous row).
 
         .. note:: the current implementation of diff uses Spark's Window without
-            specifying partition specification. This leads to moveing all data into
+            specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -4856,6 +4959,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return self.index
 
     # TODO: introduce 'in_place'; fully support 'regex'
+    @with_ansi_mode_context
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -5067,7 +5171,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ), "If 'regex' is True then 'to_replace' must be a string"
 
         if to_replace is None:
-            return self.fillna(method="ffill")
+            return self._fillna_with_method(method="ffill")
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
 
@@ -5081,33 +5185,68 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                 )
             to_replace = {k: v for k, v in zip(to_replace, value)}
+
+        spark_session = self._internal.spark_frame.sparkSession
+        ansi_mode = is_ansi_mode_enabled(spark_session)
+        col_type = self.spark.data_type
+
         if isinstance(to_replace, dict):
             is_start = True
             if len(to_replace) == 0:
                 current = self.spark.column
             else:
                 for to_replace_, value in to_replace.items():
-                    cond = (
-                        (F.isnan(self.spark.column) | self.spark.column.isNull())
-                        if pd.isna(to_replace_)
-                        else (self.spark.column == F.lit(to_replace_))
-                    )
+                    if pd.isna(to_replace_):
+                        if ansi_mode and isinstance(col_type, NumericType):
+                            cond = F.isnan(self.spark.column) | self.spark.column.isNull()
+                        else:
+                            cond = self.spark.column.isNull()
+                    else:
+                        to_replace_lit = (
+                            F.lit(to_replace_).try_cast(col_type)
+                            if ansi_mode
+                            else F.lit(to_replace_)
+                        )
+                        cond = self.spark.column == to_replace_lit
+                    value_expr = F.lit(value).try_cast(col_type) if ansi_mode else F.lit(value)
                     if is_start:
-                        current = F.when(cond, value)
+                        current = F.when(cond, value_expr)
                         is_start = False
                     else:
-                        current = current.when(cond, value)
+                        current = current.when(cond, value_expr)
                 current = current.otherwise(self.spark.column)
         else:
             if regex:
                 # to_replace must be a string
                 cond = self.spark.column.rlike(cast(str, to_replace))
             else:
-                cond = self.spark.column.isin(to_replace)
+                if ansi_mode:
+                    to_replace_values = (
+                        [to_replace]
+                        if not is_list_like(to_replace) or isinstance(to_replace, str)
+                        else to_replace
+                    )
+                    to_replace_values = cast(List[Any], to_replace_values)
+                    literals = [F.lit(v).try_cast(col_type) for v in to_replace_values]
+                    cond = self.spark.column.isin(literals)
+                else:
+                    cond = self.spark.column.isin(to_replace)
                 # to_replace may be a scalar
                 if np.array(pd.isna(to_replace)).any():
-                    cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
-            current = F.when(cond, value).otherwise(self.spark.column)
+                    if ansi_mode:
+                        if isinstance(col_type, NumericType):
+                            cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+                        else:
+                            cond = cond | self.spark.column.isNull()
+                    else:
+                        cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+
+            if ansi_mode:
+                value_expr = F.lit(value).try_cast(col_type)
+                current = F.when(cond, value_expr).otherwise(self.spark.column.try_cast(col_type))
+
+            else:
+                current = F.when(cond, value).otherwise(self.spark.column)
 
         return self._with_new_scol(current)  # TODO: dtype?
 
@@ -5486,7 +5625,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Percentage change between the current and a prior element.
 
         .. note:: the current implementation of this API uses Spark's Window without
-            specifying partition specification. This leads to moveing all data into
+            specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
 
@@ -6857,7 +6996,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
+        >>> idx = pd.date_range('2018-04-09', periods=4, freq='12h')
         >>> psser = ps.Series([1, 2, 3, 4], index=idx)
         >>> psser
         2018-04-09 00:00:00    1
@@ -7076,8 +7215,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def resample(
         self,
         rule: str_type,
-        closed: Optional[str_type] = None,
-        label: Optional[str_type] = None,
+        closed: Optional[Literal["left", "right"]] = None,
+        label: Optional[Literal["left", "right"]] = None,
         on: Optional["Series"] = None,
     ) -> "SeriesResampler":
         """
@@ -7117,7 +7256,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Start by creating a series with 9 one minute timestamps.
 
-        >>> index = pd.date_range('1/1/2000', periods=9, freq='T')
+        >>> index = pd.date_range('1/1/2000', periods=9, freq='min')
         >>> series = ps.Series(range(9), index=index, name='V')
         >>> series
         2000-01-01 00:00:00    0
@@ -7134,7 +7273,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins and sum the values
         of the timestamps falling into a bin.
 
-        >>> series.resample('3T').sum().sort_index()
+        >>> series.resample('3min').sum().sort_index()
         2000-01-01 00:00:00     3.0
         2000-01-01 00:03:00    12.0
         2000-01-01 00:06:00    21.0
@@ -7150,7 +7289,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         To include this value, close the right side of the bin interval as
         illustrated in the example below this one.
 
-        >>> series.resample('3T', label='right').sum().sort_index()
+        >>> series.resample('3min', label='right').sum().sort_index()
         2000-01-01 00:03:00     3.0
         2000-01-01 00:06:00    12.0
         2000-01-01 00:09:00    21.0
@@ -7159,7 +7298,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Downsample the series into 3 minute bins as above, but close the right
         side of the bin interval.
 
-        >>> series.resample('3T', label='right', closed='right').sum().sort_index()
+        >>> series.resample('3min', label='right', closed='right').sum().sort_index()
         2000-01-01 00:00:00     0.0
         2000-01-01 00:03:00     6.0
         2000-01-01 00:06:00    15.0
@@ -7168,7 +7307,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Upsample the series into 30 second bins.
 
-        >>> series.resample('30S').sum().sort_index()[0:5]   # Select first 5 rows
+        >>> series.resample('30s').sum().sort_index()[0:5]   # Select first 5 rows
         2000-01-01 00:00:00    0.0
         2000-01-01 00:00:30    0.0
         2000-01-01 00:01:00    1.0
@@ -7279,7 +7418,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         )
                     )
                 return rest + footer
-        return pser.to_string(name=self.name, dtype=self.dtype)
+        return pser.to_string(name=self.name, dtype=self.dtype)  # type: ignore[call-overload]
 
     def __dir__(self) -> Iterable[str_type]:
         if not isinstance(self.spark.data_type, StructType):
@@ -7336,15 +7475,11 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.series
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.series.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.series.Series.autocorr.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()

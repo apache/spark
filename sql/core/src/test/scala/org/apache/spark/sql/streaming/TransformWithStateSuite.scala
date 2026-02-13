@@ -30,15 +30,19 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExec, TransformWithStateOperatorProperties, TransformWithStateVariableUtils}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -1005,7 +1009,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
-    val spark = this.spark
+    implicit val spark: SparkSession = this.spark
     import spark.implicits._
 
     class ProcessorWithLazyIterators
@@ -1532,7 +1536,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
 
         var index = 0
         val foreachBatchDf = df.writeStream
-          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+          .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+            ds.collect()
             index += 1
           })
           .trigger(Trigger.AvailableNow())
@@ -1559,7 +1564,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
 
         def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
           val q = df.writeStream
-            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+              ds.collect()
               index += 1
             })
             .trigger(Trigger.AvailableNow)
@@ -2024,7 +2030,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
         var index = 0
 
         val q = df.writeStream
-          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+          .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+            ds.collect()
             index += 1
           })
           .trigger(Trigger.AvailableNow)
@@ -2549,6 +2556,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
   }
 }
 
+@SlowSQLTest
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
 
@@ -2562,7 +2570,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] { t =>
         assert(t.getMessage.contains("not supported"))
       }
     )
@@ -2828,7 +2836,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       )
     testStream(result, OutputMode.Update())(
       AddData(inputData, InitInputRow("a", "add", -1.0)),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] {
         (t: Throwable) => {
           assert(t.getMessage.contains("not supported"))
         }

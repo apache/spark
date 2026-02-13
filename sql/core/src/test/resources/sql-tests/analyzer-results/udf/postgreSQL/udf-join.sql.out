@@ -116,7 +116,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`J2_TBL`, false
 INSERT INTO J1_TBL VALUES (1, 4, 'one')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -124,7 +124,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (2, 3, 'two')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -132,7 +132,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (3, 2, 'three')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -140,7 +140,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (4, 1, 'four')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -148,7 +148,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (5, 0, 'five')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -156,7 +156,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (6, 6, 'six')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -164,7 +164,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (7, 7, 'seven')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -172,7 +172,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (8, 8, 'eight')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -180,7 +180,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (0, NULL, 'zero')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [col1#x AS i#x, cast(col2#x as int) AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -188,7 +188,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (NULL, NULL, 'null')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -196,7 +196,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J1_TBL VALUES (NULL, 0, 'zero')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1_tbl], Append, `spark_catalog`.`default`.`j1_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1_tbl), [i, j, t]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS j#x, cast(col3#x as string) AS t#x]
++- Project [cast(col1#x as int) AS i#x, col2#x AS j#x, col3#x AS t#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -204,7 +204,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (1, -1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -212,7 +212,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (2, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -220,7 +220,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (3, -3)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -228,7 +228,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (2, 4)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -236,7 +236,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (5, -5)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -244,7 +244,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (5, -5)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -252,7 +252,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (0, NULL)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [col1#x AS i#x, cast(col2#x as int) AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -268,7 +268,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO J2_TBL VALUES (NULL, 0)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2_tbl], Append, `spark_catalog`.`default`.`j2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2_tbl), [i, k]
-+- Project [cast(col1#x as int) AS i#x, cast(col2#x as int) AS k#x]
++- Project [cast(col1#x as int) AS i#x, col2#x AS k#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -678,7 +678,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t3`, false
 INSERT INTO t1 VALUES ( 'bb', 11 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -686,7 +686,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t2 VALUES ( 'bb', 12 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -694,7 +694,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t2 VALUES ( 'cc', 22 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -702,7 +702,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t2 VALUES ( 'ee', 42 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -710,7 +710,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t3 VALUES ( 'bb', 13 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t3], Append, `spark_catalog`.`default`.`t3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t3), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -718,7 +718,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t3 VALUES ( 'cc', 23 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t3], Append, `spark_catalog`.`default`.`t3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t3), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -726,7 +726,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO t3 VALUES ( 'dd', 33 )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t3], Append, `spark_catalog`.`default`.`t3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t3), [name, n]
-+- Project [cast(col1#x as string) AS name#x, cast(col2#x as int) AS n#x]
++- Project [col1#x AS name#x, col2#x AS n#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -1330,7 +1330,7 @@ Aggregate [cast(udf(cast(cast(udf(cast(count(1) as string)) as bigint) as string
 +- Filter cast(udf(cast(cast(udf(cast(unique1#x as string)) as int) as string)) as int) IN (list#x [])
    :  +- Project [cast(udf(cast(unique1#x as string)) as int) AS udf(unique1)#x]
    :     +- Filter (cast(udf(cast(cast(udf(cast(unique2#x as string)) as int) as string)) as int) = cast(udf(cast(42 as string)) as int))
-   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, ... 6 more fields]
+   :        +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
    :           +- Join Inner, (unique1#x = unique1#x)
    :              :- SubqueryAlias b
    :              :  +- SubqueryAlias spark_catalog.default.tenk1
@@ -1724,7 +1724,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tt3`, false
 INSERT INTO tt3 SELECT x.id, repeat('xyzzy', 100) FROM range(1,10001) x
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tt3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tt3], Append, `spark_catalog`.`default`.`tt3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tt3), [f1, f2]
-+- Project [cast(id#xL as int) AS f1#x, cast(repeat(xyzzy, 100)#x as string) AS f2#x]
++- Project [cast(id#xL as int) AS f1#x, repeat(xyzzy, 100)#x AS f2#x]
    +- Project [id#xL, repeat(xyzzy, 100) AS repeat(xyzzy, 100)#x]
       +- SubqueryAlias x
          +- Range (1, 10001, step=1)
@@ -1747,7 +1747,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tt4`, false
 INSERT INTO tt4 VALUES (0),(1),(9999)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tt4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tt4], Append, `spark_catalog`.`default`.`tt4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tt4), [f1]
-+- Project [cast(col1#x as int) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -3526,7 +3526,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`j2`, false
 INSERT INTO j1 values(1,1),(1,2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j1], Append, `spark_catalog`.`default`.`j1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j1), [id1, id2]
-+- Project [cast(col1#x as int) AS id1#x, cast(col2#x as int) AS id2#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -3534,7 +3534,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO j2 values(1,1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2], Append, `spark_catalog`.`default`.`j2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2), [id1, id2]
-+- Project [cast(col1#x as int) AS id1#x, cast(col2#x as int) AS id2#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -3542,7 +3542,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO j2 values(1,2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/j2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/j2], Append, `spark_catalog`.`default`.`j2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/j2), [id1, id2]
-+- Project [cast(col1#x as int) AS id1#x, cast(col2#x as int) AS id2#x]
++- Project [col1#x AS id1#x, col2#x AS id2#x]
    +- LocalRelation [col1#x, col2#x]
 
 

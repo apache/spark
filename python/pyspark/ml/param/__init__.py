@@ -255,7 +255,7 @@ class Params(Identifiable, metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        super(Params, self).__init__()
+        super().__init__()
         #: internal param map for user-supplied values param map
         self._paramMap: "ParamMap" = {}
 

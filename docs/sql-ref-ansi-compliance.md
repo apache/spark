@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -63,7 +63,7 @@ By default, `spark.sql.storeAssignmentPolicy` is `ANSI` and Spark SQL complies w
 </tr>
 </table>
 
-The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion. 
+The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion.
 
 ### Arithmetic Operations
 
@@ -110,25 +110,26 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
-| Source\Target | Numeric                              | String                               | Date                                 | Timestamp                            | Timestamp_NTZ                        | Interval                             | Boolean                              | Binary | Array                                | Map                                  | Struct                               |
-|---------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------|--------------------------------------|--------------------------------------|--------------------------------------|
-| Numeric       | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | N                                    | <span style="color:red">**Y**</span> | N                                    | <span style="color:red">**Y**</span> | Y                                    | N      | N                                    | N                                    | N                                    |
-| String        | <span style="color:red">**Y**</span> | Y                                    | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y      | N                                    | N                                    | N                                    |
-| Date          | N                                    | Y                                    | Y                                    | Y                                    | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
-| Timestamp     | <span style="color:red">**Y**</span> | Y                                    | Y                                    | Y                                    | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
-| Timestamp_NTZ | N                                    | Y                                    | Y                                    | Y                                    | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
-| Interval      | <span style="color:red">**Y**</span> | Y                                    | N                                    | N                                    | N                                    | Y                                    | N                                    | N      | N                                    | N                                    | N                                    |
-| Boolean       | Y                                    | Y                                    | N                                    | N                                    | N                                    | N                                    | Y                                    | N      | N                                    | N                                    | N                                    |
-| Binary        | N                                    | Y                                    | N                                    | N                                    | N                                    | N                                    | N                                    | Y      | N                                    | N                                    | N                                    |
-| Array         | N                                    | Y                                    | N                                    | N                                    | N                                    | N                                    | N                                    | N      | <span style="color:red">**Y**</span> | N                                    | N                                    |
-| Map           | N                                    | Y                                    | N                                    | N                                    | N                                    | N                                    | N                                    | N      | N                                    | <span style="color:red">**Y**</span> | N                                    |
-| Struct        | N                                    | Y                                    | N                                    | N                                    | N                                    | N                                    | N                                    | N      | N                                    | N                                    | <span style="color:red">**Y**</span> |
+| Source\Target | Numeric                              | String                               | Date                                 | Time | Timestamp                            | Timestamp_NTZ                        | Interval                             | Boolean                              | Binary | Array                                | Map                                  | Struct                               |
+|---------------|--------------------------------------|--------------------------------------|--------------------------------------|------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------|--------------------------------------|--------------------------------------|--------------------------------------|
+| Numeric       | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | N                                    | N    |<span style="color:red">**Y**</span> | N                                    | <span style="color:red">**Y**</span> | Y                                    | N      | N                                    | N                                    | N                                    |
+| String        | <span style="color:red">**Y**</span> | Y                                    | <span style="color:red">**Y**</span> | Y    |<span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y      | N                                    | N                                    | N                                    |
+| Date          | N                                    | Y                                    | Y                                    | N    | Y                                   | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
+| Time          | N                                    | Y                                    | N                                    | Y    | N                                   | N                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
+| Timestamp     | <span style="color:red">**Y**</span> | Y                                    | Y                                    | N    | Y                                   | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
+| Timestamp_NTZ | N                                    | Y                                    | Y                                    | N    | Y                                   | Y                                    | N                                    | N                                    | N      | N                                    | N                                    | N                                    |
+| Interval      | <span style="color:red">**Y**</span> | Y                                    | N                                    | N    | N                                   | N                                    | Y                                    | N                                    | N      | N                                    | N                                    | N                                    |
+| Boolean       | Y                                    | Y                                    | N                                    | N    | N                                   | N                                    | N                                    | Y                                    | N      | N                                    | N                                    | N                                    |
+| Binary        | N                                    | Y                                    | N                                    | N    | N                                   | N                                    | N                                    | N                                    | Y      | N                                    | N                                    | N                                    |
+| Array         | N                                    | Y                                    | N                                    | N    | N                                   | N                                    | N                                    | N                                    | N      | <span style="color:red">**Y**</span> | N                                    | N                                    |
+| Map           | N                                    | Y                                    | N                                    | N    | N                                   | N                                    | N                                    | N                                    | N      | N                                    | <span style="color:red">**Y**</span> | N                                    |
+| Struct        | N                                    | Y                                    | N                                    | N    | N                                   | N                                    | N                                    | N                                    | N      | N                                    | N                                    | <span style="color:red">**Y**</span> |
 
 In the table above, all the `CAST`s with new syntax are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Timestamp_NTZ/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
-* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
@@ -198,19 +199,20 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
 
-| Source\Target | Numeric | String | Date | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
-|:-------------:|:-------:|:------:|:----:|:---------:|---------------|:--------:|:-------:|:------:|:-----:|:---:|:------:|
-|    Numeric    |    Y    |   Y    |  N   |     N     | N             |    N     |    N    |   N    |   N   |  N  |   N    |
-|    String     |    N    |   Y    |  N   |     N     | N             |    N     |    N    |   N    |   N   |  N  |   N    |
-|     Date      |    N    |   Y    |  Y   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
-|   Timestamp   |    N    |   Y    |  Y   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
-| Timestamp_NTZ |    N    |   Y    |  Y   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
-|   Interval    |    N    |   Y    |  N   |     N     | N             |    N*    |    N    |   N    |   N   |  N  |   N    |
-|    Boolean    |    N    |   Y    |  N   |     N     | N             |    N     |    Y    |   N    |   N   |  N  |   N    |
-|    Binary     |    N    |   Y    |  N   |     N     | N             |    N     |    N    |   Y    |   N   |  N  |   N    |
-|     Array     |    N    |   N    |  N   |     N     | N             |    N     |    N    |   N    |  Y**  |  N  |   N    |
-|      Map      |    N    |   N    |  N   |     N     | N             |    N     |    N    |   N    |   N   | Y** |   N    |
-|    Struct     |    N    |   N    |  N   |     N     | N             |    N     |    N    |   N    |   N   |  N  |  Y**   |
+| Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
+|:-------------:|:-------:|:------:|:----:|:----:|:---------:|---------------|:--------:|:-------:|:------:|:-----:|:---:|:------:|
+|    Numeric    |    Y    |   Y    |  N   |  N   |     N     | N             |    N     |    N    |   N    |   N   |  N  |   N    |
+|    String     |    N    |   Y    |  N   |  Y   |     N     | N             |    N     |    N    |   N    |   N   |  N  |   N    |
+|     Date      |    N    |   Y    |  Y   |  N   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
+|     Time      |    N    |   Y    |  N   |  Y   |     N     | N             |    N     |    N    |   N    |   N   |  N  |   N    |
+|   Timestamp   |    N    |   Y    |  Y   |  N   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
+| Timestamp_NTZ |    N    |   Y    |  Y   |  N   |     Y     | Y             |    N     |    N    |   N    |   N   |  N  |   N    |
+|   Interval    |    N    |   Y    |  N   |  N   |     N     | N             |    N*    |    N    |   N    |   N   |  N  |   N    |
+|    Boolean    |    N    |   Y    |  N   |  N   |     N     | N             |    N     |    Y    |   N    |   N   |  N  |   N    |
+|    Binary     |    N    |   Y    |  N   |  N   |     N     | N             |    N     |    N    |   Y    |   N   |  N  |   N    |
+|     Array     |    N    |   N    |  N   |  N   |     N     | N             |    N     |    N    |   N    |  Y**  |  N  |   N    |
+|      Map      |    N    |   N    |  N   |  N   |     N     | N             |    N     |    N    |   N    |   N   | Y** |   N    |
+|    Struct     |    N    |   N    |  N   |  N   |     N     | N             |    N     |    N    |   N    |   N   |  N  |  Y**   |
 
 \* Spark doesn't support interval type table column.
 
@@ -239,6 +241,7 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 | Float     | Float -> Double                                                                 |
 | Double    | Double                                                                          |
 | Date      | Date -> Timestamp_NTZ -> Timestamp                                              |
+| Time      | Time                                                                            |
 | Timestamp | Timestamp                                                                       |
 | String    | String, Long -> Double, Date -> Timestamp_NTZ -> Timestamp , Boolean, Binary ** |
 | Binary    | Binary                                                                          |
@@ -287,9 +290,9 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 
 The truncation rule is also different for arithmetic operations: they retain at least 6 digits in the fractional part, which means we can only reduce `scale` to 6. Overflow may happen in this case.
-  
+
 ```sql
--- The coalesce function accepts any set of argument types as long as they share a least common type. 
+-- The coalesce function accepts any set of argument types as long as they share a least common type.
 -- The result type is the least common type of the arguments.
 > SET spark.sql.ansi.enabled=true;
 > SELECT typeof(coalesce(1Y, 1L, NULL));
@@ -385,6 +388,8 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_make_timestamp_ntz`: identical to the function `make_timestamp_ntz`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_interval`: identical to the function `make_interval`, except that it returns `NULL` result instead of throwing an exception on invalid interval.
   - `try_to_time`: identical to the function `to_time`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
+  - `try_to_date`: identical to the function `to_date`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
+
 
 ### SQL Keywords (optional, disabled by default)
 
@@ -419,6 +424,7 @@ Below is a list of all the keywords in Spark SQL.
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
 |ASC|non-reserved|non-reserved|non-reserved|
+|ASENSITIVE|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
@@ -446,6 +452,7 @@ Below is a list of all the keywords in Spark SQL.
 |CHARACTER|non-reserved|non-reserved|reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
+|CLOSE|non-reserved|non-reserved|non-reserved|
 |CLUSTER|non-reserved|non-reserved|non-reserved|
 |CLUSTERED|non-reserved|non-reserved|non-reserved|
 |CODEGEN|non-reserved|non-reserved|non-reserved|
@@ -474,6 +481,7 @@ Below is a list of all the keywords in Spark SQL.
 |CURRENT_TIME|reserved|non-reserved|reserved|
 |CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
 |CURRENT_USER|reserved|non-reserved|reserved|
+|CURSOR|non-reserved|non-reserved|non-reserved|
 |DATA|non-reserved|non-reserved|non-reserved|
 |DATE|non-reserved|non-reserved|reserved|
 |DATABASE|non-reserved|non-reserved|non-reserved|
@@ -492,6 +500,7 @@ Below is a list of all the keywords in Spark SQL.
 |DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DEFINER|non-reserved|non-reserved|non-reserved|
+|DELAY|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
 |DELIMITED|non-reserved|non-reserved|non-reserved|
 |DESC|non-reserved|non-reserved|non-reserved|
@@ -544,6 +553,8 @@ Below is a list of all the keywords in Spark SQL.
 |FUNCTION|non-reserved|non-reserved|reserved|
 |FUNCTIONS|non-reserved|non-reserved|non-reserved|
 |GENERATED|non-reserved|non-reserved|non-reserved|
+|GEOGRAPHY|non-reserved|non-reserved|non-reserved|
+|GEOMETRY|non-reserved|non-reserved|non-reserved|
 |GLOBAL|non-reserved|non-reserved|reserved|
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
@@ -553,6 +564,7 @@ Below is a list of all the keywords in Spark SQL.
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
+|IDENTIFIED|non-reserved|non-reserved|non-reserved|
 |IDENTITY|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|
@@ -568,6 +580,7 @@ Below is a list of all the keywords in Spark SQL.
 |INPUT|non-reserved|non-reserved|non-reserved|
 |INPUTFORMAT|non-reserved|non-reserved|non-reserved|
 |INSERT|non-reserved|non-reserved|reserved|
+|INSENSITIVE|non-reserved|non-reserved|non-reserved|
 |INT|non-reserved|non-reserved|reserved|
 |INTEGER|non-reserved|non-reserved|reserved|
 |INTERSECT|reserved|strict-non-reserved|reserved|
@@ -607,7 +620,9 @@ Below is a list of all the keywords in Spark SQL.
 |MATCHED|non-reserved|non-reserved|non-reserved|
 |MATERIALIZED|non-reserved|non-reserved|non-reserved|
 |MAX|non-reserved|non-reserved|non-reserved|
+|MEASURE|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
+|METRICS|non-reserved|non-reserved|non-reserved|
 |MICROSECOND|non-reserved|non-reserved|non-reserved|
 |MICROSECONDS|non-reserved|non-reserved|non-reserved|
 |MILLISECOND|non-reserved|non-reserved|non-reserved|
@@ -625,6 +640,7 @@ Below is a list of all the keywords in Spark SQL.
 |NANOSECOND|non-reserved|non-reserved|non-reserved|
 |NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
+|NEXT|non-reserved|non-reserved|non-reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NONE|non-reserved|non-reserved|reserved|
 |NORELY|non-reserved|non-reserved|not a keyword|
@@ -636,6 +652,7 @@ Below is a list of all the keywords in Spark SQL.
 |OFFSET|reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
+|OPEN|non-reserved|non-reserved|reserved|
 |OPTION|non-reserved|non-reserved|non-reserved|
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
@@ -664,6 +681,7 @@ Below is a list of all the keywords in Spark SQL.
 |QUARTER|non-reserved|non-reserved|non-reserved|
 |QUERY|non-reserved|non-reserved|non-reserved|
 |RANGE|non-reserved|non-reserved|reserved|
+|READ|non-reserved|non-reserved|non-reserved|
 |READS|non-reserved|non-reserved|non-reserved|
 |REAL|non-reserved|non-reserved|reserved|
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
@@ -786,6 +804,7 @@ Below is a list of all the keywords in Spark SQL.
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|
 |VOID|non-reserved|non-reserved|non-reserved|
+|WATERMARK|non-reserved|non-reserved|non-reserved|
 |WEEK|non-reserved|non-reserved|non-reserved|
 |WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|

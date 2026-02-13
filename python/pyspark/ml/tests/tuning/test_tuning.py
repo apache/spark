@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import unittest
 
 import numpy as np
 
@@ -40,7 +39,7 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 class HasInducedError(Params):
     def __init__(self):
-        super(HasInducedError, self).__init__()
+        super().__init__()
         self.inducedError = Param(
             self, "inducedError", "Uniformly-distributed error added to feature"
         )
@@ -51,7 +50,7 @@ class HasInducedError(Params):
 
 class InducedErrorModel(Model, HasInducedError):
     def __init__(self):
-        super(InducedErrorModel, self).__init__()
+        super().__init__()
 
     def _transform(self, dataset):
         return dataset.withColumn(
@@ -61,7 +60,7 @@ class InducedErrorModel(Model, HasInducedError):
 
 class InducedErrorEstimator(Estimator, HasInducedError):
     def __init__(self, inducedError=1.0):
-        super(InducedErrorEstimator, self).__init__()
+        super().__init__()
         self._set(inducedError=inducedError)
 
     def _fit(self, dataset):
@@ -409,12 +408,6 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.tuning.test_tuning import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -27,14 +27,30 @@ object V2CommandStrategy extends Strategy {
 
   // TODO: move v2 commands to here which are not data source v2 related.
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case CreateVariable(ident: ResolvedIdentifier, defaultExpr, replace) =>
-      CreateVariableExec(ident, defaultExpr, replace) :: Nil
+    case CreateVariable(idents: Seq[LogicalPlan], defaultExpr, replace)
+        if idents.forall(_.isInstanceOf[ResolvedIdentifier]) =>
+      CreateVariableExec(
+        idents.map(_.asInstanceOf[ResolvedIdentifier]),
+        defaultExpr,
+        replace) :: Nil
 
     case DropVariable(ident: ResolvedIdentifier, ifExists) =>
       DropVariableExec(ident.identifier.name, ifExists) :: Nil
 
     case SetVariable(variables, query) =>
       SetVariableExec(variables.map(_.asInstanceOf[VariableReference]), planLater(query)) :: Nil
+
+    case DeclareCursor(cursorName, queryText, asensitive) =>
+      DeclareCursorExec(cursorName, queryText, asensitive) :: Nil
+
+    case OpenCursor(cursor, args, paramNames) =>
+      OpenCursorExec(cursor, args, paramNames) :: Nil
+
+    case FetchCursor(cursor, targetVariables) =>
+      FetchCursorExec(cursor, targetVariables.map(_.asInstanceOf[VariableReference])) :: Nil
+
+    case CloseCursor(cursor) =>
+      CloseCursorExec(cursor) :: Nil
 
     case _ => Nil
   }

@@ -114,8 +114,8 @@ case class ShowTablesExtendedExec(
         field => quoteIdentifier(field.name)).mkString("[", ", ", "]"))
     }
 
-    if (table.schema().nonEmpty) {
-      results.put("Schema", table.schema().treeString)
+    if (table.columns().nonEmpty) {
+      results.put("Schema", CatalogV2Util.v2ColumnsToStructType(table.columns()).treeString)
     }
 
     results.map { case (key, value) =>

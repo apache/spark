@@ -473,13 +473,15 @@ case object SparkShreddingUtils {
    *   b: struct<typed_value: string, value: binary>>>
    *
    */
-  def variantShreddingSchema(dataType: DataType, isTopLevel: Boolean = true): StructType = {
+  def variantShreddingSchema(dataType: DataType,
+      isTopLevel: Boolean = true,
+      isObjectField : Boolean = false): StructType = {
     val fields = dataType match {
       case ArrayType(elementType, _) =>
         // Always set containsNull to false. One of value or typed_value must always be set for
         // array elements.
         val arrayShreddingSchema =
-          ArrayType(variantShreddingSchema(elementType, false), containsNull = false)
+          ArrayType(variantShreddingSchema(elementType, false, false), containsNull = false)
         Seq(
           StructField(VariantValueFieldName, BinaryType, nullable = true),
           StructField(TypedValueFieldName, arrayShreddingSchema, nullable = true)
@@ -489,15 +491,17 @@ case object SparkShreddingUtils {
         // "value" columna as "00", and missing values are represented by setting both "value" and
         // "typed_value" to null.
         val objectShreddingSchema = StructType(fields.map(f =>
-            f.copy(dataType = variantShreddingSchema(f.dataType, false), nullable = false)))
+            f.copy(dataType = variantShreddingSchema(f.dataType, false, true), nullable = false)))
         Seq(
           StructField(VariantValueFieldName, BinaryType, nullable = true),
           StructField(TypedValueFieldName, objectShreddingSchema, nullable = true)
         )
       case VariantType =>
-        // For Variant, we don't need a typed column
+        // For Variant, we don't need a typed column. If there is no typed column, value is required
+        // for array elements or top-level fields, but optional for objects (where a null represents
+        // a missing field).
         Seq(
-          StructField(VariantValueFieldName, BinaryType, nullable = true)
+          StructField(VariantValueFieldName, BinaryType, nullable = isObjectField)
         )
       case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType =>
         Seq(
@@ -642,7 +646,9 @@ case object SparkShreddingUtils {
   def parquetTypeToSparkType(parquetType: ParquetType): DataType = {
     val messageType = ParquetTypes.buildMessage().addField(parquetType).named("foo")
     val column = new ColumnIOFactory().getColumnIO(messageType)
-    new ParquetToSparkSchemaConverter().convertField(column.getChild(0)).sparkType
+    // We need the underlying file type regardless of the ignoreVariantAnnotation config.
+    val converter = new ParquetToSparkSchemaConverter(ignoreVariantAnnotation = true)
+    converter.convertField(column.getChild(0)).sparkType
   }
 
   class SparkShreddedResult(schema: VariantSchema) extends VariantShreddingWriter.ShreddedResult {
@@ -870,8 +876,6 @@ case object SparkShreddingUtils {
     val converter = new RowToColumnConverter(StructType(Array(StructField("", output.dataType()))))
     val converterVectors = Array(output)
     val converterRow = new GenericInternalRow(1)
-    output.reset()
-    output.reserve(input.getElementsAppended)
     var i = 0
     while (i < numRows) {
       if (input.isNullAt(i)) {

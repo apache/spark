@@ -23,6 +23,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.execution.streaming.runtime.StreamMetadata
 import org.apache.spark.sql.streaming.StreamTest
 
 class StreamMetadataSuite extends StreamTest {

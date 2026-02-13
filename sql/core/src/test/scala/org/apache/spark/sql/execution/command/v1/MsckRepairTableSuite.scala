@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.command.v1
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
+import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `MSCK REPAIR TABLE` command that
@@ -37,7 +36,7 @@ import org.apache.spark.sql.execution.command
 trait MsckRepairTableSuiteBase extends command.MsckRepairTableSuiteBase {
   def deletePartitionDir(tableName: String, part: String): Unit = {
     val partLoc = getPartitionLocation(tableName, part)
-    FileUtils.deleteDirectory(new File(partLoc))
+    Utils.deleteRecursively(new File(partLoc))
   }
 
   test("drop partitions") {

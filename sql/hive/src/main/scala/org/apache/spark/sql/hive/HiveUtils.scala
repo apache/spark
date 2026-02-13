@@ -36,7 +36,7 @@ import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.classic.SQLContext
@@ -76,7 +76,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("Version of the Hive metastore. Available options are " +
       "<code>2.0.0</code> through <code>2.3.10</code>, " +
       "<code>3.0.0</code> through <code>3.1.3</code> and " +
-      "<code>4.0.0</code> through <code>4.0.1</code>.")
+      "<code>4.0.0</code> through <code>4.1.0</code>.")
     .version("1.4.0")
     .stringConf
     .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
@@ -183,6 +183,16 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val CONVERT_METASTORE_AS_NULLABLE = buildConf("spark.sql.hive.convertMetastoreAsNullable")
+    .doc("When set to true, apply nullable to the schema when Spark use datasource APIs instead " +
+      "of Hive serde to read/write Hive tables in Parquet or ORC formats. This flag is " +
+      "effective only if `convertMetastoreParquet` or `convertMetastoreOrc` is enabled " +
+      "respectively. It's recommended to set to true, when the nullability of table schema " +
+      "is inconsistent between the metastore and the data files.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
@@ -211,6 +221,14 @@ private[spark] object HiveUtils extends Logging {
     .version("1.5.0")
     .booleanConf
     .createWithDefault(true)
+
+  val LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL =
+    buildConf("spark.sql.legacy.hive.thriftServer.useZeroBasedColumnOrdinalPosition")
+      .doc("When set to true, Hive Thrift server returns 0-based ORDINAL_POSITION in the " +
+        "result of GetColumns operation, instead of the corrected 1-based.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
     buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")

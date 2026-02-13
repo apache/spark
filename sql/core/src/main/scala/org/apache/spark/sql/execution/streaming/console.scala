@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.{Column => _, _}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
@@ -64,7 +64,7 @@ object ConsoleTable extends Table with SupportsWrite {
 
   override def name(): String = "console"
 
-  override def schema(): StructType = StructType(Nil)
+  override def columns(): Array[Column] = Array.empty
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.STREAMING_WRITE)

@@ -190,7 +190,7 @@ class _LinearRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_LinearRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxIter=100,
             regParam=0.0,
@@ -325,7 +325,7 @@ class LinearRegression(
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
         """
-        super(LinearRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid
         )
@@ -479,22 +479,11 @@ class LinearRegressionModel(
         return self._call_java("scale")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "LinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, MSE, r-squared ) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s = LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return LinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearRegressionSummary":
         """
@@ -806,7 +795,7 @@ class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     )
 
     def __init__(self, *args: Any):
-        super(_IsotonicRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(isotonic=True, featureIndex=0)
 
     def getIsotonic(self) -> bool:
@@ -884,7 +873,7 @@ class IsotonicRegression(
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  weightCol=None, isotonic=True, featureIndex=0):
         """
-        super(IsotonicRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid
         )
@@ -1027,7 +1016,7 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
     """
 
     def __init__(self, *args: Any):
-        super(_DecisionTreeRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1147,7 +1136,7 @@ class DecisionTreeRegressor(
                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
                  leafCol="", minWeightFractionPerNode=0.0)
         """
-        super(DecisionTreeRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid
         )
@@ -1328,7 +1317,7 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
     """
 
     def __init__(self, *args: Any):
-        super(_RandomForestRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1451,7 +1440,7 @@ class RandomForestRegressor(
                  featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
                  weightCol=None, bootstrap=True)
         """
-        super(RandomForestRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid
         )
@@ -1596,7 +1585,7 @@ class RandomForestRegressor(
         return self._set(minWeightFractionPerNode=value)
 
 
-class RandomForestRegressionModel(
+class RandomForestRegressionModel(  # type: ignore[misc]
     _JavaRegressionModel[Vector],
     _TreeEnsembleModel,
     _RandomForestRegressorParams,
@@ -1660,7 +1649,7 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_GBTRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1805,7 +1794,7 @@ class GBTRegressor(
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
                  weightCol=None)
         """
-        super(GBTRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -2069,7 +2058,7 @@ class _AFTSurvivalRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_AFTSurvivalRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             censorCol="censor",
             quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
@@ -2191,7 +2180,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
@@ -2202,7 +2191,7 @@ class AFTSurvivalRegression(
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0)
         """
-        super(AFTSurvivalRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid
         )
@@ -2231,7 +2220,7 @@ class AFTSurvivalRegression(
             0.9,
             0.95,
             0.99,
-        ],  # noqa: B005
+        ],
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
@@ -2433,7 +2422,7 @@ class _GeneralizedLinearRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_GeneralizedLinearRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             family="gaussian",
             maxIter=25,
@@ -2602,7 +2591,7 @@ class GeneralizedLinearRegression(
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
                  variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
         """
-        super(GeneralizedLinearRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid
         )
@@ -2774,24 +2763,11 @@ class GeneralizedLinearRegressionModel(
         return self._call_java("intercept")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "GeneralizedLinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, deviance, p-values) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s = GeneralizedLinearRegressionTrainingSummary(
-                super(GeneralizedLinearRegressionModel, self).summary
-            )
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return GeneralizedLinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "GeneralizedLinearRegressionSummary":
         """
@@ -3047,7 +3023,7 @@ class _FactorizationMachinesParams(
     )
 
     def __init__(self, *args: Any):
-        super(_FactorizationMachinesParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             factorSize=8,
             fitIntercept=True,
@@ -3183,7 +3159,7 @@ class FMRegressor(
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW", seed=None)
         """
-        super(FMRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)

@@ -285,6 +285,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
@@ -333,6 +335,8 @@ case class NaNvl(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   /**
    * We can only guarantee the left child can be always accessed. If we hit the left child,
@@ -406,6 +410,8 @@ case class NaNvl(left: Expression, right: Expression)
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def eval(input: InternalRow): Any = {
@@ -439,6 +445,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) != null

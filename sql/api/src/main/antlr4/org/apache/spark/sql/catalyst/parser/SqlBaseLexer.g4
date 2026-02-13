@@ -16,6 +16,11 @@
 
 lexer grammar SqlBaseLexer;
 
+@header {
+import java.util.ArrayDeque;
+import java.util.Deque;
+}
+
 @members {
   /**
    * When true, parser should throw ParseException for unclosed bracketed comment.
@@ -69,6 +74,11 @@ lexer grammar SqlBaseLexer;
   public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
+
+  /**
+   * This field stores the tags which are used to detect the end of a dollar quoted string literal.
+   */
+  private final Deque<String> tags = new ArrayDeque<String>();
 
   /**
    * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
@@ -133,6 +143,7 @@ ARCHIVE: 'ARCHIVE';
 ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
 ASC: 'ASC';
+ASENSITIVE: 'ASENSITIVE';
 AT: 'AT';
 ATOMIC: 'ATOMIC';
 AUTHORIZATION: 'AUTHORIZATION';
@@ -160,6 +171,7 @@ CHAR: 'CHAR';
 CHARACTER: 'CHARACTER';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
+CLOSE: 'CLOSE';
 CLUSTER: 'CLUSTER';
 CLUSTERED: 'CLUSTERED';
 CODEGEN: 'CODEGEN';
@@ -188,6 +200,7 @@ CURRENT_DATE: 'CURRENT_DATE';
 CURRENT_TIME: 'CURRENT_TIME';
 CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 CURRENT_USER: 'CURRENT_USER';
+CURSOR: 'CURSOR';
 DAY: 'DAY';
 DAYS: 'DAYS';
 DAYOFYEAR: 'DAYOFYEAR';
@@ -206,6 +219,7 @@ DECLARE: 'DECLARE';
 DEFAULT: 'DEFAULT';
 DEFINED: 'DEFINED';
 DEFINER: 'DEFINER';
+DELAY: 'DELAY';
 DELETE: 'DELETE';
 DELIMITED: 'DELIMITED';
 DESC: 'DESC';
@@ -257,6 +271,8 @@ FULL: 'FULL';
 FUNCTION: 'FUNCTION';
 FUNCTIONS: 'FUNCTIONS';
 GENERATED: 'GENERATED';
+GEOGRAPHY: 'GEOGRAPHY';
+GEOMETRY: 'GEOMETRY';
 GLOBAL: 'GLOBAL';
 GRANT: 'GRANT';
 GROUP: 'GROUP';
@@ -267,6 +283,7 @@ BINARY_HEX: 'X';
 HOUR: 'HOUR';
 HOURS: 'HOURS';
 IDENTIFIER_KW: 'IDENTIFIER';
+IDENTIFIED: 'IDENTIFIED';
 IDENTITY: 'IDENTITY';
 IF: 'IF';
 IGNORE: 'IGNORE';
@@ -282,6 +299,7 @@ INPATH: 'INPATH';
 INPUT: 'INPUT';
 INPUTFORMAT: 'INPUTFORMAT';
 INSERT: 'INSERT';
+INSENSITIVE: 'INSENSITIVE';
 INTERSECT: 'INTERSECT';
 INTERVAL: 'INTERVAL';
 INT: 'INT';
@@ -321,7 +339,9 @@ MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
+MEASURE: 'MEASURE';
 MERGE: 'MERGE';
+METRICS: 'METRICS';
 MICROSECOND: 'MICROSECOND';
 MICROSECONDS: 'MICROSECONDS';
 MILLISECOND: 'MILLISECOND';
@@ -338,6 +358,7 @@ NAMESPACES: 'NAMESPACES';
 NANOSECOND: 'NANOSECOND';
 NANOSECONDS: 'NANOSECONDS';
 NATURAL: 'NATURAL';
+NEXT: 'NEXT';
 NO: 'NO';
 NONE: 'NONE';
 NOT: 'NOT';
@@ -349,6 +370,7 @@ OF: 'OF';
 OFFSET: 'OFFSET';
 ON: 'ON';
 ONLY: 'ONLY';
+OPEN: 'OPEN';
 OPTION: 'OPTION';
 OPTIONS: 'OPTIONS';
 OR: 'OR';
@@ -377,6 +399,7 @@ PURGE: 'PURGE';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
 RANGE: 'RANGE';
+READ: 'READ';
 READS: 'READS';
 REAL: 'REAL';
 RECORDREADER: 'RECORDREADER';
@@ -499,6 +522,7 @@ VERSION: 'VERSION';
 VIEW: 'VIEW';
 VIEWS: 'VIEWS';
 VOID: 'VOID';
+WATERMARK: 'WATERMARK';
 WEEK: 'WEEK';
 WEEKS: 'WEEKS';
 WHEN: 'WHEN';
@@ -548,13 +572,17 @@ HENT_END: '*/';
 QUESTION: '?';
 
 STRING_LITERAL
-    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
+    : '\'' ( ~('\''|'\\') | ('\\' .) | ('\'' '\'') )* '\''
     | 'R\'' (~'\'')* '\''
     | 'R"'(~'"')* '"'
     ;
 
+BEGIN_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {tags.push(getText());} -> pushMode(DOLLAR_QUOTED_STRING_MODE)
+    ;
+
 DOUBLEQUOTED_STRING
-    :'"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    :'"' ( ~('"'|'\\') | '""' | ('\\' .) )* '"'
     ;
 
 // NOTE: If you move a numeric literal, you should modify `ParserUtils.toExprAlias()`
@@ -630,6 +658,10 @@ fragment LETTER
     : [A-Z]
     ;
 
+fragment DOLLAR_QUOTED_TAG
+    : '$' LETTER* '$'
+    ;
+
 fragment UNICODE_LETTER
     : [\p{L}]
     ;
@@ -651,4 +683,14 @@ WS
 // when splitting statements with DelimiterLexer
 UNRECOGNIZED
     : .
+    ;
+
+mode DOLLAR_QUOTED_STRING_MODE;
+DOLLAR_QUOTED_STRING_BODY
+    : ~'$'+
+    | '$' ~'$'*
+    ;
+
+END_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {getText().equals(tags.peek())}? {tags.pop();} -> popMode
     ;

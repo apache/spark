@@ -18,10 +18,10 @@
 package org.apache.spark.sql.hive
 
 import java.rmi.server.UID
+import java.util.Objects
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.SerializationUtilities
@@ -129,7 +129,7 @@ private[hive] object HiveShim {
 
     override def hashCode(): Int = {
       if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
-        Objects.hashCode(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
+        Objects.hash(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
       } else {
         functionClassName.hashCode()
       }

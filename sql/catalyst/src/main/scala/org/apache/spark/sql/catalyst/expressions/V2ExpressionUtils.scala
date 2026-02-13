@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -243,6 +243,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
       case "CONTAINS" => convertBinaryExpr(expr, Contains)
       case "IN" => convertExpr(expr, children => In(children.head, children.tail))
+      case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
       case _ => None
     }
   }

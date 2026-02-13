@@ -196,7 +196,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def quoteIdentifier(colName: String): String = {
-    s"`$colName`"
+    // Per MySQL documentation: https://dev.mysql.com/doc/refman/8.4/en/identifiers.html
+    //
+    // Identifier quote characters can be included within an identifier if you quote the
+    // identifier. If the character to be included within the identifier is the same as
+    // that used to quote the identifier itself, then you need to double the character.
+    val escapedColName = colName.replace("`", "``")
+    s"`$escapedColName`"
   }
 
   override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
@@ -424,7 +430,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
 
       options.prepareQuery +
-        s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
     }
   }
@@ -437,4 +443,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def supportsOffset: Boolean = true
 
   override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }

@@ -15,13 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
 
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -41,41 +40,65 @@ class ArithmeticTestsMixin:
     def float_psser(self):
         return ps.from_pandas(self.float_pser)
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_add(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser + pser, psser + psser, check_exact=False)
-            self.assert_eq(pser + 1, psser + 1, check_exact=False)
-            # self.assert_eq(pser + 0.1, psser + 0.1)
-            self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool), check_exact=False)
-            self.assert_eq(pser + True, psser + True, check_exact=False)
-            self.assert_eq(pser + False, psser + False, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(pser + pser, psser + psser, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser + 1, psser + 1, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(
+                pser + pser.astype(bool),
+                psser + psser.astype(bool),
+                check_exact=False,
+                ignore_null=ignore_null,
+            )
+            self.assert_eq(pser + True, psser + True, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser + False, psser + False, check_exact=False, ignore_null=ignore_null)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
-                    self.assert_eq(pser + pdf[n_col], psser + psdf[n_col], check_exact=False)
+                    self.assert_eq(
+                        pser + pdf[n_col],
+                        psser + psdf[n_col],
+                        check_exact=False,
+                        ignore_null=ignore_null,
+                    )
                 else:
                     self.assertRaises(TypeError, lambda: psser + psdf[n_col])
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
+            if is_ansi_mode_test and not col.startswith("decimal"):
+                self.assert_eq(pser + 0.1, psser + 0.1)
+
     def test_sub(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser - pser, psser - psser, check_exact=False)
-            self.assert_eq(pser - 1, psser - 1, check_exact=False)
-            # self.assert_eq(pser - 0.1, psser - 0.1)
-            self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool), check_exact=False)
-            self.assert_eq(pser - True, psser - True, check_exact=False)
-            self.assert_eq(pser - False, psser - False, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(pser - pser, psser - psser, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser - 1, psser - 1, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(
+                pser - pser.astype(bool),
+                psser - psser.astype(bool),
+                check_exact=False,
+                ignore_null=ignore_null,
+            )
+            self.assert_eq(pser - True, psser - True, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser - False, psser - False, check_exact=False, ignore_null=ignore_null)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
-                    self.assert_eq(pser - pdf[n_col], psser - psdf[n_col], check_exact=False)
+                    self.assert_eq(
+                        pser - pdf[n_col],
+                        psser - psdf[n_col],
+                        check_exact=False,
+                        ignore_null=ignore_null,
+                    )
                 else:
                     self.assertRaises(TypeError, lambda: psser - psdf[n_col])
+
+            if is_ansi_mode_test and not col.startswith("decimal"):
+                self.assert_eq(pser - 0.1, psser - 0.1)
 
 
 class ArithmeticTests(
@@ -87,12 +110,6 @@ class ArithmeticTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.data_type_ops.test_num_arithmetic import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
-import org.apache.spark.internal.config.{EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES, EXECUTOR_HEARTBEAT_INTERVAL}
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.sql.{functions, Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -48,7 +48,9 @@ class DataFrameCallbackSuite extends QueryTest
   import functions._
 
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES, false)
+    val sparkConf = super.sparkConf
+    sparkConf.set(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")
+
   }
 
   test("execute callback functions when a DataFrame action finished successfully") {
@@ -256,11 +258,12 @@ class DataFrameCallbackSuite extends QueryTest
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
-      // CTAS would derive 3 query executions
-      // 1. CreateDataSourceTableAsSelectCommand
+      // CTAS would derive 4 query executions
+      // 1. DropTable
       // 2. InsertIntoHadoopFsRelationCommand
-      // 3. CommandResultExec
-      assert(commands.length == 6)
+      // 3. CreateDataSourceTableAsSelectCommand
+      // 4. SaveAsV1TableCommand
+      assert(commands.length == 7)
       assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
       assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]

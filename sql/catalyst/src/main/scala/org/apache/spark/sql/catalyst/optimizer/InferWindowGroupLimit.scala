@@ -26,12 +26,29 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
  * and the function results are further filtered by limit-like predicates. Example query:
  * {{{
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn = 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 = rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn < 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 > rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *    ) WHERE rn <= 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 >= rn;
  * }}}
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {

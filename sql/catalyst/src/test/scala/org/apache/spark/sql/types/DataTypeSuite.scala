@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearM
 class DataTypeSuite extends SparkFunSuite {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
+  private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -278,6 +279,26 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
+  // GEOMETRY type with default fixed SRID.
+  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+
+  // GEOMETRY type with non-default fixed SRID.
+  checkDataTypeFromJson(GeometryType(3857))
+  checkDataTypeFromDDL(GeometryType(3857))
+
+  // GEOMETRY type with mixed SRID.
+  checkDataTypeFromJson(GeometryType("ANY"))
+  checkDataTypeFromDDL(GeometryType("ANY"))
+
+  // GEOGRAPHY type with default fixed SRID.
+  checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+
+  // GEOGRAPHY type with mixed SRID.
+  checkDataTypeFromJson(GeographyType("ANY"))
+  checkDataTypeFromDDL(GeographyType("ANY"))
+
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
   yearMonthIntervalTypes.foreach(checkDataTypeFromJson)
 
@@ -339,11 +360,11 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
     val dt = DataType.fromJson(schema)
 
-    dt.simpleString equals "struct<c1:string>"
-    dt.json equals
+    assert(dt.simpleString equals "struct<c1:string>")
+    assert(dt.json equals
       """
-        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
-        |""".stripMargin
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":true,"metadata":{}}]}
+        |""".stripMargin.trim)
   }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
@@ -879,7 +900,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
     ArrayType(StringType("UTF8_LCASE")),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
@@ -889,7 +910,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
@@ -914,12 +935,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(StringType, StringType("UTF8_LCASE")),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
     MapType(StringType, StringType),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
@@ -944,7 +965,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
@@ -969,7 +990,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
@@ -999,7 +1020,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
@@ -1024,7 +1045,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
@@ -1049,7 +1070,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
     StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
@@ -1145,6 +1166,17 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("schema with collation should not change during ser/de") {
+    val standaloneString = StringType(UNICODE_COLLATION_ID)
+
+    val standaloneArray = ArrayType(StringType(UNICODE_COLLATION_ID))
+
+    val standaloneMap = MapType(StringType(UNICODE_COLLATION_ID),
+      StringType(UTF8_LCASE_COLLATION_ID))
+
+    val standaloneNested = ArrayType(MapType(
+      StringType(UNICODE_COLLATION_ID),
+      ArrayType(StringType(UTF8_LCASE_COLLATION_ID))))
+
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
@@ -1185,6 +1217,7 @@ class DataTypeSuite extends SparkFunSuite {
         mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
+      standaloneString, standaloneArray, standaloneMap, standaloneNested,
       simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
       mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
       schemaWithMultipleFields)
@@ -1338,7 +1371,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+        JsonMethods.parse(arrayJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
   }
 
@@ -1360,7 +1393,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-      JsonMethods.parse(mapJson), collationsMap = collationsMap)
+      JsonMethods.parse(mapJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations ===
       MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
   }

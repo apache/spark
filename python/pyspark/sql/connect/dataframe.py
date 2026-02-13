@@ -19,9 +19,9 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -43,6 +43,7 @@ from typing import (
 )
 
 import copy
+import os
 import sys
 import random
 import pyarrow as pa
@@ -69,6 +70,7 @@ from pyspark.errors import (
     PySparkRuntimeError,
 )
 from pyspark.util import PythonEvalType
+from pyspark.serializers import CPickleSerializer
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.conversion import ArrowTableToRowsConversion
@@ -79,6 +81,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    DirectShufflePartitionID,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
@@ -141,6 +144,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._cached_schema_serialized: Optional[bytes] = None
         self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
@@ -439,6 +443,38 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+
+        partition_connect_col = cast(ConnectColumn, F._to_col(partitionIdCol))
+        direct_partition_expr = DirectShufflePartitionID(partition_connect_col._expr)
+        direct_partition_col = ConnectColumn(direct_partition_expr)
+        res = DataFrame(
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
+        )
+        res._cached_schema = self._cached_schema
+        return res
+
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(
@@ -550,7 +586,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -582,7 +618,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -612,7 +648,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -638,7 +674,7 @@ class DataFrame(ParentDataFrame):
                 if isinstance(c, Column):
                     gset.append(c)
                 elif isinstance(c, str):
-                    gset.append(self[c])
+                    gset.append(F.col(c))
                 else:
                     raise PySparkTypeError(
                         errorClass="NOT_COLUMN_OR_STR",
@@ -654,7 +690,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 gcols.append(c)
             elif isinstance(c, str):
-                gcols.append(self[c])
+                gcols.append(F.col(c))
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_STR",
@@ -1176,6 +1212,11 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._merge_cached_schema(other)
         return res
 
+    def zipWithIndex(self, indexColName: str = "index") -> ParentDataFrame:
+        return self.select(
+            F.col("*"), F._invoke_function("distributed_sequence_id").alias(indexColName)
+        )
+
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
         res = DataFrame(
@@ -1695,15 +1736,25 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd", "toJSON"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if name not in self.columns:
-            raise PySparkAttributeError(
-                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
-            )
+        # Only eagerly validate the column name when:
+        # 1, PYSPARK_VALIDATE_COLUMN_NAME_LEGACY is set 1; or
+        # 2, the name starts with '__', because it is likely a python internal method and
+        # an AttributeError might be expected to check whether the attribute exists.
+        # For example:
+        # pickle/cloudpickle need to check whether method '__setstate__' is defined or not,
+        # and it internally invokes __getattr__("__setstate__").
+        # Returning a dataframe column self._col("__setstate__") in this case will break
+        # the serialization of connect dataframe and features built atop it (e.g. FEB).
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" or name.startswith("__"):
+            if name not in self.columns:
+                raise PySparkAttributeError(
+                    errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
+                )
 
         return self._col(name)
 
@@ -1737,7 +1788,9 @@ class DataFrame(ParentDataFrame):
                 # }
 
                 # validate the column name
-                if not hasattr(self._session, "is_mock_session"):
+                if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not hasattr(
+                    self._session, "is_mock_session"
+                ):
                     from pyspark.sql.connect.types import verify_col_name
 
                     # Try best to verify the column name with cached schema
@@ -1784,7 +1837,14 @@ class DataFrame(ParentDataFrame):
 
         assert schema is not None and isinstance(schema, StructType)
 
-        return ArrowTableToRowsConversion.convert(table, schema)
+        return ArrowTableToRowsConversion.convert(
+            table, schema, binary_as_bytes=self._get_binary_as_bytes()
+        )
+
+    def _get_binary_as_bytes(self) -> bool:
+        """Get the binary_as_bytes configuration value from Spark session."""
+        conf_value = self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true")
+        return conf_value is not None and conf_value.lower() == "true"
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
@@ -1795,13 +1855,20 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
+        return self._to_pandas()
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
         return pdf
 
@@ -1836,11 +1903,24 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
+            try:
+                self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
+            except Exception as e:
+                logger.warning(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                self._cached_schema_serialized = None
         return self._cached_schema
 
     @property
     def schema(self) -> StructType:
-        return copy.deepcopy(self._schema)
+        # self._schema call will cache the schema and serialize it if it is not cached yet.
+        _schema = self._schema
+        if self._cached_schema_serialized is not None:
+            try:
+                return CPickleSerializer().loads(self._cached_schema_serialized)
+            except Exception as e:
+                logger.warning(f"DataFrame schema pickle loads failed with exception: {e}.")
+        # In case of pickle ser/de failure, fallback to deepcopy approach.
+        return copy.deepcopy(_schema)
 
     @functools.cache
     def isLocal(self) -> bool:
@@ -2010,6 +2090,7 @@ class DataFrame(ParentDataFrame):
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
+        binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
         for schema_or_table in self._session.client.to_table_as_iterator(
@@ -2023,7 +2104,9 @@ class DataFrame(ParentDataFrame):
                 table = schema_or_table
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
-                yield from ArrowTableToRowsConversion.convert(table, schema)
+                yield from ArrowTableToRowsConversion.convert(
+                    table, schema, binary_as_bytes=binary_as_bytes
+                )
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -2109,8 +2192,12 @@ class DataFrame(ParentDataFrame):
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
         schema = self._schema
+        binary_as_bytes = self._get_binary_as_bytes()
         field_converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
+            )
+            for f in schema.fields
         ]
 
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
@@ -2119,7 +2206,7 @@ class DataFrame(ParentDataFrame):
                     columnar_data = [column.to_pylist() for column in table.columns]
                     for i in range(0, table.num_rows):
                         values = [
-                            field_converters[j](columnar_data[j][i])
+                            field_converters[j](columnar_data[j][i])  # type: ignore[misc]
                             for j in range(table.num_columns)
                         ]
                         yield _create_row(fields=schema.fieldNames(), values=values)
@@ -2190,13 +2277,10 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    if not is_remote_only():
+    def toJSON(self) -> ParentDataFrame:
+        return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "toJSON()"},
-            )
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -2285,6 +2369,7 @@ def _test() -> None:
     from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2295,6 +2380,21 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+    else:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
+            del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

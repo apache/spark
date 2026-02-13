@@ -24,6 +24,14 @@ struct<>
 
 
 -- !query
+create table t4(col1 TIMESTAMP)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query schema
 struct<>
@@ -727,6 +735,67 @@ struct<1:int>
 
 
 -- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
+-- !query schema
+struct<id:int,COLNAME:string,colname:string,id:int,COLNAME:string,colname:string>
+-- !query output
+1	test	test	1	test	test
+
+
+-- !query
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte),
+     cte3 AS (SELECT id, COLNAME, colname FROM cte2)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
+-- !query schema
+struct<id:int,COLNAME:string,colname:string,id:int,COLNAME:string,colname:string>
+-- !query output
+1	test	test	1	test	test
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>
@@ -744,6 +813,14 @@ struct<>
 
 -- !query
 DROP VIEW IF EXISTS t3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS t4
 -- !query schema
 struct<>
 -- !query output

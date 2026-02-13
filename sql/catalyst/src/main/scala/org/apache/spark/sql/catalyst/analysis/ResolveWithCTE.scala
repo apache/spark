@@ -59,6 +59,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
+          case cteDef if cteDef.hasSelfReferenceInAnchor || cteDef.hasSelfReferenceInSubCTE =>
+            throw new AnalysisException(
+              errorClass = "INVALID_RECURSIVE_CTE",
+              messageParameters = Map.empty)
           case cteDef =>
             // Multiple self-references are not allowed within one cteDef.
             cteDef.child match {
@@ -282,7 +286,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         cteDefMap.get(ref.cteId).map { cteDef =>
           // cteDef is certainly resolved, otherwise it would not have been in the map.
           CTERelationRef(
-            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows)
+            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows,
+              isUnlimitedRecursion = ref.isUnlimitedRecursion)
         }.getOrElse {
           ref
         }
@@ -346,6 +351,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef = false)
         checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
       case Aggregate(_, _, child, _) =>
+        checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+      case Window(_, _, _, child, _) =>
+        checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+      case Sort(_, _, child, _) =>
         checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
       case r: UnionLoopRef if !allowRecursiveRef && r.loopId == cteId =>
         throw new AnalysisException(

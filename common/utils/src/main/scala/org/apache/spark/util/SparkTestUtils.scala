@@ -66,8 +66,6 @@ private[spark] trait SparkTestUtils {
     assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
     val out = new File(destDir, fileName)
 
-    // renameTo cannot handle in and out files in different filesystems
-    // use google's Files.move instead
     Files.move(result.toPath, out.toPath)
 
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())

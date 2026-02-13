@@ -41,35 +41,32 @@ object FlowAnalysis {
      * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
      */
   def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
-    new FlowFunction {
-      override def call(
-          allInputs: Set[TableIdentifier],
-          availableInputs: Seq[Input],
-          confs: Map[String, String],
-          queryContext: QueryContext
-      ): FlowFunctionResult = {
-        val ctx = FlowAnalysisContext(
-          allInputs = allInputs,
-          availableInputs = availableInputs,
-          queryContext = queryContext,
-          spark = SparkSession.active
-        )
-        val df = try {
-          confs.foreach { case (k, v) => ctx.setConf(k, v) }
-          Try(FlowAnalysis.analyze(ctx, plan))
-        } finally {
-          ctx.restoreOriginalConf()
-        }
-        FlowFunctionResult(
-          requestedInputs = ctx.requestedInputs.toSet,
-          batchInputs = ctx.batchInputs.toSet,
-          streamingInputs = ctx.streamingInputs.toSet,
-          usedExternalInputs = ctx.externalInputs.toSet,
-          dataFrame = df,
-          sqlConf = confs,
-          analysisWarnings = ctx.analysisWarnings.toList
-        )
+    (allInputs: Set[TableIdentifier],
+      availableInputs: Seq[Input],
+      confs: Map[String, String],
+      queryContext: QueryContext,
+      queryOrigin: QueryOrigin) => {
+      val ctx = FlowAnalysisContext(
+        allInputs = allInputs,
+        availableInputs = availableInputs,
+        queryContext = queryContext,
+        spark = SparkSession.active
+      )
+      val df = try {
+        confs.foreach { case (k, v) => ctx.setConf(k, v) }
+        Try(FlowAnalysis.analyze(ctx, plan))
+      } finally {
+        ctx.restoreOriginalConf()
       }
+      FlowFunctionResult(
+        requestedInputs = ctx.requestedInputs.toSet,
+        batchInputs = ctx.batchInputs.toSet,
+        streamingInputs = ctx.streamingInputs.toSet,
+        usedExternalInputs = ctx.externalInputs.toSet,
+        dataFrame = df,
+        sqlConf = confs,
+        analysisWarnings = ctx.analysisWarnings.toList
+      )
     }
   }
 
@@ -112,23 +109,29 @@ object FlowAnalysis {
         // - SELECT ... FROM STREAM(t1)
         // - SELECT ... FROM STREAM t1
         case u: UnresolvedRelation if u.isStreaming =>
-          readStreamInput(
+          val resolved = readStreamInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             spark.readStream,
             streamingReadOptions = StreamingReadOptions()
           ).queryExecution.analyzed
-
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          resolved.mergeTagsFrom(u)
+          resolved
         // Batch read on another dataset in the pipeline
         case u: UnresolvedRelation =>
-          readBatchInput(
+          val resolved = readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             batchReadOptions = BatchReadOptions()
           ).queryExecution.analyzed
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          resolved.mergeTagsFrom(u)
+          resolved
       }
     Dataset.ofRows(spark, resolvedPlan)
-
   }
 
   /**
@@ -213,7 +216,7 @@ object FlowAnalysis {
 
     ctx.requestedInputs += datasetIdentifier
 
-    val i = if (!ctx.allInputs.contains(datasetIdentifier)) {
+    val input = if (!ctx.allInputs.contains(datasetIdentifier)) {
       // Dataset not defined in the dataflow graph
       throw GraphErrors.pipelineLocalDatasetNotDefinedError(datasetIdentifier.unquotedString)
     } else if (!ctx.availableInput.contains(datasetIdentifier)) {
@@ -224,8 +227,8 @@ object FlowAnalysis {
       ctx.availableInput(datasetIdentifier)
     }
 
-    val inputDF = i.load(readOptions)
-    i match {
+    val inputDF = input.load(readOptions)
+    input match {
       // If the referenced input is a [[Flow]], because the query plans will be fused
       // together, we also need to fuse their confs.
       case f: Flow => f.sqlConf.foreach { case (k, v) => ctx.setConf(k, v) }
@@ -260,7 +263,7 @@ object FlowAnalysis {
             droppedOptions = sro.droppedUserOptions.keys.toSeq
           )
         }
-        ctx.streamingInputs += ResolvedInput(i, aliasIdentifier)
+        ctx.streamingInputs += ResolvedInput(input, aliasIdentifier)
       case _ =>
         if (inputDF.isStreaming && incompatibleViewReadCheck) {
           throw new AnalysisException(
@@ -268,7 +271,7 @@ object FlowAnalysis {
             Map("datasetIdentifier" -> datasetIdentifier.toString)
           )
         }
-        ctx.batchInputs += ResolvedInput(i, aliasIdentifier)
+        ctx.batchInputs += ResolvedInput(input, aliasIdentifier)
     }
     Dataset.ofRows(
       ctx.spark,

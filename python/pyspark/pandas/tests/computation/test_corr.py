@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -22,11 +21,9 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class FrameCorrMixin:
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_dataframe_corr(self):
         pdf = pd.DataFrame(
             index=[
@@ -218,12 +215,6 @@ class FrameCorrTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_corr import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
+import scala.collection.immutable.ArraySeq
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -28,12 +29,14 @@ import org.json4s.{Formats, JBool, JObject, NoTypeHints}
 import org.json4s.jackson.JsonMethods.{compact, render}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, StateStoreWriter, StreamingQueryCheckpointMetadata}
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils.{OperatorStateMetadataReader, OperatorStateMetadataWriter}
 
 /**
@@ -78,12 +81,17 @@ trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
+
+  def stateStoresMetadata: Seq[StateStoreMetadata]
 }
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 case class OperatorStateMetadataV2(
@@ -91,6 +99,9 @@ case class OperatorStateMetadataV2(
     stateStoreInfo: Array[StateStoreMetadataV2],
     operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 object OperatorStateMetadataUtils extends Logging {

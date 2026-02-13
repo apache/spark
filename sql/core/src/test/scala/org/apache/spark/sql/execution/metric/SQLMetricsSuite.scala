@@ -25,7 +25,6 @@ import scala.util.Random
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
@@ -107,6 +106,25 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         0L -> (("CommandResult", expected))))
     }
   }
+
+  test("SPARK-54749: OneRowRelation metrics") {
+    Seq((1L, "false"), (2L, "true")).foreach { case (nodeId, enableWholeStage) =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+        val df = spark.sql("select 1 as c1")
+        val oneRowRelation = df.queryExecution.executedPlan.collect {
+          case oneRowRelation: OneRowRelationExec => oneRowRelation
+        }
+        df.collect()
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(oneRowRelation.size == 1)
+
+        val expected = Map("number of output rows" -> 1L)
+        testSparkPlanMetrics(df.toDF(), 1, Map(
+          nodeId -> (("Scan OneRowRelation", expected))))
+      }
+    }
+  }
+
 
   test("Recursive CTEs metrics") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
@@ -304,6 +322,26 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         0L -> (("ObjectHashAggregate", Map(
           "spill size" -> {
             _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
+  }
+
+  test("SortAggregate metrics") {
+    // Force use SortAggregateExec instead of HashAggregateExec
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      // Assume the execution plan is
+      // -> SortAggregate(nodeId = 0)
+      //     -> Sort(nodeId = 1)
+      //       -> Exchange(nodeId = 2)
+      //          -> SortAggregate(...)
+      val df = testData2.groupBy($"a").count()
+
+      // Test aggTime metric for grouped aggregate
+      testSparkPlanMetricsWithPredicates(df, 1, Map(
+        0L -> (("SortAggregate", Map(
+          "time in aggregation build" -> {
+            _.toString.matches(timingMetricPattern)
           }))))
       )
     }
@@ -634,10 +672,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
     val mapper = new ObjectMapper()
-    val jsonProtocol = new JsonProtocol(new SparkConf())
-    val metricInfoJson = jsonProtocol.toJsonString(
-      jsonProtocol.accumulableInfoToJson(metricInfo, _))
-    val metricInfoDeser = jsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
+    val metricInfoJson = JsonProtocol.toJsonString(
+      JsonProtocol.accumulableInfoToJson(metricInfo, _))
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
     metricInfoDeser.update match {
       case Some(v: String) => assert(v.toLong === 10L)
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
@@ -917,16 +954,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           withTable("t1", "t2") {
             spark.range(4).write.saveAsTable("t1")
             spark.range(2).write.saveAsTable("t2")
-            val df = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
-            df.collect()
-            val plan = df.queryExecution.executedPlan
+            val df1 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
+            df1.collect()
+            val plan1 = df1.queryExecution.executedPlan
 
-            val joins = plan.collect {
+            val joins1 = plan1.collect {
               case s: BroadcastHashJoinExec => s
             }
 
-            assert(joins.size === 1)
-            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
+            assert(joins1.size === 1)
+            testMetricsInSparkPlanOperator(joins1.head, Map("numOutputRows" -> 2))
+
+            val df2 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2 WHERE 1 = 2)")
+            df2.collect()
+            val plan2 = df2.queryExecution.executedPlan
+
+            val joins2 = plan2.collect {
+              case s: BroadcastHashJoinExec => s
+            }
+
+            assert(joins2.size === 1)
+            testMetricsInSparkPlanOperator(joins2.head, Map("numOutputRows" -> 4))
           }
         }
       }
@@ -986,6 +1034,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SQLMetric#toInfoUpdate") {
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
     assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
   }
 }
 

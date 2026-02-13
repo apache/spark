@@ -23,7 +23,7 @@ import unittest
 import warnings
 from contextlib import contextmanager
 from io import StringIO
-from typing import cast, Iterator
+from typing import Iterator
 from unittest import mock
 
 from pyspark import SparkConf
@@ -112,6 +112,10 @@ class MemoryProfilerTests(PySparkTestCase):
             self.sc.dump_profiles(d)
             self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
         udf_names = ["ser_to_ser", "ser_to_scalar"]
@@ -130,6 +134,10 @@ class MemoryProfilerTests(PySparkTestCase):
                 "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
             )
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_profile_pandas_function_api(self):
         apis = [self.exec_grouped_map]
         f_names = ["grouped_map"]
@@ -167,7 +175,7 @@ class MemoryProfilerTests(PySparkTestCase):
     def exec_pandas_udf_ser_to_scalar(self):
         import pandas as pd
 
-        @pandas_udf("int")
+        @pandas_udf("double")
         def ser_to_scalar(ser: pd.Series) -> float:
             return ser.median()
 
@@ -265,7 +273,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_udf_with_arrow(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
@@ -294,19 +302,20 @@ class MemoryProfiler2TestsMixin:
         def add1(x):
             return x + 1
 
-        self.spark.udf.register("add1", add1)
+        with self.temp_func("add1"):
+            self.spark.udf.register("add1", add1)
 
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-            self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+                self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
-        for id in self.profile_results:
-            self.assert_udf_memory_profile_present(udf_id=id)
+            for id in self.profile_results:
+                self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_pandas_udf(self):
         @pandas_udf("long")
@@ -330,14 +339,15 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
-    def test_memory_profiler_pandas_udf_iterator_not_supported(self):
+    def test_memory_profiler_pandas_udf_iterator(self):
         import pandas as pd
 
         @pandas_udf("long")
-        def add1(x):
-            return x + 1
+        def add1(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in iter:
+                yield s + 1
 
         @pandas_udf("long")
         def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
@@ -350,16 +360,16 @@ class MemoryProfiler2TestsMixin:
             )
             df.collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(3, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
             self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
-    def test_memory_profiler_map_in_pandas_not_supported(self):
+    def test_memory_profiler_map_in_pandas(self):
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
         def filter_func(iterator):
@@ -369,11 +379,36 @@ class MemoryProfiler2TestsMixin:
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
             df.mapInPandas(filter_func, df.schema).show()
 
-        self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_memory_profiler_different_function(self):
+        df = self.spark.createDataFrame([(1,), (2,), (3,)], ["x"])
+
+        def ident(batches):
+            for b in batches:
+                yield b
+
+        def func(batches):
+            return ident(batches)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df.mapInArrow(func, schema="y long").show()
+
+        self.assertEqual(1, len(self.profile_results))
+
+        for id in self.profile_results:
+            self.assert_udf_memory_profile_present(udf_id=id)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_pandas_udf_window(self):
         # WindowInPandasExec
@@ -398,7 +433,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_aggregate_in_pandas(self):
         # AggregateInPandasExec
@@ -421,7 +456,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_group_apply_in_pandas(self):
         # FlatMapGroupsInBatchExec
@@ -443,7 +478,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
@@ -472,7 +507,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_group_apply_in_arrow(self):
         # FlatMapGroupsInBatchExec
@@ -497,7 +532,7 @@ class MemoryProfiler2TestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_memory_profiler_cogroup_apply_in_arrow(self):
         import pyarrow as pa
@@ -581,12 +616,6 @@ class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_memory_profiler import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

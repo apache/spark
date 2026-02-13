@@ -24,18 +24,17 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{ERROR, MESSAGE}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -168,7 +167,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Report error to the receiver tracker */
   def reportError(message: String, error: Throwable): Unit = {
-    val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
+    val errorString = Option(error).map(Utils.stackTraceToString).getOrElse("")
     trackerEndpoint.send(ReportError(streamId, message, errorString))
     logWarning(log"Reported error ${MDC(MESSAGE, message)} - ${MDC(ERROR, error)}")
   }
@@ -196,7 +195,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = {
     logInfo(log"Deregistering receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
-    val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
+    val errorString = error.map(Utils.stackTraceToString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
     logInfo(log"Stopped receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
   }

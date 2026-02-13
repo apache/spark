@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.rules.QueryExecutionMetering
  * Trait for tracking and logging timing metrics for single-pass resolver.
  */
 trait ResolverMetricTracker {
-  private val profilerGroup: String = getClass.getSimpleName
 
   /**
    * Log top-level timing metrics for single-pass analyzer. In order to utilize existing logging

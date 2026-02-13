@@ -21,9 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import org.apache.commons.io.IOUtils
-
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,9 +29,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{ManualClock, SystemClock}
+import org.apache.spark.util.{ManualClock, SystemClock, Utils}
 
 class RateStreamMicroBatchStream(
     rowsPerSecond: Long,
@@ -71,7 +70,7 @@ class RateStreamMicroBatchStream(
         }
 
         override def deserialize(in: InputStream): LongOffset = {
-          val content = IOUtils.toString(new InputStreamReader(in, StandardCharsets.UTF_8))
+          val content = Utils.toString(in)
           // HDFSMetadataLog guarantees that it never creates a partial file.
           assert(content.length != 0)
           if (content(0) == 'v') {

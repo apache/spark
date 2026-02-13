@@ -1,0 +1,17 @@
+================================================================================================
+Benchmark LZ4CompressionCodec
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Compression:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Compression 4 times                                2621           2633          16          0.0   655315176.3       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Decompression:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Decompression 4 times                              2270           2286          23          0.0   567457203.5       1.0X
+
+

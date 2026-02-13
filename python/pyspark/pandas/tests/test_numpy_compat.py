@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 import numpy as np
 import pandas as pd
 
@@ -23,10 +22,15 @@ from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class NumPyCompatTestsMixin:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     blacklist = [
         # Pandas-on-Spark does not currently support
         "conj",
@@ -132,7 +136,6 @@ class NumPyCompatTestsMixin:
         finally:
             reset_option("compute.ops_on_diff_frames")
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_np_spark_compat_frame(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
@@ -194,13 +197,6 @@ class NumPyCompatTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

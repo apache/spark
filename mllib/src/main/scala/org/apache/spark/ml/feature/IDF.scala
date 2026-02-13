@@ -231,7 +231,6 @@ object IDFModel extends MLReadable[IDFModel] {
     override def load(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
         val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
@@ -240,6 +239,7 @@ object IDFModel extends MLReadable[IDFModel] {
           new feature.IDFModel(OldVectors.fromML(data.idf), data.docFreq, data.numDocs)
         )
       } else {
+        val data = sparkSession.read.parquet(dataPath)
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")
           .head()

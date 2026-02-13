@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from datetime import timezone
-from typing import Any, Dict, Mapping, Iterator, Optional, cast
+from typing import Any, Dict, Mapping, Iterator, Optional, cast, Sequence
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
@@ -29,7 +29,7 @@ def create_dataflow_graph(
     default_database: Optional[str],
     sql_conf: Optional[Mapping[str, str]],
 ) -> str:
-    """Create a dataflow graph in in the Spark Connect server.
+    """Create a dataflow graph in the Spark Connect server.
 
     :returns: The ID of the created dataflow graph.
     """
@@ -57,7 +57,7 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             continue
         elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
-                "Pipeline logs stream handler received an unexpected result: " f"{result}"
+                f"Pipeline logs stream handler received an unexpected result: {result}"
             )
         else:
             event = result["pipeline_event_result"].event
@@ -65,12 +65,33 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             log_with_provided_timestamp(event.message, dt)
 
 
-def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
+def start_run(
+    spark: SparkSession,
+    dataflow_graph_id: str,
+    full_refresh: Optional[Sequence[str]],
+    full_refresh_all: bool,
+    refresh: Optional[Sequence[str]],
+    dry: bool,
+    storage: str,
+) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
+    :param spark: SparkSession.
     :param dataflow_graph_id: The ID of the dataflow graph to start.
+    :param full_refresh: List of datasets to reset and recompute.
+    :param full_refresh_all: Perform a full graph reset and recompute.
+    :param refresh: List of datasets to update.
+    :param dry: If true, the run will not actually execute any flows, but only validate the graph.
+    :param storage: The storage location to store metadata such as streaming checkpoints.
     """
-    inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
+    inner_command = pb2.PipelineCommand.StartRun(
+        dataflow_graph_id=dataflow_graph_id,
+        full_refresh_selection=full_refresh or [],
+        full_refresh_all=full_refresh_all,
+        refresh_selection=refresh or [],
+        dry=dry,
+        storage=storage,
+    )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to

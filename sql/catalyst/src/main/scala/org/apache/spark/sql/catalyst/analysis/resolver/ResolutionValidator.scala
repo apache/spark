@@ -101,6 +101,8 @@ class ResolutionValidator {
         validateJoin(join)
       case repartition: Repartition =>
         validateRepartition(repartition)
+      case sample: Sample =>
+        validateSample(sample)
       // [[LogicalRelation]], [[HiveTableRelation]] and other specific relations can't be imported
       // because of a potential circular dependency, so we match a generic Catalyst
       // [[MultiInstanceRelation]] instead.
@@ -267,6 +269,10 @@ class ResolutionValidator {
 
   private def validateRepartition(repartition: Repartition): Unit = {
     validate(repartition.child)
+  }
+
+  private def validateSample(sample: Sample): Unit = {
+    validate(sample.child)
   }
 
   private def validateJoin(join: Join) = {

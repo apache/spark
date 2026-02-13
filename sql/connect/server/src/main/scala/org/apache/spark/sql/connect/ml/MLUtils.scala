@@ -40,7 +40,7 @@ import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLReader, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoSpecializedArray}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -73,39 +73,19 @@ private[ml] object MLUtils {
       .toMap
   }
 
-  private def parseInts(ints: proto.Ints): Array[Int] = {
-    val size = ints.getValuesCount
-    val values = Array.ofDim[Int](size)
-    var i = 0
-    while (i < size) {
-      values(i) = ints.getValues(i)
-      i += 1
-    }
-    values
-  }
-
-  private def parseDoubles(doubles: proto.Doubles): Array[Double] = {
-    val size = doubles.getValuesCount
-    val values = Array.ofDim[Double](size)
-    var i = 0
-    while (i < size) {
-      values(i) = doubles.getValues(i)
-      i += 1
-    }
-    values
-  }
-
   def deserializeVector(s: proto.Expression.Literal.Struct): Vector = {
     assert(s.getElementsCount == 4)
     s.getElements(0).getByte match {
       case 0 =>
         val size = s.getElements(1).getInteger
-        val indices = parseInts(s.getElements(2).getSpecializedArray.getInts)
-        val values = parseDoubles(s.getElements(3).getSpecializedArray.getDoubles)
+        val indices = ProtoSpecializedArray.toArray(s.getElements(2).getSpecializedArray.getInts)
+        val values =
+          ProtoSpecializedArray.toArray(s.getElements(3).getSpecializedArray.getDoubles)
         Vectors.sparse(size, indices, values)
 
       case 1 =>
-        val values = parseDoubles(s.getElements(3).getSpecializedArray.getDoubles)
+        val values =
+          ProtoSpecializedArray.toArray(s.getElements(3).getSpecializedArray.getDoubles)
         Vectors.dense(values)
 
       case o => throw MlUnsupportedException(s"Unknown Vector type $o")
@@ -118,16 +98,19 @@ private[ml] object MLUtils {
       case 0 =>
         val numRows = s.getElements(1).getInteger
         val numCols = s.getElements(2).getInteger
-        val colPtrs = parseInts(s.getElements(3).getSpecializedArray.getInts)
-        val rowIndices = parseInts(s.getElements(4).getSpecializedArray.getInts)
-        val values = parseDoubles(s.getElements(5).getSpecializedArray.getDoubles)
+        val colPtrs = ProtoSpecializedArray.toArray(s.getElements(3).getSpecializedArray.getInts)
+        val rowIndices =
+          ProtoSpecializedArray.toArray(s.getElements(4).getSpecializedArray.getInts)
+        val values =
+          ProtoSpecializedArray.toArray(s.getElements(5).getSpecializedArray.getDoubles)
         val isTransposed = s.getElements(6).getBoolean
         new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
 
       case 1 =>
         val numRows = s.getElements(1).getInteger
         val numCols = s.getElements(2).getInteger
-        val values = parseDoubles(s.getElements(5).getSpecializedArray.getDoubles)
+        val values =
+          ProtoSpecializedArray.toArray(s.getElements(5).getSpecializedArray.getDoubles)
         val isTransposed = s.getElements(6).getBoolean
         new DenseMatrix(numRows, numCols, values, isTransposed)
 
@@ -157,7 +140,7 @@ private[ml] object MLUtils {
           }
 
         case _ =>
-          val paramValue = LiteralValueProtoConverter.toCatalystValue(literal)
+          val paramValue = LiteralValueProtoConverter.toScalaValue(literal)
           val paramType: Class[_] = if (p.dataClass == null) {
             if (paramValue.isInstanceOf[String]) {
               classOf[String]
@@ -187,7 +170,7 @@ private[ml] object MLUtils {
    * @return
    *   the reconciled array
    */
-  private def reconcileArray(elementType: Class[_], array: Array[_]): Array[_] = {
+  private[ml] def reconcileArray(elementType: Class[_], array: Array[_]): Array[_] = {
     if (elementType == classOf[Byte]) {
       array.map(_.asInstanceOf[Byte])
     } else if (elementType == classOf[Short]) {
@@ -204,6 +187,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[String])
     } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
       array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
+    } else if (elementType.isArray && elementType.getComponentType == classOf[String]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[String]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +

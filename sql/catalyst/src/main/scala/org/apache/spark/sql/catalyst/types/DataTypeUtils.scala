@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -248,6 +248,84 @@ object DataTypeUtils {
     case v: Int => fromDecimal(Decimal(BigDecimal(v)))
     case v: Long => fromDecimal(Decimal(BigDecimal(v)))
     case _ => forType(literal.dataType)
+  }
+
+  /**
+   * Extracts all struct field paths from a nested StructType.
+   */
+  def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          fieldPath +: extractAllFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
+
+  /**
+   * Extracts only leaf-level field paths from a nested StructType.
+   * Unlike extractAllFieldPaths, this method does not include intermediate struct paths.
+   */
+  def extractLeafFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          extractLeafFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
+
+  /**
+   * Returns true if the two StringTypes have the same base type, i.e., both are [[CharType]],
+   * both are [[VarcharType]], or both are plain [[StringType]].
+   */
+  def areSameBaseType(s1: StringType, s2: StringType): Boolean = {
+    (s1.constraint, s2.constraint) match {
+      case (NoConstraint, NoConstraint) => true
+      case (FixedLength(_), FixedLength(_)) => true
+      case (MaxLength(_), MaxLength(_)) => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Replace STRING/CHAR/VARCHAR (including nested ones) without explicit collation with the new
+   * type with the given collation.
+   */
+  def replaceDefaultStringCharAndVarcharTypes(
+      dataType: DataType, collation: String): DataType = {
+    // Should replace STRING/CHAR(10)/VARCHAR(10) with the new type.
+    // Should not replace STRING COLLATE UTF8_BINARY/CHAR(10) COLLATE UTF8_BINARY/
+    // VARCHAR(10) COLLATE UTF8_BINARY, as that is explicit collation.
+    dataType.transformRecursively {
+      case currentType: CharType if isDefaultStringCharOrVarcharType(currentType) =>
+        CharType(currentType.length, collation)
+      case currentType: VarcharType if isDefaultStringCharOrVarcharType(currentType) =>
+        VarcharType(currentType.length, collation)
+      case currentType: StringType if isDefaultStringCharOrVarcharType(currentType) =>
+        StringType(collation)
+    }
+  }
+
+  /**
+   * Returns true if the given data type is STRING/CHAR/VARCHAR without explicit collation.
+   * Even `STRING COLLATE UTF8_BINARY` is considered as with explicit collation.
+   */
+  def isDefaultStringCharOrVarcharType(dataType: DataType): Boolean = {
+    dataType match {
+      case charType: CharType => charType.collation.isEmpty
+      case varcharType: VarcharType => varcharType.collation.isEmpty
+      case st: StringType => st.eq(StringType)
+      case _ => false
+    }
   }
 }
 

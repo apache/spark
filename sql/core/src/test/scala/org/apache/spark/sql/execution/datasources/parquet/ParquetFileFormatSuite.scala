@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.time.{Duration, LocalTime, Period}
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -41,7 +42,6 @@ abstract class ParquetFileFormatSuite
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
       withTempDir { dir =>
-        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
         val basePath = dir.getCanonicalPath
 
         val path1 = new Path(basePath, "first")
@@ -52,11 +52,14 @@ abstract class ParquetFileFormatSuite
         spark.range(1, 2).toDF("a").coalesce(1).write.parquet(path2.toString)
         spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
 
-        val fileStatuses =
-          Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fileStatuses = HadoopFSUtils.listFiles(
+          new Path(basePath),
+          hadoopConf,
+          (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          hadoopConf, fileStatuses, ignoreCorruptFiles)
 
         assert(footers.size == 2)
       }

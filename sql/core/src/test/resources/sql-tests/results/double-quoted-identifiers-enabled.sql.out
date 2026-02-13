@@ -171,6 +171,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select 1 from "not_""exists"
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_\"exists`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "\"not_\"\"exists\""
+  } ]
+}
+
+
+-- !query
 SELECT 1 FROM `hello`
 -- !query schema
 struct<>

@@ -18,7 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  CleanupAliases,
+  PullOutNondeterministic
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -41,7 +45,8 @@ class ResolverRunner(
    */
   private val planRewriteRules: Seq[Rule[LogicalPlan]] = Seq(
     PruneMetadataColumns,
-    CleanupAliases
+    CleanupAliases,
+    PullOutNondeterministic
   )
 
   /**
@@ -49,6 +54,11 @@ class ResolverRunner(
    * `planRewriteRules`.
    */
   private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
+
+  /**
+   * `resolutionCheckRunner` is used to run `extendedResolutionChecks` on the resolved plan.
+   */
+  private val resolutionCheckRunner = new ResolutionCheckRunner(extendedResolutionChecks)
 
   /**
    * Entry point for the resolver. This method performs following 4 steps:
@@ -69,7 +79,7 @@ class ResolverRunner(
 
         runValidator(rewrittenPlan)
 
-        runExtendedResolutionChecks(rewrittenPlan)
+        resolutionCheckRunner.runWithSubqueries(rewrittenPlan)
 
         rewrittenPlan
       }
@@ -80,14 +90,6 @@ class ResolverRunner(
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
       val validator = new ResolutionValidator
       validator.validatePlan(plan)
-    }
-  }
-
-  private def runExtendedResolutionChecks(plan: LogicalPlan): Unit = {
-    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS)) {
-      for (check <- extendedResolutionChecks) {
-        check(plan)
-      }
     }
   }
 }

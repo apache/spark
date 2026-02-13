@@ -28,17 +28,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -189,8 +189,9 @@ case class DescribeDatabaseCommand(
       Row("Catalog Name", SESSION_CATALOG_NAME) ::
         Row("Database Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) ::
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) ::
+        allDbProperties.get(PROP_COLLATION).map(Row("Collation", _)).toList
 
     if (extended) {
       val properties = allDbProperties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
@@ -407,15 +408,19 @@ case class AlterTableChangeColumnCommand(
         val withNewTypeAndComment: StructField =
           addComment(withNewType(field, newColumn.dataType), newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
+        // The default value is already validated by ResolveSessionCatalog, so we just need
+        // to copy the CURRENT_DEFAULT metadata. Note: we preserve the original EXISTS_DEFAULT
+        // (even if it's absent) from withNewTypeAndComment, as it represents the default value
+        // that was in effect when the column was added (used for backfilling old rows).
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
-            val result: StructField =
-              addCurrentDefaultValue(withNewTypeAndComment, newColumn.getCurrentDefaultValue())
-            // Check that the proposed default value parses and analyzes correctly, and that the
-            // type of the resulting expression is equivalent or coercible to the destination column
-            // type.
-            ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
-            result
+            val (sql, expr) = newColumn.metadata.getExpression[Expression](
+              CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+            val newMetadata = new MetadataBuilder()
+              .withMetadata(withNewTypeAndComment.metadata)
+              .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, sql, expr)
+              .build()
+            withNewTypeAndComment.copy(metadata = newMetadata)
           } else {
             withNewTypeAndComment.clearCurrentDefaultValue()
           }
@@ -464,7 +469,7 @@ case class AlterTableChangeColumnCommand(
   // when altering column. Only changes in collation of data type or its nested types (recursively)
   // are allowed.
   private def canEvolveType(from: StructField, to: StructField): Boolean = {
-    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType)
+    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType, checkComplexTypes = false)
   }
 }
 
@@ -955,6 +960,64 @@ case class AlterTableSetLocationCommand(
   }
 }
 
+/**
+ * A command that saves a query as a V1 table.
+ */
+private[sql] case class SaveAsV1TableCommand(
+    tableDesc: CatalogTable,
+    mode: SaveMode,
+    query: LogicalPlan) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val qualifiedIdent = catalog.qualifyIdentifier(tableDesc.identifier)
+    val tableDescWithQualifiedIdent = tableDesc.copy(identifier = qualifiedIdent)
+    val tableExists = catalog.tableExists(qualifiedIdent)
+
+    (tableExists, mode) match {
+      case (true, SaveMode.Ignore) =>
+        // Do nothing
+
+      case (true, SaveMode.ErrorIfExists) =>
+        throw QueryCompilationErrors.tableAlreadyExistsError(qualifiedIdent)
+
+      case (true, SaveMode.Overwrite) =>
+        // Get all input data source or hive relations of the query.
+        val srcRelations = query.collect {
+          case l: LogicalRelation => l.relation
+          case relation: HiveTableRelation => relation.tableMeta.identifier
+        }
+
+        val tableRelation = sparkSession.table(qualifiedIdent).queryExecution.analyzed
+        EliminateSubqueryAliases(tableRelation) match {
+          // check if the table is a data source table (the relation is a BaseRelation).
+          case l: LogicalRelation if srcRelations.contains(l.relation) =>
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
+          // check hive table relation when overwrite mode
+          case relation: HiveTableRelation
+              if srcRelations.contains(relation.tableMeta.identifier) =>
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
+          case _ => // OK
+        }
+
+        // Drop the existing table
+        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+        // Refresh the cache of the table in the catalog.
+        catalog.refreshTable(qualifiedIdent)
+
+      case _ =>
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+    }
+    Seq.empty[Row]
+  }
+
+  private def runCommand(session: SparkSession, command: LogicalPlan): Unit = {
+    val qe = session.sessionState.executePlan(command)
+    qe.assertCommandExecuted()
+  }
+}
 
 object DDLUtils extends Logging {
   val HIVE_PROVIDER = "hive"

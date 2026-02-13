@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.{File, FilenameFilter}
 import java.net.URL
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
@@ -31,7 +31,6 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
@@ -41,7 +40,6 @@ import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.hive.service.rpc.thrift.TRowSet
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -1064,7 +1062,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
         statement.executeQuery("SET spark.sql.hive.thriftServer.singleSession=false")
       }.getMessage
       assert(e.contains(
-        "CANNOT_MODIFY_CONFIG"))
+        "CANNOT_MODIFY_STATIC_CONFIG"))
     }
   }
 
@@ -1182,7 +1180,7 @@ object ServerMode extends Enumeration {
   val binary, http = Value
 }
 
-abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2TestBase extends SparkFunSuite with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
@@ -1224,7 +1222,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
-      Files.asCharSink(new File(s"$tempLog4jConf/log4j2.properties"), StandardCharsets.UTF_8).write(
+      Files.writeString(new File(s"$tempLog4jConf/log4j2.properties").toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.stdout.ref = console
           |appender.console.type = Console

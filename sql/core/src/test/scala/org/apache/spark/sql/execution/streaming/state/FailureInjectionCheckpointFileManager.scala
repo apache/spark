@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 
 /**
  * A wrapper file output stream that will throw exception in close() and put the underlying
@@ -258,7 +258,8 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
-      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder] = None,
+      uniqueId: Option[String]): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -268,7 +269,8 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       useColumnFamilies,
       enableStateStoreCheckpointIds,
       partitionId,
-      eventForwarder)
+      eventForwarder,
+      uniqueId)
   }
 }
 
@@ -286,7 +288,8 @@ object FailureInjectionRocksDBStateStoreProvider {
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
-      eventForwarder: Option[RocksDBEventForwarder]): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder],
+      uniqueId: Option[String]): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,
@@ -296,20 +299,25 @@ object FailureInjectionRocksDBStateStoreProvider {
       useColumnFamilies = useColumnFamilies,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       partitionId = partitionId,
-      eventForwarder = eventForwarder
+      eventForwarder = eventForwarder,
+      uniqueId
     ) {
       override def createFileManager(
           dfsRootDir: String,
           localTempDir: File,
           hadoopConf: Configuration,
           codecName: String,
-          loggingId: String): RocksDBFileManager = {
+          loggingId: String,
+          storeConf: StateStoreConf): RocksDBFileManager = {
         new RocksDBFileManager(
           dfsRootDir,
           localTempDir,
           hadoopConf,
           codecName,
-          loggingId = loggingId) {
+          loggingId = loggingId,
+          fileChecksumEnabled = this.conf.fileChecksumEnabled,
+          fileChecksumThreadPoolSize = this.fileChecksumThreadPoolSize,
+          storeConf = this.conf.stateStoreConf) {
           override def getFileSystem(
               myDfsRootDir: String,
               myHadoopConf: Configuration): FileSystem = {

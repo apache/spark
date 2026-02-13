@@ -26,8 +26,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
@@ -244,7 +242,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    // By ANSI standard, quotes are escaped with another quotes.
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 
   /**
@@ -342,7 +342,18 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param connection The connection object
    * @param properties The connection properties.  This is passed through from the relation.
    */
+  @deprecated("Use beforeFetch(Connection, JDBCOptions) instead", "4.2.0")
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  /**
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param options The JDBC options for the connection.
+   */
+  def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
+    beforeFetch(connection, options.parameters)
   }
 
   /**
@@ -352,7 +363,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
+    if (value == null) null else value.replace("'", "''")
 
   /**
    * Converts value to SQL expression.
@@ -772,7 +783,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   @Since("4.1.0")
-  def isObjectNotFoundException(e: SQLException): Boolean = true
+  def isObjectNotFoundException(e: SQLException): Boolean = {
+    Option(e.getSQLState).exists(_.startsWith("42"))
+  }
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
@@ -852,6 +865,11 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
 
   /**
    * Return the DB-specific quoted and fully qualified table name

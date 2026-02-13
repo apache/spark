@@ -33,13 +33,13 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, Str
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
-private[this] sealed trait PathInstruction
-private[this] object PathInstruction {
+sealed trait PathInstruction
+object PathInstruction {
   private[expressions] case object Subscript extends PathInstruction
   private[expressions] case object Wildcard extends PathInstruction
   private[expressions] case object Key extends PathInstruction
   private[expressions] case class Index(index: Long) extends PathInstruction
-  private[expressions] case class Named(name: String) extends PathInstruction
+  case class Named(name: String) extends PathInstruction
 }
 
 private[this] sealed trait WriteStyle
@@ -49,7 +49,7 @@ private[this] object WriteStyle {
   private[expressions] case object FlattenStyle extends WriteStyle
 }
 
-private[this] object JsonPathParser extends RegexParsers {
+object JsonPathParser extends RegexParsers {
   import PathInstruction._
 
   def root: Parser[Char] = '$'

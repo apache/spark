@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
@@ -34,5 +35,9 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
       inputs: Array[String]): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"""$funcName($distinct${inputs.mkString(", ")})"""
+  }
+
+  override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
+    s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
   }
 }

@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
 * Encapsulates a request for a particular chunk of a stream.
@@ -61,9 +59,6 @@ public record StreamChunkId(long streamId, int chunkIndex) implements Encodable 
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("streamId", streamId)
-      .append("chunkIndex", chunkIndex)
-      .toString();
+    return "StreamChunkId[streamId=" + streamId + ",chunkIndex=" + chunkIndex + "]";
   }
 }

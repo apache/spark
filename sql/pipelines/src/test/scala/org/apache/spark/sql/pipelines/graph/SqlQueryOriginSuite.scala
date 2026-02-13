@@ -18,8 +18,9 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.pipelines.utils.PipelineTest
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SqlQueryOriginSuite extends PipelineTest {
+class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
   test("basic test") {
     val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
       spark,

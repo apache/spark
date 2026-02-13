@@ -79,6 +79,18 @@ class MetadataSuite extends SparkFunSuite {
     intercept[NoSuchElementException](meta.getLong("no_such_key"))
   }
 
+  test("Metadata equality check") {
+
+    // Create a StructField with empty metadata
+    val field1 = StructField("myField", IntegerType, nullable = true, Metadata.empty)
+
+    // Create a StructField with non-empty metadata
+    val metadata = new MetadataBuilder().putString("description", "An integer field").build()
+    val field2 = StructField("myField", IntegerType, nullable = true, metadata)
+
+    assert(!(field1 == field2), s"field1 = $field1, field2 = $field2")
+  }
+
   test("Kryo serialization for expressions") {
     val conf = new SparkConf()
     val serializer = new KryoSerializer(conf).newInstance()
