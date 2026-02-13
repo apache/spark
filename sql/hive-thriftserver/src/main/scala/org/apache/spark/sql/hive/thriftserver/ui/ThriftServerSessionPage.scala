@@ -102,8 +102,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     }
     val content =
       <span id="sqlsessionstat" class="collapse-aggregated-sqlsessionstat collapse-table"
-            onClick="collapseTable('collapse-aggregated-sqlsessionstat',
-                'aggregated-sqlsessionstat')">
+            data-collapse-name="collapse-aggregated-sqlsessionstat"
+            data-collapse-table="aggregated-sqlsessionstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>SQL Statistics</a>

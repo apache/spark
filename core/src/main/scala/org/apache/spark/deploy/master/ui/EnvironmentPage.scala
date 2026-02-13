@@ -66,8 +66,8 @@ private[ui] class EnvironmentPage(
       </div>
       <span>
         <span class="collapse-aggregated-runtimeInformation collapse-table"
-            onClick="collapseTable('collapse-aggregated-runtimeInformation',
-            'aggregated-runtimeInformation')">
+            data-collapse-name="collapse-aggregated-runtimeInformation"
+            data-collapse-table="aggregated-runtimeInformation">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Runtime Information</a>
@@ -77,8 +77,8 @@ private[ui] class EnvironmentPage(
           {runtimeInformationTable}
         </div>
         <span class="collapse-aggregated-sparkProperties collapse-table"
-            onClick="collapseTable('collapse-aggregated-sparkProperties',
-            'aggregated-sparkProperties')">
+            data-collapse-name="collapse-aggregated-sparkProperties"
+            data-collapse-table="aggregated-sparkProperties">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Spark Properties</a>
@@ -88,8 +88,8 @@ private[ui] class EnvironmentPage(
           {sparkPropertiesTable}
         </div>
         <span class="collapse-aggregated-hadoopProperties collapse-table"
-              onClick="collapseTable('collapse-aggregated-hadoopProperties',
-            'aggregated-hadoopProperties')">
+              data-collapse-name="collapse-aggregated-hadoopProperties"
+              data-collapse-table="aggregated-hadoopProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Hadoop Properties</a>
@@ -99,8 +99,8 @@ private[ui] class EnvironmentPage(
           {hadoopPropertiesTable}
         </div>
         <span class="collapse-aggregated-systemProperties collapse-table"
-            onClick="collapseTable('collapse-aggregated-systemProperties',
-            'aggregated-systemProperties')">
+            data-collapse-name="collapse-aggregated-systemProperties"
+            data-collapse-table="aggregated-systemProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>System Properties</a>
@@ -110,8 +110,8 @@ private[ui] class EnvironmentPage(
           {systemPropertiesTable}
         </div>
         <span class="collapse-aggregated-metricsProperties collapse-table"
-              onClick="collapseTable('collapse-aggregated-metricsProperties',
-            'aggregated-metricsProperties')">
+              data-collapse-name="collapse-aggregated-metricsProperties"
+              data-collapse-table="aggregated-metricsProperties">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Metrics Properties</a>
@@ -121,8 +121,8 @@ private[ui] class EnvironmentPage(
           {metricsPropertiesTable}
         </div>
         <span class="collapse-aggregated-classpathEntries collapse-table"
-            onClick="collapseTable('collapse-aggregated-classpathEntries',
-            'aggregated-classpathEntries')">
+            data-collapse-name="collapse-aggregated-classpathEntries"
+            data-collapse-table="aggregated-classpathEntries">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Classpath Entries</a>
@@ -132,8 +132,8 @@ private[ui] class EnvironmentPage(
           {classpathEntriesTable}
         </div>
         <span class="collapse-aggregated-environmentVariables collapse-table"
-            onClick="collapseTable('collapse-aggregated-environmentVariables',
-            'aggregated-environmentVariables')">
+            data-collapse-name="collapse-aggregated-environmentVariables"
+            data-collapse-table="aggregated-environmentVariables">
           <h4>
             <span class="collapse-table-arrow arrow-closed"></span>
             <a>Environment Variables</a>

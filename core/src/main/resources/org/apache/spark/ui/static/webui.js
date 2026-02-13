@@ -111,3 +111,53 @@ $(function() {
     $(this).toggleClass("description-input-full");
   });
 });
+
+// Event delegation for CSP-compliant inline event handler replacement.
+$(function() {
+  // collapseTable / collapseTableAndButton
+  $(document).on("click", "[data-collapse-name]", function() {
+    var name = $(this).data("collapse-name");
+    var table = $(this).data("collapse-table");
+    if ($(this).data("collapse-button")) {
+      collapseTableAndButton(name, table);
+    } else {
+      collapseTable(name, table);
+    }
+  });
+
+  // toggle details (stage-details, stacktrace-details, expand-details)
+  $(document).on("click", "[data-toggle-details]", function() {
+    var selector = $(this).data("toggle-details");
+    this.parentNode.querySelector(selector).classList.toggle("collapsed");
+  });
+
+  // toggle sub-execution list (tr two siblings away from parent tr)
+  $(document).on("click", "[data-toggle-sub-execution]", function() {
+    $(this).closest("tr").nextAll("tr.sub-execution-list").first().toggleClass("collapsed");
+  });
+
+  // kill links with confirmation
+  $(document).on("click", "a.kill-link[data-kill-message]", function(e) {
+    if (!window.confirm($(this).data("kill-message"))) {
+      e.preventDefault();
+    } else if ($(this).closest("form").length > 0) {
+      e.preventDefault();
+      $(this).closest("form").submit();
+    }
+  });
+
+  // loadMore / loadNew buttons
+  $(document).on("click", ".log-more-btn", function() { loadMore(); });
+  $(document).on("click", ".log-new-btn", function() { loadNew(); });
+
+  // toggleDagViz
+  $(document).on("click", ".expand-dag-viz[data-forjob]", function() {
+    toggleDagViz($(this).data("forjob"));
+  });
+
+  // togglePlanViz / clickPhysicalPlanDetails
+  $(document).on("click", "[data-action=togglePlanViz]", function() { togglePlanViz(); });
+  $(document).on("click", "[data-action=clickPhysicalPlanDetails]", function() {
+    clickPhysicalPlanDetails();
+  });
+});

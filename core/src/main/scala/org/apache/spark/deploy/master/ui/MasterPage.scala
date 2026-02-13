@@ -182,7 +182,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div class="row">
           <div class="col-12">
             <span class="collapse-aggregated-workers collapse-table"
-                onClick="collapseTable('collapse-aggregated-workers','aggregated-workers')">
+                data-collapse-name="collapse-aggregated-workers"
+                data-collapse-table="aggregated-workers">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Workers ({workers.length})</a>
@@ -197,7 +198,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div class="row">
           <div class="col-12">
             <span id="running-app" class="collapse-aggregated-activeApps collapse-table"
-                onClick="collapseTable('collapse-aggregated-activeApps','aggregated-activeApps')">
+                data-collapse-name="collapse-aggregated-activeApps"
+                data-collapse-table="aggregated-activeApps">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Running Applications ({activeApps.length})</a>
@@ -214,8 +216,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
              <div class="row">
                <div class="col-12">
                  <span class="collapse-aggregated-activeDrivers collapse-table"
-                     onClick="collapseTable('collapse-aggregated-activeDrivers',
-                     'aggregated-activeDrivers')">
+                     data-collapse-name="collapse-aggregated-activeDrivers"
+                     data-collapse-table="aggregated-activeDrivers">
                    <h4>
                      <span class="collapse-table-arrow arrow-open"></span>
                      <a>Running Drivers ({activeDrivers.length})</a>
@@ -233,8 +235,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div class="row">
           <div class="col-12">
             <span id="completed-app" class="collapse-aggregated-completedApps collapse-table"
-                onClick="collapseTable('collapse-aggregated-completedApps',
-                'aggregated-completedApps')">
+                data-collapse-name="collapse-aggregated-completedApps"
+                data-collapse-table="aggregated-completedApps">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Completed Applications ({completedApps.length})</a>
@@ -252,8 +254,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <div class="row">
                 <div class="col-12">
                   <span class="collapse-aggregated-completedDrivers collapse-table"
-                      onClick="collapseTable('collapse-aggregated-completedDrivers',
-                      'aggregated-completedDrivers')">
+                      data-collapse-name="collapse-aggregated-completedDrivers"
+                      data-collapse-table="aggregated-completedDrivers">
                     <h4>
                       <span class="collapse-table-arrow arrow-open"></span>
                       <a>Completed Drivers ({completedDrivers.length})</a>
@@ -300,13 +302,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-      val confirm =
-        s"if (window.confirm('Are you sure you want to kill application ${app.id} ?')) " +
-          "{ this.parentNode.submit(); return true; } else { return false; }"
       <form action="app/kill/" method="POST" style="display:inline">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+        <a href="#"
+           data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
+           class="kill-link">(kill)</a>
       </form>
     }
     <tr>
@@ -350,13 +351,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED)) {
-      val confirm =
-        s"if (window.confirm('Are you sure you want to kill driver ${driver.id} ?')) " +
-          "{ this.parentNode.submit(); return true; } else { return false; }"
       <form action="driver/kill/" method="POST" style="display:inline">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
-        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+        <a href="#"
+           data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
+           class="kill-link">(kill)</a>
       </form>
     }
     <tr>

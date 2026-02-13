@@ -102,7 +102,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Hiding table support
     assert(html.contains("class=\"collapse-aggregated-sessionstat" +
-       " collapse-table\" onclick=\"collapsetable"))
+       " collapse-table\" data-collapse-name=\"collapse-aggregated-sessionstat\""))
   }
 
   test("thriftserver session page should load successfully") {
@@ -128,7 +128,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Hiding table support
     assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
-          " onclick=\"collapsetable"))
+          " data-collapse-name=\"collapse-aggregated-sqlsessionstat\""))
   }
 }
 
