@@ -27,7 +27,7 @@ import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{RDD_LIMIT_INITIAL_NUM_PARTITIONS, RDD_LIMIT_SCALE_UP_FACTOR}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
@@ -68,7 +68,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
     val callSite = self.context.getCallSite()
-    val localProperties = self.context.getLocalProperties
+    val localProperties = Utils.cloneProperties(self.context.getLocalProperties)
     // Cached thread pool to handle aggregation of subtasks.
     implicit val executionContext = AsyncRDDActions.futureExecutionContext
     val results = new ArrayBuffer[T]
