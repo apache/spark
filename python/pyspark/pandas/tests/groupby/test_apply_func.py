@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -31,99 +32,179 @@ class GroupbyApplyFuncMixin:
             columns=["a", "b", "c"],
         )
         psdf = ps.from_pandas(pdf)
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply(psdf, pdf, include_groups)
+        else:
+            self._check_apply(psdf, pdf, include_groups=False)
+            with self.assertRaises(ValueError):
+                psdf.groupby("b").apply(lambda x: x + x.min(), include_groups=True)
+
+    def _check_apply(self, psdf, pdf, include_groups):
         self.assert_eq(
-            psdf.groupby("b").apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby("b").apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby("b")
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby("b")
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("b").apply(len).sort_index(),
-            pdf.groupby("b").apply(len).sort_index(),
+            psdf.groupby("b").apply(len, include_groups=include_groups).sort_index(),
+            pdf.groupby("b").apply(len, include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
             psdf.groupby("b")["a"]
-            .apply(lambda x, y, z: x + x.min() + y * z, 10, z=20)
+            .apply(lambda x, y, z: x + x.min() + y * z, 10, z=20, include_groups=include_groups)
             .sort_index(),
-            pdf.groupby("b")["a"].apply(lambda x, y, z: x + x.min() + y * z, 10, z=20).sort_index(),
+            pdf.groupby("b")["a"]
+            .apply(lambda x, y, z: x + x.min() + y * z, 10, z=20, include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("b")[["a"]].apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby("b")[["a"]].apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby("b")[["a"]]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby("b")[["a"]]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
             psdf.groupby(["a", "b"])
-            .apply(lambda x, y, z: x + x.min() + y + z, 1, z=2)
+            .apply(lambda x, y, z: x + x.min() + y + z, 1, z=2, include_groups=include_groups)
             .sort_index(),
-            pdf.groupby(["a", "b"]).apply(lambda x, y, z: x + x.min() + y + z, 1, z=2).sort_index(),
+            pdf.groupby(["a", "b"])
+            .apply(lambda x, y, z: x + x.min() + y + z, 1, z=2, include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b"])["c"].apply(lambda x: 1).sort_index(),
-            pdf.groupby(["b"])["c"].apply(lambda x: 1).sort_index(),
+            psdf.groupby(["b"])["c"].apply(lambda x: 1, include_groups=include_groups).sort_index(),
+            pdf.groupby(["b"])["c"].apply(lambda x: 1, include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b"])["c"].apply(len).sort_index(),
-            pdf.groupby(["b"])["c"].apply(len).sort_index(),
+            psdf.groupby(["b"])["c"].apply(len, include_groups=include_groups).sort_index(),
+            pdf.groupby(["b"])["c"].apply(len, include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby(pdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(psdf.b // 5)
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(pdf.b // 5)
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
             almost=True,
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby(pdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(psdf.b // 5)["a"]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(pdf.b // 5)["a"]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
             almost=True,
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby(pdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby(psdf.b // 5)[["a"]]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(pdf.b // 5)[["a"]]
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
             almost=True,
         )
         self.assert_eq(
-            psdf.groupby(psdf.b // 5)[["a"]].apply(len).sort_index(),
-            pdf.groupby(pdf.b // 5)[["a"]].apply(len).sort_index(),
+            psdf.groupby(psdf.b // 5)[["a"]].apply(len, include_groups=include_groups).sort_index(),
+            pdf.groupby(pdf.b // 5)[["a"]].apply(len, include_groups=include_groups).sort_index(),
             almost=True,
         )
         self.assert_eq(
-            psdf.a.rename().groupby(psdf.b).apply(lambda x: x + x.min()).sort_index(),
-            pdf.a.rename().groupby(pdf.b).apply(lambda x: x + x.min()).sort_index(),
+            psdf.a.rename()
+            .groupby(psdf.b)
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.a.rename()
+            .groupby(pdf.b)
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.a.groupby(psdf.b.rename()).apply(lambda x: x + x.min()).sort_index(),
-            pdf.a.groupby(pdf.b.rename()).apply(lambda x: x + x.min()).sort_index(),
+            psdf.a.groupby(psdf.b.rename())
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.a.groupby(pdf.b.rename())
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.a.rename().groupby(psdf.b.rename()).apply(lambda x: x + x.min()).sort_index(),
-            pdf.a.rename().groupby(pdf.b.rename()).apply(lambda x: x + x.min()).sort_index(),
+            psdf.a.rename()
+            .groupby(psdf.b.rename())
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.a.rename()
+            .groupby(pdf.b.rename())
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
 
         with self.assertRaisesRegex(TypeError, "int object is not callable"):
-            psdf.groupby("b").apply(1)
+            psdf.groupby("b").apply(1, include_groups=include_groups)
+
+    def test_apply_with_multi_index_columns(self):
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
         pdf.columns = columns
         psdf.columns = columns
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply_with_multi_index_columns(psdf, pdf, include_groups)
+        else:
+            self._check_apply_with_multi_index_columns(psdf, pdf, include_groups=False)
+            with self.assertRaises(ValueError):
+                psdf.groupby(("x", "b")).apply(lambda x: x + x.min(), include_groups=True)
+
+    def _check_apply_with_multi_index_columns(self, psdf, pdf, include_groups):
         self.assert_eq(
-            psdf.groupby(("x", "b")).apply(lambda x: 1).sort_index(),
-            pdf.groupby(("x", "b")).apply(lambda x: 1).sort_index(),
+            psdf.groupby(("x", "b")).apply(lambda x: 1, include_groups=include_groups).sort_index(),
+            pdf.groupby(("x", "b")).apply(lambda x: 1, include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby([("x", "a"), ("x", "b")]).apply(lambda x: x + x.min()).sort_index(),
-            pdf.groupby([("x", "a"), ("x", "b")]).apply(lambda x: x + x.min()).sort_index(),
+            psdf.groupby([("x", "a"), ("x", "b")])
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby([("x", "a"), ("x", "b")])
+            .apply(lambda x: x + x.min(), include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(("x", "b")).apply(len).sort_index(),
-            pdf.groupby(("x", "b")).apply(len).sort_index(),
+            psdf.groupby(("x", "b")).apply(len, include_groups=include_groups).sort_index(),
+            pdf.groupby(("x", "b")).apply(len, include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby([("x", "a"), ("x", "b")]).apply(len).sort_index(),
-            pdf.groupby([("x", "a"), ("x", "b")]).apply(len).sort_index(),
+            psdf.groupby([("x", "a"), ("x", "b")])
+            .apply(len, include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby([("x", "a"), ("x", "b")])
+            .apply(len, include_groups=include_groups)
+            .sort_index(),
         )
 
     def test_apply_without_shortcut(self):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply()
+
+    def test_apply_with_multi_index_columns_without_shortcut(self):
+        with option_context("compute.shortcut_limit", 0):
+            self.test_apply_with_multi_index_columns()
 
     def test_apply_with_type_hint(self):
         pdf = pd.DataFrame(
@@ -132,27 +213,61 @@ class GroupbyApplyFuncMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        def add_max1(x) -> ps.DataFrame[int, int, int]:
-            return x + x.min()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply_with_type_hint(psdf, pdf, include_groups)
+        else:
+            self._check_apply_with_type_hint(psdf, pdf, include_groups=False)
+
+    def _check_apply_with_type_hint(self, psdf, pdf, include_groups):
+        if include_groups:
+
+            def add_max1(x) -> ps.DataFrame[int, int, int]:
+                return x + x.min()
+
+        else:
+
+            def add_max1(x) -> ps.DataFrame[int, int]:
+                return x + x.min()
 
         # Type hints set the default column names, and we use default index for
         # pandas API on Spark. Here we ignore both diff.
-        actual = psdf.groupby("b").apply(add_max1).sort_index()
-        expected = pdf.groupby("b").apply(add_max1).sort_index()
-        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
-        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
-        self.assert_eq(sorted(actual["c2"].to_numpy()), sorted(expected["c"].to_numpy()))
+        actual = psdf.groupby("b").apply(add_max1, include_groups=include_groups).sort_index()
+        expected = pdf.groupby("b").apply(add_max1, include_groups=include_groups).sort_index()
 
-        def add_max2(
-            x,
-        ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:
-            return x + x.min()
+        if include_groups:
+            self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+            self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+            self.assert_eq(sorted(actual["c2"].to_numpy()), sorted(expected["c"].to_numpy()))
+        else:
+            self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+            self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["c"].to_numpy()))
 
-        actual = psdf.groupby("b").apply(add_max2).sort_index()
-        expected = pdf.groupby("b").apply(add_max2).sort_index()
-        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
-        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
-        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+        if include_groups:
+
+            def add_max2(
+                x,
+            ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:
+                return x + x.min()
+
+        else:
+
+            def add_max2(
+                x,
+            ) -> ps.DataFrame[slice("a", int), slice("c", int)]:
+                return x + x.min()
+
+        actual = psdf.groupby("b").apply(add_max2, include_groups=include_groups).sort_index()
+        expected = pdf.groupby("b").apply(add_max2, include_groups=include_groups).sort_index()
+
+        if include_groups:
+            self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+            self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
+            self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+        else:
+            self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+            self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
 
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
@@ -245,18 +360,38 @@ class GroupbyApplyFuncMixin:
         )
         psdf = ps.from_pandas(pdf)
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply_with_side_effect(psdf, pdf, include_groups)
+        else:
+            self._check_apply_with_side_effect(psdf, pdf, include_groups=False)
+
+    def _check_apply_with_side_effect(self, psdf, pdf, include_groups):
         acc = ps.utils.default_session().sparkContext.accumulator(0)
 
-        def sum_with_acc_frame(x) -> ps.DataFrame[np.float64, np.float64]:
-            nonlocal acc
-            acc += 1
-            return np.sum(x)
+        if include_groups:
 
-        actual = psdf.groupby("d").apply(sum_with_acc_frame)
-        actual.columns = ["d", "v"]
+            def sum_with_acc_frame(x) -> ps.DataFrame[np.float64, np.float64]:
+                nonlocal acc
+                acc += 1
+                return np.sum(x)
+
+        else:
+
+            def sum_with_acc_frame(x) -> ps.DataFrame[np.float64]:
+                nonlocal acc
+                acc += 1
+                return np.sum(x)
+
+        actual = psdf.groupby("d").apply(sum_with_acc_frame, include_groups=include_groups)
+        actual.columns = ["d", "v"] if include_groups else ["v"]
         self.assert_eq(
             actual._to_pandas().sort_index(),
-            pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True),
+            pdf.groupby("d")
+            .apply(sum, include_groups=include_groups)
+            .sort_index()
+            .reset_index(drop=True),
         )
         self.assert_eq(acc.value, 2)
 
@@ -266,8 +401,14 @@ class GroupbyApplyFuncMixin:
             return np.sum(x)
 
         self.assert_eq(
-            psdf.groupby("d")["v"].apply(sum_with_acc_series)._to_pandas().sort_index(),
-            pdf.groupby("d")["v"].apply(sum).sort_index().reset_index(drop=True),
+            psdf.groupby("d")["v"]
+            .apply(sum_with_acc_series, include_groups=include_groups)
+            ._to_pandas()
+            .sort_index(),
+            pdf.groupby("d")["v"]
+            .apply(sum, include_groups=include_groups)
+            .sort_index()
+            .reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
 
@@ -279,49 +420,111 @@ class GroupbyApplyFuncMixin:
         )
         psdf = ps.from_pandas(pdf)
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply_return_series(psdf, pdf, include_groups)
+        else:
+            self._check_apply_return_series(psdf, pdf, include_groups=False)
+            with self.assertRaises(ValueError):
+                psdf.groupby("b").apply(lambda x: x + x.iloc[0], include_groups=True)
+
+    def _check_apply_return_series(self, psdf, pdf, include_groups):
         self.assert_eq(
-            psdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
-            pdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
+            psdf.groupby("b")
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby("b").apply(lambda x: x.iloc[0], include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
-            pdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
+            psdf.groupby("b").apply(lambda x: x["a"], include_groups=include_groups).sort_index(),
+            pdf.groupby("b").apply(lambda x: x["a"], include_groups=include_groups).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
-            pdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
+            psdf.groupby(["b", "c"])
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(["b", "c"])
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
-            pdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
+            psdf.groupby(["b", "c"])
+            .apply(lambda x: x["a"], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(["b", "c"])
+            .apply(lambda x: x["a"], include_groups=include_groups)
+            .sort_index(),
         )
+
+    def test_apply_return_series_with_multi_index_columns(self):
+        # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
         pdf.columns = columns
         psdf.columns = columns
 
+        if LooseVersion(pd.__version__) < "3.0.0":
+            for include_groups in [True, False]:
+                with self.subTest(include_groups=include_groups):
+                    self._check_apply_return_series_with_multi_index_columns(
+                        psdf, pdf, include_groups
+                    )
+        else:
+            self._check_apply_return_series_with_multi_index_columns(
+                psdf, pdf, include_groups=False
+            )
+            with self.assertRaises(ValueError):
+                psdf.groupby(("x", "b")).apply(lambda x: x + x.iloc[0], include_groups=True)
+
+    def _check_apply_return_series_with_multi_index_columns(self, psdf, pdf, include_groups):
         self.assert_eq(
-            psdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
-            pdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
+            psdf.groupby(("x", "b"))
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(("x", "b"))
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
-            pdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
+            psdf.groupby(("x", "b"))
+            .apply(lambda x: x[("x", "a")], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby(("x", "b"))
+            .apply(lambda x: x[("x", "a")], include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
-            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
+            psdf.groupby([("x", "b"), ("y", "c")])
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")])
+            .apply(lambda x: x.iloc[0], include_groups=include_groups)
+            .sort_index(),
         )
         self.assert_eq(
-            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
-            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
+            psdf.groupby([("x", "b"), ("y", "c")])
+            .apply(lambda x: x[("x", "a")], include_groups=include_groups)
+            .sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")])
+            .apply(lambda x: x[("x", "a")], include_groups=include_groups)
+            .sort_index(),
         )
 
     def test_apply_return_series_without_shortcut(self):
         # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
         with ps.option_context("compute.shortcut_limit", 2):
             self.test_apply_return_series()
+
+    def test_apply_return_series_with_multi_index_columns_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 2):
+            self.test_apply_return_series_with_multi_index_columns()
 
     def test_apply_explicitly_infer(self):
         # SPARK-39317
