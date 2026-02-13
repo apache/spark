@@ -150,46 +150,62 @@ case class ST_GeogFromWKB(wkb: Expression)
 
 /**
  * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value. The SRID
- * value of the returned GEOMETRY value is 0.
+ * value of the returned GEOMETRY value is the provided SRID. If not SRID value is provided, the
+ * SRID value of the returned GEOMETRY value is set to 0.
  * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
  * for more details on the WKB format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(wkb) - Parses the WKB description of a geometry and returns the corresponding "
-    + "GEOMETRY value.",
+  usage = "_FUNC_(wkb[, srid]) - Parses the WKB description of a geometry and returns the "
+    + "corresponding GEOMETRY value.",
   arguments = """
     Arguments:
       * wkb - A BINARY value in WKB format, representing a GEOMETRY value.
+      * srid - The optional SRID value of the geometry. Default is 0.
   """,
   examples = """
     Examples:
       > SELECT hex(st_asbinary(_FUNC_(X'0101000000000000000000F03F0000000000000040')));
        0101000000000000000000F03F0000000000000040
+      > SELECT st_srid(_FUNC_(X'0101000000000000000000F03F0000000000000040'));
+       0
+      > SELECT hex(st_asbinary(_FUNC_(X'0101000000000000000000F03F0000000000000040', 4326)));
+       0101000000000000000000F03F0000000000000040
+      > SELECT st_srid(_FUNC_(X'0101000000000000000000F03F0000000000000040', 4326));
+       4326
   """,
   since = "4.1.0",
   group = "st_funcs"
 )
-case class ST_GeomFromWKB(wkb: Expression)
+case class ST_GeomFromWKB(wkb: Expression, srid: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
-    with UnaryLike[Expression] {
+    with BinaryLike[Expression] {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+  // If no SRID value is provided, use the default SRID value for geometries.
+  def this(wkb: Expression) = {
+    this(wkb, Literal(ExpressionDefaults.DEFAULT_GEOMETRY_SRID))
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
-    GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID),
+    STExpressionUtils.geometryTypeWithSrid(srid),
     "stGeomFromWKB",
-    Seq(wkb),
+    Seq(wkb, srid),
     returnNullable = false
   )
 
   override def prettyName: String = "st_geomfromwkb"
 
-  override def child: Expression = wkb
+  override def left: Expression = wkb
 
-  override protected def withNewChildInternal(newChild: Expression): ST_GeomFromWKB =
-    copy(wkb = newChild)
+  override def right: Expression = srid
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): ST_GeomFromWKB = copy(wkb = newLeft, srid = newRight)
 }
 
 /** ST accessor expressions. */

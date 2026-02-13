@@ -20,11 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate,
-  Expand,
-  LogicalPlan
-}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.ByteType
@@ -116,6 +112,63 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
   }
 
   /**
+   * Replace [[GROUPING]] and [[GROUPING_ID]] functions with expressions that extract bits from
+   * the grouping ID attribute to determine which grouping set is active.
+   */
+  def replaceGroupingFunction(
+      expression: Expression,
+      groupByExpressions: Seq[Expression],
+      gid: Expression,
+      newAlias: (Expression, Option[String], Seq[String]) => Alias): Expression = {
+    val canonicalizedGroupByExpressions = groupByExpressions.map(_.canonicalized)
+
+    expression transform {
+      case groupingId: GroupingID =>
+        if (groupingId.groupByExprs.isEmpty ||
+          groupingId.groupByExprs.map(_.canonicalized) == canonicalizedGroupByExpressions) {
+          newAlias(gid, Some(toPrettySQL(groupingId)), Seq.empty)
+        } else {
+          throw QueryCompilationErrors.groupingIDMismatchError(groupingId, groupByExpressions)
+        }
+      case grouping @ Grouping(column: Expression) =>
+        val index = groupByExpressions.indexWhere(_.semanticEquals(column))
+        if (index >= 0) {
+          newAlias(
+            Cast(
+              BitwiseAnd(
+                ShiftRight(gid, Literal(groupByExpressions.length - 1 - index)),
+                Literal(1L)
+              ),
+              ByteType
+            ).withTimeZone(conf.sessionLocalTimeZone),
+            Some(toPrettySQL(grouping)),
+            Seq.empty
+          )
+        } else {
+          throw QueryCompilationErrors.groupingColInvalidError(column, groupByExpressions)
+        }
+    }
+  }
+
+  /**
+   * Collect the last grouping expression since the provided [[Aggregate]] should have grouping id
+   * as the last grouping key.
+   */
+  def collectGroupingExpressions(aggregate: Aggregate): Seq[Expression] = {
+    val gid = aggregate.groupingExpressions.last
+    gid match {
+      case attributeReference: AttributeReference =>
+        if (attributeReference.name != VirtualColumn.groupingIdName) {
+          throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+        }
+      case _ =>
+        throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+    }
+
+    aggregate.groupingExpressions.take(aggregate.groupingExpressions.length - 1)
+  }
+
+  /**
    * Create new aliases for all group by expressions to prevent null values set by [[Expand]]
    * from being used in aggregates instead of original values.
    */
@@ -202,45 +255,6 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
 
     aggregationsWithExtractedAttributes.map { expression =>
       expression.asInstanceOf[NamedExpression]
-    }
-  }
-
-  /**
-   * Replace [[GROUPING]] and [[GROUPING_ID]] functions with expressions that extract bits from
-   * the grouping ID attribute to determine which grouping set is active.
-   */
-  private def replaceGroupingFunction(
-      expression: Expression,
-      groupByExpressions: Seq[Expression],
-      gid: Expression,
-      newAlias: (Expression, Option[String], Seq[String]) => Alias): Expression = {
-    val canonicalizedGroupByExpressions = groupByExpressions.map(_.canonicalized)
-
-    expression transform {
-      case groupingId: GroupingID =>
-        if (groupingId.groupByExprs.isEmpty ||
-          groupingId.groupByExprs.map(_.canonicalized) == canonicalizedGroupByExpressions) {
-          newAlias(gid, Some(toPrettySQL(groupingId)), Seq.empty)
-        } else {
-          throw QueryCompilationErrors.groupingIDMismatchError(groupingId, groupByExpressions)
-        }
-      case grouping @ Grouping(column: Expression) =>
-        val index = groupByExpressions.indexWhere(_.semanticEquals(column))
-        if (index >= 0) {
-          newAlias(
-            Cast(
-              BitwiseAnd(
-                ShiftRight(gid, Literal(groupByExpressions.length - 1 - index)),
-                Literal(1L)
-              ),
-              ByteType
-            ).withTimeZone(conf.sessionLocalTimeZone),
-            Some(toPrettySQL(grouping)),
-            Seq.empty
-          )
-        } else {
-          throw QueryCompilationErrors.groupingColInvalidError(column, groupByExpressions)
-        }
     }
   }
 

@@ -105,12 +105,14 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
   val VARIABLE_REFERENCE: Value = Value
+  val CURSOR_REFERENCE: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
   val UNRESOLVED_COLLATION: Value = Value
+  val UNRESOLVED_CURSOR: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
@@ -165,6 +167,7 @@ object TreePattern extends Enumeration  {
   val REPARTITION_OPERATION: Value = Value
   val REBALANCE_PARTITIONS: Value = Value
   val RESOLVED_METRIC_VIEW: Value = Value
+  val SEQUENTIAL_STREAMING_UNION: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val SORT: Value = Value
   val SQL_TABLE_FUNCTION: Value = Value

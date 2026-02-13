@@ -17,8 +17,8 @@
 
 """PySpark Functions"""
 
-from pyspark.sql.functions.builtin import *  # noqa: F401,F403
-from pyspark.sql.functions import partitioning  # noqa: F401,F403
+from pyspark.sql.functions.builtin import *  # noqa: F403
+from pyspark.sql.functions import partitioning  # noqa: F401
 
 __all__ = [  # noqa: F405
     # Normal functions
@@ -421,6 +421,12 @@ __all__ = [  # noqa: F405
     "theta_intersection_agg",
     "theta_sketch_agg",
     "theta_union_agg",
+    "tuple_intersection_agg_double",
+    "tuple_intersection_agg_integer",
+    "tuple_sketch_agg_double",
+    "tuple_sketch_agg_integer",
+    "tuple_union_agg_double",
+    "tuple_union_agg_integer",
     "try_avg",
     "try_sum",
     "var_pop",
@@ -531,6 +537,18 @@ __all__ = [  # noqa: F405
     "theta_intersection",
     "theta_sketch_estimate",
     "theta_union",
+    "tuple_difference_double",
+    "tuple_difference_integer",
+    "tuple_intersection_double",
+    "tuple_intersection_integer",
+    "tuple_sketch_estimate_double",
+    "tuple_sketch_estimate_integer",
+    "tuple_sketch_summary_double",
+    "tuple_sketch_summary_integer",
+    "tuple_sketch_theta_double",
+    "tuple_sketch_theta_integer",
+    "tuple_union_double",
+    "tuple_union_integer",
     "try_aes_decrypt",
     "try_reflect",
     "typeof",

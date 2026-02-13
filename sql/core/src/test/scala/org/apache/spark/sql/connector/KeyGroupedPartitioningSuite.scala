@@ -124,7 +124,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
     // Has exactly one partition.
-    val partitionValues = Seq(31).map(v => InternalRow.fromSeq(Seq(v)))
+    val partitionValues = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
     checkQueryPlan(df, distribution,
       physical.KeyGroupedPartitioning(distribution.clustering, 1, partitionValues, partitionValues))
   }
@@ -2798,8 +2798,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   }
 
   test("SPARK-54439: KeyGroupedPartitioning with transform and join key size mismatch") {
-    // Do not use `bucket()` in "one side partition" tests as its implementation in
-    // `InMemoryBaseTable` conflicts with `BucketFunction`
     val items_partitions = Array(years("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -2821,6 +2819,62 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       assert(shuffles.size == 1, "only shuffle one side not report partitioning")
 
       checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+    }
+  }
+
+  test("SPARK-55302: Custom metrics of grouped partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    val metrics = runAndFetchMetrics {
+      val df = sql(s"SELECT * FROM testcat.ns.$items")
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans(0).inputRDD.partitions.length === 2, "items scan should have 2 partition groups")
+      df.collect()
+    }
+    assert(metrics("number of rows read") == "3")
+  }
+
+  test("SPARK-55411: Fix ArrayIndexOutOfBoundsException when join keys " +
+    "are less than cluster keys") {
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+
+      val customers_partitions = Array(identity("customer_name"), bucket(4, "customer_id"))
+      createTable(customers, customersColumns, customers_partitions)
+      sql(s"INSERT INTO testcat.ns.$customers VALUES " +
+        s"('aaa', 10, 1), ('bbb', 20, 2), ('ccc', 30, 3)")
+
+      createTable(orders, ordersColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$orders VALUES " +
+        s"(100.0, 1), (200.0, 1), (150.0, 2), (250.0, 2), (350.0, 2), (400.50, 3)")
+
+      val df = sql(
+        s"""${selectWithMergeJoinHint("c", "o")}
+           |customer_name, customer_age, order_amount
+           |FROM testcat.ns.$customers c JOIN testcat.ns.$orders o
+           |ON c.customer_id = o.customer_id ORDER BY c.customer_id, order_amount
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.length == 1)
+
+      checkAnswer(df, Seq(
+        Row("aaa", 10, 100.0),
+        Row("aaa", 10, 200.0),
+        Row("bbb", 20, 150.0),
+        Row("bbb", 20, 250.0),
+        Row("bbb", 20, 350.0),
+        Row("ccc", 30, 400.50)))
     }
   }
 }

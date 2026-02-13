@@ -37,10 +37,17 @@ class NumModTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser % pser, psser % psser, check_exact=False)
-            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool), check_exact=False)
-            self.assert_eq(pser % True, psser % True, check_exact=False)
-            self.assert_eq(pser % 1, psser % 1, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(pser % pser, psser % psser, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(
+                pser % pser.astype(bool),
+                psser % psser.astype(bool),
+                check_exact=False,
+                ignore_null=ignore_null,
+            )
+            self.assert_eq(pser % True, psser % True, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser % 1, psser % 1, check_exact=False, ignore_null=ignore_null)
+
             if not col.startswith("decimal"):
                 self.assert_eq(pser % 0, psser % 0, check_exact=False)
             if col in ["int", "int32"]:

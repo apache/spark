@@ -217,6 +217,14 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
+      .addNewResizePolicy()
+        .withResourceName("cpu")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
+      .addNewResizePolicy()
+        .withResourceName("memory")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
@@ -239,8 +247,8 @@ private[spark] class BasicExecutorFeatureStep(
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
         if (executorCpuLimitQuantity.compareTo(executorCpuQuantity) < 0) {
-          throw new SparkException(s"The executor cpu request ($executorCpuQuantity) should be " +
-            s"less than or equal to cpu limit ($executorCpuLimitQuantity)")
+          throw new IllegalArgumentException(s"The executor cpu request ($executorCpuQuantity) " +
+            s"should be less than or equal to cpu limit ($executorCpuLimitQuantity)")
         }
         new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()

@@ -2653,7 +2653,7 @@ class HiveDDLSuite
           |SELECT word, number from t1
         """.stripMargin)
 
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
       val joined = inputData.toDS().toDF()
         .join(spark.table("smallTable"), $"value" === $"number")
 

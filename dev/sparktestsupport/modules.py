@@ -19,6 +19,7 @@ from functools import total_ordering
 import itertools
 import os
 import re
+from pathlib import Path
 
 all_modules = []
 
@@ -88,6 +89,19 @@ class Module(object):
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
+
+    def missing_potential_python_test(self, filename):
+        """
+        Check if the given filename is missing from the module if it is a Python test file.
+
+        Return True if it is a test file and is not included in the module.
+        """
+        path = Path(filename)
+        last_part = path.parts[-1]
+        if not re.match(r"test_.*\.py", last_part):
+            return False
+        module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
+        return not any(module_path.endswith(test) for test in self.python_test_goals)
 
     def __repr__(self):
         return "Module<%s>" % self.name
@@ -594,7 +608,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
         "pyspark.sql.tests.test_connect_compatibility",
-        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
+        "pyspark.sql.tests.coercion.test_pandas_udf_input_type",
+        "pyspark.sql.tests.coercion.test_python_udf_input_type",
         "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
     ],
@@ -668,15 +683,17 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.streaming.test_streaming_foreach",
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
+        "pyspark.sql.tests.streaming.test_streaming_offline_state_repartition",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable",
-        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",  # noqa: E501
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_tws_tester",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -1213,9 +1230,9 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
-        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",  # noqa: E501
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
-        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",  # noqa: E501
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there

@@ -21,6 +21,7 @@ from typing import Any, Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     BooleanType,
     DayTimeIntervalType,
@@ -63,6 +64,13 @@ class TimedeltaOps(DataTypeOps):
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return col
+        else:
+            return col.astype(self.dtype)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)

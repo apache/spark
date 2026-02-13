@@ -20,9 +20,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.conversion import (
+    ArrowArrayToPandasConversion,
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
-    ArrowTimestampConversion,
+    ArrowArrayConversion,
+    ArrowBatchTransformer,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -38,7 +40,7 @@ from pyspark.sql.types import (
     StructType,
     UserDefinedType,
 )
-from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT, PythonOnlyPoint, PythonOnlyUDT
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 
 
@@ -62,6 +64,85 @@ class Score:
 
     def __eq__(self, other):
         return self.score == other.score
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowBatchTransformerTests(unittest.TestCase):
+    def test_flatten_struct_basic(self):
+        """Test flattening a struct column into separate columns."""
+        import pyarrow as pa
+
+        struct_array = pa.StructArray.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
+            names=["x", "y"],
+        )
+        batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
+
+        flattened = ArrowBatchTransformer.flatten_struct(batch)
+
+        self.assertEqual(flattened.num_columns, 2)
+        self.assertEqual(flattened.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(flattened.column(1).to_pylist(), ["a", "b", "c"])
+        self.assertEqual(flattened.schema.names, ["x", "y"])
+
+    def test_flatten_struct_empty_batch(self):
+        """Test flattening an empty batch."""
+        import pyarrow as pa
+
+        struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        struct_array = pa.array([], type=struct_type)
+        batch = pa.RecordBatch.from_arrays([struct_array], ["_0"])
+
+        flattened = ArrowBatchTransformer.flatten_struct(batch)
+
+        self.assertEqual(flattened.num_rows, 0)
+        self.assertEqual(flattened.num_columns, 2)
+
+    def test_wrap_struct_basic(self):
+        """Test wrapping columns into a struct."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([1, 2, 3]), pa.array(["a", "b", "c"])],
+            names=["x", "y"],
+        )
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_columns, 1)
+        self.assertEqual(wrapped.schema.names, ["_0"])
+
+        struct_col = wrapped.column(0)
+        self.assertEqual(len(struct_col), 3)
+        self.assertEqual(struct_col.field(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(struct_col.field(1).to_pylist(), ["a", "b", "c"])
+
+    def test_wrap_struct_empty_columns(self):
+        """Test wrapping a batch with no columns."""
+        import pyarrow as pa
+
+        schema = pa.schema([])
+        batch = pa.RecordBatch.from_arrays([], schema=schema)
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_columns, 1)
+        self.assertEqual(wrapped.num_rows, 0)
+
+    def test_wrap_struct_empty_batch(self):
+        """Test wrapping an empty batch with schema."""
+        import pyarrow as pa
+
+        schema = pa.schema([("x", pa.int64()), ("y", pa.string())])
+        batch = pa.RecordBatch.from_arrays(
+            [pa.array([], type=pa.int64()), pa.array([], type=pa.string())],
+            schema=schema,
+        )
+
+        wrapped = ArrowBatchTransformer.wrap_struct(batch)
+
+        self.assertEqual(wrapped.num_rows, 0)
+        self.assertEqual(wrapped.num_columns, 1)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -224,7 +305,7 @@ class ConversionTests(unittest.TestCase):
             pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["x", "y"])], names=["a", "b"]),
             pa.array([{1: None, 2: "x"}], type=pa.map_(pa.int32(), pa.string())),
         ]:
-            output = ArrowTimestampConversion.localize_tz(arr)
+            output = ArrowArrayConversion.localize_tz(arr)
             self.assertTrue(output is arr, f"MUST not generate a new array {output.tolist()}")
 
         # timestampe types
@@ -292,8 +373,48 @@ class ConversionTests(unittest.TestCase):
                 ),
             ),  # map<int, array<ts-ltz>>
         ]:
-            output = ArrowTimestampConversion.localize_tz(arr)
+            output = ArrowArrayConversion.localize_tz(arr)
             self.assertEqual(output, expected, f"{output.tolist()} != {expected.tolist()}")
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowArrayToPandasConversionTests(unittest.TestCase):
+    def test_udt_convert_numpy(self):
+        import pyarrow as pa
+
+        udt = ExamplePointUDT()
+
+        # basic conversion with nulls
+        arr = pa.array([[1.0, 2.0], None, [3.0, 4.0]], type=pa.list_(pa.float64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
+        self.assertIsInstance(result.iloc[0], ExamplePoint)
+        self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], ExamplePoint(3.0, 4.0))
+        self.assertEqual(result.name, "my_point")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=pa.list_(pa.float64())), udt
+        )
+        self.assertEqual(len(result), 0)
+
+        # PythonOnlyUDT
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([[5.0, 6.0]], type=pa.list_(pa.float64())), PythonOnlyUDT()
+        )
+        self.assertIsInstance(result.iloc[0], PythonOnlyPoint)
+        self.assertEqual(result.iloc[0], PythonOnlyPoint(5.0, 6.0))
+
+    def test_udt_chunked_array(self):
+        import pyarrow as pa
+
+        chunk1 = pa.array([[1.0, 2.0]], type=pa.list_(pa.float64()))
+        chunk2 = pa.array([[3.0, 4.0]], type=pa.list_(pa.float64()))
+        chunked = pa.chunked_array([chunk1, chunk2])
+        result = ArrowArrayToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
+        self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
+        self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
 
 
 if __name__ == "__main__":
