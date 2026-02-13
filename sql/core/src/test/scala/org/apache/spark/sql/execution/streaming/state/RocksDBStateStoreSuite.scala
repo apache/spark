@@ -2509,7 +2509,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("deleteRange - bulk deletion of keys in range") {
+  testWithRocksDBStateStore("deleteRange - bulk deletion of keys in range") {
     tryWithProviderResource(
       newStoreProvider(
         keySchemaWithRangeScan,
@@ -2548,40 +2548,55 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   test("deleteRange - changelog checkpointing records and replays range deletions") {
+    // useColumnFamilies = true is required to get changelog writer V2 which supports
+    // DELETE_RANGE_RECORD. V1 (used when useColumnFamilies = false) does not support it.
     withSQLConf(
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "100") {
       val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
       val keyEncoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0))
+      val cfName = "testColFamily"
 
       // Create provider and commit version 1 with some data and a deleteRange
       tryWithProviderResource(
         newStoreProvider(storeId, keyEncoderSpec,
-          keySchema = keySchemaWithRangeScan)) { provider =>
+          keySchema = keySchemaWithRangeScan,
+          useColumnFamilies = true)) { provider =>
         val store = provider.getStore(0)
+        store.createColFamilyIfAbsent(cfName,
+          keySchemaWithRangeScan, valueSchema,
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+
         // Put keys: (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")
-        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10))
-        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20))
-        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30))
-        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40))
-        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50))
+        store.put(dataToKeyRowWithRangeScan(1L, "a"), dataToValueRow(10), cfName)
+        store.put(dataToKeyRowWithRangeScan(2L, "b"), dataToValueRow(20), cfName)
+        store.put(dataToKeyRowWithRangeScan(3L, "c"), dataToValueRow(30), cfName)
+        store.put(dataToKeyRowWithRangeScan(4L, "d"), dataToValueRow(40), cfName)
+        store.put(dataToKeyRowWithRangeScan(5L, "e"), dataToValueRow(50), cfName)
         store.commit()
 
         // Version 2: deleteRange [2, 4) - should delete keys 2 and 3
         val store2 = provider.getStore(1)
+        store2.createColFamilyIfAbsent(cfName,
+          keySchemaWithRangeScan, valueSchema,
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
         val beginKey = dataToKeyRowWithRangeScan(2L, "")
         val endKey = dataToKeyRowWithRangeScan(4L, "")
-        store2.deleteRange(beginKey, endKey)
+        store2.deleteRange(beginKey, endKey, cfName)
         store2.commit()
       }
 
       // Reload from a fresh provider (same storeId) to force changelog replay
       tryWithProviderResource(
         newStoreProvider(storeId, keyEncoderSpec,
-          keySchema = keySchemaWithRangeScan)) { reloadedProvider =>
+          keySchema = keySchemaWithRangeScan,
+          useColumnFamilies = true)) { reloadedProvider =>
         val reloadedStore = reloadedProvider.getStore(2)
         try {
-          val remainingKeys = reloadedStore.iterator().map { kv =>
+          reloadedStore.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+          val remainingKeys = reloadedStore.iterator(cfName).map { kv =>
             keyRowWithRangeScanToData(kv.key)
           }.toSeq
 
