@@ -2297,19 +2297,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING =
-    buildConf("spark.sql.legacy.allowBuiltinFunctionShadowing")
+  val SESSION_FUNCTION_RESOLUTION_ORDER =
+    buildConf("spark.sql.functionResolution.sessionOrder")
       .internal()
       .version("4.2.0")
-      .doc("When false (default, secure mode), all session functions can be registered " +
-        "but builtins take precedence during resolution " +
-        "(order: builtin -> session -> persistent). " +
-        "When true (legacy mode), Scala UDFs shadow builtins " +
-        "(order: session -> builtin -> persistent), " +
-        "but SQL-based registration (CREATE TEMPORARY FUNCTION) is blocked when " +
-        "conflicting with builtins to preserve master behavior.")
-      .booleanConf
-      .createWithDefault(false)
+      .doc("Order of the session (temporary) function namespace when resolving unqualified " +
+        "function names. Valid values: 'first', 'second', 'last'. " +
+        "'first': session -> builtin -> persistent (SQL temp creation blocked if " +
+        "conflicts with builtin). 'second': builtin -> session -> persistent (default). " +
+        "'last': builtin -> persistent (current schema) -> session.")
+      .stringConf
+      .checkValues(Set("first", "second", "last"))
+      .createWithDefault("second")
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -7985,8 +7984,28 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
 
-  def legacyAllowBuiltinFunctionShadowing: Boolean =
-    getConf(SQLConf.LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING)
+  def sessionFunctionResolutionOrder: String =
+    getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns the function resolution search path for error messages and resolution order.
+   * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
+   * "last" (session last). When catalogPath is empty, returns only system namespaces.
+   */
+  def functionResolutionSearchPath(catalogPath: String): Seq[String] = {
+    val order = sessionFunctionResolutionOrder
+    order match {
+      case "first" =>
+        if (catalogPath.isEmpty) Seq("system.session", "system.builtin")
+        else Seq("system.session", "system.builtin", catalogPath)
+      case "last" =>
+        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
+        else Seq("system.builtin", catalogPath, "system.session")
+      case _ => // "second"
+        if (catalogPath.isEmpty) Seq("system.builtin", "system.session")
+        else Seq("system.builtin", "system.session", catalogPath)
+    }
+  }
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

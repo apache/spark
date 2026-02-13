@@ -2072,9 +2072,10 @@ class Analyzer(
                 // treated as a multi-part namespace in the session catalog.
                 val catalogPath = (catalogManager.currentCatalog.name +:
                   catalogManager.currentNamespace).mkString(".")
+                val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
                 throw QueryCompilationErrors.unresolvedRoutineError(
                   nameParts,
-                  Seq("system.builtin", "system.session", catalogPath),
+                  searchPath,
                   f.origin)
             }
 
@@ -2109,9 +2110,10 @@ class Analyzer(
                 case FunctionType.NotFound =>
                   // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
                   val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
+                  val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
-                    Seq("system.builtin", "system.session", catalogPath),
+                    searchPath,
                     f.origin)
               }
             }
@@ -2272,10 +2274,10 @@ class Analyzer(
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
             }.getOrElse {
+              val searchPath = SQLConf.get.functionResolutionSearchPath("")
               throw QueryCompilationErrors.unresolvedRoutineError(
                 nameParts,
-                // We don't support persistent high-order functions yet.
-                Seq("system.builtin", "system.session"),
+                searchPath,
                 u.origin)
             }
           }

@@ -52,6 +52,7 @@ import org.apache.spark.sql.connector.catalog.functions.{
   UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
@@ -65,19 +66,42 @@ class FunctionResolution(
 
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
-      resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
-        val CatalogAndIdentifier(catalog, ident) =
-          relationResolution.expandIdentifier(u.nameParts)
-        catalog.asFunctionCatalog.loadFunction(ident) match {
-          case v1Func: V1Function =>
-            // V1Function has a lazy builder - invoke() triggers resource loading
-            // and builder creation only on first invocation
-            val func = v1Func.invoke(u.arguments)
-            validateFunction(func, u.arguments.length, u)
-          case unboundV2Func =>
-            resolveV2Function(unboundV2Func, u.arguments, u)
+      val builtinOrSession = resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u)
+      val order = SQLConf.get.sessionFunctionResolutionOrder
+      if (order == "last" && u.nameParts.size == 1) {
+        // Order: builtin -> persistent -> session; session not in resolveBuiltinOrTempFunction path
+        builtinOrSession.getOrElse {
+          try {
+            resolvePersistentFunction(u)
+          } catch {
+            case _: NoSuchFunctionException | _: AnalysisException =>
+              val catalogPath = (
+                catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+              ).mkString(".")
+              val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
+              v1SessionCatalog.resolveTempFunction(u.nameParts.head, u.arguments).getOrElse(
+                throw QueryCompilationErrors.unresolvedRoutineError(
+                  u.nameParts,
+                  searchPath,
+                  u.origin))
+          }
         }
+      } else {
+        builtinOrSession.getOrElse(resolvePersistentFunction(u))
       }
+    }
+  }
+
+  /** Resolve from persistent catalog (current catalog/namespace). Throws if not found. */
+  private def resolvePersistentFunction(u: UnresolvedFunction): Expression = {
+    val CatalogAndIdentifier(catalog, ident) =
+      relationResolution.expandIdentifier(u.nameParts)
+    catalog.asFunctionCatalog.loadFunction(ident) match {
+      case v1Func: V1Function =>
+        val func = v1Func.invoke(u.arguments)
+        validateFunction(func, u.arguments.length, u)
+      case unboundV2Func =>
+        resolveV2Function(unboundV2Func, u.arguments, u)
     }
   }
 

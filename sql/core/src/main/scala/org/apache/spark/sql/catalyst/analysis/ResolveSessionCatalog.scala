@@ -575,6 +575,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.missingCatalogRefreshFunctionAbilityError(catalog)
       }
 
+    case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
+        if nameParts.length >= 2 &&
+          nameParts(nameParts.length - 2).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
     case CreateFunction(
         ResolvedIdentifier(catalog, ident), _, _, _, _)
         if isSessionCatalog(catalog) &&
@@ -599,6 +605,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
+
+    case c @ CreateUserDefinedFunction(
+        UnresolvedIdentifier(nameParts, _), _, _, _, _, _, _, _, _, _, _, _)
+        if nameParts.length >= 2 &&
+          nameParts(nameParts.length - 2).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
 
     case c @ CreateUserDefinedFunction(
         ResolvedIdentifier(catalog, ident), _, _, _, _, _, _, _, _, _, _, _)
@@ -801,6 +814,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
+          if (ident.namespace().length >= 1 &&
+              ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+            throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+              "CREATE", ident.name())
+          }
           throw QueryCompilationErrors
             .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
         }

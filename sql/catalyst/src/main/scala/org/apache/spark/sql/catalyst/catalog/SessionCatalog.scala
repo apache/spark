@@ -182,27 +182,30 @@ class SessionCatalog(
     database = Some(CatalogManager.BUILTIN_NAMESPACE),
     catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
-  // The resolution path: builtin -> session (security-focused order)
+  // The resolution path: builtin -> session (session "second")
   private val RESOLUTION_PATH = Seq(
     BUILTIN_NAMESPACE_TEMPLATE,
     SESSION_NAMESPACE_TEMPLATE
   )
 
-  // Legacy resolution path: session -> builtin (pre-4.0 behavior, allows shadowing)
+  // Legacy resolution path: session -> builtin (session "first")
   private val LEGACY_RESOLUTION_PATH = Seq(
     SESSION_NAMESPACE_TEMPLATE,
     BUILTIN_NAMESPACE_TEMPLATE
   )
+
+  // Session last: only builtin (session tried after persistent in FunctionResolution)
+  private val SESSION_LAST_RESOLUTION_PATH = Seq(BUILTIN_NAMESPACE_TEMPLATE)
 
   /**
    * Returns the resolution path for function lookup.
    * @return Ordered sequence of namespace identifiers.
    */
   private def resolutionPath(): Seq[FunctionIdentifier] = {
-    if (conf.legacyAllowBuiltinFunctionShadowing) {
-      LEGACY_RESOLUTION_PATH
-    } else {
-      RESOLUTION_PATH
+    conf.sessionFunctionResolutionOrder match {
+      case "first" => LEGACY_RESOLUTION_PATH
+      case "last" => SESSION_LAST_RESOLUTION_PATH
+      case _ => RESOLUTION_PATH // "second" (default)
     }
   }
 
@@ -2188,8 +2191,8 @@ class SessionCatalog(
     // from shadowing builtin functions (to preserve master behavior)
     // Scala UDFs are still allowed to shadow in legacy mode
     // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-    if (func.database.isEmpty && useCompositeKey && conf.legacyAllowBuiltinFunctionShadowing &&
-        !overrideIfExists) {
+    val sessionFirst = conf.sessionFunctionResolutionOrder == "first"
+    if (func.database.isEmpty && useCompositeKey && sessionFirst && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionIdentifier(format(funcName))
@@ -2305,7 +2308,7 @@ class SessionCatalog(
       // Security check: When legacy mode is enabled, block SQL-created temporary functions
       // from shadowing builtin functions (including extensions) as a safeguard
       // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-      if (conf.legacyAllowBuiltinFunctionShadowing && !overrideIfExists) {
+      if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
         val builtinIdent = FunctionIdentifier(format(funcName))

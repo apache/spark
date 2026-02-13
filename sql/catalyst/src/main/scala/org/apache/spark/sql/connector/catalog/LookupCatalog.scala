@@ -128,8 +128,12 @@ private[sql] trait LookupCatalog extends Logging {
         }
       }
       if (CatalogV2Util.isSessionCatalog(catalog) && ident.namespace().length != 1) {
-        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
-          ident.namespace().toImmutableArraySeq)
+        val ns = ident.namespace().toImmutableArraySeq
+        if (ns.nonEmpty && ns.last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+          throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+            "CREATE", ident.name())
+        }
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(ns)
       }
       Some((catalog, ident))
     }

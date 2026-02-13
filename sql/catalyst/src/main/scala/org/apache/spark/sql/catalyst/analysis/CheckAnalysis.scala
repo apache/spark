@@ -304,12 +304,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedFunctionName =>
         val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
-        // Build search path based on actual resolution order (respects legacy config)
-        val searchPath = if (SQLConf.get.legacyAllowBuiltinFunctionShadowing) {
-          Seq("system.session", "system.builtin", catalogPath)
-        } else {
-          Seq("system.builtin", "system.session", catalogPath)
-        }
+        val searchPath = SQLConf.get.functionResolutionSearchPath(catalogPath)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
           searchPath,

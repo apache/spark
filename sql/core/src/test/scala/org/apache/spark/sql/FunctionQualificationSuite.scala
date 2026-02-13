@@ -717,7 +717,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 13: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is true") {
-    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
       // Try to create a SQL temp function that shadows a builtin
       // SQL temp functions are blocked in legacy mode to preserve master behavior
       checkError(
@@ -749,7 +749,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 13: Legacy mode - Scala UDF allowed and shadows builtin when config is true") {
-    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
       withTempView("test_data") {
         sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
 
@@ -782,7 +782,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 13: Legacy mode - resolution order changes when config is true") {
-    withSQLConf("spark.sql.legacy.allowBuiltinFunctionShadowing" -> "true") {
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
       withTempView("test_data") {
         sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
 
@@ -809,8 +809,63 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SECTION 13: Session last - builtin and persistent take precedence over session") {
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
+      withTempView("test_data") {
+        sql("CREATE TEMPORARY VIEW test_data AS SELECT 1 as id")
+        spark.udf.register("upper", (s: String) => "TEMP_" + s)
+        try {
+          // Unqualified upper resolves to builtin first (session is last)
+          checkAnswer(
+            sql("SELECT upper('test') FROM test_data"),
+            Row("TEST")
+          )
+          checkAnswer(
+            sql("SELECT session.upper('test') FROM test_data"),
+            Row("TEMP_test")
+          )
+        } finally {
+          spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
+        }
+      }
+    }
+  }
+
+  test("SECTION 13: Session last - persistent takes precedence over session when both exist") {
+    withUserDefinedFunction("default.session_last_foo" -> false, "session_last_foo" -> true) {
+      withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
+        sql("CREATE FUNCTION session_last_foo() RETURNS INT RETURN 42")
+        spark.udf.register("session_last_foo", () => 100)
+        withTempView("t") {
+          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
+          // Unqualified: should resolve to persistent first (session is last)
+          checkAnswer(sql("SELECT session_last_foo() FROM t"), Row(42))
+          // Qualified session: should resolve to temp
+          checkAnswer(sql("SELECT session.session_last_foo() FROM t"), Row(100))
+        }
+      }
+    }
+  }
+
+  test("SECTION 13: Unresolved routine error search path reflects sessionOrder config") {
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
+      val e1 = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") }
+      assert(e1.getErrorClass == "UNRESOLVED_ROUTINE")
+      assert(e1.getMessage.contains("system.session") && e1.getMessage.contains("system.builtin"))
+      assert(e1.getMessage.indexOf("system.session") < e1.getMessage.indexOf("system.builtin"),
+        "With session first, search path should list session before builtin")
+    }
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
+      val e2 = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") }
+      assert(e2.getErrorClass == "UNRESOLVED_ROUTINE")
+      assert(e2.getMessage.contains("system.builtin") && e2.getMessage.contains("system.session"))
+      assert(e2.getMessage.indexOf("system.builtin") < e2.getMessage.indexOf("system.session"),
+        "With session last, search path should list builtin before session")
+    }
+  }
+
   test("SECTION 13: Legacy mode - default behavior allows registration but builtin wins") {
-    // Without setting the config (default is false, secure mode), registration is allowed
+    // Without setting the config (default is second), registration is allowed
     // but resolution order ensures builtins take precedence
     spark.udf.register("length", (s: String) => 999)
 

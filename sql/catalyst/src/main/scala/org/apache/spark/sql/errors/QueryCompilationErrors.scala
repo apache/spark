@@ -1268,7 +1268,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "funcName" -> toSQLId(funcName),
         "namespace" -> toSQLId(namespace),
-        "config" -> toSQLConf(SQLConf.LEGACY_ALLOW_BUILTIN_FUNCTION_SHADOWING.key)
+        "config" -> toSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key)
       )
     )
   }
