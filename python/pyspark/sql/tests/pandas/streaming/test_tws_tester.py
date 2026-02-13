@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import random
 import tempfile
 import unittest
@@ -56,8 +57,8 @@ from pyspark.testing.sqlutils import (
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message or "",
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TwsTesterTests(ReusedSQLTestCase):
     def test_running_count_processor(self):
@@ -932,8 +933,8 @@ class TwsTesterTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message or "",
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
 )
 class TwsTesterFuzzTests(ReusedSQLTestCase):
     @classmethod

@@ -1953,10 +1953,10 @@ Spark allows users to specify a custom Kubernetes schedulers.
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.13.1:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.0:
 
   ```bash
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.0/installer/volcano-development.yaml
   ```
 
 ##### Build
@@ -2034,10 +2034,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.8.0 on an existing Kubernetes cluster.
 
 ##### Get started
 
