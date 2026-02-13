@@ -247,7 +247,7 @@ case class MaxMinByK(
   usage = """
     _FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
-    maximum values of `y`, sorted in descending order by `y` (since 4.2.0).
+    maximum values of `y`, sorted in descending order by `y`.
   """,
   examples = """
     Examples:
@@ -261,7 +261,7 @@ case class MaxMinByK(
     those associated the same values of `y`.
   """,
   group = "agg_funcs",
-  since = "3.0.0")
+  since = "4.2.0")
 // scalastyle:on line.size.limit
 object MaxByBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -279,7 +279,7 @@ object MaxByBuilder extends ExpressionBuilder {
   usage = """
     _FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
-    minimum values of `y`, sorted in ascending order by `y` (since 4.2.0).
+    minimum values of `y`, sorted in ascending order by `y`.
   """,
   examples = """
     Examples:

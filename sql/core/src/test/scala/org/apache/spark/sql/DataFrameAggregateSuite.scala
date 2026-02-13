@@ -1336,6 +1336,15 @@ class DataFrameAggregateSuite extends QueryTest
         Row("dotNET", Seq(2013, 2012), Seq(2012, 2013)) :: Nil
     )
 
+    // Error: k must be a constant (not a column reference)
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[AnalysisException] {
+        sql(s"SELECT $fn(x, y, z) FROM VALUES (('a', 10, 2)) AS tab(x, y, z)").collect()
+      }
+      assert(error.getMessage.contains("NON_FOLDABLE_INPUT") ||
+        error.getMessage.contains("constant integer"))
+    }
+
     // Error: k must be positive
     Seq("max_by", "min_by").foreach { fn =>
       val error = intercept[Exception] {
