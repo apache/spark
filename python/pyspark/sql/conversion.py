@@ -1495,9 +1495,7 @@ class ArrowArrayToPandasConversion:
             series = series.apply(
                 cast(
                     Callable,
-                    lambda v: VariantVal(v["value"], v["metadata"])
-                    if v is not None
-                    else None,
+                    lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None,
                 )
             )
         # elif isinstance(
