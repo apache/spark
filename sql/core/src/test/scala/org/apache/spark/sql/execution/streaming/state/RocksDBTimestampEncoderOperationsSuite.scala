@@ -335,6 +335,93 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
+  // Diverse set of timestamps that exercise binary lexicographic encoding edge cases,
+  // reusing the same values from range scan encoder tests in RocksDBStateStoreSuite,
+  // including large negatives, small negatives, zero, small positives, large positives,
+  // and powers of 2.
+  private val diverseTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+    -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
+    -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
+
+  /**
+   * Tests that the given encoder type correctly orders entries by event time when using
+   * diverse timestamp values that exercise binary lexicographic encoding edge cases.
+   *
+   * @param encoderType "prefix" or "postfix"
+   * @param useMultipleValuesPerKey whether to store multiple values per (key, timestamp)
+   * @param encoding data encoding format (e.g. "unsaferow")
+   */
+  private def testDiverseTimestampOrdering(
+      encoderType: String,
+      useMultipleValuesPerKey: Boolean,
+      encoding: String): Unit = {
+    val valuesPerKey = if (useMultipleValuesPerKey) 2 else 1
+
+    tryWithProviderResource(
+      newStoreProviderWithTimestampEncoder(
+        encoderType = encoderType,
+        useMultipleValuesPerKey = useMultipleValuesPerKey,
+        dataEncoding = encoding)
+    ) { provider =>
+      val store = provider.getStore(0)
+
+      try {
+        // Insert diverse timestamps in non-sorted order
+        diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+          val keyRow = keyAndTimestampToRow("key1", 1, ts)
+          if (useMultipleValuesPerKey) {
+            val values = Array(valueToRow(idx * 10), valueToRow(idx * 10 + 1))
+            store.putList(keyRow, values)
+          } else {
+            store.put(keyRow, valueToRow(idx))
+          }
+        }
+
+        // For postfix encoder, add a different key to verify prefix scan isolation
+        if (encoderType == "postfix") {
+          store.put(keyAndTimestampToRow("key2", 1, 500L), valueToRow(999))
+        }
+
+        // Read results back using the appropriate scan method
+        val iter = encoderType match {
+          // For prefix encoder, we use iterator
+          case "prefix" =>
+            if (useMultipleValuesPerKey) store.iteratorWithMultiValues()
+            else store.iterator()
+          // For postfix encoder, we use prefix scan with ("key1", 1) as the prefix key
+          case "postfix" =>
+            if (useMultipleValuesPerKey) store.prefixScanWithMultiValues(keyToRow("key1", 1))
+            else store.prefixScan(keyToRow("key1", 1))
+        }
+
+        val results = iter.map(_.key.getLong(2)).toList
+        iter.close()
+
+        assert(results.length === diverseTimestamps.length * valuesPerKey)
+
+        // Verify event times are in ascending order
+        val distinctEventTimes = results.distinct
+        assert(distinctEventTimes === diverseTimestamps.sorted,
+          "Results should be ordered by event time")
+      } finally {
+        store.abort()
+      }
+    }
+  }
+
+  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  Seq("unsaferow").foreach { encoding =>
+    Seq("prefix", "postfix").foreach { encoderType =>
+      Seq(false, true).foreach { useMultipleValuesPerKey =>
+        val multiValueSuffix = if (useMultipleValuesPerKey) " and multiple values" else ""
+        test(s"Event time as $encoderType: ordering with diverse timestamps" +
+          s"$multiValueSuffix (encoding = $encoding)") {
+          testDiverseTimestampOrdering(encoderType, useMultipleValuesPerKey, encoding)
+        }
+      }
+    }
+  }
+
   // Helper methods to create test data
   private val keyProjection = UnsafeProjection.create(keySchema)
   private val keyAndTimestampProjection = UnsafeProjection.create(
