@@ -29,9 +29,10 @@ By default the script compares module JARs (class contents and sizes).
 Use --shading, --assemblies-only, or --deps to switch modes.
 
   JARs (default)    Compare module JARs class-by-class.
-  --shading         Compare shaded/relocated packages in assembly JARs.
-                    Reports unshaded packages (real issues) and class-level
-                    differences (may indicate mismatched transitive deps).
+  --shading         Verify shading relocation rules. For each expected
+                    relocation (e.g., io/grpc/ -> org/sparkproject/io/grpc/)
+                    checks that source packages are absent and target
+                    packages are present in both builds.
   --assemblies-only Compare assembly JARs (size, class count, packages).
   --deps            Compare resolved dependency trees (runs Maven/SBT).
   --self-test       Run internal self-tests and exit.
@@ -81,7 +82,28 @@ Maven and SBT shade dependencies differently:
 
 Because of this, module JARs from Maven are larger than SBT's. Use
 --ignore-shaded with the default mode to skip these expected differences,
-or use --shading to inspect the shaded classes directly.
+or use --shading to verify relocation rules directly.
+
+Relocation rules
+~~~~~~~~~~~~~~~~
+--shading verifies these expected relocations for each module:
+
+  core:
+    org/eclipse/jetty/     -> org/sparkproject/jetty/
+    com/google/common/     -> org/sparkproject/guava/
+    com/google/thirdparty/ -> org/sparkproject/guava/
+    com/google/protobuf/   -> org/sparkproject/spark_core/protobuf/
+
+  connect-client:
+    com/google/common/     -> org/sparkproject/connect/guava/
+    com/google/thirdparty/ -> org/sparkproject/connect/guava/
+    com/google/protobuf/   -> org/sparkproject/com/google/protobuf/
+    io/grpc/               -> org/sparkproject/io/grpc/
+    io/netty/              -> org/sparkproject/io/netty/
+    org/apache/arrow/      -> org/sparkproject/org/apache/arrow/
+
+For each rule, both builds are checked: the source package should be
+absent (relocated) and the target package should be present.
 """
 
 import argparse
@@ -929,239 +951,217 @@ def find_shaded_jars(build_type: str) -> Dict[str, Path]:
     return assemblies
 
 
-def analyze_shading(jar_path: Path) -> Dict[str, Dict[str, Set[str]]]:
-    """Analyze shading in a JAR file, returning class sets grouped by package."""
-    result: Dict[str, Dict[str, Set[str]]] = {
-        "unshaded": defaultdict(set),  # Original packages that should be shaded
-        "shaded": defaultdict(set),  # Properly shaded packages
-    }
-
-    # Packages that indicate improper shading (should have been relocated)
-    unshaded_patterns = [
-        "org/eclipse/jetty/",
-        "com/google/common/",
-        "com/google/thirdparty/",
-        "com/google/protobuf/",
-        "io/grpc/",
-        "io/netty/",
-        "org/apache/arrow/",
-    ]
-
-    # Shaded package prefixes
-    shaded_patterns = [
-        "org/sparkproject/",
-    ]
-
-    try:
-        with zipfile.ZipFile(jar_path, "r") as zf:
-            for name in zf.namelist():
-                if not name.endswith(".class"):
-                    continue
-
-                # Check for unshaded (problematic) packages
-                for pattern in unshaded_patterns:
-                    if name.startswith(pattern):
-                        pkg = pattern.rstrip("/")
-                        result["unshaded"][pkg].add(name)
-                        break
-
-                # Check for properly shaded packages
-                for pattern in shaded_patterns:
-                    if name.startswith(pattern):
-                        # Extract the shaded sub-package (first 2 levels for detail)
-                        rest = name[len(pattern) :]
-                        parts = rest.split("/")
-                        if len(parts) >= 2:
-                            sub_pkg = "/".join(parts[:2])
-                        else:
-                            sub_pkg = parts[0] if parts else ""
-                        full_pkg = pattern + sub_pkg
-                        result["shaded"][full_pkg].add(name)
-                        break
-
-    except zipfile.BadZipFile:
-        print(f"[warn] Could not read JAR: {jar_path}")
-
-    return result
+def _count_classes_under(jar_path: Path, prefix: str) -> int:
+    """Count .class files under a package prefix inside a JAR."""
+    count = 0
+    with zipfile.ZipFile(jar_path, "r") as zf:
+        for name in zf.namelist():
+            if name.endswith(".class") and name.startswith(prefix):
+                count += 1
+    return count
 
 
 def compare_shading_data() -> Dict[str, Any]:
-    """Collect shading comparison data and return structured dict."""
-    maven_assemblies = find_shaded_jars("maven")
-    sbt_assemblies = find_shaded_jars("sbt")
+    """Collect rule-driven shading comparison data.
 
-    all_names = set(maven_assemblies.keys()) | set(sbt_assemblies.keys())
-    unshaded_packages = 0  # Number of package prefixes that contain unshaded classes
-    unshaded_class_count = 0  # Total number of classes that should have been relocated
-    shaded_matching = 0  # Packages where both sides exist and classes match exactly
-    shaded_differing = 0  # Packages where both sides exist but classes differ
-    shaded_skipped = 0  # Packages where one side is missing (no comparison possible)
-    assemblies_data: Dict[str, Any] = {}
+    For each module in SHADING_RULES, checks every relocation rule against
+    both the Maven and SBT JARs:
+      - source package should be absent (relocated)
+      - target package should be present
+      - class counts should match between builds
+    """
+    maven_jars = find_shaded_jars("maven")
+    sbt_jars = find_shaded_jars("sbt")
 
-    for name in sorted(all_names):
-        maven_jar = maven_assemblies.get(name)
-        sbt_jar = sbt_assemblies.get(name)
-        entry: Dict[str, Any] = {}
+    # Map SHADING_RULES keys to find_shaded_jars keys
+    # SHADING_RULES uses short names ("core", "connect-client")
+    # find_shaded_jars uses full names ("core", "connect-client-jvm")
+    rule_to_jar_key = {
+        "core": "core",
+        "connect-client": "connect-client-jvm",
+    }
 
+    modules_data: Dict[str, Any] = {}
+    total_rules = 0
+    rules_pass = 0
+    rules_fail = 0
+    rules_warn = 0
+
+    for module, rules in SHADING_RULES.items():
+        jar_key = rule_to_jar_key.get(module, module)
+        maven_jar = maven_jars.get(jar_key)
+        sbt_jar = sbt_jars.get(jar_key)
+
+        module_entry: Dict[str, Any] = {}
         if maven_jar:
-            entry["maven"] = {
+            module_entry["maven"] = {
                 "jar_type": "module",
                 "path": str(maven_jar.relative_to(SPARK_HOME)),
-                "size": maven_jar.stat().st_size,
             }
         if sbt_jar:
-            entry["sbt"] = {
+            module_entry["sbt"] = {
                 "jar_type": "assembly",
                 "path": str(sbt_jar.relative_to(SPARK_HOME)),
-                "size": sbt_jar.stat().st_size,
             }
 
-        maven_shading = analyze_shading(maven_jar) if maven_jar else None
-        sbt_shading = analyze_shading(sbt_jar) if sbt_jar else None
+        rules_data: List[Dict[str, Any]] = []
+        for source, target in rules.items():
+            total_rules += 1
+            rule_entry: Dict[str, Any] = {"source": source, "target": target}
 
-        maven_unshaded = dict(maven_shading["unshaded"]) if maven_shading else {}
-        sbt_unshaded = dict(sbt_shading["unshaded"]) if sbt_shading else {}
-        maven_shaded = dict(maven_shading["shaded"]) if maven_shading else {}
-        sbt_shaded = dict(sbt_shading["shaded"]) if sbt_shading else {}
+            # Check each build
+            for build, jar_path in [("maven", maven_jar), ("sbt", sbt_jar)]:
+                if jar_path is None:
+                    rule_entry[build] = {"status": "not_built"}
+                    continue
 
-        entry["unshaded"] = {}
-        if maven_unshaded:
-            entry["unshaded"]["maven"] = {
-                pkg: len(classes) for pkg, classes in sorted(maven_unshaded.items())
-            }
-            unshaded_packages += len(maven_unshaded)
-            unshaded_class_count += sum(len(classes) for classes in maven_unshaded.values())
-        if sbt_unshaded:
-            entry["unshaded"]["sbt"] = {
-                pkg: len(classes) for pkg, classes in sorted(sbt_unshaded.items())
-            }
-            unshaded_packages += len(sbt_unshaded)
-            unshaded_class_count += sum(len(classes) for classes in sbt_unshaded.values())
+                source_count = _count_classes_under(jar_path, source)
+                target_count = _count_classes_under(jar_path, target)
 
-        all_shaded_pkgs = set(maven_shaded.keys()) | set(sbt_shaded.keys())
-        shaded_detail = {}
-        for pkg in sorted(all_shaded_pkgs):
-            m_classes = maven_shaded.get(pkg, set())
-            s_classes = sbt_shaded.get(pkg, set())
-            pkg_entry: Dict[str, Any] = {
-                "maven": len(m_classes),
-                "sbt": len(s_classes),
-            }
-
-            if maven_jar and sbt_jar and m_classes and s_classes:
-                only_in_maven = m_classes - s_classes
-                only_in_sbt = s_classes - m_classes
-                if only_in_maven or only_in_sbt:
-                    shaded_differing += 1
-                    if only_in_maven:
-                        pkg_entry["only_in_maven"] = sorted(only_in_maven)
-                    if only_in_sbt:
-                        pkg_entry["only_in_sbt"] = sorted(only_in_sbt)
+                if source_count > 0:
+                    rule_entry[build] = {
+                        "status": "unshaded",
+                        "source_classes": source_count,
+                        "target_classes": target_count,
+                    }
+                elif target_count > 0:
+                    rule_entry[build] = {
+                        "status": "relocated",
+                        "target_classes": target_count,
+                    }
                 else:
-                    shaded_matching += 1
+                    rule_entry[build] = {"status": "absent"}
+
+            # Determine overall rule status
+            m_status = rule_entry.get("maven", {}).get("status")
+            s_status = rule_entry.get("sbt", {}).get("status")
+
+            if m_status == "unshaded" or s_status == "unshaded":
+                rule_entry["result"] = "FAIL"
+                rules_fail += 1
+            elif m_status == "relocated" and s_status == "relocated":
+                m_count = rule_entry["maven"]["target_classes"]
+                s_count = rule_entry["sbt"]["target_classes"]
+                if m_count == s_count:
+                    rule_entry["result"] = "PASS"
+                    rules_pass += 1
+                else:
+                    rule_entry["result"] = "WARN"
+                    rules_warn += 1
+            elif m_status == "not_built" or s_status == "not_built":
+                # Can only verify the side that exists
+                existing = m_status if m_status != "not_built" else s_status
+                if existing == "relocated":
+                    rule_entry["result"] = "PASS"
+                    rules_pass += 1
+                elif existing == "unshaded":
+                    rule_entry["result"] = "FAIL"
+                    rules_fail += 1
+                else:
+                    rule_entry["result"] = "WARN"
+                    rules_warn += 1
             else:
-                shaded_skipped += 1
+                rule_entry["result"] = "WARN"
+                rules_warn += 1
 
-            shaded_detail[pkg] = pkg_entry
-        entry["shaded"] = shaded_detail
+            rules_data.append(rule_entry)
 
-        assemblies_data[name] = entry
+        module_entry["rules"] = rules_data
+        modules_data[module] = module_entry
 
     return {
         "mode": "shading",
         "summary": {
-            "assemblies": len(assemblies_data),
-            "shaded_packages_matching": shaded_matching,
-            "shaded_packages_differing": shaded_differing,
-            "shaded_packages_skipped": shaded_skipped,
-            "unshaded_packages": unshaded_packages,
-            "unshaded_class_count": unshaded_class_count,
+            "modules": len(modules_data),
+            "total_rules": total_rules,
+            "pass": rules_pass,
+            "fail": rules_fail,
+            "warn": rules_warn,
         },
-        "assemblies": assemblies_data,
+        "modules": modules_data,
     }
 
 
 def print_shading_report(data: Dict[str, Any]) -> None:
-    """Print shading comparison in human-readable format."""
-    assemblies = data["assemblies"]
+    """Print rule-driven shading report."""
+    modules = data["modules"]
     summary = data["summary"]
 
-    print(f"\nShading Verification ({len(assemblies)} assemblies)")
+    print("\nShading Verification")
+    print("Maven embeds shaded classes in module JARs; SBT uses separate assembly JARs.")
+    print("Sizes are not comparable. This report verifies relocation rules only.")
     print("\u2500" * 72)
 
-    for name, entry in assemblies.items():
-        print(f"\n  {name}")
+    for module, entry in modules.items():
+        rules = entry["rules"]
+        print(f"\n  {module} ({len(rules)} rules)")
 
         if "maven" in entry:
-            m = entry["maven"]
-            print(f"    Maven (module JAR):   {m['path']} ({m['size']:,} bytes)")
+            print(f"    Maven: {entry['maven']['path']} ({entry['maven']['jar_type']} JAR)")
         else:
             print("    Maven: (not built)")
         if "sbt" in entry:
-            s = entry["sbt"]
-            print(f"    SBT   (assembly JAR): {s['path']} ({s['size']:,} bytes)")
+            print(f"    SBT:   {entry['sbt']['path']} ({entry['sbt']['jar_type']} JAR)")
         else:
             print("    SBT:   (not built)")
 
-        unshaded = entry.get("unshaded", {})
-        if not unshaded:
-            print("    Unshaded: none (good)")
-        else:
-            for build, pkgs in unshaded.items():
-                for pkg, count in pkgs.items():
-                    print(f"    UNSHADED [{build}]: {pkg} ({count} classes)")
+        for rule in rules:
+            source = rule["source"]
+            target = rule["target"]
+            result = rule["result"]
+            marker = "\u2713" if result == "PASS" else ("\u2717" if result == "FAIL" else "~")
 
-        shaded = entry.get("shaded", {})
-        if shaded:
-            has_maven = "maven" in entry
-            has_sbt = "sbt" in entry
-            for pkg, pkg_entry in shaded.items():
-                m, s = pkg_entry["maven"], pkg_entry["sbt"]
-                only_m = pkg_entry.get("only_in_maven", [])
-                only_s = pkg_entry.get("only_in_sbt", [])
-                if has_maven and has_sbt:
-                    if not only_m and not only_s:
-                        print(f"    \u2713 {pkg}: {m} classes")
-                    else:
-                        print(
-                            f"    \u2717 {pkg}: Maven={m}, SBT={s}"
-                            f" (+{len(only_m)} Maven, +{len(only_s)} SBT)"
-                        )
-                        for cls in only_m[:5]:
-                            print(f"        only in Maven: {cls}")
-                        if len(only_m) > 5:
-                            print(f"        ... and {len(only_m) - 5} more only in Maven")
-                        for cls in only_s[:5]:
-                            print(f"        only in SBT:   {cls}")
-                        if len(only_s) > 5:
-                            print(f"        ... and {len(only_s) - 5} more only in SBT")
-                elif has_sbt:
-                    print(f"    \u2713 {pkg}: {s} classes")
-                else:
-                    print(f"    \u2713 {pkg}: {m} classes")
+            print(f"\n    {marker} {source} \u2192 {target}")
 
-    matching = summary["shaded_packages_matching"]
-    differing = summary["shaded_packages_differing"]
-    skipped = summary["shaded_packages_skipped"]
-    unshaded_pkgs = summary["unshaded_packages"]
-    unshaded_cls = summary["unshaded_class_count"]
-    compared = matching + differing
+            for build in ("maven", "sbt"):
+                info = rule.get(build, {})
+                status = info.get("status", "not_built")
+                label = "Maven" if build == "maven" else "SBT  "
+
+                if status == "not_built":
+                    print(f"      {label}: (not built)")
+                elif status == "relocated":
+                    count = info["target_classes"]
+                    print(f"      {label}: relocated ({count} classes)")
+                elif status == "unshaded":
+                    src_count = info["source_classes"]
+                    tgt_count = info.get("target_classes", 0)
+                    print(
+                        f"      {label}: UNSHADED ({src_count} source classes remain"
+                        + (f", {tgt_count} relocated)" if tgt_count else ")")
+                    )
+                elif status == "absent":
+                    print(f"      {label}: absent (no source or target classes)")
+
+            # Show count mismatch if both relocated
+            m_info = rule.get("maven", {})
+            s_info = rule.get("sbt", {})
+            if (
+                m_info.get("status") == "relocated"
+                and s_info.get("status") == "relocated"
+                and m_info["target_classes"] != s_info["target_classes"]
+            ):
+                diff = s_info["target_classes"] - m_info["target_classes"]
+                sign = "+" if diff > 0 else ""
+                print(f"      (SBT has {sign}{diff} classes vs Maven)")
+
     print("\u2500" * 72)
-    parts = [f"{compared} shaded packages compared ({matching} match, {differing} differ)"]
-    if skipped:
-        parts.append(f"{skipped} skipped (one side missing)")
-    if unshaded_pkgs:
-        parts.append(f"{unshaded_pkgs} unshaded packages ({unshaded_cls} classes)")
+    total = summary["total_rules"]
+    p, f, w = summary["pass"], summary["fail"], summary["warn"]
+    parts = [f"{total} rules checked"]
+    if p:
+        parts.append(f"{p} pass")
+    if f:
+        parts.append(f"{f} fail")
+    if w:
+        parts.append(f"{w} warn")
     print(f"Summary: {', '.join(parts)}")
-    if unshaded_cls > 0:
-        print(f"FAIL: {unshaded_cls} classes found that should have been relocated")
-    elif differing > 0:
-        print(
-            "WARN: all packages properly shaded, but class-level differences found"
-            " (review above to determine if acceptable)"
-        )
+    if f > 0:
+        print("FAIL: unshaded classes found that should have been relocated")
+    elif w > 0:
+        print("WARN: all relocations applied, but class counts differ between builds")
     else:
-        print("PASS: all packages properly shaded, class contents match exactly")
+        print("PASS: all relocation rules verified")
 
 
 def get_maven_dependencies() -> Dict[str, Set[str]]:
@@ -1451,7 +1451,7 @@ def main():
     mode_group.add_argument(
         "--shading",
         action="store_true",
-        help="Compare shading/relocation in assembly JARs",
+        help="Verify shading relocation rules against both builds",
     )
     mode_group.add_argument(
         "--assemblies-only", action="store_true", help="Compare assembly JARs only"
@@ -1559,7 +1559,7 @@ def main():
             _output_report(report)
         if not args.json:
             print_shading_report(report)
-        if report["summary"]["unshaded_class_count"] > 0:
+        if report["summary"]["fail"] > 0:
             sys.exit(1)
         return
 
