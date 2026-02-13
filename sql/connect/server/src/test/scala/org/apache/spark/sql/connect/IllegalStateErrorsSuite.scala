@@ -220,7 +220,7 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
         SessionStatus.Closed,
         List(SessionStatus.Pending)),
       IllegalStateErrors.serviceNotStarted(),
-      IllegalStateErrors.streamingQueryUnexpectedReturnValue("key", "value", "context"),
+      IllegalStateErrors.streamingQueryUnexpectedReturnValue("key", 123, "context"),
       IllegalStateErrors.cleanerAlreadySet("key", "queryKey"),
       IllegalStateErrors.eventSendAfterShutdown("key"),
       IllegalStateErrors.noBatchesAvailable("response"))
