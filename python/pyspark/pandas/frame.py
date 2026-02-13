@@ -9266,7 +9266,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 overlap = old_col.isNotNull() & new_col.isNotNull()
                 if filter_func is not None:
-                    overlap = overlap & pandas_udf(filter_func, BooleanType())(old_col)
+                    overlap = overlap & pandas_udf(  # type: ignore[call-overload]
+                        filter_func, BooleanType()
+                    )(old_col)
 
                 any_overlap = any_overlap | overlap
 
@@ -9284,7 +9286,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if filter_func is not None:
                 from pyspark.sql.types import BooleanType
 
-                mask = pandas_udf(filter_func, BooleanType())(old_col)
+                mask = pandas_udf(filter_func, BooleanType())(old_col)  # type: ignore[call-overload]
                 updated_col = (
                     F.when(new_col.isNull() | mask.isNull() | ~mask, old_col).otherwise(new_col)
                     if overwrite
