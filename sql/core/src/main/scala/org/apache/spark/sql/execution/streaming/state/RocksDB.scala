@@ -981,6 +981,10 @@ class RocksDB(
               verifyChangelogRecord(kvVerifier, key, Some(value))
               merge(key, value, includesPrefix = useColumnFamilies,
                 deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
+
+            case RecordType.DELETE_RANGE_RECORD =>
+              // For deleteRange, 'key' is beginKey and 'value' is endKey
+              deleteRange(key, value, includesPrefix = useColumnFamilies)
           }
         }
       } finally {
@@ -1438,29 +1442,33 @@ class RocksDB(
    * Delete all keys in the range [beginKey, endKey).
    * Uses RocksDB's native deleteRange for efficient bulk deletion.
    *
-   * @param beginKey The start key of the range (inclusive)
-   * @param endKey   The end key of the range (exclusive)
-   * @param cfName   The column family name
+   * @param beginKey       The start key of the range (inclusive)
+   * @param endKey         The end key of the range (exclusive)
+   * @param cfName         The column family name
+   * @param includesPrefix Whether the keys already include the column family prefix.
+   *                       Set to true during changelog replay to avoid double-encoding.
    */
   def deleteRange(
       beginKey: Array[Byte],
       endKey: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
 
-    val beginKeyWithPrefix = if (useColumnFamilies) {
+    val beginKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(beginKey, cfName)
     } else {
       beginKey
     }
 
-    val endKeyWithPrefix = if (useColumnFamilies) {
+    val endKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(endKey, cfName)
     } else {
       endKey
     }
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
+    changelogWriter.foreach(_.deleteRange(beginKeyWithPrefix, endKeyWithPrefix))
   }
 
   /**

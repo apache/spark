@@ -1408,6 +1408,30 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
+  /**
+   * Read the next changelog record, skipping DELETE_RANGE_RECORD entries as they cannot
+   * be represented as individual key-value change records in the state change data feed.
+   * Returns null if there are no more records.
+   */
+  private def readNextChangelogRecord():
+      (RecordType.Value, Array[Byte], Array[Byte]) = {
+    while (true) {
+      val reader = currentChangelogReader()
+      if (reader == null) {
+        return null
+      }
+      val nextRecord = reader.next()
+      if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
+        logWarning(log"Skipping DELETE_RANGE_RECORD in state change data feed " +
+          log"for store ${MDC(STATE_STORE_ID, storeId)} as range deletions cannot be " +
+          log"represented as individual change records.")
+      } else {
+        return nextRecord
+      }
+    }
+    null // unreachable, needed for compilation
+  }
+
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
@@ -1421,12 +1445,11 @@ class RocksDBStateStoreChangeDataReader(
       // the next record. Note that this has be handled across multiple changelog files and we
       // rely on the currentChangelogReader to move to the next changelog file when needed.
       while (currRecord == null) {
-        val reader = currentChangelogReader()
-        if (reader == null) {
+        val nextRecord = readNextChangelogRecord()
+        if (nextRecord == null) {
           return null
         }
 
-        val nextRecord = reader.next()
         val keyBytes = if (storeConf.rowChecksumEnabled
           && nextRecord._1 == RecordType.DELETE_RECORD) {
           // remove checksum and decode to the original key
@@ -1455,11 +1478,10 @@ class RocksDBStateStoreChangeDataReader(
         }
       }
     } else {
-      val reader = currentChangelogReader()
-      if (reader == null) {
+      val nextRecord = readNextChangelogRecord()
+      if (nextRecord == null) {
         return null
       }
-      val nextRecord = reader.next()
       currRecord = if (storeConf.rowChecksumEnabled) {
         nextRecord._1 match {
           case RecordType.DELETE_RECORD =>
