@@ -450,8 +450,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
             if agg.isDistinct && listAgg.needSaveOrderValue =>
-            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+              // Allow when the mismatch is only because child was cast
+              val mismatchDueToCast = listAgg.orderExpressions.size == 1 &&
+                (listAgg.child match {
+                  case Cast(castChild, _, _, _) => listAgg.orderExpressions.head.child.semanticEquals(castChild)
+                  case _ => false
+                })
+              if (!mismatchDueToCast) {
+                throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+                  listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+              }
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)

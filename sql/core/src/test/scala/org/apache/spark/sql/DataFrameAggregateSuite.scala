@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.Locale
 
 import scala.util.Random
@@ -706,6 +706,114 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       df4.selectExpr("listagg(col1, '|')", "listagg(col2, '|')"),
       Seq(Row("a|b|c", "b|c|d"))
+    )
+  }
+
+  test("SPARK-55501: listagg with distinct and within group order by") {
+    val df1 = Seq((1), (2), (2), (3)).toDF("col")
+    checkAnswer(
+      df1.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("123"))
+    )
+    
+    val df2 = Seq((1L), (2L), (2L), (3L)).toDF("col")
+    checkAnswer(
+      df2.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("123"))
+    )
+
+    val df3 = Seq((1.1), (2.2), (2.2), (3.3)).toDF("col")
+    checkAnswer(
+      df3.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("1.12.23.3"))
+    )
+
+    checkAnswer(
+      spark.sql("""SELECT listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)
+        FROM VALUES (cast(1.1 as decimal(10,2))), (cast(2.2 as decimal(10,2))),
+        (cast(2.2 as decimal(10,2))) t(col)"""),
+      Seq(Row("1.10,2.20"))
+    )
+
+    val df4 = Seq(LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 1)).toDF("col")
+    checkAnswer(
+      df4.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("2024-01-012024-01-02"))
+    )
+
+    val df5 = Seq((true), (false), (true)).toDF("col")
+    checkAnswer(
+      df5.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("falsetrue"))
+    )
+
+    val df6 = Seq((1), (10), (2), (20), (2)).toDF("col")
+    checkAnswer(
+      df6.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col DESC)"),
+      Seq(Row("20,10,2,1"))
+    )
+
+    val df7 = Seq[Integer](1, 2, null, 2, 3).toDF("col")
+    checkAnswer(
+      df7.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("123"))
+    )
+
+    val df8 = Seq[Integer](1, null, 2, null).toDF("col")
+    checkAnswer(
+      df8.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col NULLS FIRST)"),
+      Seq(Row("12"))
+    )
+
+    val df9 = Seq((1, 10), (1, 2), (2, 30), (2, 30), (1, 2)).toDF("grp", "col")
+    checkAnswer(
+      df9.groupBy("grp")
+        .agg(expr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)")),
+      Seq(Row(1, "2,10"), Row(2, "30"))
+    )
+
+    val df10 = Seq((1, "a"), (1, "b"), (2, "a"), (2, "a"), (1, "b")).toDF("grp", "col")
+    checkAnswer(
+      df10.groupBy("grp")
+        .agg(expr("listagg(distinct col) WITHIN GROUP (ORDER BY col)")),
+      Seq(Row(1, "ab"), Row(2, "a"))
+    )
+
+    val df11 = Seq((1), (10), (2), (20), (2)).toDF("col")
+    checkAnswer(
+      df11.selectExpr("listagg(distinct cast(col as string), ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("1,2,10,20"))
+    )
+
+    val df12 = Seq((10), (1), (2), (20), (2)).toDF("col")
+    checkAnswer(
+      df12.selectExpr("listagg(cast(col as string), ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("1,2,2,10,20"))
+    )
+  }
+
+  test("SPARK-55501: listagg with distinct and within group order by with binary type") {
+    val df1 = Seq("banana", "apple", "banana", "cherry").map(_.getBytes).toDF("col")
+    checkAnswer(
+      df1.selectExpr("listagg(distinct col, cast(',' as binary)) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("apple,banana,cherry".getBytes))
+    )
+
+    val df2 = Seq("b", "a", null, "b").map(s => Option(s).map(_.getBytes).orNull).toDF("col")
+    checkAnswer(
+      df2.selectExpr("listagg(distinct col, cast('|' as binary)) WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("a|b".getBytes))
+    )
+
+    checkAnswer(
+      spark.sql(
+        """SELECT grp, listagg(distinct col, cast(',' as binary)) WITHIN GROUP (ORDER BY col)
+           FROM VALUES (1, X'AA'), (1, X'BB'), (1, X'AA'), (2, X'CC'), (2, X'CC') AS t(grp, col)
+           GROUP BY grp"""),
+      Seq(
+        Row(1, Array(0xAA, 0x2C, 0xBB).map(_.toByte)),
+        Row(2, Array(0xCC).map(_.toByte))
+      )
     )
   }
 

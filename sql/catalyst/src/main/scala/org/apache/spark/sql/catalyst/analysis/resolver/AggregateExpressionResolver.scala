@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, OuterReference, SubExprUtils}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -79,7 +79,8 @@ class AggregateExpressionResolver(
    *    `handleOuterAggregateExpression`);
    *  - Validation:
    *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if it contains [[SortOrder]] different
-   *      from its child;
+   *      from its child, unless the mismatch is only due to a [[Cast]] on the child whose inner
+   *      expression is semantically equal to the single order-by column;
    *   2. Nested aggregate functions are not allowed;
    *   3. Nondeterministic expressions in the subtree of a related aggregate function are not
    *      allowed;
@@ -117,7 +118,15 @@ class AggregateExpressionResolver(
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
           if agg.isDistinct && listAgg.needSaveOrderValue =>
-        throwFunctionAndOrderExpressionMismatchError(listAgg)
+            // Allow when the mismatch is only because child was cast
+            val mismatchDueToCast = listAgg.orderExpressions.size == 1 &&
+              (listAgg.child match {
+                case Cast(castChild, _, _, _) => listAgg.orderExpressions.head.child.semanticEquals(castChild)
+                case _ => false
+              })
+            if (!mismatchDueToCast) {
+              throwFunctionAndOrderExpressionMismatchError(listAgg)
+            }
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
           throwNestedAggregateFunction(aggregateExpression)
