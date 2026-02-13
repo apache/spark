@@ -18,7 +18,7 @@
 import array
 import datetime
 import decimal
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, cast, overload
 
 import pyspark
 from pyspark.errors import PySparkValueError
@@ -1493,7 +1493,12 @@ class ArrowArrayToPandasConversion:
         elif isinstance(spark_type, VariantType):
             series = arr.to_pandas(date_as_object=True)
             series = series.apply(
-                lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
+                cast(
+                    Callable,
+                    lambda v: VariantVal(v["value"], v["metadata"])
+                    if v is not None
+                    else None,
+                )
             )
         # elif isinstance(
         #     spark_type,
