@@ -2764,10 +2764,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             ser = TransformWithStateInPySparkRowInitStateSerializer(
                 runner_conf.arrow_max_records_per_batch
             )
-        elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
+        elif eval_type in (
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        ):
             ser = ArrowStreamSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
-            ser = ArrowStreamGroupSerializer(num_dfs=0, write_start_stream=True)
         elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
             # Arrow cast and safe check are always enabled
             ser = ArrowStreamArrowUDFSerializer(safecheck=True, arrow_cast=True)
@@ -2852,9 +2853,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         import pyarrow as pa
 
-        def func(  # type: ignore[misc]
-            split_index: int, batches: Iterator["pa.RecordBatch"]
-        ) -> Iterator["pa.RecordBatch"]:
+        def func(
+            split_index: int, batches: Iterator[pa.RecordBatch]
+        ) -> Iterator[pa.RecordBatch]:
             """Apply scalar Arrow UDFs: extract → call → assemble → enforce → verify."""
             from pyspark.sql.pandas.types import to_arrow_schema
 
