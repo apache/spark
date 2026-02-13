@@ -849,18 +849,30 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
   test("SECTION 13: Unresolved routine error search path reflects sessionOrder config") {
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
-      val e1 = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") }
-      assert(e1.getErrorClass == "UNRESOLVED_ROUTINE")
-      assert(e1.getMessage.contains("system.session") && e1.getMessage.contains("system.builtin"))
-      assert(e1.getMessage.indexOf("system.session") < e1.getMessage.indexOf("system.builtin"),
-        "With session first, search path should list session before builtin")
+      checkError(
+        exception = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") },
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`no_such_func_xyz`",
+          "searchPath" -> "[`system`.`session`, `system`.`builtin`, `spark_catalog`.`default`]"
+        ),
+        context = ExpectedContext(
+          fragment = "no_such_func_xyz()",
+          start = 7,
+          stop = 25))
     }
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
-      val e2 = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") }
-      assert(e2.getErrorClass == "UNRESOLVED_ROUTINE")
-      assert(e2.getMessage.contains("system.builtin") && e2.getMessage.contains("system.session"))
-      assert(e2.getMessage.indexOf("system.builtin") < e2.getMessage.indexOf("system.session"),
-        "With session last, search path should list builtin before session")
+      checkError(
+        exception = intercept[AnalysisException] { sql("SELECT no_such_func_xyz()") },
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`no_such_func_xyz`",
+          "searchPath" -> "[`system`.`builtin`, `spark_catalog`.`default`, `system`.`session`]"
+        ),
+        context = ExpectedContext(
+          fragment = "no_such_func_xyz()",
+          start = 7,
+          stop = 25))
     }
   }
 
