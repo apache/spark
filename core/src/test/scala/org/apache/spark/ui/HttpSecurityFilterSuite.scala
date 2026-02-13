@@ -135,6 +135,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val cspValue = cspCaptor.getValue
     assert(cspValue.startsWith("default-src 'self'; script-src 'self' 'nonce-"))
     assert(cspValue.contains("style-src 'self' 'unsafe-inline'"))
+    assert(cspValue.contains("img-src 'self' data:"))
     assert(cspValue.contains("object-src 'none'"))
     assert(cspValue.contains("base-uri 'self'"))
 
