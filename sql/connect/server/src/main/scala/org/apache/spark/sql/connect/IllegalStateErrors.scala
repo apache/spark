@@ -102,7 +102,7 @@ object IllegalStateErrors {
 
   def streamingQueryUnexpectedReturnValue(
       key: String,
-      value: Any,
+      value: Int,
       context: String): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.STREAMING_QUERY_UNEXPECTED_RETURN_VALUE",
@@ -113,7 +113,7 @@ object IllegalStateErrors {
 
   def cleanerAlreadySet(
       key: String,
-      queryKey: Any): SparkIllegalStateException =
+      queryKey: String): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE.STATE_CONSISTENCY_CLEANER_ALREADY_SET",
       messageParameters = Map(

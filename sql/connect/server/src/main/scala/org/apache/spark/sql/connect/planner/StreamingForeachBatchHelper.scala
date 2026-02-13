@@ -236,7 +236,7 @@ object StreamingForeachBatchHelper extends Logging {
         case Some(_) =>
           throw IllegalStateErrors.cleanerAlreadySet(
             sessionHolder.key.toString,
-            key)
+            key.toString)
         case None => // Inserted. Normal.
       }
     }
