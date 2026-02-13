@@ -2852,26 +2852,24 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         import pyarrow as pa
+        from pyspark.sql.pandas.types import to_arrow_schema
+
+        combined_return_type = StructType(
+            [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
+        )
+        combined_arrow_schema = to_arrow_schema(
+            combined_return_type,
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+        col_names = ["_%d" % i for i in range(len(udfs))]
 
         def func(
             split_index: int, batches: Iterator[pa.RecordBatch]
         ) -> Iterator[pa.RecordBatch]:
             """Apply scalar Arrow UDFs: extract → call → assemble → enforce → verify."""
-            from pyspark.sql.pandas.types import to_arrow_schema
 
-            # Pre-compute Arrow schema and per-UDF metadata (once per partition)
-            combined_return_type = StructType(
-                [StructField("_%d" % i, rt) for i, (_, _, _, rt) in enumerate(udfs)]
-            )
-            combined_arrow_schema = to_arrow_schema(
-                combined_return_type,
-                timezone="UTC",
-                prefers_large_types=runner_conf.use_large_var_types,
-            )
-
-            col_names = ["_%d" % i for i in range(len(udfs))]
-
-            def process_batch(input_batch: "pa.RecordBatch") -> "pa.RecordBatch":
+            def process_batch(input_batch: pa.RecordBatch) -> pa.RecordBatch:
                 """Apply UDFs, enforce schema, and verify row count."""
                 # Extract columns by offsets, group into args/kwargs, apply each UDF
                 # Assemble UDF results, enforce schema, verify row count
