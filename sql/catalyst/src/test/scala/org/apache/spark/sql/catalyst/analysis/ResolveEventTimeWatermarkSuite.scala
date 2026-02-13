@@ -117,4 +117,44 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
       parameters = Map("sqlExpr" -> "timestamp_seconds(a) AS `timestamp_seconds(a)`")
     )
   }
+
+  test("SPARK-55492: event time column expr refers to nested field") {
+    import org.apache.spark.sql.catalyst.expressions.AttributeReference
+    import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+    import org.apache.spark.sql.types.{StructType, StructField, TimestampType, IntegerType, StringType}
+
+    // Create a streaming relation with nested struct field
+    val nestedSchema = StructType(Seq(
+      StructField("ts", TimestampType, nullable = false),
+      StructField("value", StringType, nullable = true)
+    ))
+
+    val relationWithNestedField = LocalRelation(
+      Seq(
+        AttributeReference("id", IntegerType)(),
+        AttributeReference("nested", nestedSchema)()
+      ),
+      isStreaming = true)
+
+    val planBeforeRule = relationWithNestedField
+      .unresolvedWithWatermark(
+        UnresolvedAttribute(Seq("nested", "ts")),
+        new CalendarInterval(0, 0, 1000))
+
+    val analyzed = getAnalyzer.execute(planBeforeRule)
+
+    // EventTimeWatermark node has UUID, hence we can't simply compare the plan
+    // with expected shape of plan as a whole. Just verify it analyzes without error.
+    assert(analyzed.resolved, "Plan should be resolved successfully")
+
+    // Verify EventTimeWatermark node exists
+    val watermarkNodes = analyzed.collect {
+      case e: EventTimeWatermark => e
+    }
+    assert(watermarkNodes.nonEmpty, "EventTimeWatermark node should exist in analyzed plan")
+
+    // Verify the eventTime attribute name
+    assert(watermarkNodes.head.eventTime.name == "ts",
+      s"Expected event time attribute name 'ts', got '${watermarkNodes.head.eventTime.name}'")
+  }
 }

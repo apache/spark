@@ -595,8 +595,7 @@ class Dataset[T] private[sql](
     val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
-    EventTimeWatermark(util.UUID.randomUUID(), UnresolvedAttribute(eventTime),
-      parsedDelay, logicalPlan)
+    UnresolvedEventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
   /** @inheritdoc */

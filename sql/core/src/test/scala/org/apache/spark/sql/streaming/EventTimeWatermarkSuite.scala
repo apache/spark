@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeStats, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, expr, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{count, expr, struct, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.tags.SlowSQLTest
@@ -1005,5 +1005,35 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   private def awaitTermination(): AssertOnQuery = Execute("AwaitTermination") { q =>
     q.awaitTermination()
+  }
+
+  test("SPARK-55492: watermark on nested struct field") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .select(
+        $"value".as("id"),
+        struct(timestamp_seconds($"value").as("timestamp"),
+               $"value".cast("string").as("value")).as("nested_struct")
+      )
+      .select($"id", $"nested_struct".as("kolona"))
+
+    // Should be able to apply watermark on nested field without error
+    val dfWithWatermark = df.withWatermark("kolona.timestamp", "0 seconds")
+
+    // Verify the plan is analyzable
+    val analyzed = dfWithWatermark.queryExecution.analyzed
+    assert(analyzed.resolved, "Plan should be resolved successfully")
+
+    // Verify the watermark is in the logical plan
+    val watermarkNode = analyzed.collect {
+      case w: EventTimeWatermark => w
+    }
+    assert(watermarkNode.nonEmpty, "EventTimeWatermark node should be present in the plan")
+
+    // Verify the watermark column name
+    assert(watermarkNode.head.eventTime.name == "timestamp",
+      s"Expected watermark on 'timestamp', got '${watermarkNode.head.eventTime.name}'")
   }
 }
