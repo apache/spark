@@ -307,7 +307,7 @@
     <mima.version>1.1.4</mima.version>
 
     <!-- Version used in Profiler -->
-    <ap-loader.version>4.0-10</ap-loader.version>
+    <ap-loader.version>4.3-12</ap-loader.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
