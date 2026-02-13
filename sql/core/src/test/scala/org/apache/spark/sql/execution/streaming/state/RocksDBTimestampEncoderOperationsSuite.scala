@@ -35,6 +35,10 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+/**
+ * Test suite for RocksDB state store operations with timestamp key encoders, mostly for
+ * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
+ */
 @ExtendedSQLTest
 class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   with BeforeAndAfterEach with Matchers {
@@ -64,7 +68,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
   private def newDir(): String = Utils.createTempDir().getCanonicalPath
 
-  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
+  //  encoding
   Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       test(s"Event time as $encoderType: basic put and get operations (encoding = $encoding)") {
@@ -276,9 +281,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       }
     }
 
-    test(
-      s"Event time as postfix: prefix scan operations (encoding = $encoding)"
-    ) {
+    test(s"Event time as postfix: prefix scan operations (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(encoderType = "postfix", dataEncoding = encoding)
       ) { provider =>
@@ -409,7 +412,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
-  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
+  //  encoding
   Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       Seq(false, true).foreach { useMultipleValuesPerKey =>
