@@ -115,11 +115,143 @@ import zipfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, TypedDict, Union
 
 
 # Get Spark home directory
 SPARK_HOME = Path(__file__).parent.parent.resolve()
+
+
+# ---------------------------------------------------------------------------
+# Typed dicts for structured report output
+# ---------------------------------------------------------------------------
+
+
+class JarInfoDict(TypedDict, total=False):
+    path: str
+    size: int
+    class_count: int
+    resource_count: int
+    services_count: int
+    multi_release_class_count: int
+
+
+class ComparisonResultDict(TypedDict, total=False):
+    status: str
+    maven: JarInfoDict
+    sbt: JarInfoDict
+    size_diff: str
+    only_in_maven: Dict[str, int]
+    only_in_maven_count: int
+    only_in_sbt: Dict[str, int]
+    only_in_sbt_count: int
+    services_only_in_maven: List[str]
+    services_only_in_sbt: List[str]
+
+
+class JarsSummaryDict(TypedDict, total=False):
+    total: int
+    matching: int
+    only_in_maven: int
+    only_in_sbt: int
+    content_differs: int
+
+
+class JarsReportDict(TypedDict):
+    mode: str
+    summary: JarsSummaryDict
+    jars: Dict[str, ComparisonResultDict]
+
+
+class AssemblyBuildInfoDict(TypedDict, total=False):
+    jar_type: str
+    path: str
+    size: int
+    class_count: int
+    resource_count: int
+
+
+class AssemblyShadingCountDict(TypedDict):
+    maven: int
+    sbt: int
+
+
+class AssemblyEntryDict(TypedDict, total=False):
+    maven: AssemblyBuildInfoDict
+    sbt: AssemblyBuildInfoDict
+    size_diff: str
+    only_in_maven: Dict[str, int]
+    only_in_sbt: Dict[str, int]
+    shading: Dict[str, AssemblyShadingCountDict]
+
+
+class AssemblyReportDict(TypedDict):
+    mode: str
+    assemblies: Dict[str, AssemblyEntryDict]
+    issues: int
+
+
+class ShadingJarInfoDict(TypedDict):
+    jar_type: str
+    path: str
+
+
+class ShadingBuildStatusDict(TypedDict, total=False):
+    status: str
+    source_classes: int
+    target_classes: int
+
+
+class ShadingRuleDict(TypedDict, total=False):
+    source: str
+    target: str
+    maven: ShadingBuildStatusDict
+    sbt: ShadingBuildStatusDict
+    result: str
+
+
+class ShadingModuleDict(TypedDict, total=False):
+    maven: ShadingJarInfoDict
+    sbt: ShadingJarInfoDict
+    rules: List[ShadingRuleDict]
+
+
+ShadingSummaryDict = TypedDict(
+    "ShadingSummaryDict",
+    {"modules": int, "total_rules": int, "pass": int, "fail": int, "warn": int},
+)
+
+
+class ShadingReportDict(TypedDict):
+    mode: str
+    summary: ShadingSummaryDict
+    modules: Dict[str, ShadingModuleDict]
+
+
+class DepsSummaryDict(TypedDict, total=False):
+    total: int
+    matching: int
+    differing: int
+    only_in_maven_modules: List[str]
+    only_in_sbt_modules: List[str]
+
+
+class DepsModuleEntryDict(TypedDict, total=False):
+    status: str
+    maven_count: int
+    sbt_count: int
+    only_in_maven: List[str]
+    only_in_sbt: List[str]
+
+
+class DepsReportDict(TypedDict, total=False):
+    mode: str
+    error: str
+    summary: DepsSummaryDict
+    modules: Dict[str, DepsModuleEntryDict]
+
+
+ReportDict = Union[JarsReportDict, AssemblyReportDict, ShadingReportDict, DepsReportDict]
 
 
 @dataclass
@@ -141,8 +273,8 @@ class JarInfo:
     def class_count(self) -> int:
         return len(self.classes)
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
+    def to_dict(self) -> JarInfoDict:
+        d: JarInfoDict = {
             "path": str(self.path.relative_to(SPARK_HOME)),
             "size": self.size,
             "class_count": self.class_count(),
@@ -197,8 +329,8 @@ class ComparisonResult:
             or len(self.services_only_in_sbt) > 0
         )
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"status": self.status}
+    def to_dict(self) -> ComparisonResultDict:
+        d: ComparisonResultDict = {"status": self.status}
         if self.maven_jar:
             d["maven"] = self.maven_jar.to_dict()
         if self.sbt_jar:
@@ -542,7 +674,7 @@ def compare_jars(
     return results
 
 
-def build_report_dict(results: Dict[str, ComparisonResult]) -> Dict[str, Any]:
+def build_report_dict(results: Dict[str, ComparisonResult]) -> JarsReportDict:
     """Build a structured report dictionary from comparison results."""
     total = len(results)
     matches = sum(1 for r in results.values() if r.is_match)
@@ -740,19 +872,19 @@ def print_report(
                     print(f"      {svc}")
 
 
-def compare_assembly_data() -> Dict[str, Any]:
+def compare_assembly_data() -> AssemblyReportDict:
     """Collect assembly comparison data and return structured dict."""
     maven_assemblies = find_shaded_jars("maven")
     sbt_assemblies = find_shaded_jars("sbt")
 
     all_names = set(maven_assemblies.keys()) | set(sbt_assemblies.keys())
-    assemblies_data: Dict[str, Any] = {}
+    assemblies_data: Dict[str, AssemblyEntryDict] = {}
     total_issues = 0
 
     for name in sorted(all_names):
         maven_jar = maven_assemblies.get(name)
         sbt_jar = sbt_assemblies.get(name)
-        entry: Dict[str, Any] = {}
+        entry: AssemblyEntryDict = {}
 
         maven_info = get_jar_contents(maven_jar) if maven_jar else None
         sbt_info = get_jar_contents(sbt_jar) if sbt_jar else None
@@ -821,7 +953,7 @@ def compare_assembly_data() -> Dict[str, Any]:
     }
 
 
-def print_assembly_report(data: Dict[str, Any]) -> None:
+def print_assembly_report(data: AssemblyReportDict) -> None:
     """Print assembly comparison in human-readable format."""
     assemblies = data["assemblies"]
     issues = data["issues"]
@@ -961,7 +1093,7 @@ def _count_classes_under(jar_path: Path, prefix: str) -> int:
     return count
 
 
-def compare_shading_data() -> Dict[str, Any]:
+def compare_shading_data() -> ShadingReportDict:
     """Collect rule-driven shading comparison data.
 
     For each module in SHADING_RULES, checks every relocation rule against
@@ -981,7 +1113,7 @@ def compare_shading_data() -> Dict[str, Any]:
         "connect-client": "connect-client-jvm",
     }
 
-    modules_data: Dict[str, Any] = {}
+    modules_data: Dict[str, ShadingModuleDict] = {}
     total_rules = 0
     rules_pass = 0
     rules_fail = 0
@@ -992,7 +1124,7 @@ def compare_shading_data() -> Dict[str, Any]:
         maven_jar = maven_jars.get(jar_key)
         sbt_jar = sbt_jars.get(jar_key)
 
-        module_entry: Dict[str, Any] = {}
+        module_entry: ShadingModuleDict = {}
         if maven_jar:
             module_entry["maven"] = {
                 "jar_type": "module",
@@ -1004,10 +1136,10 @@ def compare_shading_data() -> Dict[str, Any]:
                 "path": str(sbt_jar.relative_to(SPARK_HOME)),
             }
 
-        rules_data: List[Dict[str, Any]] = []
+        rules_data: List[ShadingRuleDict] = []
         for source, target in rules.items():
             total_rules += 1
-            rule_entry: Dict[str, Any] = {"source": source, "target": target}
+            rule_entry: ShadingRuleDict = {"source": source, "target": target}
 
             # Check each build
             for build, jar_path in [("maven", maven_jar), ("sbt", sbt_jar)]:
@@ -1082,7 +1214,7 @@ def compare_shading_data() -> Dict[str, Any]:
     }
 
 
-def print_shading_report(data: Dict[str, Any]) -> None:
+def print_shading_report(data: ShadingReportDict) -> None:
     """Print rule-driven shading report."""
     modules = data["modules"]
     summary = data["summary"]
@@ -1225,7 +1357,7 @@ def get_sbt_dependencies() -> Dict[str, Set[str]]:
     return deps
 
 
-def compare_dependencies_data() -> Dict[str, Any]:
+def compare_dependencies_data() -> DepsReportDict:
     """Collect dependency comparison data and return structured dict."""
     print("\nFetching Maven dependencies...")
     maven_deps = get_maven_dependencies()
@@ -1247,7 +1379,7 @@ def compare_dependencies_data() -> Dict[str, Any]:
     only_maven_modules = set(maven_deps.keys()) - set(sbt_deps.keys())
     only_sbt_modules = set(sbt_deps.keys()) - set(maven_deps.keys())
 
-    modules_data: Dict[str, Any] = {}
+    modules_data: Dict[str, DepsModuleEntryDict] = {}
     differing = 0
 
     for module in sorted(common_modules):
@@ -1256,7 +1388,7 @@ def compare_dependencies_data() -> Dict[str, Any]:
         only_maven = maven_set - sbt_set
         only_sbt = sbt_set - maven_set
 
-        entry: Dict[str, Any] = {
+        entry: DepsModuleEntryDict = {
             "status": "match" if not (only_maven or only_sbt) else "differs",
             "maven_count": len(maven_set),
             "sbt_count": len(sbt_set),
@@ -1283,7 +1415,7 @@ def compare_dependencies_data() -> Dict[str, Any]:
     }
 
 
-def print_dependencies_report(data: Dict[str, Any]) -> None:
+def print_dependencies_report(data: DepsReportDict) -> None:
     """Print dependency comparison in human-readable format."""
     if "error" in data:
         print(f"\n[warn] {data['error']}")
@@ -1532,7 +1664,7 @@ def main():
         if not build_sbt():
             sys.exit(1)
 
-    def _output_report(report: Dict[str, Any]) -> None:
+    def _output_report(report: ReportDict) -> None:
         """Handle JSON output to stdout and/or file."""
         if args.json:
             print(json.dumps(report, indent=2))
