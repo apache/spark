@@ -278,7 +278,14 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def read(self, start: dict) -> (Iterator[Tuple], dict):
             """
-            Takes start offset as an input, return an iterator of tuples and the start offset of next read.
+            Takes start offset as an input, return an iterator of tuples and
+            the end offset (start offset for the next read). The end offset must
+            advance past the start offset when returning data; otherwise Spark
+            raises a validation exception.
+            For example, returning 2 records from start_idx 0 means end should
+            be {"offset": 2} (i.e. start + 2).
+            When there is no data to read, you may return the same offset as end and
+            start, but you must provide an empty iterator.
             """
             start_idx = start["offset"]
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])
