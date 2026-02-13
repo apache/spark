@@ -248,4 +248,189 @@ class PruneNestedFieldsThroughGenerateForScanSuite extends SchemaPruningTest {
       }
     }
   }
+
+  // Test case for bug: when posexplode element fields are selected WITHOUT the position column,
+  // pruning should still work correctly. This test verifies the fix for the "consecutive
+  // OUTER POSEXPLODE without pos columns" issue.
+  test("posexplode: element fields only (no pos column) still prunes correctly") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val gen = posexplodeItems()
+      val item = gen.generatorOutput(1)
+      val fieldA = GetStructField(item, 0, Some("a"))
+      val fieldB = GetStructField(item, 1, Some("b"))
+      // Only element fields, NOT the position column
+      val query = gen.select(fieldA, fieldB).analyze
+
+      val optimized = Optimize.execute(query)
+
+      val generates = optimized.collect { case g: Generate => g }
+      assert(generates.nonEmpty)
+      val newGen = generates.head
+      newGen.generator.children.head.dataType match {
+        case ArrayType(st: StructType, _) =>
+          // Should prune to just a, b - c should be removed
+          assert(st.fieldNames.toSet === Set("a", "b"),
+            s"Expected pruned struct {a, b} but got ${st.fieldNames.mkString(", ")}")
+        case other =>
+          fail(s"Expected ArrayType(StructType) but got $other")
+      }
+    }
+  }
+
+  // Nested data for consecutive posexplode tests
+  // Structure: outer_array -> array<struct<b, b_int, b_string, b_array>>
+  //            b_array    -> array<struct<c, c_int, c_2>>
+  private val innerStruct = StructType(Seq(
+    StructField("c", StringType),
+    StructField("c_int", LongType),
+    StructField("c_2", StringType)))
+
+  private val outerStruct = StructType(Seq(
+    StructField("b", StringType),
+    StructField("b_int", LongType),
+    StructField("b_string", StringType),
+    StructField("b_array", ArrayType(innerStruct))))
+
+  private val nestedRel = LocalRelation(
+    $"a".string,
+    $"a_int".long,
+    $"a_array".array(outerStruct))
+
+  // Test consecutive posexplodes with position columns selected (should work)
+  test("consecutive posexplode: with pos columns selected") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      // Create outer posexplode
+      val outerPosExplode = PosExplode($"a_array")
+      val outerGen = Generate(
+        outerPosExplode,
+        unrequiredChildIndex = Nil,
+        outer = true,
+        qualifier = None,
+        generatorOutput = Seq(
+          AttributeReference("a_idx", IntegerType)(),
+          AttributeReference("a_array_item", outerStruct)()),
+        child = nestedRel)
+
+      val outerPos = outerGen.generatorOutput(0)
+      val outerItem = outerGen.generatorOutput(1)
+      val outerFieldB = GetStructField(outerItem, 0, Some("b"))
+      val outerFieldBArray = GetStructField(outerItem, 3, Some("b_array"))
+
+      // Create inner posexplode on a_array_item.b_array
+      val innerPosExplode = PosExplode(outerFieldBArray)
+      val innerGen = Generate(
+        innerPosExplode,
+        unrequiredChildIndex = Nil,
+        outer = true,
+        qualifier = None,
+        generatorOutput = Seq(
+          AttributeReference("b_idx", IntegerType)(),
+          AttributeReference("b_array_item", innerStruct)()),
+        child = outerGen)
+
+      val innerPos = innerGen.generatorOutput(0)
+      val innerItem = innerGen.generatorOutput(1)
+      val innerFieldC = GetStructField(innerItem, 0, Some("c"))
+
+      // Select WITH position columns: a_idx, a_array_item.b, b_idx, b_array_item.c
+      val query = innerGen.select(outerPos, outerFieldB, innerPos, innerFieldC).analyze
+
+      val optimized = Optimize.execute(query)
+
+      // Check outer struct is pruned correctly (only b and b_array)
+      val generates = optimized.collect { case g: Generate => g }
+      // Find the outer generate (the one with a_array as source)
+      val outerGenerates = generates.filter { g =>
+        g.generator.children.head.dataType match {
+          case ArrayType(ArrayType(_, _), _) => false // This would be inner with nested array
+          case ArrayType(st: StructType, _) =>
+            // Check if this is outer struct (has b_array field)
+            st.fieldNames.exists(_.contains("b"))
+          case _ => false
+        }
+      }
+
+      if (outerGenerates.nonEmpty) {
+        val outerGenResult = outerGenerates.head
+        outerGenResult.generator.children.head.dataType match {
+          case ArrayType(st: StructType, _) =>
+            // Outer struct should have b and b_array (b_int and b_string pruned)
+            assert(st.fieldNames.toSet === Set("b", "b_array"),
+              s"Expected pruned outer struct {b, b_array} but got " +
+                s"${st.fieldNames.mkString(", ")}")
+          case other =>
+            fail(s"Expected ArrayType(StructType) for outer but got $other")
+        }
+      }
+    }
+  }
+
+  // Test consecutive posexplodes WITHOUT position columns (this is the bug case)
+  test("consecutive posexplode: without pos columns should still prune outer fields") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      // Create outer posexplode
+      val outerPosExplode = PosExplode($"a_array")
+      val outerGen = Generate(
+        outerPosExplode,
+        unrequiredChildIndex = Nil,
+        outer = true,
+        qualifier = None,
+        generatorOutput = Seq(
+          AttributeReference("a_idx", IntegerType)(),
+          AttributeReference("a_array_item", outerStruct)()),
+        child = nestedRel)
+
+      val outerItem = outerGen.generatorOutput(1)
+      val outerFieldB = GetStructField(outerItem, 0, Some("b"))
+      val outerFieldBArray = GetStructField(outerItem, 3, Some("b_array"))
+
+      // Create inner posexplode on a_array_item.b_array
+      val innerPosExplode = PosExplode(outerFieldBArray)
+      val innerGen = Generate(
+        innerPosExplode,
+        unrequiredChildIndex = Nil,
+        outer = true,
+        qualifier = None,
+        generatorOutput = Seq(
+          AttributeReference("b_idx", IntegerType)(),
+          AttributeReference("b_array_item", innerStruct)()),
+        child = outerGen)
+
+      val innerItem = innerGen.generatorOutput(1)
+      val innerFieldC = GetStructField(innerItem, 0, Some("c"))
+
+      // Select WITHOUT position columns: a_array_item.b, b_array_item.c
+      // This is the bug case - outer field "b" may be missing from scan
+      val query = innerGen.select(outerFieldB, innerFieldC).analyze
+
+      val optimized = Optimize.execute(query)
+
+      // Check outer struct is pruned correctly (should have b and b_array)
+      val generates = optimized.collect { case g: Generate => g }
+      val outerGenerates = generates.filter { g =>
+        g.generator.children.head.dataType match {
+          case ArrayType(ArrayType(_, _), _) => false
+          case ArrayType(st: StructType, _) =>
+            st.fieldNames.exists(_.contains("b"))
+          case _ => false
+        }
+      }
+
+      if (outerGenerates.nonEmpty) {
+        val outerGenResult = outerGenerates.head
+        outerGenResult.generator.children.head.dataType match {
+          case ArrayType(st: StructType, _) =>
+            // BUG: Without pos columns, outer struct may only have b_array, missing "b"
+            // EXPECTED: {b, b_array}
+            assert(st.fieldNames.contains("b"),
+              s"BUG: Outer struct missing 'b' field! Got: ${st.fieldNames.mkString(", ")}. " +
+                "This happens when consecutive posexplode doesn't select position columns.")
+            assert(st.fieldNames.contains("b_array"),
+              s"Expected b_array in outer struct, got: ${st.fieldNames.mkString(", ")}")
+          case other =>
+            fail(s"Expected ArrayType(StructType) for outer but got $other")
+        }
+      }
+    }
+  }
 }

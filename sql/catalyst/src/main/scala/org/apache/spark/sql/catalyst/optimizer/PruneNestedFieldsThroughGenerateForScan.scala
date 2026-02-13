@@ -452,7 +452,6 @@ object PruneNestedFieldsThroughGenerateForScan
     // (e.g., from GeneratorNestedColumnAliasing)
     val intermediateExprs = collectIntermediateExpressions(chainStart, chain.head.generate)
 
-
     // Compute nested schema requirements with backward propagation
     val allTopExprs = projectList ++ filterConditions ++ intermediateExprs
     val requirements = computeNestedChainRequirements(chain, allTopExprs, Nil, leaf, chainStart)
@@ -2284,9 +2283,21 @@ object PruneNestedFieldsThroughGenerateForScan
 
     // Collect expressions from ALL intermediate nodes in the chain
     // These include filters and projects between generates that may reference the source array
+    //
+    // IMPORTANT: Filter out direct attribute references from intermediate Projects.
+    // When ColumnPruning inserts a pass-through Project like `Project(a_array_item, ...)`,
+    // the `a_array_item` attribute reference is just a pass-through, NOT an indication
+    // that all fields of the struct are needed. We only care about GetStructField accesses
+    // from intermediate nodes, not direct attribute references.
     val intermediateNodeExprs = chain.flatMap { info =>
       info.intermediateNodes.flatMap {
-        case Project(projectList, _) => projectList
+        case Project(projectList, _) =>
+          // Filter out direct attribute references (pass-throughs)
+          projectList.filter {
+            case _: Attribute => false
+            case Alias(_: Attribute, _) => false
+            case _ => true
+          }
         case Filter(condition, _) => Seq(condition)
         case _ => Nil
       }
