@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.internal.SQLConf
@@ -93,75 +95,13 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
   private val COUNT_METADATA_KEY = "COUNT"
 
-  /**
-   * Return an appropriate schema for shredding a Variant value.
-   * It is similar to the SchemaOfVariant expression, but the rules are somewhat different, because
-   * we want the types to be consistent with what will be allowed during shredding. E.g.
-   * SchemaOfVariant will consider the common type across Integer and Double to be double, but we
-   * consider it to be VariantType, since shredding will not allow those types to be written to
-   * the same typed_value.
-   * We also maintain metadata on struct fields to track how frequently they occur. Rare fields
-   * are dropped in the final schema.
-   */
-  private def schemaOf(v: Variant, maxDepth: Int): DataType = v.getType match {
-    case Type.OBJECT =>
-      if (maxDepth <= 0) return VariantType
-      val size = v.objectSize()
-      val fields = new Array[StructField](size)
-      for (i <- 0 until size) {
-        val field = v.getFieldAtIndex(i)
-        fields(i) = StructField(field.key, schemaOf(field.value, maxDepth - 1),
-          metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, 1).build())
-      }
-      // According to the variant spec, object fields must be sorted alphabetically. So we don't
-      // have to sort, but just need to validate they are sorted.
-      for (i <- 1 until size) {
-        if (fields(i - 1).name >= fields(i).name) {
-          throw new SparkRuntimeException(
-            errorClass = "MALFORMED_VARIANT",
-            messageParameters = Map.empty
-          )
-        }
-      }
-      StructType(fields)
-    case Type.ARRAY =>
-      if (maxDepth <= 0) return VariantType
-      var elementType: DataType = NullType
-      for (i <- 0 until v.arraySize()) {
-        elementType = mergeSchema(elementType, schemaOf(v.getElementAtIndex(i), maxDepth - 1))
-      }
-      ArrayType(elementType)
-    case Type.NULL => NullType
-    case Type.BOOLEAN => BooleanType
-    case Type.LONG =>
-      // Compute the smallest decimal that can contain this value.
-      // This will allow us to merge with decimal later without introducing excessive precision.
-      // If we only end up encountering integer values, we'll convert back to LongType when we
-      // finalize.
-      val d = BigDecimal(v.getLong())
-      val precision = d.precision
-      if (precision <= Decimal.MAX_LONG_DIGITS) {
-        DecimalType(precision, 0)
-      } else {
-        // Value is too large for Decimal(18, 0), so record its type as long.
-        LongType
-      }
-    case Type.STRING => StringType
-    case Type.DOUBLE => DoubleType
-    case Type.DECIMAL =>
-      // Don't strip trailing zeros to determine scale. Even if we allow scale relaxation during
-      // shredding, it's useful to take trailing zeros as a hint that the extra digits may be used
-      // in later values, and use the larger scale.
-      val d = Decimal(v.getDecimalWithOriginalScale())
-      DecimalType(d.precision, d.scale)
-    case Type.DATE => DateType
-    case Type.TIMESTAMP => TimestampType
-    case Type.TIMESTAMP_NTZ => TimestampNTZType
-    case Type.FLOAT => FloatType
-    case Type.BINARY => BinaryType
-    // Spark doesn't support UUID, so shred it as an untyped value.
-    case Type.UUID => VariantType
-  }
+  // Field statistics for efficient single-pass cardinality tracking
+  private case class FieldStats(
+    var dataType: DataType,
+    var rowCount: Int = 0,           // Count of distinct rows containing this field
+    var lastSeenRow: Int = -1,       // Last row index that incremented rowCount
+    var arrayElementCount: Long = 0  // Total occurrences across all array elements
+  )
 
   private def getFieldCount(field: StructField): Long = {
     field.metadata.getLong(COUNT_METADATA_KEY)
@@ -351,36 +291,261 @@ class InferVariantShreddingSchema(val schema: StructType) {
   }
 
   def inferSchema(rows: Seq[InternalRow]): StructType = {
-    // For each path to a Variant value, iterate over all rows and update the inferred schema.
-    // Add the result to a map, which we'll use to update the full schema.
-    // maxShreddedFieldsPerFile is a global max for all fields, so initialize it here.
+    // For each variant path, collect field statistics using a single pass
     val maxFields = MaxFields(maxShreddedFieldsPerFile)
+
     val inferredSchemas = pathsToVariant.map { path =>
-      var numNonNullValues = 0
-      val simpleSchema = rows.foldLeft(NullType: DataType) {
-        case (partialSchema, row) =>
-          getValueAtPath(schema, row, path).map { variantVal =>
-            numNonNullValues += 1
-            val v = new Variant(variantVal.getValue, variantVal.getMetadata)
-            val schemaOfRow = schemaOf(v, maxShreddingDepth)
-            mergeSchema(partialSchema, schemaOfRow)
-          // If getValueAtPath returned None, the value is null in this row; just ignore.
-          }
-          .getOrElse(partialSchema)
-        // If we didn't find any non-null rows, use an unshredded schema.
+      // Map from field path to statistics (type + occurrence tracking)
+      val fieldRegistry = mutable.Map[String, FieldStats]()
+      var numNonNullVariants = 0
+
+      // Single pass: process all rows for this variant path
+      rows.zipWithIndex.foreach { case (row, rowIdx) =>
+        getValueAtPath(schema, row, path).foreach { variantVal =>
+          numNonNullVariants += 1
+          val v = new Variant(variantVal.getValue, variantVal.getMetadata)
+          // Traverse variant and update field registry
+          collectFieldStats(v, "", rowIdx, fieldRegistry, 0, inArrayContext = false)
+        }
       }
 
-      // Don't infer a schema for fields that appear in less than 10% of rows.
-      // Ensure that minCardinality is at least 1 if we have any rows.
-      val minCardinality = (numNonNullValues + 9) / 10
-
+      // Build final schema from collected statistics
+      val minCardinality = (numNonNullVariants + 9) / 10
+      val simpleSchema = buildSchemaFromStats(fieldRegistry, "", minCardinality, numNonNullVariants)
       val finalizedSchema = finalizeSimpleSchema(simpleSchema, minCardinality, maxFields)
       val shreddingSchema = SparkShreddingUtils.variantShreddingSchema(finalizedSchema)
       val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(shreddingSchema)
       (path, schemaWithMetadata)
     }.toMap
 
-    // Insert each inferred schema into the full schema.
+    // Insert each inferred schema into the full schema
     updateSchema(schema, inferredSchemas)
+  }
+
+  /**
+   * Recursively traverse a variant value and collect field statistics.
+   * For each field encountered, record its type and track distinct row count.
+   * For fields inside arrays, also increment the occurrence count.
+   */
+  private def collectFieldStats(
+      v: Variant,
+      pathPrefix: String,
+      rowIdx: Int,
+      fieldRegistry: mutable.Map[String, FieldStats],
+      depth: Int,
+      inArrayContext: Boolean): Unit = {
+
+    if (depth >= maxShreddingDepth) return
+
+    v.getType match {
+      case Type.OBJECT =>
+        val size = v.objectSize()
+        // Validate fields are sorted (per variant spec)
+        for (i <- 1 until size) {
+          val prevKey = v.getFieldAtIndex(i - 1).key
+          val currKey = v.getFieldAtIndex(i).key
+          if (prevKey >= currKey) {
+            throw new SparkRuntimeException(
+              errorClass = "MALFORMED_VARIANT",
+              messageParameters = Map.empty
+            )
+          }
+        }
+
+        // Process each field
+        for (i <- 0 until size) {
+          val field = v.getFieldAtIndex(i)
+          val fieldPath = if (pathPrefix.isEmpty) field.key else s"$pathPrefix.${field.key}"
+
+          // Get or create field stats
+          val stats = fieldRegistry.getOrElseUpdate(
+            fieldPath,
+            FieldStats(NullType)
+          )
+
+          // Track distinct row count (deduplicate using lastSeenRow)
+          if (stats.lastSeenRow != rowIdx) {
+            stats.rowCount += 1
+            stats.lastSeenRow = rowIdx
+          }
+
+          // Track occurrence count for array elements
+          if (inArrayContext) {
+            stats.arrayElementCount += 1
+          }
+
+          // Infer and merge type
+          val fieldType = inferPrimitiveType(field.value, depth)
+          stats.dataType = mergeSchema(stats.dataType, fieldType)
+
+          // Recurse into nested structures (keep array context)
+          collectFieldStats(field.value, fieldPath, rowIdx, fieldRegistry, depth + 1,
+            inArrayContext)
+        }
+
+      case Type.ARRAY =>
+        val arrayPath = if (pathPrefix.isEmpty) "[]" else s"$pathPrefix[]"
+        val stats = fieldRegistry.getOrElseUpdate(
+          arrayPath,
+          FieldStats(NullType)
+        )
+
+        // Track distinct row count for the array field itself
+        if (stats.lastSeenRow != rowIdx) {
+          stats.rowCount += 1
+          stats.lastSeenRow = rowIdx
+        }
+
+        val arraySize = v.arraySize()
+        if (arraySize > 0) {
+          // Process array elements
+          for (i <- 0 until arraySize) {
+            val element = v.getElementAtIndex(i)
+            val elementTypeClass = element.getType
+
+            // For primitives, infer and merge type directly
+            // For objects/arrays, collectFieldStats handles type via field traversal
+            if (elementTypeClass != Type.OBJECT && elementTypeClass != Type.ARRAY) {
+              val primitiveType = inferPrimitiveType(element, depth)
+              stats.dataType = mergeSchema(stats.dataType, primitiveType)
+            }
+
+            // Recurse into element to collect nested fields, now IN array context
+            collectFieldStats(element, arrayPath, rowIdx, fieldRegistry, depth + 1,
+              inArrayContext = true)
+          }
+        }
+
+      case _ =>
+    }
+  }
+
+  /**
+   * Infer the type of a variant value without recursive field collection.
+   * For objects and arrays, return a marker type; recursive collection is done separately.
+   */
+  private def inferPrimitiveType(v: Variant, depth: Int): DataType = {
+    if (depth >= maxShreddingDepth) return VariantType
+
+    v.getType match {
+      case Type.OBJECT =>
+        // Return empty struct as marker; fields collected separately
+        StructType(Seq.empty)
+      case Type.ARRAY =>
+        // Return array with null element as marker; elements processed separately
+        ArrayType(NullType)
+      case Type.NULL => NullType
+      case Type.BOOLEAN => BooleanType
+      case Type.LONG =>
+        val d = BigDecimal(v.getLong())
+        val precision = d.precision
+        if (precision <= Decimal.MAX_LONG_DIGITS) {
+          DecimalType(precision, 0)
+        } else {
+          LongType
+        }
+      case Type.STRING => StringType
+      case Type.DOUBLE => DoubleType
+      case Type.DECIMAL =>
+        val d = Decimal(v.getDecimalWithOriginalScale())
+        DecimalType(d.precision, d.scale)
+      case Type.DATE => DateType
+      case Type.TIMESTAMP => TimestampType
+      case Type.TIMESTAMP_NTZ => TimestampNTZType
+      case Type.FLOAT => FloatType
+      case Type.BINARY => BinaryType
+      case Type.UUID => VariantType
+    }
+  }
+
+  /**
+   * Build a schema from collected field statistics, filtering by cardinality.
+   * For fields in array contexts, use arrayElementCount / total rows.
+   * For top-level fields, use distinct row count.
+   */
+  private def buildSchemaFromStats(
+      fieldRegistry: mutable.Map[String, FieldStats],
+      pathPrefix: String,
+      minCardinality: Int,
+      numNonNullVariants: Int): DataType = {
+
+    // Check if we're in an array context (path contains "[]")
+    val inArrayContext = pathPrefix.contains("[]")
+
+    // Check if this is an array path first (before checking for children)
+    val arrayPath = if (pathPrefix.isEmpty) "[]" else s"$pathPrefix[]"
+    fieldRegistry.get(arrayPath).foreach { stats =>
+      if (stats.rowCount >= minCardinality) {
+        val elementType = buildSchemaFromStats(fieldRegistry, arrayPath, minCardinality,
+          numNonNullVariants)
+        return ArrayType(if (elementType == VariantType) stats.dataType else elementType)
+      }
+    }
+
+    // Find all direct children of this path (for struct fields)
+    // Limit to 1000 fields before filtering by cardinality, matching original behavior
+    val maxStructSize = 1000
+    val allDirectChildren = fieldRegistry.filter { case (fieldPath, stats) =>
+      // Check if this field is a direct child
+      if (pathPrefix.isEmpty) {
+        !fieldPath.contains(".") && !fieldPath.contains("[")
+      } else {
+        fieldPath.startsWith(pathPrefix + ".") && {
+          val suffix = fieldPath.substring(pathPrefix.length + 1)
+          !suffix.contains(".") && !suffix.contains("[")
+        }
+      }
+    }.toSeq.sortBy(_._1).take(maxStructSize)
+
+    // Filter by cardinality
+    val children = allDirectChildren.filter { case (fieldPath, stats) =>
+      val cardinality = if (inArrayContext) {
+        stats.arrayElementCount
+      } else {
+        stats.rowCount
+      }
+      cardinality >= minCardinality
+    }
+
+    if (children.isEmpty) {
+      return VariantType
+    }
+
+    // Build struct from children
+    val fields = children.toSeq.sortBy(_._1).map { case (fieldPath, stats) =>
+      val fieldName = if (pathPrefix.isEmpty) {
+        fieldPath
+      } else {
+        fieldPath.substring(pathPrefix.length + 1)
+      }
+
+      val fieldType = stats.dataType match {
+        case StructType(_) =>
+          // Recurse to build nested struct
+          buildSchemaFromStats(fieldRegistry, fieldPath, minCardinality, numNonNullVariants)
+        case ArrayType(_, _) =>
+          // Recurse to build array element type
+          val arrayPath = s"$fieldPath[]"
+          fieldRegistry.get(arrayPath) match {
+            case Some(elementStats) =>
+              val elementType = buildSchemaFromStats(fieldRegistry, arrayPath, minCardinality,
+                numNonNullVariants)
+              ArrayType(if (elementType == VariantType) elementStats.dataType else elementType)
+            case None =>
+              stats.dataType
+          }
+        case other => other
+      }
+
+      val cardinality = if (inArrayContext) {
+        stats.arrayElementCount
+      } else {
+        stats.rowCount
+      }
+      StructField(fieldName, fieldType,
+        metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, cardinality).build())
+    }
+
+    StructType(fields)
   }
 }
