@@ -2864,7 +2864,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         ) -> Iterator[pa.RecordBatch]:
             """Apply scalar Arrow UDFs"""
 
-            def process_batch(input_batch: pa.RecordBatch) -> pa.RecordBatch:
+            for input_batch in batches:
                 output_batch = pa.RecordBatch.from_arrays(
                     [
                         udf_func(
@@ -2879,9 +2879,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     output_batch, combined_arrow_schema
                 )
                 verify_scalar_result(output_batch, input_batch.num_rows)
-                return output_batch
-
-            yield from map(process_batch, batches)
+                yield output_batch
 
         # profiling is not supported for UDF
         return func, None, ser, ser
