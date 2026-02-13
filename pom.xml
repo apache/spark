@@ -233,7 +233,7 @@
     -->
     <arrow.version>18.3.0</arrow.version>
     <ammonite.version>3.0.5</ammonite.version>
-    <jjwt.version>0.12.6</jjwt.version>
+    <jjwt.version>0.13.0</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
