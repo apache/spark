@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util.geo;
 
+import org.apache.spark.sql.catalyst.util.Geography;
 import org.apache.spark.sql.catalyst.util.Geometry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -88,10 +89,15 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
    * Test helper to verify WKB round-trip (write and read back)
    */
   private void checkWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
+    checkGeometryWkbRoundTrip(wkbHexLittle, wkbHexBig);
+    checkGeographyWkbRoundTrip(wkbHexLittle, wkbHexBig);
+  }
+
+  private void checkGeometryWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
     byte[] wkbLittle = hexToBytes(wkbHexLittle);
     byte[] wkbBig = hexToBytes(wkbHexBig);
 
-    // Parse the WKB (little)
+    // Parse the geometry WKB (little endian).
     WkbReader reader = new WkbReader();
     GeometryModel model = reader.read(wkbLittle, 0);
     WkbWriter writer = new WkbWriter();
@@ -102,7 +108,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelLittle),
         "WKB big endian round-trip failed");
 
-    // Parse the WKB (big)
+    // Parse the geometry WKB (big endian).
     GeometryModel geomFromBig = reader.read(wkbBig, 0);
     byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
@@ -111,7 +117,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelBig),
       "WKB big endian round-trip from big endian failed");
 
-    // Use Geometry.fromWkb (little)
+    // Use Geometry.fromWkb (little endian).
     Geometry geometryFromLittle = Geometry.fromWkb(wkbLittle, 0);
     byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
@@ -120,7 +126,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryLittle),
         "Geometry.fromWKB big endian round-trip failed");
 
-    // Use Geometry.fromWkb (big)
+    // Use Geometry.fromWkb (big endian).
     Geometry geometryFromBig = Geometry.fromWkb(writtenBigFromModelLittle, 0);
     byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
@@ -128,7 +134,49 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     byte[] wkbBigFromGeometryBig = geometryFromBig.toWkb(ByteOrder.BIG_ENDIAN);
     Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryBig),
         "Geometry.fromWKB big endian round-trip from big endian failed");
+  }
 
+  private void checkGeographyWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
+    byte[] wkbLittle = hexToBytes(wkbHexLittle);
+    byte[] wkbBig = hexToBytes(wkbHexBig);
+
+    // Parse the geography WKB (little endian).
+    WkbReader reader = new WkbReader(true);
+    GeometryModel model = reader.read(wkbLittle, 0);
+    WkbWriter writer = new WkbWriter();
+    byte[] writtenLittleFromModelLittle = writer.write(model, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelLittle = writer.write(model, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelLittle),
+        "WKB little endian round-trip failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelLittle),
+        "WKB big endian round-trip failed");
+
+    // Parse the geography WKB (big endian).
+    GeometryModel geomFromBig = reader.read(wkbBig, 0);
+    byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelBig),
+      "WKB little endian round-trip from big endian failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelBig),
+      "WKB big endian round-trip from big endian failed");
+
+    // Use Geography.fromWkb (little endian).
+    Geography geometryFromLittle = Geography.fromWkb(wkbLittle, 0);
+    byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
+        "Geography.fromWKB little endian round-trip failed");
+    byte[] wkbBigFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryLittle),
+        "Geography.fromWKB big endian round-trip failed");
+
+    // Use Geography.fromWkb (big endian).
+    Geography geometryFromBig = Geography.fromWkb(writtenBigFromModelLittle, 0);
+    byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
+        "Geography.fromWKB little endian round-trip from big endian failed");
+    byte[] wkbBigFromGeometryBig = geometryFromBig.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryBig),
+        "Geography.fromWKB big endian round-trip from big endian failed");
   }
 
   // ========== Point Tests (2D) ==========
@@ -1127,9 +1175,75 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
   public void testSridPreservation() {
     String wkbLe = "0101000000000000000000f03f0000000000000040";
     byte[] wkb = hexToBytes(wkbLe);
-    WkbReader reader = new WkbReader();
-    GeometryModel geom = reader.read(wkb, 4326);
 
+    WkbReader geomReader = new WkbReader();
+    GeometryModel geom = geomReader.read(wkb, 4326);
     Assertions.assertEquals(4326, geom.srid());
+
+    WkbReader geogReader = new WkbReader(true);
+    GeometryModel geog = geogReader.read(wkb, 4326);
+    Assertions.assertEquals(4326, geog.srid());
+  }
+
+  // ========== Geography Coordinate Bounds Validation Tests ==========
+
+  /**
+   * Test helper to verify that geography bounds validation rejects out-of-bounds coordinates.
+   */
+  private void checkGeographyBoundsError(String wkbHexLe, String wkbHexBe) {
+    for (String wkbHex : new String[]{wkbHexLe, wkbHexBe}) {
+      byte[] wkb = hexToBytes(wkbHex);
+
+      // Geography mode with validation should reject non-geographic coordinate values.
+      WkbReader geographyReader = new WkbReader(true);
+      WkbParseException ex = Assertions.assertThrows(
+          WkbParseException.class, () -> geographyReader.read(wkb, 0));
+      Assertions.assertTrue(ex.getMessage().contains("Invalid coordinate value"));
+      // Geography mode without validation should accept non-geographic coordinate values.
+      WkbReader noValidateGeographyReader = new WkbReader(0, true);
+      Assertions.assertDoesNotThrow(() -> noValidateGeographyReader.read(wkb, 0));
+
+      // Geometry mode should always accept non-geographic coordinate values.
+      WkbReader geometryReader = new WkbReader();
+      Assertions.assertDoesNotThrow(() -> geometryReader.read(wkb, 0));
+      WkbReader noValidateGeometryReader = new WkbReader(0);
+      Assertions.assertDoesNotThrow(() -> noValidateGeometryReader.read(wkb, 0));
+    }
+  }
+
+  @Test
+  public void testGeographyBoundsLongitudeTooHigh() {
+    // WKB values for: POINT(200 0); longitude > 180.
+    checkGeographyBoundsError(
+      "010100000000000000000069400000000000000000",
+      "000000000140690000000000000000000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLongitudeTooLow() {
+    // WKB values for: POINT(-200 0); longitude < -180.
+    checkGeographyBoundsError(
+      "010100000000000000000069c00000000000000000",
+      "0000000001c0690000000000000000000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLatitudeTooHigh() {
+    // WKB values for: POINT(0 100); latitude > 90.
+    checkGeographyBoundsError(
+      "010100000000000000000000000000000000005940",
+      "000000000100000000000000004059000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLatitudeTooLow() {
+    // WKB values for: POINT(0 -100); latitude < -90.
+    checkGeographyBoundsError(
+      "0101000000000000000000000000000000000059c0",
+      "00000000010000000000000000c059000000000000"
+    );
   }
 }
