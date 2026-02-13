@@ -576,6 +576,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case CreateFunction(
+        ResolvedIdentifier(catalog, ident), _, _, _, _)
+        if isSessionCatalog(catalog) &&
+          ident.namespace().length >= 1 &&
+          ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", ident.name())
+
+    case CreateFunction(
         ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
       if (ident.database.exists(_.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))) {
         throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
@@ -591,6 +599,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
+
+    case c @ CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog, ident), _, _, _, _, _, _, _, _, _, _, _)
+        if isSessionCatalog(catalog) &&
+          ident.namespace().length >= 1 &&
+          ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", ident.name())
 
     case c @ CreateUserDefinedFunction(
         ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
