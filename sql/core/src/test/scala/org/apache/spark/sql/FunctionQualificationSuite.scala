@@ -859,7 +859,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(
           fragment = "no_such_func_xyz()",
           start = 7,
-          stop = 25))
+          stop = 24))
     }
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "last") {
       checkError(
@@ -872,7 +872,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(
           fragment = "no_such_func_xyz()",
           start = 7,
-          stop = 25))
+          stop = 24))
     }
   }
 
