@@ -566,7 +566,11 @@ abstract class UnionBase extends LogicalPlan {
   }
 }
 
-object UnionBase {
+/**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
   /**
    * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
    */

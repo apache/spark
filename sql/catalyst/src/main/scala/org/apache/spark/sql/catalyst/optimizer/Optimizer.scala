@@ -1039,10 +1039,10 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
     // Push down deterministic projection through Union or SequentialStreamingUnion.
     // This is safe because it preserves child ordering.
-    case project @ Project(projectList, UnionBase(u))
+    case project @ Project(projectList, SequentialOrSimpleUnion(u))
       if projectList.forall(_.deterministic) && u.children.nonEmpty &&
         canPushProjectionThroughUnion(project) =>
-      UnionBase.withNewChildren(u, pushProjectionThroughUnion(projectList, u))
+      SequentialOrSimpleUnion.withNewChildren(u, pushProjectionThroughUnion(projectList, u))
   }
 }
 
@@ -1825,24 +1825,26 @@ object CombineUnions extends Rule[LogicalPlan] {
     _.containsAnyPattern(UNION, SEQUENTIAL_STREAMING_UNION, DISTINCT_LIKE), ruleId) {
     // Flatten Union or SequentialStreamingUnion.
     // This is safe because flattening preserves child ordering.
-    case UnionBase(u) => flattenUnion(u, false)
-    case Distinct(UnionBase(u)) => Distinct(flattenUnion(u, true))
+    case SequentialOrSimpleUnion(u) => flattenUnion(u, false)
+    case Distinct(SequentialOrSimpleUnion(u)) => Distinct(flattenUnion(u, true))
     // Only handle distinct-like 'Deduplicate', where the keys == output
-    case Deduplicate(keys: Seq[Attribute], UnionBase(u)) if AttributeSet(keys) == u.outputSet =>
+    case Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
+        if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
-    case DeduplicateWithinWatermark(keys: Seq[Attribute], UnionBase(u))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
       if AttributeSet(keys) == u.outputSet =>
       DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: UnionBase, flattenDistinct: Boolean): UnionBase = {
-    val topByName = UnionBase.byName(union)
-    val topAllowMissingCol = UnionBase.allowMissingCol(union)
+    val topByName = SequentialOrSimpleUnion.byName(union)
+    val topAllowMissingCol = SequentialOrSimpleUnion.allowMissingCol(union)
 
     // Helper to check if a union can be merged with the top-level union
     def canMerge(u: UnionBase): Boolean = {
-      UnionBase.isSameType(union, u) && UnionBase.byName(u) == topByName &&
-        UnionBase.allowMissingCol(u) == topAllowMissingCol
+      SequentialOrSimpleUnion.isSameType(union, u) &&
+        SequentialOrSimpleUnion.byName(u) == topByName &&
+        SequentialOrSimpleUnion.allowMissingCol(u) == topAllowMissingCol
     }
 
     val stack = mutable.Stack[LogicalPlan](union)
@@ -1859,25 +1861,27 @@ object CombineUnions extends Rule[LogicalPlan] {
               !p2.projectList.exists(SubqueryExpression.hasCorrelatedSubquery) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
-        case Distinct(UnionBase(u)) if flattenDistinct && canMerge(u) =>
+        case Distinct(SequentialOrSimpleUnion(u)) if flattenDistinct && canMerge(u) =>
           stack.pushAll(u.children.reverse)
         // Only handle distinct-like 'Deduplicate', where the keys == output
-        case Deduplicate(keys: Seq[Attribute], UnionBase(u))
+        case Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
             if flattenDistinct && canMerge(u) && AttributeSet(keys) == u.outputSet =>
           stack.pushAll(u.children.reverse)
-        case UnionBase(u) if canMerge(u) =>
+        case SequentialOrSimpleUnion(u) if canMerge(u) =>
           stack.pushAll(u.children.reverse)
         // Push down projection through union and then push pushed plan to Stack if
         // there is a Project.
-        case project @ Project(projectList, Distinct(UnionBase(u)))
+        case project @ Project(projectList, Distinct(SequentialOrSimpleUnion(u)))
             if projectList.forall(_.deterministic) && u.children.nonEmpty &&
-              flattenDistinct && canMerge(u) && canPushProjectionThroughUnion(project) =>
+              flattenDistinct && canMerge(u) &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], UnionBase(u)))
+        case project @ Project(
+            projectList, Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u)))
             if projectList.forall(_.deterministic) && flattenDistinct && canMerge(u) &&
               AttributeSet(keys) == u.outputSet && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case project @ Project(projectList, UnionBase(u))
+        case project @ Project(projectList, SequentialOrSimpleUnion(u))
             if projectList.forall(_.deterministic) && u.children.nonEmpty &&
               canMerge(u) && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
@@ -1885,7 +1889,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    UnionBase.withNewChildren(union, flattened.toSeq)
+    SequentialOrSimpleUnion.withNewChildren(union, flattened.toSeq)
   }
 }
 
