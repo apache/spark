@@ -715,17 +715,11 @@ class DataFrameAggregateSuite extends QueryTest
       df1.selectExpr("listagg(distinct cast(col as string), ',') WITHIN GROUP (ORDER BY col)"),
       Seq(Row("1,2,10,20"))
     )
-    
+
     val df2 = Seq((1L), (2L), (2L), (3L)).toDF("col")
     checkAnswer(
       df2.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
       Seq(Row("123"))
-    )
-
-    val df3 = Seq((1.1), (2.2), (2.2), (3.3)).toDF("col")
-    checkAnswer(
-      df3.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
-      Seq(Row("1.12.23.3"))
     )
 
     checkAnswer(
@@ -735,7 +729,11 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Row("1.10,2.20"))
     )
 
-    val df4 = Seq(LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 1)).toDF("col")
+    val df4 = Seq(
+      LocalDate.of(2026, 1, 2),
+      LocalDate.of(2026, 1, 2),
+      LocalDate.of(2026, 1, 1)
+    ).toDF("col")
     checkAnswer(
       df4.selectExpr("listagg(distinct col) WITHIN GROUP (ORDER BY col)"),
       Seq(Row("2024-01-012024-01-02"))
@@ -809,6 +807,67 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(
         Row(1, Array(0xAA, 0x2C, 0xBB).map(_.toByte)),
         Row(2, Array(0xCC).map(_.toByte))
+      )
+    )
+  }
+
+  test("SPARK-55501: listagg distinct with implicit cast - type safety") {
+    val dfShort = Seq(1.toShort, 2.toShort, 2.toShort, 3.toShort).toDF("col")
+    checkAnswer(
+      dfShort.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("1,2,3"))
+    )
+
+    val dfByte = Seq(1.toByte, 2.toByte, 2.toByte, 3.toByte).toDF("col")
+    checkAnswer(
+      dfByte.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("1,2,3"))
+    )
+
+    val dfTimestampNTZ = Seq(
+      LocalDateTime.parse("2026-01-01T10:00:00"),
+      LocalDateTime.parse("2026-01-01T10:00:00"),
+      LocalDateTime.parse("2026-01-01T10:00:01")
+    ).toDF("col")
+    checkAnswer(
+      dfTimestampNTZ.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("2024-01-01 10:00:00,2024-01-02 12:00:00"))
+    )
+
+    val dfPeriod = Seq(
+      Period.ofMonths(1), Period.ofMonths(2), Period.ofMonths(1)
+    ).toDF("col")
+    checkAnswer(
+      dfPeriod.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)"),
+      Seq(Row("INTERVAL '0-1' YEAR TO MONTH,INTERVAL '0-2' YEAR TO MONTH"))
+    )
+
+    // Negative tests
+    val dfDouble = Seq(-0.0, 0.0, -0.0, 1.2).toDF("col")
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfDouble.selectExpr("listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)").collect()
+      },
+      condition = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+      parameters = Map(
+        "funcName" -> "`listagg`",
+        "inputType" -> "\"DOUBLE\"",
+        "castType" -> "\"STRING\""
+      )
+    )
+
+    val dfFloat = Seq(-0.0f, 0.0f, -0.0f, 3.2f).toDF("col")
+    checkError(
+      exception = intercept[AnalysisException] {
+        dfFloat.selectExpr(
+          "listagg(distinct col, ',') WITHIN GROUP (ORDER BY col)"
+        ).collect()
+      },
+      condition = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+      parameters = Map(
+        "funcName" -> "`listagg`",
+        "inputType" -> "\"FLOAT\"",
+        "castType" -> "\"STRING\""
       )
     )
   }

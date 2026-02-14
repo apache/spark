@@ -117,17 +117,8 @@ class AggregateExpressionResolver(
   private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-          if agg.isDistinct && listAgg.needSaveOrderValue =>
-            // Allow when the mismatch is only because child was cast
-            val mismatchDueToCast = listAgg.orderExpressions.size == 1 &&
-              (listAgg.child match {
-                case Cast(castChild, _, _, _) =>
-                  listAgg.orderExpressions.head.child.semanticEquals(castChild)
-                case _ => false
-              })
-            if (!mismatchDueToCast) {
-              throwFunctionAndOrderExpressionMismatchError(listAgg)
-            }
+          if agg.isDistinct && listAgg.needSaveOrderValue && !listAgg.isOrderMismatchDueToCast =>
+            throwListAggDistinctOrderMismatchError(listAgg)
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
           throwNestedAggregateFunction(aggregateExpression)
@@ -222,12 +213,23 @@ class AggregateExpressionResolver(
     }
   }
 
-  private def throwFunctionAndOrderExpressionMismatchError(listAgg: ListAgg) = {
-    throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-      listAgg.prettyName,
-      listAgg.child,
-      listAgg.orderExpressions
-    )
+  private def throwListAggDistinctOrderMismatchError(listAgg: ListAgg): Nothing = {
+    if (listAgg.isOrderMismatchDueToUnsafeCast) {
+      listAgg.child match {
+        case Cast(castChild, castType, _, _) =>
+          throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+            listAgg.prettyName,
+            castChild.dataType,
+            castType
+          )
+      }
+    } else {
+      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+        listAgg.prettyName,
+        listAgg.child,
+        listAgg.orderExpressions
+      )
+    }
   }
 
   private def throwNestedAggregateFunction(aggregateExpression: AggregateExpression): Nothing = {

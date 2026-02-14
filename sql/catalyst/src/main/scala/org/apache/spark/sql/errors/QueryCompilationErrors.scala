@@ -1116,6 +1116,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "orderingExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(", ")))
   }
 
+  def functionAndOrderExpressionUnsafeCastError(
+      functionName: String,
+      inputType: DataType,
+      castType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+      messageParameters = Map(
+        "funcName" -> toSQLId(functionName),
+        "inputType" -> toSQLType(inputType),
+        "castType" -> toSQLType(castType)))
+  }
+
   def wrongCommandForObjectTypeError(
       operation: String,
       requiredType: String,

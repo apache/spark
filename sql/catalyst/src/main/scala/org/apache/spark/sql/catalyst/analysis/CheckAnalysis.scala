@@ -97,6 +97,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case _ => None
     }
 
+  private def throwListAggDistinctOrderMismatchError(listAgg: ListAgg): Nothing = {
+    if (listAgg.isOrderMismatchDueToUnsafeCast) {
+      listAgg.child match {
+        case Cast(castChild, castType, _, _) =>
+          throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+            listAgg.prettyName, castChild.dataType, castType)
+      }
+    } else {
+      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+        listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+    }
+  }
+
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
@@ -449,18 +462,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-            if agg.isDistinct && listAgg.needSaveOrderValue =>
-              // Allow when the mismatch is only because child was cast
-              val mismatchDueToCast = listAgg.orderExpressions.size == 1 &&
-                (listAgg.child match {
-                  case Cast(castChild, _, _, _) =>
-                    listAgg.orderExpressions.head.child.semanticEquals(castChild)
-                  case _ => false
-                })
-              if (!mismatchDueToCast) {
-                throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-                  listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
-              }
+            if agg.isDistinct && listAgg.needSaveOrderValue && !listAgg.isOrderMismatchDueToCast =>
+              throwListAggDistinctOrderMismatchError(listAgg)
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)

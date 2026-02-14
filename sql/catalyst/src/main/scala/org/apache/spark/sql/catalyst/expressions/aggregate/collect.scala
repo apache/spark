@@ -592,6 +592,57 @@ case class ListAgg(
     false
   }
 
+  /**
+   * Whether the order mismatch is only due to a cast on child,
+   * and the cast preserves GROUP BY equality semantics for the source type.
+   * A type is safe if its cast to string is injective w.r.t. GROUP BY equality:
+   * equal values always produce equal strings, and different strings imply
+   * different values.
+   *
+   * Note: collation mismatches between child and order expression are already
+   * caught by LISTAGG's inputTypes validation, so we
+   * only need to check the source type here.
+   */
+  def isOrderMismatchDueToCast: Boolean = orderExpressions.size == 1 &&
+    (child match {
+      case Cast(castChild, _, _, _) =>
+        orderExpressions.head.child.semanticEquals(castChild) &&
+        isCastSafeForDistinct(castChild.dataType)
+      case _ => false
+    })
+
+  /**
+   * Whether the order mismatch is due to a cast on child,
+   * but the source type is not safe for DISTINCT deduplication after casting.
+   * For example, floating-point types where -0.0 and 0.0 are equal but cast
+   * to different strings.
+   */
+  def isOrderMismatchDueToUnsafeCast: Boolean = orderExpressions.size == 1 &&
+    (child match {
+      case Cast(castChild, _, _, _) =>
+        orderExpressions.head.child.semanticEquals(castChild) &&
+        !isCastSafeForDistinct(castChild.dataType)
+      case _ => false
+    })
+
+  /**
+   * Whitelist of source types that are safe for DISTINCT deduplication after casting
+   * to STRING/BINARY.
+   */
+  private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
+    case _: IntegerType | LongType | ShortType | ByteType => true
+    case _: DecimalType => true
+    case _: DateType | TimestampType | TimestampNTZType => true
+    case _: TimeType => true
+    case _: CalendarIntervalType => true
+    case _: YearMonthIntervalType => true
+    case _: DayTimeIntervalType => true
+    case BooleanType => true
+    case BinaryType => true
+    case st: StringType if st.supportsBinaryEquality => true
+    case _ => false
+  }
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
       child = newChildren.head,

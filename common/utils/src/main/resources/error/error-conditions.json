@@ -4290,6 +4290,11 @@
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
         ]
       },
+      "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
+        "message" : [
+          "The function <funcName> with DISTINCT requires an implicit cast from <inputType> to <castType>, but this cast may not preserve equality semantics for the input type (e.g., floating-point -0.0 and 0.0 are equal but cast to different strings)."
+        ]
+      },
       "WITHIN_GROUP_MISSING" : {
         "message" : [
           "WITHIN GROUP is required for the function."
