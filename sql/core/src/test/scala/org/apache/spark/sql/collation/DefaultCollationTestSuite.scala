@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
 
@@ -759,16 +759,40 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   }
 }
 
+
 abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
+  // This is used for tests that don't depend on explicitly specifying the data type
+  // (these tests still test the string type), or ones that are not applicable to char/varchar
+  // types. E.g., UDFs don't support char/varchar as input parameters/return types.
   protected def stringTestNamesV1: Seq[String] = Seq(
     "Check AttributeReference dataType from View with default collation",
     "CTAS with DEFAULT COLLATION and VIEW",
     "default string producing expressions in view definition",
+    "Test UDTF with default collation",
+    "Test UDF with default collation",
+    "Test UDTF with default collation and without columns in RETURNS TABLE",
+    "Test UDF with default collation and collation applied to return type",
+    "Test explicit UTF8_BINARY collation for UDF params/return type",
+    "ALTER SCHEMA DEFAULT COLLATION doesn't affect UDF/UDTF collation",
+    "Test applying collation to UDF params",
+    "Test UDF collation behavior with default and mixed collation settings",
+    "Test replacing UDF with default collation",
+    "Nested UDFs with default collation",
     "View with UTF8_LCASE default collation from schema level"
-  )
+  ) ++ schemaAndObjectCollationPairs.flatMap {
+    case (schemaDefaultCollation, udfDefaultCollation) => Seq(
+      s"""CREATE UDF/UDTF with schema level collation
+         | (schema default collation = $schemaDefaultCollation,
+         | view default collation = $udfDefaultCollation)""".stripMargin,
+      s"""CREATE OR UDF/UDTF with schema level collation
+         | (schema default collation = $schemaDefaultCollation,
+         | view default collation = $udfDefaultCollation)""".stripMargin
+    )
+  }
 
-    testString("Check AttributeReference dataType from View with default collation") {
+
+  testString("Check AttributeReference dataType from View with default collation") {
       _ =>
     withView(testView) {
       sql(s"CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1")
@@ -1070,6 +1094,404 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       }
     }
   }
+  def emptyCreateTable()(f: => Unit): Unit = {
+    f
+  }
+
+  def createTable(dataType: String)(f: => Unit): Unit = {
+    withTable(testTable1) {
+      sql(
+        s"""CREATE TABLE $testTable1
+           | (c1 $dataType COLLATE UNICODE, c2 $dataType COLLATE SR_AI, c3 INT)
+           |""".stripMargin)
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable1 VALUES ('a', 'a', 1)")
+      // scalastyle:on
+      f
+    }
+  }
+
+  def testUDF()(
+      createAndCheckUDF: (String, String, Boolean, String, String) => Unit): Unit = {
+    val functionName = "f"
+    val prefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}"
+    Seq(
+      ("", "", false),
+      ("", "TEMPORARY", true),
+      ("OR REPLACE", "", false),
+      ("OR REPLACE", "TEMPORARY", true)
+    ).foreach {
+      case (replace, temporary, isTemporary) =>
+        createAndCheckUDF(replace, temporary, isTemporary, functionName, prefix)
+    }
+  }
+
+  testString("Test UDTF with default collation") {
+      dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        createTable(dataType) {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            // Table function
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName()
+                | RETURNS TABLE
+                | (c1 $dataType COLLATE UTF8_LCASE, c2 $dataType, c3 INT, c4 $dataType)
+                | DEFAULT COLLATION UNICODE_CI
+                | RETURN
+                |  SELECT *, 'w' AS c4
+                |  FROM $testTable1
+                |  WHERE 'a' = 'A'
+                |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT COUNT(*) FROM $functionName()"), Row(1))
+            checkAnswer(sql(s"SELECT COLLATION(c1) FROM $functionName()"),
+              Row(s"$prefix.UTF8_LCASE"))
+            checkAnswer(sql(s"SELECT COLLATION(c2) FROM $functionName()"),
+              Row(s"$prefix.UNICODE_CI"))
+            checkAnswer(sql(s"SELECT COLLATION(c4) FROM $functionName()"),
+              Row(s"$prefix.UNICODE_CI"))
+            checkAnswer(sql(s"SELECT c1 = 'A' FROM $functionName()"), Row(true))
+            checkAnswer(sql(s"SELECT c2 = 'A' FROM $functionName()"), Row(true))
+            checkAnswer(sql(s"SELECT c4 = 'W' FROM $functionName()"), Row(true))
+          }
+        }
+    }
+  }
+
+  testString("Test UDTF with default collation and without columns in RETURNS TABLE") { _ =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        withUserDefinedFunction((functionName, isTemporary)) {
+          sql(
+            s"""CREATE $replace $temporary FUNCTION $functionName()
+               | RETURNS TABLE
+               | DEFAULT COLLATION UTF8_LCASE
+               | RETURN
+               |  SELECT 'a' AS c1, 'b' COLLATE UTF8_BINARY AS c2, 'c' COLLATE UNICODE AS c3
+               |  WHERE 'a' = 'A'
+               |""".stripMargin)
+
+          checkAnswer(sql(s"SELECT * FROM $functionName()"), Row("a", "b", "c"))
+          checkAnswer(sql(s"SELECT COLLATION(c1) FROM $functionName()"),
+            Row(s"$prefix.UTF8_LCASE"))
+          checkAnswer(sql(s"SELECT COLLATION(c2) FROM $functionName()"),
+            Row(s"$prefix.UTF8_BINARY"))
+          checkAnswer(sql(s"SELECT COLLATION(c3) FROM $functionName()"),
+            Row(s"$prefix.UNICODE"))
+        }
+    }
+  }
+
+  testString("Test UDF with default collation") { dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        createTable(dataType) {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName()
+                | RETURNS $dataType COLLATE UTF8_LCASE
+                | DEFAULT COLLATION UNICODE_CI
+                | RETURN
+                |  SELECT c1
+                |  FROM $testTable1
+                |  WHERE 'a' = 'A'
+                |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT COUNT($functionName())"), Row(1))
+            checkAnswer(sql(s"SELECT COLLATION($functionName())"),
+              Row(s"$prefix.UTF8_LCASE"))
+            checkAnswer(sql(s"SELECT $functionName() = 'A'"), Row(true))
+          }
+        }
+    }
+  }
+
+  testString("Test UDF with default collation and collation applied to return type") {
+      dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        createTable(dataType) {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName()
+                | RETURNS $dataType
+                | DEFAULT COLLATION UNICODE
+                | RETURN
+                |  SELECT c1
+                |  FROM $testTable1
+                |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT COUNT($functionName())"), Row(1))
+            checkAnswer(sql(s"SELECT COLLATION($functionName())"),
+              Row(s"$prefix.UNICODE"))
+            checkAnswer(sql(s"SELECT $functionName() = 'A'"), Row(false))
+          }
+        }
+    }
+  }
+
+  testString("Test explicit UTF8_BINARY collation for UDF params/return type") {
+      dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        emptyCreateTable() {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName
+                 | (p1 $dataType COLLATE UTF8_BINARY, p2 $dataType)
+                 | RETURNS $dataType COLLATE UTF8_BINARY
+                 | DEFAULT COLLATION UTF8_LCASE
+                 | RETURN
+                 |  SELECT CASE WHEN p1 != 'A' AND p2 = 'B' THEN 'C' ELSE 'D' END
+                 |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT $functionName('a', 'b') = 'C'"), Row(true))
+            checkAnswer(sql(s"SELECT $functionName('a', 'b') = 'c'"), Row(false))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION($functionName('b', 'c'))"),
+              Row(s"$prefix.UTF8_BINARY"))
+          }
+        }
+    }
+
+    // Table UDF
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        emptyCreateTable() {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName
+                 | (p1 $dataType COLLATE UTF8_BINARY, p2 $dataType)
+                 | RETURNS TABLE
+                 | (c1 $dataType COLLATE UTF8_BINARY, c2 $dataType)
+                 | DEFAULT COLLATION UTF8_LCASE
+                 | RETURN
+                 |  SELECT CASE WHEN p1 != 'A' AND p2 = 'B' THEN 'C' ELSE 'D' END, 'E'
+                 |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT c1 = 'C', c2 = 'E' FROM $functionName('a', 'b')"),
+              Row(true, true))
+            checkAnswer(sql(s"SELECT c1 ='c' FROM $functionName('a', 'b')"), Row(false))
+            checkAnswer(sql(s"SELECT c2 ='e' FROM $functionName('a', 'b')"), Row(true))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $functionName('a', 'b')"),
+              Row(s"$prefix.UTF8_BINARY"))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $functionName('a', 'b')"),
+              Row(s"$prefix.UTF8_LCASE"))
+          }
+        }
+    }
+  }
+
+  // UDF with schema level collation tests
+  schemaAndObjectCollationPairs.foreach {
+    case (schemaDefaultCollation, udfDefaultCollation) =>
+      testString(
+        s"""CREATE UDF/UDTF with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | view default collation = $udfDefaultCollation)""".stripMargin) { dataType =>
+        testCreateUDFWithSchemaLevelCollation(dataType, schemaDefaultCollation, udfDefaultCollation)
+      }
+
+      testString(
+        s"""CREATE OR UDF/UDTF with schema level collation
+          | (schema default collation = $schemaDefaultCollation,
+          | view default collation = $udfDefaultCollation)""".stripMargin) { dataType =>
+        testCreateUDFWithSchemaLevelCollation(dataType, schemaDefaultCollation, udfDefaultCollation)
+      }
+  }
+
+  testString("ALTER SCHEMA DEFAULT COLLATION doesn't affect UDF/UDTF collation") {
+      dataType =>
+    val functionName = "f"
+    val prefix = "SYSTEM.BUILTIN"
+
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
+      sql(s"USE $testSchema")
+
+      withUserDefinedFunction((functionName, false)) {
+        sql(s"CREATE FUNCTION $functionName() RETURN SELECT 'a' WHERE 'b' = 'B'")
+
+        checkAnswer(sql(s"SELECT $functionName()"), Row("a"))
+        checkAnswer(sql(s"SELECT COLLATION($functionName())"), Row(s"$prefix.UTF8_LCASE"))
+
+        // ALTER SCHEMA DEFAULT COLLATION
+        sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UNICODE")
+
+        checkAnswer(sql(s"SELECT $functionName()"), Row("a"))
+        checkAnswer(sql(s"SELECT COLLATION($functionName())"), Row(s"$prefix.UTF8_LCASE"))
+      }
+    }
+
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
+      sql(s"USE $testSchema")
+
+      withUserDefinedFunction((functionName, false)) {
+        sql(
+          s"""CREATE FUNCTION $functionName()
+             |RETURNS TABLE (c1 $dataType, c2 $dataType COLLATE UTF8_BINARY,
+             |c3 $dataType COLLATE UNICODE)
+             |RETURN
+             |SELECT 'a', 'b', 'c' WHERE 'd' = 'D'
+             |""".stripMargin)
+
+        checkAnswer(sql(s"SELECT * FROM $functionName()"), Row("a", "b", "c"))
+        checkAnswer(sql(s"SELECT COLLATION(c1) FROM $functionName()"), Row(s"$prefix.UTF8_LCASE"))
+        checkAnswer(sql(s"SELECT COLLATION(c2) FROM $functionName()"), Row(s"$prefix.UTF8_BINARY"))
+        checkAnswer(sql(s"SELECT COLLATION(c3) FROM $functionName()"), Row(s"$prefix.UNICODE"))
+
+        // ALTER SCHEMA DEFAULT COLLATION
+        sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UNICODE")
+
+        checkAnswer(sql(s"SELECT * FROM $functionName()"), Row("a", "b", "c"))
+        checkAnswer(sql(s"SELECT COLLATION(c1) FROM $functionName()"), Row(s"$prefix.UTF8_LCASE"))
+        checkAnswer(sql(s"SELECT COLLATION(c2) FROM $functionName()"), Row(s"$prefix.UTF8_BINARY"))
+        checkAnswer(sql(s"SELECT COLLATION(c3) FROM $functionName()"), Row(s"$prefix.UNICODE"))
+      }
+    }
+  }
+
+  testString("Test applying collation to UDF params") { dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        emptyCreateTable() {
+          withUserDefinedFunction((functionName, isTemporary)) {
+            sql(
+              s"""CREATE $replace $temporary FUNCTION $functionName
+                | (p1 $dataType, p2 $dataType COLLATE UNICODE)
+                | RETURNS TABLE
+                | (c1 BOOLEAN, c2 BOOLEAN, c3 $dataType, c4 $dataType COLLATE UNICODE,
+                | c5 $dataType COLLATE SR_AI)
+                | DEFAULT COLLATION UTF8_LCASE
+                | RETURN
+                |  SELECT p1 = 'A', p2 = 'A', p2, p2, p2
+                |  WHERE p1 = 'A'
+                |""".stripMargin)
+
+            val expected = Seq(
+              Row(true, false, "a", "a", "a")
+            )
+            val expectedSchema = new StructType()
+              .add("c1", BooleanType)
+              .add("c2", BooleanType)
+              .add("c3", StringType)
+              .add("c4", StringType)
+              .add("c5", StringType)
+            checkAnswer(sql(s"SELECT * FROM $functionName('a', 'a')"),
+              spark.createDataFrame(spark.sparkContext.parallelize(expected), expectedSchema))
+            checkAnswer(sql(s"SELECT COLLATION(c3) FROM $functionName('a', 'a')"),
+              Row(s"$prefix.UTF8_LCASE"))
+            checkAnswer(sql(s"SELECT COLLATION(c4) FROM $functionName('a', 'a')"),
+              Row(s"$prefix.UNICODE"))
+            checkAnswer(sql(s"SELECT COLLATION(c5) FROM $functionName('a', 'a')"),
+              Row(s"$prefix.sr_AI"))
+            checkAnswer(sql(s"SELECT c3 = 'A' FROM $functionName('a', 'a')"),
+              Row(true))
+            checkAnswer(sql(s"SELECT c4 = 'A' FROM $functionName('a', 'a')"),
+              Row(false))
+            checkAnswer(sql(s"SELECT c5 = 'A' FROM $functionName('a', 'a')"),
+              Row(false))
+          }
+        }
+    }
+  }
+
+  testString("Test UDF collation behavior with default and mixed collation settings") {
+      dataType =>
+    testUDF() {
+      (replace, temporary, isTemporary, functionName, prefix) =>
+        emptyCreateTable() {
+          val fullFunctionName =
+            if (isTemporary) {
+              functionName
+            } else {
+              s"spark_catalog.default.$functionName"
+            }
+
+          Seq(
+            // (returnsClause, returnType, otherCollation, inputChar, compareChar)
+            ("", "UTF8_LCASE", "SR_AI", "w", "W"),
+            (s"RETURNS $dataType", "UTF8_LCASE", "SR_AI", "w", "W"),
+            // scalastyle:off
+            (s"RETURNS $dataType COLLATE SR_AI", "sr_AI", "UTF8_LCASE", "ć", "č")
+            // scalastyle:on
+          ).foreach {
+            case (returnsClause, returnTypeCollation, otherCollation, inputChar, equalChar) =>
+              withUserDefinedFunction((functionName, isTemporary)) {
+                sql(
+                  s"""CREATE $replace $temporary FUNCTION $functionName() $returnsClause
+                    | DEFAULT COLLATION UTF8_LCASE
+                    | RETURN
+                    |  SELECT '$inputChar' AS c1
+                    |  WHERE 'a' = 'A'""".stripMargin)
+
+                checkAnswer(sql(s"SELECT COUNT($functionName())"), Row(1))
+                checkAnswer(sql(s"SELECT DISTINCT COLLATION($functionName())"),
+                  Row(s"$prefix.$returnTypeCollation"))
+                checkAnswer(
+                  sql(s"SELECT $functionName() =" +
+                    s" (SELECT '$equalChar' COLLATE $returnTypeCollation)"),
+                  Row(true))
+
+                val exception = intercept[AnalysisException] {
+                  sql(s"SELECT $functionName() = (SELECT 'a' COLLATE $otherCollation)")
+                }
+                assert(exception.getMessage.contains("indeterminate collation"))
+              }
+          }
+        }
+    }
+  }
+
+  testString("Test replacing UDF with default collation") { _ =>
+    val functionName = "f"
+    val prefix = "SYSTEM.BUILTIN"
+
+    withUserDefinedFunction((functionName, false)) {
+      sql(
+        s"""CREATE FUNCTION $functionName()
+          | RETURN
+          |  SELECT 'a'
+          |""".stripMargin)
+      sql(
+        s"""CREATE OR REPLACE FUNCTION $functionName()
+          | DEFAULT COLLATION UTF8_LCASE
+          | RETURN
+          |  SELECT 'a' AS c1
+          |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION($functionName())"),
+        Row(s"$prefix.UTF8_LCASE"))
+      checkAnswer(sql(s"SELECT $functionName() = 'A'"), Row(true))
+    }
+  }
+
+  testString("Nested UDFs with default collation") {
+      dataType =>
+    val function1Name = "f1"
+    val function2Name = "f2"
+    withUserDefinedFunction((function1Name, false)) {
+      sql(
+        s"""CREATE FUNCTION $function1Name(s $dataType)
+          | DEFAULT COLLATION UTF8_LCASE
+          | RETURN
+          |  SELECT s
+          |""".stripMargin)
+      withUserDefinedFunction((function2Name, false)) {
+        // scalastyle:off
+        sql(
+          s"""CREATE FUNCTION $function2Name()
+            | DEFAULT COLLATION SR_AI
+            | RETURN
+            |  SELECT 'č'
+            |  WHERE $function1Name('a') = $function1Name('A')
+            |""".stripMargin)
+        // scalastyle:on
+        checkAnswer(sql(s"SELECT COUNT($function2Name())"), Row(1))
+      }
+    }
+  }
 
   // View with schema level collation tests
   schemaAndObjectCollationPairs.foreach {
@@ -1250,6 +1672,99 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       (1 to defaultStringProducingExpressions.length).foreach { index =>
         assertTableColumnCollation(testView, s"c$index", resolvedDefaultCollation)
       }
+    }
+  }
+  private def testCreateUDFWithSchemaLevelCollation(
+      dataType: String,
+      schemaDefaultCollation: String,
+      udfDefaultCollation: Option[String],
+      replaceUDF: Boolean = false): Unit = {
+    val prefix = "SYSTEM.BUILTIN"
+    val functionName = "f"
+
+    val (udfDefaultCollationClause, resolvedDefaultCollation) =
+      if (udfDefaultCollation.isDefined) {
+        (s"DEFAULT COLLATION ${udfDefaultCollation.get}", udfDefaultCollation.get)
+      } else {
+        ("", schemaDefaultCollation)
+      }
+    val replace = if (replaceUDF) "OR REPLACE" else ""
+
+    Seq(/* alterSchemaCollation */ false, true).foreach {
+      alterSchemaCollation =>
+        withDatabase(testSchema) {
+          if (!alterSchemaCollation) {
+            sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION $schemaDefaultCollation")
+          } else {
+            sql(s"CREATE SCHEMA $testSchema DEFAULT COLLATION EN")
+            sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION $schemaDefaultCollation")
+          }
+          sql(s"USE $testSchema")
+
+          Seq(
+            // (returnClause, outputCollation)
+            ("", resolvedDefaultCollation),
+            (s"RETURNS $dataType", resolvedDefaultCollation),
+            (s"RETURNS $dataType COLLATE FR", "fr")
+          ).foreach {
+            case (returnClause, outputCollation) =>
+              withUserDefinedFunction((functionName, false)) {
+                // scalastyle:off
+                sql(
+                  s"""CREATE $replace FUNCTION $functionName
+                     |(p1 $dataType, p2 $dataType COLLATE UTF8_BINARY, p3 $dataType COLLATE SR_AI_CI)
+                     |$returnClause
+                     |$udfDefaultCollationClause
+                     |RETURN SELECT 'a' AS c1 WHERE p2 != 'A' AND p3 = 'Č'
+                     |""".stripMargin)
+
+                checkAnswer(sql(s"SELECT $functionName('x', 'a', 'ć')"), Row("a"))
+                checkAnswer(sql(s"SELECT DISTINCT COLLATION($functionName('x', 'a', 'ć'))"),
+                  Row(s"$prefix.$outputCollation"))
+                // scalastyle:on
+              }
+          }
+
+          withUserDefinedFunction((functionName, false)) {
+            sql(
+              s"""CREATE $replace FUNCTION $functionName()
+                 |RETURNS TABLE
+                 |(c1 $dataType, c2 $dataType COLLATE UTF8_BINARY, c3 $dataType COLLATE SR_AI_CI)
+                 |$udfDefaultCollationClause
+                 |RETURN
+                 |SELECT 'a', 'b', 'c'
+                 |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT * FROM $functionName()"), Row("a", "b", "c"))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $functionName()"),
+              Row(s"$prefix.$resolvedDefaultCollation"))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $functionName()"),
+              Row(s"$prefix.UTF8_BINARY"))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c3) FROM $functionName()"),
+              Row(s"$prefix.sr_CI_AI"))
+          }
+
+          withUserDefinedFunction((functionName, false)) {
+            val pairs = defaultStringProducingExpressions.zipWithIndex.map {
+              case (expr, index) => (s"$expr AS c${index + 1}", s"c${index + 1} $dataType")
+            }
+            val columns = pairs.map(_._1).mkString(", ")
+            val returnsClause = pairs.map(_._2).mkString(", ")
+
+            sql(
+              s"""CREATE $replace FUNCTION $functionName()
+                 |RETURNS TABLE
+                 |($returnsClause)
+                 |$udfDefaultCollationClause
+                 |RETURN SELECT $columns
+                 |""".stripMargin)
+
+            (1 to defaultStringProducingExpressions.length).foreach { index =>
+              checkAnswer(sql(s"SELECT COLLATION(c$index) FROM $functionName()"),
+                Row(s"$prefix.$resolvedDefaultCollation"))
+            }
+          }
+        }
     }
   }
 }

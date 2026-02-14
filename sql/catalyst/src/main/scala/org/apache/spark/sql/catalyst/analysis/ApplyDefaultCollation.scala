@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
@@ -219,6 +219,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           }
           newAlterViewAs.copyTagsFrom(alterViewAs)
           newAlterViewAs
+
+        case createUserDefinedFunction@CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
+        _, _, _, _, _, collation, _, _, _, _, _, _) if collation.isEmpty =>
+          val newCreateUserDefinedFunction =
+            CurrentOrigin.withOrigin(createUserDefinedFunction.origin) {
+              createUserDefinedFunction.copy(
+                collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+            }
+          newCreateUserDefinedFunction.copyTagsFrom(createUserDefinedFunction)
+          newCreateUserDefinedFunction
 
         case other =>
           other

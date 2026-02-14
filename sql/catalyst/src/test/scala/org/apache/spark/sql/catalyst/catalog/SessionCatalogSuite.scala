@@ -2158,6 +2158,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exprText = None,
         queryText = None,
         comment = None,
+        collation = None,
         deterministic = Some(true),
         containsSQL = Some(false),
         isTableFunc = false,
@@ -2181,6 +2182,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exprText = Some("SELECT 1"),
         queryText = None,
         comment = None,
+        collation = None,
         deterministic = Some(true),
         containsSQL = Some(true),
         isTableFunc = true,  // But marked as table function

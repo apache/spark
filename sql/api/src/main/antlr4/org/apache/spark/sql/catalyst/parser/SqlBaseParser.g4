@@ -1571,6 +1571,7 @@ routineCharacteristics
     | sqlDataAccess
     | nullCall
     | commentSpec
+    | collationSpec
     | rightsClause)*
     ;
 

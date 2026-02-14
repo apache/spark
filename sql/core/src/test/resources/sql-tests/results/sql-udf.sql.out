@@ -313,7 +313,7 @@ struct<>
 -- !query
 SELECT foo1d2(1, 2, 3, 4), foo1d2(1, 2, 3), foo1d2(1, 2), foo1d2(1)
 -- !query schema
-struct<spark_catalog.default.foo1d2(1, 2, 3, 4):string,spark_catalog.default.foo1d2(1, 2, 3):string,spark_catalog.default.foo1d2(1, 2):string,spark_catalog.default.foo1d2(1):string>
+struct<spark_catalog.default.foo1d2(1, 2, 3, 4):string collate UTF8_BINARY,spark_catalog.default.foo1d2(1, 2, 3):string collate UTF8_BINARY,spark_catalog.default.foo1d2(1, 2):string collate UTF8_BINARY,spark_catalog.default.foo1d2(1):string collate UTF8_BINARY>
 -- !query output
 1 2 3 4	1 2 3 9	1 2 8 9	1 7 8 9
 
@@ -890,7 +890,7 @@ struct<>
 -- !query
 SELECT foo7a('Foo.a', 'Foo.b', 'Foo.c')
 -- !query schema
-struct<spark_catalog.default.foo7a(Foo.a, Foo.b, Foo.c):string>
+struct<spark_catalog.default.foo7a(Foo.a, Foo.b, Foo.c):string collate UTF8_BINARY>
 -- !query output
 Foo.a: Foo.a Foo.a: Foo.a T.b: t.b Foo.b: Foo.b T.c: t.c T.c: t.c
 
@@ -909,7 +909,7 @@ struct<>
 -- !query
 SELECT * FROM foo7at('Foo.a', 'Foo.b', 'Foo.c')
 -- !query schema
-struct<a:string,b:string,c:string,d:string,e:string>
+struct<a:string collate UTF8_BINARY,b:string collate UTF8_BINARY,c:string collate UTF8_BINARY,d:string collate UTF8_BINARY,e:string collate UTF8_BINARY>
 -- !query output
 Foo.a: Foo.a	Foo.b: Foo.b	T.b: t.b	Foo.c: Foo.c	T.c: t.c
 
@@ -1384,7 +1384,7 @@ struct<>
 -- !query
 SELECT foo9j('1234567890', '12')
 -- !query schema
-struct<spark_catalog.default.foo9j(1234567890, 12):string>
+struct<spark_catalog.default.foo9j(1234567890, 12):string collate UTF8_BINARY>
 -- !query output
 123456789012
 
@@ -1392,7 +1392,7 @@ struct<spark_catalog.default.foo9j(1234567890, 12):string>
 -- !query
 SELECT foo9j(12345678901, '12')
 -- !query schema
-struct<spark_catalog.default.foo9j(12345678901, 12):string>
+struct<spark_catalog.default.foo9j(12345678901, 12):string collate UTF8_BINARY>
 -- !query output
 1234567890112
 
@@ -1615,7 +1615,7 @@ struct<>
 -- !query
 SELECT foo9o(MAP('hello', 1, 'world', 2))
 -- !query schema
-struct<spark_catalog.default.foo9o(map(hello, 1, world, 2)):map<string,int>>
+struct<spark_catalog.default.foo9o(map(hello, 1, world, 2)):map<string collate UTF8_BINARY,int>>
 -- !query output
 {"hello":1,"world":2}
 
@@ -1623,7 +1623,7 @@ struct<spark_catalog.default.foo9o(map(hello, 1, world, 2)):map<string,int>>
 -- !query
 SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'))
 -- !query schema
-struct<spark_catalog.default.foo9o(entries):map<string,int>>
+struct<spark_catalog.default.foo9o(entries):map<string collate UTF8_BINARY,int>>
 -- !query output
 {"hello":1,"world":2}
 
@@ -1639,7 +1639,7 @@ struct<>
 -- !query
 SELECT foo9p(STRUCT(1, 'hello'))
 -- !query schema
-struct<spark_catalog.default.foo9p(struct(1, hello)):struct<a1:int,a2:string>>
+struct<spark_catalog.default.foo9p(struct(1, hello)):struct<a1:int,a2:string collate UTF8_BINARY>>
 -- !query output
 {"a1":1,"a2":"hello"}
 
@@ -1647,7 +1647,7 @@ struct<spark_catalog.default.foo9p(struct(1, hello)):struct<a1:int,a2:string>>
 -- !query
 SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'))
 -- !query schema
-struct<spark_catalog.default.foo9p(from_json({1:"hello"})):struct<a1:int,a2:string>>
+struct<spark_catalog.default.foo9p(from_json({1:"hello"})):struct<a1:int,a2:string collate UTF8_BINARY>>
 -- !query output
 {"a1":null,"a2":null}
 
@@ -1663,7 +1663,7 @@ struct<>
 -- !query
 SELECT foo9q(ARRAY(STRUCT(1, 'hello'), STRUCT(2, 'world')))
 -- !query schema
-struct<spark_catalog.default.foo9q(array(struct(1, hello), struct(2, world))):array<struct<a1:int,a2:string>>>
+struct<spark_catalog.default.foo9q(array(struct(1, hello), struct(2, world))):array<struct<a1:int,a2:string collate UTF8_BINARY>>>
 -- !query output
 [{"a1":1,"a2":"hello"},{"a1":2,"a2":"world"}]
 
@@ -1671,7 +1671,7 @@ struct<spark_catalog.default.foo9q(array(struct(1, hello), struct(2, world))):ar
 -- !query
 SELECT foo9q(ARRAY(NAMED_STRUCT('x', 1, 'y', 'hello'), NAMED_STRUCT('x', 2, 'y', 'world')))
 -- !query schema
-struct<spark_catalog.default.foo9q(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world))):array<struct<a1:int,a2:string>>>
+struct<spark_catalog.default.foo9q(array(named_struct(x, 1, y, hello), named_struct(x, 2, y, world))):array<struct<a1:int,a2:string collate UTF8_BINARY>>>
 -- !query output
 [{"a1":1,"a2":"hello"},{"a1":2,"a2":"world"}]
 
@@ -1679,7 +1679,7 @@ struct<spark_catalog.default.foo9q(array(named_struct(x, 1, y, hello), named_str
 -- !query
 SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'))
 -- !query schema
-struct<spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}])):array<struct<a1:int,a2:string>>>
+struct<spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}])):array<struct<a1:int,a2:string collate UTF8_BINARY>>>
 -- !query output
 NULL
 
@@ -1695,7 +1695,7 @@ struct<>
 -- !query
 SELECT foo9r(ARRAY(MAP('hello', 1), MAP('world', 2)))
 -- !query schema
-struct<spark_catalog.default.foo9r(array(map(hello, 1), map(world, 2))):array<map<string,int>>>
+struct<spark_catalog.default.foo9r(array(map(hello, 1), map(world, 2))):array<map<string collate UTF8_BINARY,int>>>
 -- !query output
 [{"hello":1},{"world":2}]
 
@@ -1703,7 +1703,7 @@ struct<spark_catalog.default.foo9r(array(map(hello, 1), map(world, 2))):array<ma
 -- !query
 SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'))
 -- !query schema
-struct<spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}])):array<map<string,int>>>
+struct<spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}])):array<map<string collate UTF8_BINARY,int>>>
 -- !query output
 [{"hello":1},{"world":2}]
 
@@ -1727,7 +1727,7 @@ struct<>
 -- !query
 SELECT bar1_10(3)
 -- !query schema
-struct<spark_catalog.default.bar1_10(3):string>
+struct<spark_catalog.default.bar1_10(3):string collate UTF8_BINARY>
 -- !query output
 5
 
@@ -1759,7 +1759,7 @@ struct<>
 -- !query
 SELECT foo1_11b()
 -- !query schema
-struct<spark_catalog.default.foo1_11b():string>
+struct<spark_catalog.default.foo1_11b():string collate UTF8_BINARY>
 -- !query output
 hello world
 
@@ -1855,7 +1855,7 @@ struct<>
 -- !query
 SELECT foo1_11h(1, 'test')
 -- !query schema
-struct<spark_catalog.default.foo1_11h(1, test):struct<a:int,b:string>>
+struct<spark_catalog.default.foo1_11h(1, test):struct<a:int,b:string collate UTF8_BINARY>>
 -- !query output
 {"a":1,"b":"test"}
 
@@ -1887,7 +1887,7 @@ struct<>
 -- !query
 SELECT foo1_11j('hello')
 -- !query schema
-struct<spark_catalog.default.foo1_11j(hello):string>
+struct<spark_catalog.default.foo1_11j(hello):string collate UTF8_BINARY>
 -- !query output
 HELLO
 
@@ -1903,7 +1903,7 @@ struct<>
 -- !query
 SELECT foo1_11k(123, 'test')
 -- !query schema
-struct<spark_catalog.default.foo1_11k(123, test):string>
+struct<spark_catalog.default.foo1_11k(123, test):string collate UTF8_BINARY>
 -- !query output
 123_test
 
@@ -1919,7 +1919,7 @@ struct<>
 -- !query
 SELECT * FROM foo1_11l()
 -- !query schema
-struct<id:int,name:string>
+struct<id:int,name:string collate UTF8_BINARY>
 -- !query output
 1	hello
 
@@ -1935,7 +1935,7 @@ struct<>
 -- !query
 SELECT * FROM foo1_11m(5, 'world')
 -- !query schema
-struct<doubled:int,upper_name:string>
+struct<doubled:int,upper_name:string collate UTF8_BINARY>
 -- !query output
 10	WORLD
 
@@ -1967,7 +1967,7 @@ struct<>
 -- !query
 SELECT * FROM foo1_11o(1, 'Alice')
 -- !query schema
-struct<person_info:struct<id:int,name:string>,modified_id:int>
+struct<person_info:struct<id:int,name:string collate UTF8_BINARY>,modified_id:int>
 -- !query output
 {"id":1,"name":"Alice"}	101
 
@@ -2321,7 +2321,7 @@ struct<>
 -- !query
 SELECT foo2_4a(ARRAY('a', 'b'))
 -- !query schema
-struct<spark_catalog.default.foo2_4a(array(a, b)):string>
+struct<spark_catalog.default.foo2_4a(array(a, b)):string collate UTF8_BINARY>
 -- !query output
 a
 
@@ -2338,7 +2338,7 @@ struct<>
 -- !query
 SELECT foo2_4b(map('a', 'hello', 'b', 'world'), 'a')
 -- !query schema
-struct<spark_catalog.default.foo2_4b(map(a, hello, b, world), a):string>
+struct<spark_catalog.default.foo2_4b(map(a, hello, b, world), a):string collate UTF8_BINARY>
 -- !query output
 HELLO HELLO
 
@@ -3616,7 +3616,7 @@ SELECT foo3_2e1(
     ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
     '2022-01-01')
 -- !query schema
-struct<spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), struct(2022-01-01 10:11:15, 2)), 2022-01-01):string>
+struct<spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), struct(2022-01-01 10:11:15, 2)), 2022-01-01):string collate UTF8_BINARY>
 -- !query output
 1
 
