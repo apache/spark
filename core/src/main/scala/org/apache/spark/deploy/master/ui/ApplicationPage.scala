@@ -116,7 +116,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <div class="row"> <!-- Executors -->
         <div class="col-12">
           <span class="collapse-aggregated-executors collapse-table"
-              onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
+              data-collapse-name="collapse-aggregated-executors"
+              data-collapse-table="aggregated-executors">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Executor Summary ({allExecutors.length})</a>
@@ -128,8 +129,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
           {
             if (removedExecutors.nonEmpty) {
               <span class="collapse-aggregated-removedExecutors collapse-table"
-                  onClick="collapseTable('collapse-aggregated-removedExecutors',
-                  'aggregated-removedExecutors')">
+                  data-collapse-name="collapse-aggregated-removedExecutors"
+                  data-collapse-table="aggregated-removedExecutors">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Removed Executors ({removedExecutors.length})</a>

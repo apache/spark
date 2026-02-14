@@ -2,6 +2,9 @@
   "name": "ui-test",
   "license": "Apache License 2.0",
   "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
   "devDependencies": {
     "glob": "^13.0.3",
     "jest": "^30.0.0",
@@ -9,6 +12,7 @@
     "jquery": "^3.7.1"
   },
   "jest": {
-    "testEnvironment": "jsdom"
+    "testEnvironment": "jsdom",
+    "transform": {}
   }
 }
