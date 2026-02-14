@@ -1415,11 +1415,8 @@ class RocksDBStateStoreChangeDataReader(
    */
   private def readNextChangelogRecord():
       (RecordType.Value, Array[Byte], Array[Byte]) = {
-    while (true) {
-      val reader = currentChangelogReader()
-      if (reader == null) {
-        return null
-      }
+    var reader = currentChangelogReader()
+    while (reader != null) {
       val nextRecord = reader.next()
       if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
         logWarning(log"Skipping DELETE_RANGE_RECORD in state change data feed " +
@@ -1428,8 +1425,9 @@ class RocksDBStateStoreChangeDataReader(
       } else {
         return nextRecord
       }
+      reader = currentChangelogReader()
     }
-    null // unreachable, needed for compilation
+    null
   }
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {

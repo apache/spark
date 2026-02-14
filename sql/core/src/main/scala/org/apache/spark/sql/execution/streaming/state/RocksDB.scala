@@ -1469,6 +1469,7 @@ class RocksDB(
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
     changelogWriter.foreach(_.deleteRange(beginKeyWithPrefix, endKeyWithPrefix))
+    // TODO: Add metrics update for deleteRange operations
   }
 
   /**
