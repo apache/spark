@@ -596,6 +596,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.exprText,
         c.queryText,
         c.comment,
+        c.collation,
         c.isDeterministic,
         c.containsSQL,
         c.language,
@@ -605,7 +606,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.replace)
 
     case CreateUserDefinedFunction(
-        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
+        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
