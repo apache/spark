@@ -336,6 +336,164 @@ WithCTE
 
 
 -- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (1), (2), (2), (3) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1 as bigint)), (cast(2 as bigint)), (cast(2 as bigint)), (cast(3 as bigint)) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#xL as string), ,, col#xL ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#xL]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1 as smallint)), (cast(2 as smallint)), (cast(2 as smallint)), (cast(3 as smallint)) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1 as tinyint)), (cast(2 as tinyint)), (cast(2 as tinyint)), (cast(3 as tinyint)) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.10 as decimal(10,2))), (cast(2.20 as decimal(10,2))), (cast(2.20 as decimal(10,2))) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (DATE'2024-01-01'), (DATE'2024-01-02'), (DATE'2024-01-01') AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (TIMESTAMP_NTZ'2024-01-01 10:00:00'), (TIMESTAMP_NTZ'2024-01-02 12:00:00'), (TIMESTAMP_NTZ'2024-01-01 10:00:00') AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (true), (false), (true) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (INTERVAL '1' MONTH), (INTERVAL '2' MONTH), (INTERVAL '1' MONTH) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (INTERVAL '1' HOUR), (INTERVAL '2' HOUR), (INTERVAL '1' HOUR) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT cast(col as string), ',') WITHIN GROUP (ORDER BY col) FROM VALUES (10), (1), (2), (20), (2) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(col AS STRING), ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col DESC) FROM VALUES (1), (10), (2), (20), (2) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x DESC NULLS LAST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col DESC NULLS LAST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (1), (2), (null), (2), (3) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col NULLS FIRST) FROM VALUES (1), (null), (2), (null) AS t(col)
+-- !query analysis
+Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT grp, listagg(DISTINCT col) WITHIN GROUP (ORDER BY col) FROM VALUES (1, 'a'), (1, 'b'), (2, 'a'), (2, 'a'), (1, 'b') AS t(grp, col) GROUP BY grp
+-- !query analysis
+Aggregate [grp#x], [grp#x, listagg(distinct col#x, null, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, NULL) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
++- SubqueryAlias t
+   +- LocalRelation [grp#x, col#x]
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'DEAD'), (X'BEEF'), (X'DEAD'), (X'CAFE'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF'), regexp_count(col, X'CAFE') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x AS col#x]
+:        +- Aggregate [listagg(distinct col1#x, 0x2C, col1#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0xDEAD as string)) AS regexp_count(col, X'DEAD')#x, regexp_count(cast(col#x as string), cast(0xBEEF as string)) AS regexp_count(col, X'BEEF')#x, regexp_count(cast(col#x as string), cast(0xCAFE as string)) AS regexp_count(col, X'CAFE')#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'BB'), (X'AA'), (NULL), (X'BB'))) SELECT len(col), regexp_count(col, X'AA'), regexp_count(col, X'BB') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x AS col#x]
+:        +- Aggregate [listagg(distinct col1#x, 0x7C, col1#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0xAA as string)) AS regexp_count(col, X'AA')#x, regexp_count(cast(col#x as string), cast(0xBB as string)) AS regexp_count(col, X'BB')#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+SELECT grp, hex(listagg(DISTINCT col, X'2C') WITHIN GROUP (ORDER BY col)) FROM VALUES (1, X'AA'), (1, X'BB'), (1, X'AA'), (2, X'CC'), (2, X'CC') AS t(grp, col) GROUP BY grp
+-- !query analysis
+Aggregate [grp#x], [grp#x, hex(listagg(distinct col#x, 0x2C, col#x ASC NULLS FIRST, 0, 0)) AS hex(listagg(DISTINCT col, X'2C') WITHIN GROUP (ORDER BY col ASC NULLS FIRST))#x]
++- SubqueryAlias t
+   +- LocalRelation [grp#x, col#x]
+
+
+-- !query
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -505,5 +663,35 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "funcArg" : "\"col1\"",
     "funcName" : "`listagg`",
     "orderingExpr" : "\"col1\", \"col2\""
+  }
+}
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.1 as double)), (cast(2.2 as double)), (cast(2.2 as double)), (cast(3.3 as double)) AS t(col)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"DOUBLE\""
+  }
+}
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.0 as float)), (cast(2.0 as float)), (cast(2.0 as float)) AS t(col)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"FLOAT\""
   }
 }
