@@ -79,13 +79,9 @@ import org.apache.spark.sql.types._
 object PruneNestedFieldsThroughGenerateForScan
     extends Rule[LogicalPlan] with SQLConfHelper {
 
-  // Counter for debugging invocations
-  private var invocationCounter = new java.util.concurrent.atomic.AtomicInteger(0)
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.nestedSchemaPruningEnabled) return plan
-    val invocationId = invocationCounter.incrementAndGet()
-    rewriteGenerateChains(plan, invocationId)
+    rewriteGenerateChains(plan)
   }
 
   /**
@@ -121,26 +117,25 @@ object PruneNestedFieldsThroughGenerateForScan
    * For each chain, we collect required fields for each Generate and rewrite
    * bottom-up, inserting a single pruned Project at the leaf.
    *
-   * For chains with multiple generates where inner generates could benefit from
-   * pruning, uses the nested schema approach (Steps 11-13). For single generates,
-   * uses the proven flat Set[String] approach.
+   * Uses nested schema approach for requirement propagation, enabling inner
+   * generate pruning by embedding inner requirements into outer schemas.
    */
-  private def rewriteGenerateChains(plan: LogicalPlan, invocationId: Int): LogicalPlan = {
+  private def rewriteGenerateChains(plan: LogicalPlan): LogicalPlan = {
     plan.transformDown {
       // Pattern 1: Project directly above a Generate chain
       case p @ Project(projectList, child) if startsGenerateChain(child) =>
-        tryRewriteChainWithNestedSchema(p, projectList, Nil, child, None, invocationId)
+        tryRewriteChainWithNestedSchema(p, projectList, Nil, child, None)
 
       // Pattern 2: Project -> Filter -> Generate chain
       case p @ Project(projectList, f @ Filter(condition, child))
           if startsGenerateChain(child) =>
         tryRewriteChainWithNestedSchema(
-          p, projectList, Seq(condition), child, Some(f), invocationId)
+          p, projectList, Seq(condition), child, Some(f))
 
       // Pattern 3: Project above a Generate that has an intermediate Project below
       case p @ Project(projectList, g: Generate)
           if !startsGenerateChain(g) && startsGenerateChainThroughProjects(g.child) =>
-        tryRewriteChainWithNestedSchema(p, projectList, Nil, g, None, invocationId)
+        tryRewriteChainWithNestedSchema(p, projectList, Nil, g, None)
     }
   }
 
@@ -372,63 +367,6 @@ object PruneNestedFieldsThroughGenerateForScan
   }
 
   /**
-   * Attempts to rewrite a Generate chain without an intermediate filter.
-   */
-  private def tryRewriteChain(
-      originalProject: Project,
-      projectList: Seq[NamedExpression],
-      filterConditions: Seq[Expression],
-      chainStart: LogicalPlan): LogicalPlan = {
-
-    val (chain, leaf) = extractGenerateChain(chainStart)
-    if (chain.isEmpty) return originalProject
-
-    // Compute required fields for each Generate in the chain
-    val requirements = computeChainRequirements(chain, projectList, filterConditions, leaf)
-
-    // Check if any pruning is possible
-    val anyPruning = requirements.zip(chain).exists { case (req, info) =>
-      req.isDefined && req.get.size < info.elementStruct.fields.length
-    }
-
-    if (!anyPruning) return originalProject
-
-    // Rewrite bottom-up
-    rewriteChainBottomUp(
-      originalProject, projectList, filterConditions, chain, requirements, leaf, None)
-  }
-
-  /**
-   * Attempts to rewrite a Generate chain with an intermediate filter above the chain.
-   */
-  private def tryRewriteChainWithFilter(
-      originalProject: Project,
-      projectList: Seq[NamedExpression],
-      filterCondition: Expression,
-      filter: Filter,
-      chainStart: LogicalPlan): LogicalPlan = {
-
-    val (chain, leaf) = extractGenerateChain(chainStart)
-    if (chain.isEmpty) return originalProject
-
-    val filterConditions = Seq(filterCondition)
-
-    // Compute required fields for each Generate in the chain
-    val requirements = computeChainRequirements(chain, projectList, filterConditions, leaf)
-
-    // Check if any pruning is possible
-    val anyPruning = requirements.zip(chain).exists { case (req, info) =>
-      req.isDefined && req.get.size < info.elementStruct.fields.length
-    }
-
-    if (!anyPruning) return originalProject
-
-    // Rewrite bottom-up
-    rewriteChainBottomUp(
-      originalProject, projectList, filterConditions, chain, requirements, leaf, Some(filter))
-  }
-
-  /**
    * Attempts to rewrite a Generate chain using nested schema propagation.
    * This enables inner generate pruning by embedding inner requirements into outer schemas.
    */
@@ -437,8 +375,7 @@ object PruneNestedFieldsThroughGenerateForScan
       projectList: Seq[NamedExpression],
       filterConditions: Seq[Expression],
       chainStart: LogicalPlan,
-      filterOpt: Option[Filter],
-      invocationId: Int): LogicalPlan = {
+      filterOpt: Option[Filter]): LogicalPlan = {
 
     val (chain, leaf) = extractGenerateChain(chainStart)
     if (chain.isEmpty) return originalProject
@@ -456,14 +393,10 @@ object PruneNestedFieldsThroughGenerateForScan
     val allTopExprs = projectList ++ filterConditions ++ intermediateExprs
     val requirements = computeNestedChainRequirements(chain, allTopExprs, Nil, leaf, chainStart)
 
-    // DEBUG: Print chain and requirements IMMEDIATELY after extraction and computation
-
     // Check if any pruning is possible (top-level count reduction OR nested type changes)
     val anyPruning = requirements.zip(chain).exists { case (req, info) =>
-      val canPrune = req.isDefined && hasNestedTypePruning(req.get, info.elementStruct)
-      canPrune
+      req.isDefined && hasNestedTypePruning(req.get, info.elementStruct)
     }
-
 
     if (!anyPruning) return originalProject
 
@@ -1260,261 +1193,6 @@ object PruneNestedFieldsThroughGenerateForScan
     }
   }
 
-  /**
-   * Computes required fields for each Generate in the chain.
-   *
-   * For each Generate, we collect field requirements from:
-   * 1. The top-level projectList and filterConditions
-   * 2. The generator child expressions of parent Generates
-   * 3. Filters below each Generate (extracted from leaf path)
-   *
-   * Returns None for a Generate if its output is used directly (can't prune).
-   */
-  private def computeChainRequirements(
-      chain: Seq[GenerateInfo],
-      projectList: Seq[NamedExpression],
-      filterConditions: Seq[Expression],
-      leaf: LogicalPlan): Seq[Option[Set[String]]] = {
-
-    // Extract filters from the leaf path
-    val (leafFilters, _) = decomposeChild(leaf)
-
-    // All expressions that may reference Generate outputs
-    val topExprs: Seq[Expression] = projectList ++ filterConditions ++ leafFilters
-
-    // Collect expressions from each level: top + generator children of parent Generates +
-    // intermediate nodes' expressions.
-    // For chain [outer, inner], inner's gen child (e.g., complex.col2) refs outer's output.
-    // Additionally, intermediate nodes (Projects/Filters inserted by GNA) between Generates
-    // contain expressions that reference the Generate output (e.g., l2.l3_f1 AS _extract_l3_f1).
-    val exprsByLevel: Seq[Seq[Expression]] = chain.indices.map { i =>
-      val parentGenExprs = chain.take(i).flatMap { parentInfo =>
-        // The generator's child expression references the output of Generates below it
-        Seq(parentInfo.generator.child)
-      }
-
-      // Include expressions from intermediate nodes above this Generate.
-      // These are Project/Filter nodes inserted by GNA that may reference this Generate's output.
-      // For chain[i], we need to check the intermediate nodes of all parent chain items
-      // (chain[j] for j < i) as they sit above chain[i]'s Generate and may reference its output.
-      val intermediateExprs = chain.take(i + 1).flatMap { info =>
-        info.intermediateNodes.flatMap {
-          case p: Project => p.projectList
-          case f: Filter => Seq(f.condition)
-          case _ => Nil
-        }
-      }
-
-      topExprs ++ parentGenExprs ++ intermediateExprs
-    }
-
-    // For each Generate, analyze required fields from relevant expressions
-    chain.zip(exprsByLevel).zipWithIndex.map { case ((info, exprs), idx) =>
-
-      // Analyze fields accessed via the exploded element (item.field)
-      val explodedFieldsOpt = analyzeRequiredFields(exprs, info.colAttr)
-
-      // Analyze fields accessed via the source array (someArray.field via GetArrayStructFields)
-      // Support both direct attributes and GetStructField chains rooted at scan attributes
-      val sourceRootAttr: Option[Attribute] = extractRootAttribute(info.generator.child)
-      val sourceFieldsOpt = analyzeSourceArrayFields(exprs, sourceRootAttr, info.generator.child)
-
-      // Merge requirements
-      (explodedFieldsOpt, sourceFieldsOpt) match {
-        case (None, _) => None // Can't prune - direct reference to exploded element
-        case (_, None) => None // Can't prune - complex source array expression
-        case (Some(exploded), Some(source)) =>
-          val required = exploded ++ source
-          val isPosOnly = required.isEmpty && info.posAttrOpt.isDefined
-          val canPruneToMinimal = isPosOnly && info.elementStruct.fields.length > 1
-          if (canPruneToMinimal) {
-            // Only pos is used; select minimal-weight field
-            selectMinimalWeightField(info.elementStruct).map(f => Set(f.name))
-          } else if (isPosOnly) {
-            // Pos-only but already at minimal fields (≤1) - no pruning possible.
-            // This ensures idempotency: after first pass prunes to 1 field,
-            // second pass won't try to prune to 0 fields.
-            None
-          } else {
-            Some(required)
-          }
-      }
-    }
-  }
-
-  /**
-   * Rewrites the Generate chain bottom-up.
-   *
-   * Starting from the innermost Generate, we:
-   * 1. Insert a pruned array Project at the leaf (for the outermost Generate that can be pruned)
-   * 2. Update each Generate's output schema
-   * 3. Fix ordinals in all expressions that reference the updated outputs
-   *
-   * Important: We can only prune a Generate if its source array is a direct attribute from the
-   * scan (leaf), not from another Generate's output. Inner generates that explode fields from
-   * outer generate outputs cannot be pruned at the leaf level.
-   */
-  private def rewriteChainBottomUp(
-      originalProject: Project,
-      projectList: Seq[NamedExpression],
-      filterConditions: Seq[Expression],
-      chain: Seq[GenerateInfo],
-      requirements: Seq[Option[Set[String]]],
-      leaf: LogicalPlan,
-      filterOpt: Option[Filter]): LogicalPlan = {
-
-    // Decompose the leaf to find where to insert our pruning Project
-    val (leafFilters, actualLeaf) = decomposeChild(leaf)
-
-    // Find the TRUE scan relation to determine scan attribute IDs.
-    val scanLeaf = findScanLeaf(leaf)
-    val scanAttrIds = scanLeaf.output.map(_.exprId).toSet
-
-    // Find the outermost Generate that can be pruned AND has a scan-rooted source.
-    // We can only prune generates whose source array is rooted at a scan attribute,
-    // not from another generate's output (inner generates exploding outer generate
-    // outputs can't be pruned here).
-    // This supports both direct attributes (e.g., `explode(arr)`) and GetStructField
-    // chains (e.g., `explode(col.structArr)`).
-    val outermostPrunableIdx = chain.indices.find { i =>
-      val info = chain(i)
-      val hasScanRootedSource = extractRootAttribute(info.generator.child) match {
-        case Some(rootAttr) => scanAttrIds.contains(rootAttr.exprId)
-        case None => false
-      }
-      hasScanRootedSource &&
-        requirements(i).isDefined &&
-        requirements(i).get.size < info.elementStruct.fields.length
-    }
-
-    outermostPrunableIdx match {
-      case None => originalProject // No pruning possible
-      case Some(prunableIdx) =>
-        val prunableInfo = chain(prunableIdx)
-        val requiredFields = requirements(prunableIdx).get
-
-        if (requiredFields.size >= prunableInfo.elementStruct.fields.length) {
-          return originalProject // All fields needed
-        }
-
-        // Order fields according to original struct order
-        val orderedFields = prunableInfo.elementStruct.fieldNames
-          .filter(requiredFields.contains).toSeq
-
-        // New element struct for the prunable Generate (define early - needed for filter rewriting)
-        val newElementStruct = StructType(orderedFields.map { name =>
-          prunableInfo.elementStruct(prunableInfo.elementStruct.fieldIndex(name))
-        })
-
-        // Build the pruned array expression
-        // Extract the root attribute for filter rewriting (supports GetStructField chains)
-        val sourceRootAttr: Option[Attribute] = extractRootAttribute(prunableInfo.generator.child)
-        val sourceArrayExpr: Expression = prunableInfo.generator.child
-
-        val prunedArrayExpr = buildPrunedArray(
-          sourceArrayExpr,
-          prunableInfo.elementStruct,
-          orderedFields,
-          prunableInfo.containsNull)
-
-        val prunedAlias = Alias(prunedArrayExpr, "_pruned_explode")()
-        val prunedAttr = prunedAlias.toAttribute
-
-        // Compute pass-through attributes needed above.
-        // Note: We don't include generator child references here because:
-        // 1. For the prunable Generate, its child (source array) is replaced with _pruned
-        // 2. For parent Generates, their children reference outputs of child Generates,
-        //    which are available after the Generate executes
-        val aboveReferences: Set[Attribute] =
-          (projectList.flatMap(_.references) ++
-            filterConditions.flatMap(_.references)).toSet
-        val allGenOutputs = AttributeSet(chain.flatMap(_.generate.generatorOutput))
-        val childAttrsNeededAbove: Seq[Attribute] = actualLeaf.output
-          .filter(a => aboveReferences.exists(r =>
-            r.exprId == a.exprId && !allGenOutputs.contains(r)))
-
-        // Inner Project directly above the leaf
-        val innerProject = Project(childAttrsNeededAbove :+ prunedAlias, actualLeaf)
-
-        // Rewrite leaf filters to reference _pruned, fixing ordinals in GetArrayStructFields
-        // Support both direct Attributes and GetStructField chains as source expressions
-        val rewrittenLeaf = sourceRootAttr match {
-          case Some(_) =>
-            leafFilters.foldLeft(innerProject: LogicalPlan) { (plan, cond) =>
-              val rewritten = fixArrayStructOrdinalsInExprChain(
-                cond, sourceArrayExpr, prunedAttr, newElementStruct, prunableInfo.containsNull)
-              Filter(rewritten, plan)
-            }
-          case None =>
-            leafFilters.foldLeft(innerProject: LogicalPlan) { (plan, cond) =>
-              Filter(cond, plan)
-            }
-        }
-
-        // newElementStruct already defined above
-
-        // Build new generator for the prunable Generate
-        val newGenerator: ExplodeBase = prunableInfo.generator match {
-          case _: Explode => Explode(prunedAttr)
-          case _: PosExplode => PosExplode(prunedAttr)
-        }
-
-        // Updated generator output (preserve exprIds)
-        val newGenOutput = prunableInfo.generate.generatorOutput
-          .zip(toAttributes(newGenerator.elementSchema)).map {
-            case (oldAttr, newAttr) =>
-              newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
-          }
-
-        // Build the rewritten chain from the prunable Generate upward
-        var currentChild: LogicalPlan = rewrittenLeaf
-
-        // First, rebuild Generates below the prunable one (if any) - they stay unchanged
-        for (i <- (chain.length - 1) until prunableIdx by -1) {
-          val info = chain(i)
-          currentChild = info.generate.copy(child = currentChild)
-        }
-
-        // Now add the prunable Generate with updated output
-        val prunedIdx = childAttrsNeededAbove.length
-        val prunableGenerate = prunableInfo.generate.copy(
-          generator = newGenerator,
-          unrequiredChildIndex = Seq(prunedIdx),
-          generatorOutput = newGenOutput,
-          child = currentChild)
-        currentChild = prunableGenerate
-
-        // Rebuild Generates above the prunable one, fixing ordinals in their generator children
-        for (i <- (prunableIdx - 1) to 0 by -1) {
-          val info = chain(i)
-          // Fix ordinals in the generator child expression
-          val fixedGenChild = fixOrdinalsInExpr(
-            info.generator.child, prunableInfo.colAttr, newElementStruct)
-          val fixedGenerator: ExplodeBase = info.generator match {
-            case _: Explode => Explode(fixedGenChild)
-            case _: PosExplode => PosExplode(fixedGenChild)
-          }
-          currentChild = info.generate.copy(
-            generator = fixedGenerator,
-            child = currentChild)
-        }
-
-        // Fix ordinals in the top-level expressions
-        val fixedProjectList = projectList.map(
-          fixOrdinalsInExpr(_, prunableInfo.colAttr, newElementStruct)
-            .asInstanceOf[NamedExpression])
-
-        filterOpt match {
-          case Some(filter) =>
-            val fixedCond = fixOrdinalsInExpr(
-              filter.condition, prunableInfo.colAttr, newElementStruct)
-            Project(fixedProjectList, Filter(fixedCond, currentChild))
-          case None =>
-            Project(fixedProjectList, currentChild)
-        }
-    }
-  }
-
   // ---------------------------------------------------------------------------
   //  Helpers
   // ---------------------------------------------------------------------------
@@ -1602,32 +1280,6 @@ object PruneNestedFieldsThroughGenerateForScan
         hasNestedDataTypePruning(reqElem, origElem)
       case _ =>
         false
-    }
-  }
-
-  /**
-   * Extracts the root field name from a GetStructField/GetArrayStructFields chain
-   * rooted at the given attribute.
-   * For example:
-   * - GetStructField(GetStructField(l1, level2), level3) returns Some(level2)
-   * - GetArrayStructFields(GetStructField(l1, level2), level3) returns Some(level2)
-   */
-  @scala.annotation.tailrec
-  private def extractRootFieldFromChain(
-      expr: Expression,
-      colAttr: Attribute): Option[String] = {
-    expr match {
-      case gsf: GetStructField if isAttrRef(gsf.child, colAttr) =>
-        Some(gsf.extractFieldName)
-      case gsf: GetStructField =>
-        extractRootFieldFromChain(gsf.child, colAttr)
-      case gasf: GetArrayStructFields if isAttrRef(gasf.child, colAttr) =>
-        // gasf.child is the attribute, so this is a top-level access
-        Some(gasf.field.name)
-      case gasf: GetArrayStructFields =>
-        extractRootFieldFromChain(gasf.child, colAttr)
-      case _ =>
-        None
     }
   }
 
@@ -2593,46 +2245,6 @@ object PruneNestedFieldsThroughGenerateForScan
       currentInfo: GenerateInfo): Option[String] = {
     val path = extractSourceFieldPath(sourceInfo, currentInfo)
     path.headOption
-  }
-
-  // ---------------------------------------------------------------------------
-  //  Required-field analysis (legacy - flat Set[String])
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Returns the set of struct field names accessed through
-   * [[GetStructField]] on `colAttr`, or [[None]] when `colAttr` is
-   * referenced directly (meaning all fields are needed).
-   */
-  private def analyzeRequiredFields(
-      exprs: Seq[Expression],
-      colAttr: Attribute): Option[Set[String]] = {
-    val fieldNames = mutable.LinkedHashSet[String]()
-    var canPrune = true
-
-    def analyze(e: Expression): Unit = {
-      if (!canPrune) return
-      e match {
-        case gsf: GetStructField if isAttrRef(gsf.child, colAttr) =>
-          fieldNames += gsf.extractFieldName
-        // Also handle GetArrayStructFields - this is used when accessing an array field
-        // from the exploded element, e.g., a_array_item.b_array where b_array is array<struct>
-        case gasf: GetArrayStructFields if isAttrRef(gasf.child, colAttr) =>
-          fieldNames += gasf.field.name
-        case gasf: GetArrayStructFields =>
-          gasf.children.foreach(analyze)
-        // Handle GetNestedArrayStructFields for nested array access
-        case gnasf: GetNestedArrayStructFields if isAttrRef(gnasf.child, colAttr) =>
-          fieldNames += gnasf.field.name
-        case a: Attribute if a.exprId == colAttr.exprId =>
-          // Direct reference outside GetStructField -> all fields needed
-          canPrune = false
-        case other =>
-          other.children.foreach(analyze)
-      }
-    }
-    exprs.foreach(analyze)
-    if (canPrune) Some(fieldNames.toSet) else None
   }
 
   /**
