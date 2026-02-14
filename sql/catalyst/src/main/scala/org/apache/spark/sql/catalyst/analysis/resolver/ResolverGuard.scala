@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.{
 }
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
+  FunctionResolution,
   GetViewColumnByNameAndOrdinal,
   ResolvedInlineTable,
   UnresolvedAlias,
@@ -382,21 +383,16 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   }
 
   /**
-   * Checks if a function name is unqualified or explicitly qualified as builtin.
-   * This method is currently unused but kept for potential future use.
+   * Returns true if the name is unqualified or explicitly qualified as builtin
+   * (e.g. builtin.func, system.builtin.func).
    *
+   * @note Reserved for future use (e.g. guard rules that treat builtin-qualified
+   *       names differently).
    * @param nameParts the parts of the function name
    * @return true if the name is unqualified, "builtin.func", or "system.builtin.func"
    */
   private def isBuiltinOrUnqualified(nameParts: Seq[String]): Boolean = {
-    nameParts.length match {
-      case 1 => true
-      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case 3 =>
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case _ => false
-    }
+    nameParts.length == 1 || FunctionResolution.maybeBuiltinFunctionName(nameParts)
   }
 
   private def checkLiteral(literal: Literal) = true

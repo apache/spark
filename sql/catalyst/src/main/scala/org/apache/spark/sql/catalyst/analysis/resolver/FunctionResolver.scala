@@ -175,32 +175,8 @@ class FunctionResolver(
    * Rejects catalog.db.count (persistent function) to avoid incorrect normalization.
    */
   private def isCount(unresolvedFunction: UnresolvedFunction): Boolean = {
-    if (unresolvedFunction.isDistinct) {
-      return false
-    }
-
-    val nameParts = unresolvedFunction.nameParts
-
-    // Validate that this is actually the builtin count function, not a persistent one
-    val isBuiltinCount = nameParts.length match {
-      case 1 =>
-        // Unqualified: "count"
-        nameParts.head.equalsIgnoreCase("count")
-      case 2 =>
-        // Two parts: must be "builtin.count"
-        nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) &&
-        nameParts.last.equalsIgnoreCase("count")
-      case 3 =>
-        // Three parts: must be "system.builtin.count"
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) &&
-        nameParts.last.equalsIgnoreCase("count")
-      case _ =>
-        // More than 3 parts or other patterns are not builtin count
-        false
-    }
-
-    isBuiltinCount
+    !unresolvedFunction.isDistinct &&
+      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(unresolvedFunction.nameParts, "count")
   }
 
   /**

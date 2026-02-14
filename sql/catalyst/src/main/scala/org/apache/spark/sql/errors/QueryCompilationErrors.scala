@@ -1271,17 +1271,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new FunctionAlreadyExistsException(func.nameParts)
   }
 
-  def cannotShadowBuiltinFunctionError(funcName: String, namespace: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_SHADOW_BUILTIN_FUNCTION",
-      messageParameters = Map(
-        "funcName" -> toSQLId(funcName),
-        "namespace" -> toSQLId(namespace),
-        "config" -> toSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key)
-      )
-    )
-  }
-
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(

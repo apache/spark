@@ -66,11 +66,15 @@ class FunctionResolution(
 
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
-      val builtinOrSession = resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u)
+      // For "last" order this is builtin then persistent then session; for "first"/"second"
+      // it is the result of the session resolution path (builtin then session,
+      // or session then builtin).
+      val builtinOrSessionResult = resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u)
       val order = SQLConf.get.sessionFunctionResolutionOrder
       if (order == "last" && u.nameParts.size == 1) {
-        // Order: builtin -> persistent -> session; session not in resolveBuiltinOrTempFunction path
-        builtinOrSession.getOrElse {
+        // Order: builtin -> persistent -> session; session not in
+        // resolveBuiltinOrTempFunction path.
+        builtinOrSessionResult.getOrElse {
           try {
             resolvePersistentFunction(u)
           } catch {
@@ -87,7 +91,7 @@ class FunctionResolution(
           }
         }
       } else {
-        builtinOrSession.getOrElse(resolvePersistentFunction(u))
+        builtinOrSessionResult.getOrElse(resolvePersistentFunction(u))
       }
     }
   }
@@ -127,7 +131,8 @@ class FunctionResolution(
       // After validation, last element is the function name (e.g., "func" from "session.func")
       v1SessionCatalog.lookupTempFunction(name.last)
     } else if (name.size == 1) {
-      // Unqualified - check temp first (shadowing), then builtin
+      // Unqualified: resolution order is given by the session resolution path
+      // (builtin then session by default, or session then builtin when session is first).
       v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
       // Multi-part name that's not system.builtin/session - this is a catalog-qualified name.
@@ -147,7 +152,8 @@ class FunctionResolution(
       // Explicitly qualified as temp - lookup only temp
       v1SessionCatalog.lookupTempTableFunction(name.last)
     } else if (name.length == 1) {
-      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
+      // Unqualified: resolution order follows the session resolution path
+      // (see lookupBuiltinOrTempFunction).
       v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
     } else {
       None
@@ -258,10 +264,10 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
-      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
-      // This ensures built-in functions take precedence over temp functions (security fix)
-      // Cross-type checking: If only a temp table function exists (no scalar version),
-      // throw error when used in scalar context
+      // Unqualified: resolution order follows the session resolution path
+      // (builtin then session by default).
+      // Cross-type checking: if only a temp table function exists (no scalar version),
+      // throw error when used in scalar context.
       val funcName = name.head
       val scalarResult = v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
 
@@ -303,19 +309,22 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempTableFunction(name.last, arguments)
     } else if (name.length == 1) {
-      // For unqualified names, use the PATH resolution order: extension -> builtin -> session
-      // This ensures built-in table functions take precedence over temp functions (security fix)
-      // Cross-type checking: If only a temp scalar function exists (no table version),
-      // throw error when used in table context (checked below in Step 2)
+      // Unqualified: first match in path (scalar or table) wins; if scalar first, throw
+      // NOT_A_TABLE (consistent with scalar context where table-first yields
+      // NOT_A_SCALAR_FUNCTION).
       val funcName = name.head
-      v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
+      v1SessionCatalog
+        .resolveBuiltinOrTempTableFunctionRespectingPathOrder(funcName, arguments) match {
+        case Some(Left(plan)) => Some(plan)
+        case Some(Right(())) =>
+          throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
+        case None => None
+      }
     } else {
       None
     }
 
-    // Step 2: Fallback to scalar registry for type mismatch detection
-    // If no table function was found (neither builtin nor temp), check if a scalar function exists.
-    // If yes, this is a cross-type error - scalar function used in table context.
+    // Step 2: If no table function was found in path, check if a scalar exists (wrong type).
     if (tableFunctionResult.isEmpty && name.length == 1) {
       if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
         throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
@@ -644,5 +653,18 @@ object FunctionResolution {
         nameParts(2).nonEmpty
       case _ => false
     }
+  }
+
+  /**
+   * Returns true if the name is unqualified or explicitly qualified as builtin with the given
+   * function name. Used for special syntax (e.g. COUNT(*) -> COUNT(1)) that should only apply
+   * to the builtin function, not to user-defined or persistent functions.
+   *
+   * @param nameParts The function name parts (e.g. Seq("count"), Seq("builtin", "count")).
+   * @param expectedName The expected function name (e.g. "count").
+   */
+  def isUnqualifiedOrBuiltinFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+    nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName)) &&
+      (nameParts.size == 1 || maybeBuiltinFunctionName(nameParts))
   }
 }

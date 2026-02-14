@@ -149,7 +149,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 5: Cross-Type Error Detection - table in scalar context") {
-    // Table function cannot be used in scalar context
+    // Scalar resolution only looks in scalar registry. If we use a name that exists only as a
+    // table function (table first / only in path), we get NOT_A_SCALAR_FUNCTION.
     sql("CREATE TEMPORARY FUNCTION table_only() RETURNS TABLE(val INT) RETURN SELECT 42")
     checkAnswer(sql("SELECT * FROM table_only()"), Row(42))
 
@@ -173,6 +174,48 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     // Generator functions work in both contexts
     checkAnswer(sql("SELECT explode(array(1, 2, 3))"), Seq(Row(1), Row(2), Row(3)))
     checkAnswer(sql("SELECT * FROM explode(array(1, 2, 3))"), Seq(Row(1), Row(2), Row(3)))
+  }
+
+  test("SECTION 5: Table resolution - scalar first in path yields NOT_A_TABLE_FUNCTION") {
+    // First match in path wins (consistent with scalar context). Builtin has scalar "abs", so
+    // in table context we get NOT_A_TABLE_FUNCTION; we do not skip to the temp table function.
+    sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 99")
+    try {
+      checkError(
+        exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
+        condition = "NOT_A_TABLE_FUNCTION",
+        parameters = Map("functionName" -> "`abs`"))
+      checkAnswer(sql("SELECT abs(-5)"), Row(5))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION abs")
+    }
+  }
+
+  test("SECTION 5: Cannot have temp scalar and temp table function with same name") {
+    // SessionCatalog prevents registering both types with the same name so DROP is unambiguous.
+    sql("CREATE TEMPORARY FUNCTION same_name() RETURNS INT RETURN 1")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY FUNCTION same_name() RETURNS TABLE(x INT) RETURN SELECT 2")
+      },
+      condition = "ROUTINE_ALREADY_EXISTS",
+      parameters = Map(
+        "routineName" -> "`same_name`",
+        "newRoutineType" -> "routine",
+        "existingRoutineType" -> "routine"))
+    sql("DROP TEMPORARY FUNCTION same_name")
+    // Other order: table first, then scalar
+    sql("CREATE TEMPORARY FUNCTION same_name() RETURNS TABLE(x INT) RETURN SELECT 2")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY FUNCTION same_name() RETURNS INT RETURN 1")
+      },
+      condition = "ROUTINE_ALREADY_EXISTS",
+      parameters = Map(
+        "routineName" -> "`same_name`",
+        "newRoutineType" -> "routine",
+        "existingRoutineType" -> "routine"))
+    sql("DROP TEMPORARY FUNCTION same_name")
   }
 
   test("SECTION 6: DDL Operations - DESCRIBE") {
@@ -874,6 +917,23 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
           start = 7,
           stop = 24))
     }
+  }
+
+  test("SECTION 13: Multi-part name with invalid namespace yields UNRESOLVED_ROUTINE " +
+    "with search path") {
+    // A 3-part name like x.y.func triggers REQUIRES_SINGLE_PART_NAMESPACE in the session catalog;
+    // LookupFunctions converts it to unresolved routine error with the configured search path.
+    checkError(
+      exception = intercept[AnalysisException] { sql("SELECT x.y.no_such_xyz()") },
+      condition = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`x`.`y`.`no_such_xyz`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+      ),
+      context = ExpectedContext(
+        fragment = "x.y.no_such_xyz()",
+        start = 7,
+        stop = 24))
   }
 
   test("SECTION 13: Legacy mode - default behavior allows registration but builtin wins") {

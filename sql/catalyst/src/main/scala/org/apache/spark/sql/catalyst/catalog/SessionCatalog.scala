@@ -2513,10 +2513,9 @@ class SessionCatalog(
 
   /**
    * Look up the `ExpressionInfo` of the given function by name.
-   * Searches through extension, built-in, and temp functions in that order.
+   * Resolution order follows the configured path (e.g. builtin then session);
+   * extension functions are stored in the builtin namespace.
    * This only supports scalar functions.
-   *
-   * Resolution order: extension -> builtin -> session (temp)
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     lookupFunctionWithShadowing(name, functionRegistry, checkBuiltinOperators = true)
@@ -2524,9 +2523,8 @@ class SessionCatalog(
 
   /**
    * Look up the `ExpressionInfo` of the given function by name.
-   * Searches through extension, built-in, and temp table functions in that order.
-   *
-   * Resolution order: extension -> builtin -> session (temp)
+   * Resolution order follows the configured path (e.g. builtin then session);
+   * extension functions are stored in the builtin namespace.
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
@@ -2632,9 +2630,8 @@ class SessionCatalog(
 
   /**
    * Look up a scalar function by name and resolve it to an Expression.
-   * Searches through extension, built-in, and temp functions in that order.
-   *
-   * Resolution order: extension -> builtin -> session (temp)
+   * Resolution order follows the configured path (e.g. builtin then session);
+   * extension functions are stored in the builtin namespace.
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
     resolveFunctionWithFallback(name, arguments, functionRegistry)
@@ -2689,14 +2686,39 @@ class SessionCatalog(
 
   /**
    * Look up a table function by name and resolve it to a LogicalPlan.
-   * Searches through extension, built-in, and temp functions in that order.
+   * Resolution order follows the configured path (e.g. builtin then session);
+   * extension functions are stored in the builtin namespace.
    *
-   * Resolution order: extension -> builtin -> session (temp)
+   * For unqualified names, use [[resolveBuiltinOrTempTableFunctionRespectingPathOrder]] so that
+   * if a scalar function appears before a table function in the path, the caller can throw
+   * NOT_A_TABLE_FUNCTION (consistent with scalar context where table-first yields NOT_A_SCALAR).
    */
   def resolveBuiltinOrTempTableFunction(
       name: String,
       arguments: Seq[Expression]): Option[LogicalPlan] =
     resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
+
+  /**
+   * Resolves an unqualified name as a table function, respecting path order: the first match
+   * (scalar or table) in the path wins. Returns Left(plan) if a table function is found first,
+   * Right(()) if a scalar function is found first (caller should throw NOT_A_TABLE_FUNCTION),
+   * None if no function is found in the path.
+   */
+  def resolveBuiltinOrTempTableFunctionRespectingPathOrder(
+      name: String,
+      arguments: Seq[Expression]): Option[Either[LogicalPlan, Unit]] = {
+    val path = resolutionPath()
+    for (namespace <- path) {
+      if (lookupInNamespace(namespace, name, functionRegistry).isDefined) {
+        return Some(Right(()))
+      }
+      resolveInNamespace(namespace, name, arguments, tableFunctionRegistry) match {
+        case Some(plan) => return Some(Left(plan))
+        case None =>
+      }
+    }
+    None
+  }
 
   /**
    * Resolves functions using PATH-based resolution.

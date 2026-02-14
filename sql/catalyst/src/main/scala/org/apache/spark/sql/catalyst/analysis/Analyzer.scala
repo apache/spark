@@ -1826,35 +1826,9 @@ class Analyzer(
      * Checks if the given function name parts match the expected builtin function name.
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
-     *
-     * Valid patterns (returns true):
-     * - 1 part: "count" (unqualified, will resolve to builtin due to resolution order)
-     * - 2 parts: "builtin.count"
-     * - 3 parts: "system.builtin.count"
-     *
-     * Invalid patterns (returns false):
-     * - "session.count" (could be a non-aggregate UDF)
-     * - "extension.count" (could be a non-aggregate UDF)
-     * - "foo.bar.count" (invalid qualification)
-     * - "catalog.db.count" (persistent function)
-     * - More than 3 parts
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      if (!nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName))) {
-        return false
-      }
-
-      nameParts.length match {
-        case 1 => true  // Unqualified: safe due to resolution order (builtin wins)
-        case 2 =>
-          // Only allow explicit builtin qualification
-          nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-        case 3 =>
-          // Only allow system.builtin.name
-          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-            nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-        case _ => false
-      }
+      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)
     }
 
     /**
@@ -1866,7 +1840,8 @@ class Analyzer(
           matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          // Preserve the original qualification (if any) in the transformed node.
+          // The transformed node keeps the same name parts so that resolution still
+          // sees the same qualification.
           f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
