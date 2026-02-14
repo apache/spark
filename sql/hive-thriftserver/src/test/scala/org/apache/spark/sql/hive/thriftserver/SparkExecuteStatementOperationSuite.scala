@@ -65,6 +65,18 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     assert(columns.getColumns.get(1).getComment == "")
   }
 
+  test("GeometryType and GeographyType are mapped to STRING_TYPE in ThriftServer") {
+    val field1 = StructField("geom", GeometryType(4326))
+    val field2 = StructField("geog", GeographyType(4326))
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    val geomType = columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geomType === TTypeId.STRING_TYPE)
+    val geogType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geogType === TTypeId.STRING_TYPE)
+  }
+
   Seq(
     (OperationState.CANCELED, (_: SparkExecuteStatementOperation).cancel()),
     (OperationState.TIMEDOUT, (_: SparkExecuteStatementOperation).timeoutCancel()),

@@ -26,6 +26,131 @@ struct<>
 
 
 -- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query schema
+struct<st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0):geometry(0)>
+-- !query output
+POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)
+-- !query schema
+struct<st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326):geometry(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'), 3857)
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), 3857):geometry(3857)>
+-- !query output
+SRID=3857;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query schema
+struct<st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'):geography(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326))
+-- !query schema
+struct<CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL)
+-- !query schema
+struct<st_geomfromwkb(NULL, 0):geometry(0)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL, 4326)
+-- !query schema
+struct<st_geomfromwkb(NULL, 4326):geometry(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(NULL), 3857)
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(NULL, 0), 3857):geometry(3857)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_GeogFromWKB(NULL)
+-- !query schema
+struct<st_geogfromwkb(NULL):geography(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(NULL) AS GEOMETRY(4326))
+-- !query schema
+struct<CAST(st_geogfromwkb(NULL) AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb) FROM geodata
+-- !query schema
+struct<st_geomfromwkb(wkb, 0):geometry(0)>
+-- !query output
+NULL
+POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb, 4326) FROM geodata
+-- !query schema
+struct<st_geomfromwkb(wkb, 4326):geometry(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(wkb), 3857) FROM geodata
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(wkb, 0), 3857):geometry(3857)>
+-- !query output
+NULL
+SRID=3857;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeogFromWKB(wkb) FROM geodata
+-- !query schema
+struct<st_geogfromwkb(wkb):geography(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(wkb) AS GEOMETRY(4326)) FROM geodata
+-- !query schema
+struct<CAST(st_geogfromwkb(wkb) AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
 SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS STRING) AS result
 -- !query schema
 struct<>

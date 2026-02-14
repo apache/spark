@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -217,23 +218,17 @@ class GeographyExecutionSuite {
   /** Tests for Geography WKT and EWKT converters. */
 
   @Test
-  void testToWktUnsupported() {
+  void testToWkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toWkt
-    );
-    assertEquals("Geography WKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("POINT(1 2)", new String(geography.toWkt(), StandardCharsets.UTF_8));
   }
 
   @Test
-  void testToEwktUnsupported() {
+  void testToEwkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toEwkt
-    );
-    assertEquals("Geography EWKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("SRID=4326;POINT(1 2)", new String(geography.toEwkt(), StandardCharsets.UTF_8));
   }
 
   /** Tests for other Geography methods. */

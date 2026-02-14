@@ -23,6 +23,116 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query analysis
+Project [st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0) AS st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)
+-- !query analysis
+Project [st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 4326) AS st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'), 3857)
+-- !query analysis
+Project [st_setsrid(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040, 0), 3857) AS st_setsrid(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), 3857)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query analysis
+Project [st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) AS st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326))
+-- !query analysis
+Project [cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geometry(4326)) AS CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(4326))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL)
+-- !query analysis
+Project [st_geomfromwkb(cast(null as binary), 0) AS st_geomfromwkb(NULL, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL, 4326)
+-- !query analysis
+Project [st_geomfromwkb(cast(null as binary), 4326) AS st_geomfromwkb(NULL, 4326)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(NULL), 3857)
+-- !query analysis
+Project [st_setsrid(st_geomfromwkb(cast(null as binary), 0), 3857) AS st_setsrid(st_geomfromwkb(NULL, 0), 3857)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeogFromWKB(NULL)
+-- !query analysis
+Project [st_geogfromwkb(cast(null as binary)) AS st_geogfromwkb(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(NULL) AS GEOMETRY(4326))
+-- !query analysis
+Project [cast(st_geogfromwkb(cast(null as binary)) as geometry(4326)) AS CAST(st_geogfromwkb(NULL) AS GEOMETRY(4326))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb) FROM geodata
+-- !query analysis
+Project [st_geomfromwkb(wkb#x, 0) AS st_geomfromwkb(wkb, 0)#x]
++- SubqueryAlias spark_catalog.default.geodata
+   +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb, 4326) FROM geodata
+-- !query analysis
+Project [st_geomfromwkb(wkb#x, 4326) AS st_geomfromwkb(wkb, 4326)#x]
++- SubqueryAlias spark_catalog.default.geodata
+   +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(wkb), 3857) FROM geodata
+-- !query analysis
+Project [st_setsrid(st_geomfromwkb(wkb#x, 0), 3857) AS st_setsrid(st_geomfromwkb(wkb, 0), 3857)#x]
++- SubqueryAlias spark_catalog.default.geodata
+   +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT ST_GeogFromWKB(wkb) FROM geodata
+-- !query analysis
+Project [st_geogfromwkb(wkb#x) AS st_geogfromwkb(wkb)#x]
++- SubqueryAlias spark_catalog.default.geodata
+   +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(wkb) AS GEOMETRY(4326)) FROM geodata
+-- !query analysis
+Project [cast(st_geogfromwkb(wkb#x) as geometry(4326)) AS CAST(st_geogfromwkb(wkb) AS GEOMETRY(4326))#x]
++- SubqueryAlias spark_catalog.default.geodata
+   +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
 SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS STRING) AS result
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
