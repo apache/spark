@@ -92,19 +92,23 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 4: Cross-Type Shadowing - temp table + builtin scalar") {
-    // Temp table function + builtin scalar function (NO conflict - builtin wins!)
-    sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 42")
-
-    // Builtin scalar abs still works unqualified (builtin resolves before temp table)
-    checkAnswer(sql("SELECT abs(-5)"), Row(5))
-
-    // Temp table function works in table context
-    checkAnswer(sql("SELECT * FROM abs()"), Row(42))
-
-    // Both accessible with explicit qualification
-    checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
-    checkAnswer(sql("SELECT * FROM session.abs()"), Row(42))
-    sql("DROP TEMPORARY FUNCTION abs")
+    // Intent: when builtin has only a scalar and temp has a table with the same name, resolution
+    // follows "first match in path" (consistent with scalar context). Builtin scalar abs is first,
+    // so unqualified table context yields NOT_A_TABLE_FUNCTION; we do not skip to the temp table.
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+      sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 42")
+    }
+    try {
+      checkAnswer(sql("SELECT abs(-5)"), Row(5))
+      checkError(
+        exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
+        condition = "NOT_A_TABLE_FUNCTION",
+        parameters = Map("functionName" -> "`abs`"))
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT * FROM session.abs()"), Row(42))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION abs")
+    }
   }
 
   test("SECTION 4: Cross-Type Shadowing - temp scalar + builtin table") {
@@ -179,15 +183,18 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   test("SECTION 5: Table resolution - scalar first in path yields NOT_A_TABLE_FUNCTION") {
     // First match in path wins (consistent with scalar context). Builtin has scalar "abs", so
     // in table context we get NOT_A_TABLE_FUNCTION; we do not skip to the temp table function.
-    sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 99")
-    try {
-      checkError(
-        exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
-        condition = "NOT_A_TABLE_FUNCTION",
-        parameters = Map("functionName" -> "`abs`"))
-      checkAnswer(sql("SELECT abs(-5)"), Row(5))
-    } finally {
-      sql("DROP TEMPORARY FUNCTION abs")
+    // Use sessionOrder "second" so we can create a temp function that shadows builtin.
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+      sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE(val INT) RETURN SELECT 99")
+      try {
+        checkError(
+          exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
+          condition = "NOT_A_TABLE_FUNCTION",
+          parameters = Map("functionName" -> "`abs`"))
+        checkAnswer(sql("SELECT abs(-5)"), Row(5))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION abs")
+      }
     }
   }
 
@@ -438,7 +445,11 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 8: Views - view with shadowing temp function") {
-    sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777")
+    // Intent: views can reference temp functions via qualified names (session.abs) and builtin
+    // via builtin.abs. withSQLConf allows creating temp abs when sessionOrder is "first" in CI.
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+      sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777")
+    }
 
     // View must use qualified name to access temp function
     sql("CREATE TEMPORARY VIEW shadow_view AS SELECT session.abs() as result")
@@ -608,11 +619,13 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SECTION 11: Security - user cannot shadow abs") {
-    // Built-in abs works
+    // Intent: unqualified abs resolves to builtin; temp only via session.abs. withSQLConf allows
+    // creating temp abs when sessionOrder is "first" in CI.
     checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
 
-    // Create temp abs
-    sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999")
+    withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+      sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999")
+    }
 
     // Unqualified abs still resolves to builtin (security-focused order)
     checkAnswer(sql("SELECT abs(-5)"), Row(5))
@@ -933,7 +946,7 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(
         fragment = "x.y.no_such_xyz()",
         start = 7,
-        stop = 24))
+        stop = 23))
   }
 
   test("SECTION 13: Legacy mode - default behavior allows registration but builtin wins") {
