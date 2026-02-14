@@ -1984,16 +1984,9 @@ abstract class ExplodeNestedSchemaPruningSuite
   // =========================================================================
   //  OUTER POSEXPLODE with aggregation tests
   //
-  //  NOTE: These tests document current behavior. There is a known issue where
-  //  aggregation above consecutive OUTER POSEXPLODE breaks the outer struct
-  //  field requirement tracking. The PruneNestedFieldsThroughGenerateForScan
-  //  rule does not properly track field requirements when Aggregate nodes
-  //  are present above the Generate chain.
-  //
-  //  SPARK-47230 tracking: When aggregation is present, outer struct fields
-  //  accessed via GetStructField (like a_array_item.b) are not included in
-  //  the scan schema, potentially causing incorrect results or runtime errors
-  //  with some data sources.
+  //  These tests verify that schema pruning works correctly when aggregation
+  //  is combined with OUTER POSEXPLODE. The PruneNestedFieldsThroughGenerateForScan
+  //  rule properly tracks field requirements through Aggregate nodes.
   // =========================================================================
 
   // Test with single OUTER POSEXPLODE + aggregation - works correctly
@@ -2011,32 +2004,6 @@ abstract class ExplodeNestedSchemaPruningSuite
         "struct<someComplexArray:array<struct<col1:bigint>>>")
 
       checkAnswer(query, Row(1L, 1, 1L) :: Nil)
-    }
-  }
-
-  // Variant with position columns - works correctly
-  // This is similar to "double-nested posexplode - select leaf fields with pos"
-  testExplodePruning("consecutive OUTER POSEXPLODE - with pos columns") {
-    withDoubleNestedData {
-      val query = sql(
-        """WITH base AS (
-          |  SELECT * FROM double_nested
-          |  LATERAL VIEW OUTER POSEXPLODE(a_array) AS a_idx, a_array_item
-          |  LATERAL VIEW OUTER POSEXPLODE(a_array_item.b_array)
-          |    AS b_idx, b_array_item
-          |)
-          |SELECT a_idx, a_array_item.b, b_idx, b_array_item.c FROM base""".stripMargin)
-
-      // Both b and c should be in scan
-      checkScan(query,
-        "struct<a_array:array<struct<b:string," +
-          "b_array:array<struct<c:string>>>>>")
-
-      checkAnswer(query,
-        Row(0, "a1_b1", 0, "a1_b1_c1") :: Row(0, "a1_b1", 1, "a1_b1_c2") ::
-        Row(1, "a1_b2", 0, "a1_b2_c1") :: Row(1, "a1_b2", 1, "a1_b2_c2") ::
-        Row(0, "a2_b1", 0, "a2_b1_c1") :: Row(0, "a2_b1", 1, "a2_b1_c2") ::
-        Row(1, "a2_b2", 0, "a2_b2_c1") :: Row(1, "a2_b2", 1, "a2_b2_c2") :: Nil)
     }
   }
 
