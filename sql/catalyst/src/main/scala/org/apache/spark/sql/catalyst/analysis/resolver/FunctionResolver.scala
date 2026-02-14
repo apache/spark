@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   TryEval
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s.

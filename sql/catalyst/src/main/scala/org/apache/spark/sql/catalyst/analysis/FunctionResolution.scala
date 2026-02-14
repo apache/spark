@@ -315,8 +315,8 @@ class FunctionResolution(
       val funcName = name.head
       v1SessionCatalog
         .resolveBuiltinOrTempTableFunctionRespectingPathOrder(funcName, arguments) match {
-        case Some(Left(plan)) => Some(plan)
-        case Some(Right(())) =>
+        case Some(scala.util.Left(plan)) => Some(plan)
+        case Some(scala.util.Right(())) =>
           throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
         case None => None
       }
