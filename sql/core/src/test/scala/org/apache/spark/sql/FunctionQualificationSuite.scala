@@ -103,7 +103,11 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
         condition = "NOT_A_TABLE_FUNCTION",
-        parameters = Map("functionName" -> "`abs`"))
+        parameters = Map("functionName" -> "`abs`"),
+        context = ExpectedContext(
+          fragment = "abs()",
+          start = 14,
+          stop = 18))
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
       checkAnswer(sql("SELECT * FROM session.abs()"), Row(42))
     } finally {
@@ -190,7 +194,11 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
         checkError(
           exception = intercept[AnalysisException] { sql("SELECT * FROM abs()") },
           condition = "NOT_A_TABLE_FUNCTION",
-          parameters = Map("functionName" -> "`abs`"))
+          parameters = Map("functionName" -> "`abs`"),
+          context = ExpectedContext(
+            fragment = "abs()",
+            start = 14,
+            stop = 18))
         checkAnswer(sql("SELECT abs(-5)"), Row(5))
       } finally {
         sql("DROP TEMPORARY FUNCTION abs")
