@@ -535,4 +535,30 @@ class SetOperationSuite extends PlanTest {
 
     comparePlans(optimized, expected.analyze)
   }
+
+  test("SequentialStreamingUnion: optimizer preserves child ordering") {
+    // Create distinct streaming relations with different outputs to verify ordering
+    val streamRel1 = LocalRelation($"a".int, $"b".int).copy(isStreaming = true)
+    val streamRel2 = LocalRelation($"c".int, $"d".int).copy(isStreaming = true)
+    val streamRel3 = LocalRelation($"e".int, $"f".int).copy(isStreaming = true)
+
+    // Create SequentialStreamingUnion with a specific order
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+
+    // Apply various optimizer rules by running full optimization
+    val optimized = Optimize.execute(seqUnion.analyze)
+
+    // Extract the children from the optimized plan
+    val optimizedUnion = optimized.asInstanceOf[SequentialStreamingUnion]
+
+    // Verify the children are in the exact same order
+    assert(optimizedUnion.children.length == 3, "Should have 3 children")
+    assert(optimizedUnion.children(0).output.map(_.name) == Seq("a", "b"),
+      "First child should be streamRel1 with columns a, b")
+    assert(optimizedUnion.children(1).output.map(_.name) == Seq("c", "d"),
+      "Second child should be streamRel2 with columns c, d")
+    assert(optimizedUnion.children(2).output.map(_.name) == Seq("e", "f"),
+      "Third child should be streamRel3 with columns e, f")
+  }
 }
