@@ -2699,22 +2699,22 @@ class SessionCatalog(
     resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
 
   /**
-   * Resolves an unqualified name as a table function, respecting path order: the first match
-   * (scalar or table) in the path wins. Returns Left(plan) if a table function is found first,
-   * Right(()) if a scalar function is found first (caller should throw NOT_A_TABLE_FUNCTION),
-   * None if no function is found in the path.
+   * Resolves an unqualified name as a table function, respecting path order. In each namespace
+   * we check for a table function first; if present (including generator functions that exist as
+   * both scalar and table), return it. Only if the namespace has a scalar but no table do we
+   * return "scalar first" so the caller can throw NOT_A_TABLE_FUNCTION.
    */
   def resolveBuiltinOrTempTableFunctionRespectingPathOrder(
       name: String,
       arguments: Seq[Expression]): Option[Either[LogicalPlan, Unit]] = {
     val path = resolutionPath()
     for (namespace <- path) {
-      if (lookupInNamespace(namespace, name, functionRegistry).isDefined) {
-        return Some(Right(()))
-      }
       resolveInNamespace(namespace, name, arguments, tableFunctionRegistry) match {
         case Some(plan) => return Some(Left(plan))
         case None =>
+          if (lookupInNamespace(namespace, name, functionRegistry).isDefined) {
+            return Some(Right(()))
+          }
       }
     }
     None
