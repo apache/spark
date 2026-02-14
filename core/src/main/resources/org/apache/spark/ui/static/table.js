@@ -117,3 +117,29 @@ function collapseTableAndButton(thisName, table) {
   }
 }
 /* eslint-enable no-unused-vars */
+
+// Event delegation for thread dump page (CSP-compliant)
+$(function() {
+  // toggleThreadStackTrace on row click
+  $(document).on("click", "tr.accordion-heading[data-thread-id]", function() {
+    toggleThreadStackTrace($(this).data("thread-id"), false);
+  });
+
+  // expandAll / collapseAll
+  $(document).on("click", "[data-action=expandAllThreadStackTrace]", function() {
+    expandAllThreadStackTrace(true);
+  });
+  $(document).on("click", "[data-action=collapseAllThreadStackTrace]", function() {
+    collapseAllThreadStackTrace($(this).data("toggle-button") !== false);
+  });
+
+  // onMouseOverAndOut
+  $(document).on("mouseenter mouseleave", "tr.accordion-heading[data-thread-id]", function() {
+    onMouseOverAndOut($(this).data("thread-id"));
+  });
+
+  // onSearchStringChange
+  $(document).on("input", "[data-search-input]", function() {
+    onSearchStringChange();
+  });
+});

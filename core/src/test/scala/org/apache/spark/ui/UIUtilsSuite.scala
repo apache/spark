@@ -225,4 +225,12 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(cell4 === <td>{"java.lang.RuntimeException"}{UIUtils.detailsUINode(isMultiline = true, e4)}</td>)
   }
   // scalastyle:on line.size.limit
+
+  test("detailsUINode uses data-toggle-details instead of onclick") {
+    val result = UIUtils.detailsUINode(isMultiline = true, "error\nmessage")
+    val html = result.toString
+    assert(!html.contains("onclick"), "detailsUINode should not contain inline onclick handler")
+    assert(html.contains("data-toggle-details"), "detailsUINode should use data-toggle-details")
+    assert(html.contains("stacktrace-details"), "detailsUINode should contain stacktrace-details")
+  }
 }

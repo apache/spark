@@ -232,7 +232,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
-    <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+    <script nonce={CspNonce.get}>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
 
   def vizHeaderNodes(request: HttpServletRequest): Seq[Node] = {
@@ -283,7 +283,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes(request)}
-        <script>setAppBasePath('{activeTab.basePath}')</script>
+        <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
@@ -507,7 +507,7 @@ private[spark] object UIUtils extends Logging {
       graphs: collection.Seq[RDDOperationGraph], forJob: Boolean): collection.Seq[Node] = {
     <div>
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
-            class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+            class="expand-dag-viz" data-forjob={forJob.toString}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
            data-placement="top">
@@ -703,7 +703,7 @@ private[spark] object UIUtils extends Logging {
   def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
     if (isMultiline) {
       // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+      <span data-toggle-details=".stacktrace-details"
             class="expand-details">
         +details
       </span> ++
