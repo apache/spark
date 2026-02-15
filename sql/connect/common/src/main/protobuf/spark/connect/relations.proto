@@ -256,6 +256,11 @@ message Read {
     //
     // This is only supported by the JDBC data source.
     repeated string predicates = 5;
+
+    // (Optional) A user-provided name for the streaming source.
+    // This name is used in checkpoint metadata and enables stable checkpoint locations
+    // for source evolution.
+    optional string source_name = 6;
   }
 }
 

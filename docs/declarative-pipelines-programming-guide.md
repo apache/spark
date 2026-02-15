@@ -117,10 +117,47 @@ The `spark-pipelines` command line interface (CLI) is the primary way to manage 
 
 `spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes.
 
-The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for one of the files:
+Since `spark-pipelines` is built on top of `spark-submit`, it supports all `spark-submit` arguments except for `--class`. For the complete list of available parameters, see the [Spark Submit documentation](https://spark.apache.org/docs/latest/submitting-applications.html#launching-applications-with-spark-submit).
 
-* `spark-pipeline.yml`
-* `spark-pipeline.yaml`
+It also supports several pipeline-specific parameters:
+
+* `--spec PATH` - Path to the pipeline specification file. If not provided, the CLI will look in the current directory and parent directories for one of the files:
+  * `spark-pipeline.yml`
+  * `spark-pipeline.yaml`
+
+* `--full-refresh DATASETS` - List of datasets to reset and recompute (comma-separated). This clears all existing data and checkpoints for the specified datasets and recomputes them from scratch.
+
+* `--full-refresh-all` - Perform a full graph reset and recompute. This is equivalent to `--full-refresh` for all datasets in the pipeline.
+
+* `--refresh DATASETS` - List of datasets to update (comma-separated). This triggers an update for the specified datasets without clearing existing data.
+
+#### Refresh Selection Behavior
+
+If no refresh options are specified, a default incremental update is performed. The refresh parameters are mutually exclusive:
+- `--full-refresh-all` cannot be combined with `--full-refresh` or `--refresh`
+- `--full-refresh` and `--refresh` can be used together to specify different behaviors for different datasets
+
+#### Examples
+
+```bash
+# Basic run with default incremental update
+spark-pipelines run
+
+# Run with specific spec file
+spark-pipelines run --spec /path/to/my-pipeline.yaml
+
+# Full refresh of specific datasets
+spark-pipelines run --full-refresh orders,customers
+
+# Full refresh of entire pipeline
+spark-pipelines run --full-refresh-all
+
+# Run with custom Spark configuration
+spark-pipelines run --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
+
+# Run on remote Spark Connect server
+spark-pipelines run --remote sc://my-cluster:15002
+```
 
 ### `spark-pipelines dry-run`
 
@@ -128,6 +165,10 @@ The `--spec` parameter allows selecting the pipeline spec file. If not provided,
 - Syntax errors – e.g. invalid Python or SQL code
 - Analysis errors – e.g. selecting from a table or a column that doesn't exist
 - Graph validation errors - e.g. cyclic dependencies
+
+Since `spark-pipelines` is built on top of `spark-submit`, it supports all `spark-submit` arguments except for `--class`. For the complete list of available parameters, see the [Spark Submit documentation](https://spark.apache.org/docs/latest/submitting-applications.html#launching-applications-with-spark-submit).
+
+It also supports the pipeline-specific `--spec` parameter (see description above in the `run` section).
 
 ## Programming with SDP in Python
 
@@ -448,6 +489,52 @@ CREATE FLOW append_customers_us_east
 AS INSERT INTO customers_us
 SELECT * FROM STREAM(customers_us_east);
 ```
+
+## Writing Data to External Targets with Sinks
+
+Sinks in SDP provide a way to write transformed data to external destinations beyond the default streaming tables and materialized views. Sinks are particularly useful for operational use cases that require low-latency data processing, reverse ETL operations, or writing to external systems. 
+
+Sinks enable a pipeline to write to any destination that a Spark Structured Streaming query can be written to, including, but not limited to, **Apache Kafka** and **Azure Event Hubs**.
+
+### Creating and Using Sinks in Python
+
+Working with sinks involves two main steps: creating the sink definition and implementing an append flow to write data.
+
+#### Creating a Kafka Sink
+
+You can create a sink that streams data to a Kafka topic:
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql.functions import to_json, struct
+
+dp.create_sink(
+    name="kafka_sink",
+    format="kafka",
+    options={
+        "kafka.bootstrap.servers": "localhost:9092",
+        "topic": "processed_orders"
+    }
+)
+
+@dp.append_flow(target="kafka_sink")
+def kafka_orders_flow() -> DataFrame:
+    return (
+        spark.readStream.table("customer_orders")
+        .select(
+            col("order_id").cast("string").alias("key"),
+            to_json(struct("*")).alias("value")
+        )
+    )
+```
+
+### Sink Considerations
+
+When working with sinks, keep the following considerations in mind:
+
+- **Streaming-only**: Sinks currently support only streaming queries through `append_flow` decorators
+- **Python API**: Sink functionality is available only through the Python API, not SQL
+- **Append-only**: Only append operations are supported; full refresh updates reset checkpoints but do not clean previously computed results
 
 ## Important Considerations
 

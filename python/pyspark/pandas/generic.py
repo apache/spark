@@ -37,8 +37,10 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
@@ -946,7 +948,7 @@ class Frame(object, metaclass=ABCMeta):
             psdf_or_ser = self
             pdf = psdf_or_ser._to_pandas()
             if isinstance(self, ps.Series):
-                pdf = pdf.to_frame()
+                pdf = pdf.to_frame()  # type: ignore[operator]
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
@@ -2665,7 +2667,7 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = (
+            first_valid_row_df = (
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
@@ -2673,10 +2675,10 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         # For Empty Series or DataFrame, returns None.
-        if len(first_valid_row) == 0:
+        if len(first_valid_row_df) == 0:
             return None
 
-        first_valid_row = first_valid_row.iloc[0]
+        first_valid_row = first_valid_row_df.iloc[0]
         if len(first_valid_row) == 1:
             return first_valid_row.iloc[0]
         else:
@@ -3085,7 +3087,7 @@ class Frame(object, metaclass=ABCMeta):
             # If DataFrame has only a single value, use pandas API directly.
             if has_single_value:
                 result = self._to_internal_pandas().squeeze(axis)
-                return ps.Series(result) if isinstance(result, pd.Series) else result
+                return ps.Series(result) if isinstance(result, pd.Series) else result  # type: ignore[return-value]
             elif axis == 0:
                 return self
             else:
@@ -3312,6 +3314,17 @@ class Frame(object, metaclass=ABCMeta):
     def fillna(
         self: FrameLike,
         value: Optional[Any] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        pass
+
+    @abstractmethod
+    def _fillna_with_method(
+        self: FrameLike,
+        value: Optional[Any] = None,
         method: Optional[str] = None,
         axis: Optional[Axis] = None,
         inplace: bool_type = False,
@@ -3394,9 +3407,23 @@ class Frame(object, metaclass=ABCMeta):
         3    1.0
         dtype: float64
         """
-        return self.fillna(method="bfill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="bfill", axis=axis, inplace=inplace, limit=limit)
 
-    backfill = bfill
+    def backfill(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.bfill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `backfill` method is not supported in pandas 3.0.0 and later. Use `bfill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        backfill.__doc__ = bfill.__doc__
 
     # TODO: add 'downcast' when value parameter exists
     def ffill(
@@ -3473,9 +3500,23 @@ class Frame(object, metaclass=ABCMeta):
         3    3.0
         dtype: float64
         """
-        return self.fillna(method="ffill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="ffill", axis=axis, inplace=inplace, limit=limit)
 
-    pad = ffill
+    def pad(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.ffill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `pad` method is not supported in pandas 3.0.0 and later. Use `ffill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        pad.__doc__ = ffill.__doc__
 
     # TODO: add 'axis', 'inplace', 'downcast'
     def interpolate(

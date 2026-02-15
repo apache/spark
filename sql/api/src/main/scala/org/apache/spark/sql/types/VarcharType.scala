@@ -16,19 +16,49 @@
  */
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.{JString, JValue}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
+/**
+ * A data type representing variable-length character strings with a specified maximum length.
+ *
+ * @param length
+ *   The maximum length of the varchar string (must be non-negative)
+ * @param collation
+ *   Optional collation ID for string comparison and sorting. If None, uses
+ *   UTF8_BINARY_COLLATION_ID. The reason for using an `Option` is to be able to see in the
+ *   analyzer whether the collation was explicitly specified or not.
+ */
 @Experimental
-case class VarcharType(length: Int)
-    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, MaxLength(length)) {
+case class VarcharType private[sql] (length: Int, collation: Option[Int])
+    extends StringType(
+      collation.getOrElse(CollationFactory.UTF8_BINARY_COLLATION_ID),
+      MaxLength(length)) {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   override def defaultSize: Int = length
-  override def typeName: String = s"varchar($length)"
-  override def jsonValue: JValue = JString(typeName)
-  override def toString: String = s"VarcharType($length)"
+  override def typeName: String =
+    if (isUTF8BinaryCollation) s"varchar($length)"
+    else s"varchar($length) collate $collationName"
+  override def toString: String =
+    if (isUTF8BinaryCollation) s"VarcharType($length)"
+    else s"VarcharType($length, $collationName)"
   private[spark] override def asNullable: VarcharType = this
+
+  def toStringType: StringType = {
+    if (collation.isEmpty) StringType
+    else StringType(collationId)
+  }
+}
+
+object VarcharType {
+  def apply(length: Int): VarcharType = new VarcharType(length, None)
+
+  def apply(length: Int, collationName: String): VarcharType = {
+    val collationId = CollationFactory.collationNameToId(collationName)
+    new VarcharType(length, Some(collationId))
+  }
+
+  def apply(length: Int, collationId: Int): VarcharType =
+    new VarcharType(length, Some(collationId))
 }

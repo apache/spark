@@ -40,8 +40,8 @@ from multiprocessing import Manager
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
 
 
-from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
-from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
+from sparktestsupport import SPARK_HOME
+from sparktestsupport.shellutils import which, subprocess_check_output
 from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
 
 
@@ -211,14 +211,24 @@ class TestRunner:
 
     def thread_dump(self, pid):
         pyspark_python = self.env['PYSPARK_PYTHON']
+        python_path = f"{os.path.join(SPARK_HOME, 'python')}"
+        py4j_path = f"{os.path.join(SPARK_HOME, 'python/lib/py4j-0.10.9.9-src.zip')}"
         p = subprocess.run(
             [pyspark_python, "-m", "pyspark.threaddump", "-p", str(pid)],
-            env={**self.env, "PYTHONPATH": f"{os.path.join(SPARK_HOME, 'python')}:{os.environ.get('PYTHONPATH', '')}"},
+            env={
+                **self.env,
+                "PYTHONPATH": f"{python_path}:{py4j_path}:{os.environ.get('PYTHONPATH', '')}",
+            },
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
         if p.returncode == 0:
             LOGGER.error(f"Thread dump:\n{p.stdout.decode('utf-8')}")
+        elif p.returncode == 5:
+            # pystack or psutil not installed, that's okay
+            pass
+        else:
+            LOGGER.error(f"Failed to get thread dump, exit code {p.returncode}:\n{p.stdout.decode('utf-8')}")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):

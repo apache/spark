@@ -75,6 +75,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       private var processor: ArrowOutputProcessor = _
 
       context.addTaskCompletionListener[Unit] { _ =>
+        if (processor != null) {
+          processor.close()
+        }
         if (reader != null) {
           reader.close(false)
         }
@@ -250,6 +253,7 @@ abstract class BaseSliceArrowOutputProcessor(
       prevVectors.foreach(_.close())
       prevRoot.close()
     }
+    super.close()
   }
 }
 

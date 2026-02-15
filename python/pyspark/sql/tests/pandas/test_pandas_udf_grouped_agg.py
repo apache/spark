@@ -17,7 +17,7 @@
 
 import unittest
 import logging
-from typing import cast, Iterator, Tuple
+from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row, functions as sf
@@ -50,7 +50,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class GroupedAggPandasUDFTestsMixin:
     @property
@@ -215,7 +215,7 @@ class GroupedAggPandasUDFTestsMixin:
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
             @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
-            def mean_and_std_udf(v):  # noqa: F811
+            def mean_and_std_udf(v):
                 return {v.mean(): v.std()}
 
         self.check_error(

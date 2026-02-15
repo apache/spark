@@ -23,11 +23,13 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
     Optional,
     Set,
     Sized,
     Tuple,
     Type,
+    TYPE_CHECKING,
     Union,
     cast,
     no_type_check,
@@ -42,7 +44,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     is_datetime64_dtype,
     is_list_like,
 )
@@ -50,6 +52,8 @@ from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
@@ -99,6 +103,9 @@ from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
+
+if TYPE_CHECKING:
+    from pandas._typing import HTMLFlavors
 
 __all__ = [
     "from_pandas",
@@ -936,7 +943,7 @@ def read_excel(
     keep_default_na: bool = True,
     verbose: bool = False,
     parse_dates: Union[bool, List, Dict] = False,
-    date_parser: Optional[Callable] = None,
+    date_parser: Union[Optional[Callable], _NoValueType] = _NoValue,
     thousands: Optional[str] = None,
     comment: Optional[str] = None,
     skipfooter: int = 0,
@@ -1132,34 +1139,44 @@ def read_excel(
     2     None    NaN
     """
 
+    kwargs = dict(
+        header=header,
+        names=names,
+        index_col=index_col,
+        usecols=usecols,
+        dtype=dtype,
+        engine=engine,
+        converters=converters,
+        true_values=true_values,
+        false_values=false_values,
+        skiprows=skiprows,
+        na_values=na_values,
+        keep_default_na=keep_default_na,
+        verbose=verbose,
+        parse_dates=parse_dates,
+        thousands=thousands,
+        comment=comment,
+        skipfooter=skipfooter,
+        **kwds,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        if date_parser is not _NoValue:
+            kwargs["date_parser"] = date_parser
+    else:
+        if date_parser is not _NoValue:
+            raise TypeError("The 'date_parser' keyword is not supported in pandas 3.0.0 and later.")
+
     def pd_read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
     ) -> pd.DataFrame:
-        return pd.read_excel(
+        return pd.read_excel(  # type: ignore[return-value]
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
-            header=header,
-            names=names,
-            index_col=index_col,
-            usecols=usecols,
-            dtype=dtype,
-            engine=engine,
-            converters=converters,
-            true_values=true_values,
-            false_values=false_values,
-            skiprows=skiprows,
             nrows=nr,
-            na_values=na_values,
-            keep_default_na=keep_default_na,
-            verbose=verbose,
-            parse_dates=parse_dates,  # type: ignore[arg-type]
-            date_parser=date_parser,
-            thousands=thousands,
-            comment=comment,
-            skipfooter=skipfooter,
-            **kwds,
+            **kwargs,
         )
 
     if not isinstance(io, str):
@@ -1252,6 +1269,7 @@ def read_excel(
         return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
     if isinstance(sampled, dict):
+        assert sampled is not None
         return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
     else:
         return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
@@ -1260,7 +1278,7 @@ def read_excel(
 def read_html(
     io: Union[str, Any],
     match: str = ".+",
-    flavor: Optional[str] = None,
+    flavor: Optional["HTMLFlavors"] = None,
     header: Optional[Union[int, List[int]]] = None,
     index_col: Optional[Union[int, List[int]]] = None,
     skiprows: Optional[Union[int, List[int], slice]] = None,
@@ -1590,7 +1608,7 @@ def to_datetime(
     errors: str = "raise",
     format: Optional[str] = None,
     unit: Optional[str] = None,
-    infer_datetime_format: bool = False,
+    infer_datetime_format: Union[bool, _NoValueType] = _NoValue,
     origin: str = "unix",
 ):
     """
@@ -1730,19 +1748,29 @@ def to_datetime(
         "microseconds": "us",
     }
 
+    kwargs = dict(
+        errors=errors,
+        format=format,
+        unit=unit,
+        origin=origin,
+    )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        kwargs["infer_datetime_format"] = (
+            infer_datetime_format if infer_datetime_format is not _NoValue else False
+        )
+    else:
+        if infer_datetime_format is not _NoValue:
+            raise TypeError(
+                "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
+            )
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
     ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
-        return pd.to_datetime(
-            pser_or_pdf,
-            errors=errors,
-            format=format,
-            unit=unit,
-            infer_datetime_format=infer_datetime_format,
-            origin=origin,
-        )
+        return pd.to_datetime(pser_or_pdf, **kwargs)
 
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
@@ -1757,14 +1785,7 @@ def to_datetime(
 
         psdf = arg[list_cols]
         return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
-    return pd.to_datetime(
-        arg,
-        errors=errors,
-        format=format,
-        unit=unit,
-        infer_datetime_format=infer_datetime_format,
-        origin=origin,
-    )
+    return pd.to_datetime(arg, **kwargs)
 
 
 def date_range(
@@ -1874,7 +1895,7 @@ def date_range(
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1917,7 +1938,7 @@ def date_range(
     return cast(
         DatetimeIndex,
         ps.from_pandas(
-            pd.date_range(
+            pd.date_range(  # type: ignore[call-overload]
                 start=start,
                 end=end,
                 periods=periods,
@@ -2032,7 +2053,7 @@ def timedelta_range(
     periods: Optional[int] = None,
     freq: Optional[Union[str, DateOffset]] = None,
     name: Optional[str] = None,
-    closed: Optional[str] = None,
+    closed: Optional[Literal["left", "right"]] = None,
 ) -> TimedeltaIndex:
     """
     Return a fixed frequency TimedeltaIndex, with day as the default frequency.
@@ -2082,7 +2103,7 @@ def timedelta_range(
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
-    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],
@@ -2101,7 +2122,7 @@ def timedelta_range(
     return cast(
         TimedeltaIndex,
         ps.from_pandas(
-            pd.timedelta_range(
+            pd.timedelta_range(  # type: ignore[call-overload]
                 start=start,
                 end=end,
                 periods=periods,
@@ -2320,10 +2341,10 @@ def get_dummies(
             values = values[1:]
 
         def column_name(v: Any) -> Name:
-            if prefix is None or prefix[i] == "":  # type: ignore[index]
+            if prefix is None or prefix[i] == "":
                 return v
             else:
-                return "{}{}{}".format(prefix[i], prefix_sep, v)  # type: ignore[index]
+                return "{}{}{}".format(prefix[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
@@ -2592,9 +2613,7 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(  # type: ignore[assignment]
-                map(str, _range(len(concat_psdf.columns)))
-            )
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
@@ -2953,7 +2972,7 @@ def merge(
     ----------
     right: Object to merge with.
     how: Type of merge to be performed.
-        {'left', 'right', 'outer', 'inner'}, default 'inner'
+        {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'
 
         left: use only keys from left frame, like a SQL left outer join; preserve key
             order.
@@ -2963,6 +2982,8 @@ def merge(
             lexicographically.
         inner: use intersection of keys from both frames, like a SQL inner join;
             preserve the order of the left keys.
+        cross: creates the cartesian product from both frames, preserves the order
+            of the left keys.
     on: Column or index level names to join on. These must be found in both DataFrames. If on
         is None and not merging on indexes then this defaults to the intersection of the
         columns in both DataFrames.
@@ -3886,7 +3907,7 @@ def _test() -> None:
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
         # `legacy="1.25"` only available in `nump>=2`
-        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas

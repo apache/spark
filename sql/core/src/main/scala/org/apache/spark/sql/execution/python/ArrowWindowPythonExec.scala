@@ -108,8 +108,7 @@ case class ArrowWindowPythonExec(
         evalType,
         longMetric("spillSize"),
         pythonMetrics,
-        sessionUUID,
-        conf.pythonUDFProfiler)
+        sessionUUID)
 
     // Start processing.
     if (conf.usePartitionEvaluator) {

@@ -260,12 +260,14 @@ object KeyValueChecksumEncoder {
    * @param verifier used for checksum verification.
    * @param keyBytes Key bytes for the value to decode, only used for checksum verification.
    * @param valueBytes The value bytes to decode.
+   * @param delimiterSize Size of delimiter used between merged values (in bytes).
    * @return The original value row bytes, without the checksum.
    * */
   def decodeAndVerifyValueRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
       keyBytes: Array[Byte],
-      valueBytes: Array[Byte]): Array[Byte] = {
+      valueBytes: Array[Byte],
+      delimiterSize: Int): Array[Byte] = {
     // First get the total size of the original values
     // Doing this to also support decoding merged values (via merge) e.g. val1,val2,val3
     val valuesEnd = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
@@ -276,14 +278,14 @@ object KeyValueChecksumEncoder {
       // skip the checksum (first 4 bytes)
       currentPosition += java.lang.Integer.BYTES
       val valueRowSize = Platform.getInt(valueBytes, currentPosition)
-      // move to the next value and skip the delimiter character used for rocksdb merge
-      currentPosition += java.lang.Integer.BYTES + valueRowSize + 1
+      // move to the next value and skip the delimiter bytes used for rocksdb merge
+      currentPosition += java.lang.Integer.BYTES + valueRowSize + delimiterSize
       resultSize += valueRowSize
       numValues += 1
     }
 
     // include the number of delimiters used for merge
-    resultSize += numValues - 1
+    resultSize += (numValues - 1) * delimiterSize
 
     // now verify and decode to original merged values
     val result = new Array[Byte](resultSize)
@@ -308,7 +310,7 @@ object KeyValueChecksumEncoder {
 
       // No delimiter is needed if single value or the last value in multi-value
       val copyLength = if (currentValueCount < numValues) {
-        valueRowSize + 1 // copy the delimiter
+        valueRowSize + delimiterSize // copy the delimiter
       } else {
         valueRowSize
       }
@@ -337,12 +339,14 @@ object KeyValueChecksumEncoder {
    * @param verifier Used for checksum verification.
    * @param keyBytes Key bytes for the value to decode, only used for checksum verification.
    * @param valueBytes The value bytes to decode.
+   * @param delimiterSize Size of delimiter used between merged values (in bytes).
    * @return Iterator of index range representing the original value row bytes, without checksum.
    */
   def decodeAndVerifyMultiValueRowWithChecksum(
       verifier: Option[KeyValueIntegrityVerifier],
       keyBytes: Array[Byte],
-      valueBytes: Array[Byte]): Iterator[ArrayIndexRange[Byte]] = {
+      valueBytes: Array[Byte],
+      delimiterSize: Int): Iterator[ArrayIndexRange[Byte]] = {
     if (valueBytes == null) {
       Seq().iterator
     } else {
@@ -357,8 +361,8 @@ object KeyValueChecksumEncoder {
           val (valueRowIndex, checksum) =
             getValueRowIndexAndChecksum(valueBytes, startingPosition = position)
           verifier.foreach(_.verify(keyRowIndex, Some(valueRowIndex), checksum))
-          // move to the next value and skip the delimiter character used for rocksdb merge
-          position = byteIndexToOffset(valueRowIndex.untilIndex) + 1
+          // move to the next value and skip the delimiter bytes used for rocksdb merge
+          position = byteIndexToOffset(valueRowIndex.untilIndex) + delimiterSize
           valueRowIndex
         }
       }

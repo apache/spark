@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import jakarta.servlet.FilterChain
+import jakarta.servlet.{FilterChain, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -129,6 +129,16 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
+    // CSP header contains a dynamic nonce, so verify it matches the expected pattern
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    val cspValue = cspCaptor.getValue
+    assert(cspValue.startsWith("default-src 'self'; script-src 'self' 'nonce-"))
+    assert(cspValue.contains("style-src 'self' 'unsafe-inline'"))
+    assert(cspValue.contains("img-src 'self' data:"))
+    assert(cspValue.contains("object-src 'none'"))
+    assert(cspValue.contains("base-uri 'self'"))
+
     Map(
       "X-Frame-Options" -> "ALLOW-FROM example.com",
       "X-XSS-Protection" -> "xssProtection",
@@ -173,6 +183,74 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     when(req.getParameter("doAs")).thenReturn("alice")
     filter.doFilter(req, res, chain)
     verify(res, times(2)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+  }
+
+  test("CSP nonce is available during chain.doFilter and cleared after") {
+    val conf = new SparkConf(false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+
+    var nonceInsideChain: String = null
+    val chain = new FilterChain {
+      override def doFilter(req: ServletRequest, res: ServletResponse): Unit = {
+        nonceInsideChain = CspNonce.get
+      }
+    }
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    // Nonce should have been available inside chain.doFilter
+    assert(nonceInsideChain != null && nonceInsideChain.nonEmpty)
+    // Nonce should be cleared after doFilter completes
+    assert(CspNonce.get === null)
+
+    // CSP header should contain the same nonce that was available inside the chain
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(cspCaptor.getValue.contains(s"'nonce-$nonceInsideChain'"))
+  }
+
+  test("CSP nonce is cleared even when access is denied") {
+    val conf = new SparkConf(false)
+      .set(ACLS_ENABLE, true)
+      .set(UI_VIEW_ACLS, Seq("alice"))
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    when(req.getRemoteUser()).thenReturn("unauthorized-user")
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    // chain.doFilter should not have been called
+    verify(chain, times(0)).doFilter(any(), any())
+    // Nonce should still be cleared
+    assert(CspNonce.get === null)
+  }
+
+  test("each request gets a unique CSP nonce") {
+    val conf = new SparkConf(false)
+    val secMgr = new SecurityManager(conf)
+    val filter = new HttpSecurityFilter(conf, secMgr)
+
+    val nonces = (1 to 3).map { _ =>
+      val req = mockRequest()
+      val res = mock(classOf[HttpServletResponse])
+      var nonce: String = null
+      val chain = new FilterChain {
+        override def doFilter(req: ServletRequest, res: ServletResponse): Unit = {
+          nonce = CspNonce.get
+        }
+      }
+      filter.doFilter(req, res, chain)
+      nonce
+    }
+
+    // All nonces should be unique
+    assert(nonces.distinct.size === 3)
   }
 
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {

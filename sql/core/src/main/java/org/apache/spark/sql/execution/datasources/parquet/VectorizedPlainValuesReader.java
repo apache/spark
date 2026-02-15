@@ -287,10 +287,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putByte(rowId + i, buffer.get());
-      // skip the next 3 bytes
-      buffer.position(buffer.position() + 3);
+    if (buffer.hasArray()) {
+      byte[] array = buffer.array();
+      int offset = buffer.arrayOffset() + buffer.position();
+      for (int i = 0; i < total; i++) {
+        c.putByte(rowId + i, array[offset + i * 4]);
+      }
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putByte(rowId + i, buffer.get());
+        // skip the next 3 bytes
+        buffer.position(buffer.position() + 3);
+      }
     }
   }
 

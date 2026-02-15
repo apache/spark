@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
@@ -43,7 +43,6 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{Launched
 class StandaloneDynamicAllocationSuite
   extends SparkFunSuite
   with LocalSparkContext
-  with BeforeAndAfterAll
   with PrivateMethodTester {
 
   private val numWorkers = 2

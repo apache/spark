@@ -442,7 +442,8 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) extends MetadataMapSupport {
+    viewOriginalText: Option[String] = None)
+  extends MetadataMapSupport {
 
   import CatalogTable._
 

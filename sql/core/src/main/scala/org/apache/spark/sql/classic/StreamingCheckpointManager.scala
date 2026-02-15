@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.classic
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionErrors, OfflineStateRepartitionRunner}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming
 
 /** @inheritdoc */
+@Evolving
 private[spark] class StreamingCheckpointManager(
     sparkSession: SparkSession,
     sqlConf: SQLConf) extends streaming.StreamingCheckpointManager with Logging {

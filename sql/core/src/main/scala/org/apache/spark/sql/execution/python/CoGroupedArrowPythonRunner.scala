@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.arrow.ArrowWriterWrapper
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -48,12 +49,13 @@ class CoGroupedArrowPythonRunner(
     pythonRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
+  ArrowUtils.failDuplicatedFieldNames(leftSchema)
+  ArrowUtils.failDuplicatedFieldNames(rightSchema)
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
@@ -121,7 +123,7 @@ class CoGroupedArrowPythonRunner(
       private var rightGroupArrowWriter: ArrowWriterWrapper = null
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
       /**
@@ -155,7 +157,7 @@ class CoGroupedArrowPythonRunner(
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
             leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
-              timeZoneId, pythonExec + " (left)", errorOnDuplicatedFieldNames = true,
+              timeZoneId, pythonExec + " (left)",
               largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
             leftGroupArrowWriter.unloader = createUnloader(leftGroupArrowWriter.root)
@@ -178,7 +180,7 @@ class CoGroupedArrowPythonRunner(
         } else if (nextBatchInRightGroup != null) {
           if (rightGroupArrowWriter == null) {
             rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
-              timeZoneId, pythonExec + " (right)", errorOnDuplicatedFieldNames = true,
+              timeZoneId, pythonExec + " (right)",
               largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
             rightGroupArrowWriter.unloader = createUnloader(rightGroupArrowWriter.root)

@@ -126,7 +126,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK-52933: Verify if the executor cpu request exceeds limit") {
     baseConf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "2")
     baseConf.set(KUBERNETES_EXECUTOR_LIMIT_CORES, "1")
-    val error = intercept[SparkException] {
+    val error = intercept[IllegalArgumentException] {
       initDefaultProfile(baseConf)
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
@@ -649,6 +649,23 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     // memory = 1024M  + 150MB (overrides any other overhead calculation)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1174Mi")
+  }
+
+  test("SPARK-55431: executor pod sets resizePolicy to NotRequired for cpu and memory") {
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val resizePolicies = executor.container.getResizePolicy.asScala
+    assert(resizePolicies.size === 2)
+
+    val cpuPolicy = resizePolicies.find(_.getResourceName == "cpu")
+    assert(cpuPolicy.isDefined)
+    assert(cpuPolicy.get.getRestartPolicy === "NotRequired")
+
+    val memoryPolicy = resizePolicies.find(_.getResourceName == "memory")
+    assert(memoryPolicy.isDefined)
+    assert(memoryPolicy.get.getRestartPolicy === "NotRequired")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

@@ -66,7 +66,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
+        if (key == null) {
+          throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+        }
+        key.toString -> (if (value == null) "null" else value.toString)
       }
     case m: CreateMap =>
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)

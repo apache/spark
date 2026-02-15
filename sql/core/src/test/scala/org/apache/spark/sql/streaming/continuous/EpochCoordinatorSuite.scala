@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming.continuous
 import org.mockito.{ArgumentCaptor, InOrder}
 import org.mockito.ArgumentMatchers.{any, eq => eqTo}
 import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
@@ -36,8 +35,7 @@ import org.apache.spark.sql.test.TestSparkSession
 class EpochCoordinatorSuite
   extends SparkFunSuite
     with LocalSparkSession
-    with MockitoSugar
-    with BeforeAndAfterEach {
+    with MockitoSugar {
 
   private var epochCoordinator: RpcEndpointRef = _
 

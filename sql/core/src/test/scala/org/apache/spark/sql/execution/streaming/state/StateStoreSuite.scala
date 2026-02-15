@@ -1234,11 +1234,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("SPARK-21145: Restarted queries create new provider instances") {
     try {
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
-      implicit val spark: SparkSession = SparkSession.builder().master("local[2]").getOrCreate()
+      val spark: SparkSession = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
-      val inputData = MemoryStream[Int]
+      val inputData = MemoryStream[Int](spark)
 
       def runQueryAndGetLoadedProviders(): Seq[StateStoreProvider] = {
         val aggregated = inputData.toDF().groupBy("value").agg(count("*"))
@@ -1864,6 +1864,41 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
         assert(reloadedStore.commit() === 2)
         assert(reloadedStore.metrics.numKeys === 4)
+      }
+    }
+  }
+
+  testWithAllCodec("multiGet - batch retrieval of multiple keys") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        // Put multiple key-value pairs
+        put(store, "a", 1, 10)
+        put(store, "b", 2, 20)
+        put(store, "c", 3, 30)
+        put(store, "d", 4, 40)
+
+        // Create keys array for multiGet
+        val keys = Array(
+          dataToKeyRow("a", 1),
+          dataToKeyRow("b", 2),
+          dataToKeyRow("c", 3),
+          dataToKeyRow("nonexistent", 999) // Key that doesn't exist
+        )
+
+        // Perform multiGet
+        // Note: multiGet returns an iterator, we copy rows when collecting
+        val results = store.multiGet(keys, StateStore.DEFAULT_COL_FAMILY_NAME)
+          .map(row => if (row != null) row.copy() else null).toArray
+
+        // Verify results
+        assert(results.length === 4)
+        assert(valueRowToData(results(0)) === 10)
+        assert(valueRowToData(results(1)) === 20)
+        assert(valueRowToData(results(2)) === 30)
+        assert(results(3) === null) // Non-existent key should return null
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }

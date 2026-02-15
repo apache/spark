@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
@@ -73,26 +74,20 @@ class IndexBasicMixin:
         self.assert_eq(psdf.index.copy(), pdf.index.copy())
 
     def test_holds_integer(self):
-        pidx = pd.Index([1, 2, 3, 4])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+        def check_holds_integer(pidx):
+            psidx = ps.from_pandas(pidx)
 
-        pidx = pd.Index([1.1, 2.2, 3.3, 4.4])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+            if LooseVersion(pd.__version__) < "3.0.0":
+                self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+            else:
+                with self.assertRaises(AttributeError):
+                    psidx.holds_integer()
 
-        pidx = pd.Index(["A", "B", "C", "D"])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "a")])
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.holds_integer(), psmidx.holds_integer())
-
-        pmidx = pd.MultiIndex.from_tuples([(10, 1), (10, 2), (20, 1)])
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.holds_integer(), psmidx.holds_integer())
+        check_holds_integer(pd.Index([1, 2, 3, 4]))
+        check_holds_integer(pd.Index([1.1, 2.2, 3.3, 4.4]))
+        check_holds_integer(pd.Index(["A", "B", "C", "D"]))
+        check_holds_integer(pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "a")]))
+        check_holds_integer(pd.MultiIndex.from_tuples([(10, 1), (10, 2), (20, 1)]))
 
     def test_item(self):
         pidx = pd.Index([10])
