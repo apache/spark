@@ -115,6 +115,18 @@ class GeometryExecutionSuite {
     assertEquals(0, geometry.srid());
   }
 
+  @Test
+  void testFromWkbWithInvalidSrid() {
+    byte[] wkb = getTestWKBPoint();
+    for (int invalidSrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
+      IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> Geometry.fromWkb(wkb, invalidSrid)
+      );
+      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+    }
+  }
+
   /** Tests for Geometry EWKB parsing. */
 
   @Test
@@ -245,5 +257,26 @@ class GeometryExecutionSuite {
   void testSrid() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
     assertEquals(4326, geometry.srid());
+  }
+
+  @Test
+  void testSetSridWithValidSrid() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    for (int validSrid : new int[]{0, 3857, 4326}) {
+      geometry.setSrid(validSrid);
+      assertEquals(validSrid, geometry.srid());
+    }
+  }
+
+  @Test
+  void testSetSridWithInvalidSrid() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    for (int invalidSrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
+      IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> geometry.setSrid(invalidSrid)
+      );
+      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+    }
   }
 }

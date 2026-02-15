@@ -112,6 +112,18 @@ class GeographyExecutionSuite {
     assertEquals(4326, geography.srid());
   }
 
+  @Test
+  void testFromWkbWithInvalidSrid() {
+    byte[] wkb = getTestWKBPoint();
+    for (int invalidSrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> Geography.fromWkb(wkb, invalidSrid)
+      );
+      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+    }
+  }
+
   /** Tests for Geography EWKB parsing. */
 
   @Test
@@ -242,5 +254,26 @@ class GeographyExecutionSuite {
   void testSrid() {
     Geography geography = Geography.fromBytes(testGeographyVal);
     assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testSetSridWithValidSrid() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    for (int validSrid : new int[]{4326}) {
+      geography.setSrid(validSrid);
+      assertEquals(validSrid, geography.srid());
+    }
+  }
+
+  @Test
+  void testSetSridWithInvalidSrid() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    for (int invalidSrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> geography.setSrid(invalidSrid)
+      );
+      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+    }
   }
 }
