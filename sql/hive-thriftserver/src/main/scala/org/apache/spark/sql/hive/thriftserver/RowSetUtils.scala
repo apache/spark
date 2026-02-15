@@ -26,7 +26,7 @@ import org.apache.hive.service.rpc.thrift._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.HiveResult._
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, ShortType, StringType}
 
 object RowSetUtils {
 
@@ -142,7 +142,11 @@ object RowSetUtils {
           val value = if (row.isNullAt(ordinal)) {
             ""
           } else {
-            toHiveString((row.get(ordinal), typ), nested = true, timeFormatters, binaryFormatter)
+            val nested = typ match {
+              case _: GeometryType | _: GeographyType => false
+              case _ => true
+            }
+            toHiveString((row.get(ordinal), typ), nested, timeFormatters, binaryFormatter)
           }
           values.add(value)
           i += 1

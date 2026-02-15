@@ -106,6 +106,30 @@ NULL
 
 
 -- !query
+SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))
+-- !query schema
+struct<array(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0)):array<geometry(0)>>
+-- !query output
+["POINT(1 2)"]
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326))
+-- !query schema
+struct<array(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326)):array<geometry(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+
+
+-- !query
+SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))
+-- !query schema
+struct<array(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):array<geography(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+
+
+-- !query
 SELECT ST_GeomFromWKB(wkb) FROM geodata
 -- !query schema
 struct<st_geomfromwkb(wkb, 0):geometry(0)>
@@ -148,6 +172,33 @@ struct<CAST(st_geogfromwkb(wkb) AS GEOMETRY(4326)):geometry(4326)>
 -- !query output
 NULL
 SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(wkb)) FROM geodata
+-- !query schema
+struct<array(st_geomfromwkb(wkb, 0)):array<geometry(0)>>
+-- !query output
+["POINT(1 2)"]
+[null]
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(wkb, 4326)) FROM geodata
+-- !query schema
+struct<array(st_geomfromwkb(wkb, 4326)):array<geometry(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+[null]
+
+
+-- !query
+SELECT array(ST_GeogFromWKB(wkb)) FROM geodata
+-- !query schema
+struct<array(st_geogfromwkb(wkb)):array<geography(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+[null]
 
 
 -- !query
