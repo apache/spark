@@ -24,12 +24,12 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
@@ -453,5 +453,146 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       val localTime = DateTimeUtils.nanosToLocalTime(nanos)
       assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
     }
+  }
+
+  // WKB bytes for POINT (17 7), reused across geospatial tests.
+  private val pointWkb: Array[Byte] = "010100000000000000000031400000000000001C40"
+    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+  test("converting Geometry to GeometryType via convertToCatalyst") {
+    val geom = Geometry.fromWKB(pointWkb, 0)
+    val result = CatalystTypeConverters.convertToCatalyst(geom)
+    assert(result.isInstanceOf[GeometryVal])
+    val resultVal = result.asInstanceOf[GeometryVal]
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(STUtils.stSrid(resultVal) === 0)
+  }
+
+  test("converting Geometry with non-default SRID via convertToCatalyst") {
+    val geom = Geometry.fromWKB(pointWkb, 4326)
+    val result = CatalystTypeConverters.convertToCatalyst(geom)
+    assert(result.isInstanceOf[GeometryVal])
+    val resultVal = result.asInstanceOf[GeometryVal]
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(STUtils.stSrid(resultVal) === 4326)
+  }
+
+  test("converting Geography to GeographyType via convertToCatalyst") {
+    val geog = Geography.fromWKB(pointWkb, 4326)
+    val result = CatalystTypeConverters.convertToCatalyst(geog)
+    assert(result.isInstanceOf[GeographyVal])
+    val resultVal = result.asInstanceOf[GeographyVal]
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(STUtils.stSrid(resultVal) === 4326)
+  }
+
+  test("convertToCatalyst null handling for geospatial types") {
+    assert(CatalystTypeConverters.convertToCatalyst(null: Geometry) === null)
+    assert(CatalystTypeConverters.convertToCatalyst(null: Geography) === null)
+  }
+
+  test("convertToCatalyst with Geometry with invalid SRID") {
+    val geom = Geometry.fromWKB(pointWkb, 1)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.convertToCatalyst(geom)
+      },
+      condition = "ST_INVALID_SRID_VALUE",
+      parameters = Map("srid" -> "1"))
+  }
+
+  test("createToCatalystConverter for GeometryType") {
+    val gt = GeometryType(0)
+    val converter = CatalystTypeConverters.createToCatalystConverter(gt)
+    val geom = Geometry.fromWKB(pointWkb, 0)
+    val result = converter(geom)
+    assert(result.isInstanceOf[GeometryVal])
+    val resultVal = result.asInstanceOf[GeometryVal]
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(STUtils.stSrid(resultVal) === 0)
+  }
+
+  test("createToCatalystConverter for GeographyType") {
+    val gt = GeographyType(4326)
+    val converter = CatalystTypeConverters.createToCatalystConverter(gt)
+    val geog = Geography.fromWKB(pointWkb, 4326)
+    val result = converter(geog)
+    assert(result.isInstanceOf[GeographyVal])
+    val resultVal = result.asInstanceOf[GeographyVal]
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(STUtils.stSrid(resultVal) === 4326)
+  }
+
+  test("createToScalaConverter for GeometryType") {
+    val gt = GeometryType(0)
+    val geom = Geometry.fromWKB(pointWkb, 0)
+    val catalystVal = STUtils.serializeGeomFromWKB(geom, gt)
+    val result = CatalystTypeConverters.createToScalaConverter(gt)(catalystVal)
+    assert(result.isInstanceOf[Geometry])
+    assert(result === geom)
+  }
+
+  test("createToScalaConverter for GeographyType") {
+    val gt = GeographyType(4326)
+    val geog = Geography.fromWKB(pointWkb, 4326)
+    val catalystVal = STUtils.serializeGeogFromWKB(geog, gt)
+    val result = CatalystTypeConverters.createToScalaConverter(gt)(catalystVal)
+    assert(result.isInstanceOf[Geography])
+    assert(result === geog)
+  }
+
+  test("null handling for geospatial individual values") {
+    assert(CatalystTypeConverters.createToScalaConverter(GeometryType(0))(null) === null)
+    assert(CatalystTypeConverters.createToScalaConverter(GeographyType(4326))(null) === null)
+  }
+
+  test("converting a wrong value to GeometryType") {
+    val gt = GeometryType(0)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(gt)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3219",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "STRING"))
+  }
+
+  test("converting a wrong value to GeographyType") {
+    val gt = GeographyType(4326)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(gt)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3219",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "STRING"))
+  }
+
+  test("convertToCatalyst with Geometry nested in Seq") {
+    val geom = Geometry.fromWKB(pointWkb, 0)
+    val result = CatalystTypeConverters.convertToCatalyst(Seq(geom))
+    assert(result.isInstanceOf[GenericArrayData])
+    val array = result.asInstanceOf[GenericArrayData]
+    assert(array.numElements() === 1)
+    val element = array.get(0, GeometryType("ANY"))
+    assert(element.isInstanceOf[GeometryVal])
+    assert(java.util.Arrays.equals(
+      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+  }
+
+  test("convertToCatalyst with Geography nested in Seq") {
+    val geog = Geography.fromWKB(pointWkb, 4326)
+    val result = CatalystTypeConverters.convertToCatalyst(Seq(geog))
+    assert(result.isInstanceOf[GenericArrayData])
+    val array = result.asInstanceOf[GenericArrayData]
+    assert(array.numElements() === 1)
+    val element = array.get(0, GeographyType("ANY"))
+    assert(element.isInstanceOf[GeographyVal])
+    assert(java.util.Arrays.equals(
+      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
   }
 }
