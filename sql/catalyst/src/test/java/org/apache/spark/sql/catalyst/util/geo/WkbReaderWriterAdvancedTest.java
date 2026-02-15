@@ -33,6 +33,10 @@ import java.util.List;
  */
 public class WkbReaderWriterAdvancedTest extends WkbTestBase {
 
+  /** Helper fields for SRID values used in tests. */
+  private final int geomSrid = Geometry.DEFAULT_SRID;
+  private final int geogSrid = Geography.DEFAULT_SRID;
+
   /**
    * Test helper to verify WKB parsing from hex string in both byte orders
    */
@@ -54,12 +58,12 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     GeometryModel geomLittle;
     if (expectedValidateError) {
       WkbParseException ex = Assertions.assertThrows(
-        WkbParseException.class, () -> validateReader.read(wkbLittle, 0));
+        WkbParseException.class, () -> validateReader.read(wkbLittle, geomSrid));
       Assertions.assertTrue(ex.getMessage().toUpperCase().contains(wkbHexLittle.toUpperCase()),
         "Exception message should contain the WKB hex: " + wkbHexLittle);
-      geomLittle = noValidateReader.read(wkbLittle, 0);
+      geomLittle = noValidateReader.read(wkbLittle, geomSrid);
     } else {
-      geomLittle = validateReader.read(wkbLittle, 0);
+      geomLittle = validateReader.read(wkbLittle, geomSrid);
     }
 
     Assertions.assertEquals(expectedType, geomLittle.getTypeId(),
@@ -72,12 +76,12 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     GeometryModel geomBig;
     if (expectedValidateError) {
       WkbParseException ex = Assertions.assertThrows(
-        WkbParseException.class, () -> validateReader.read(wkbBig, 0));
+        WkbParseException.class, () -> validateReader.read(wkbBig, geomSrid));
       Assertions.assertTrue(ex.getMessage().toUpperCase().contains(wkbHexBig.toUpperCase()),
         "Exception message should contain the WKB hex: " + wkbHexBig);
-      geomBig = noValidateReader.read(wkbBig, 0);
+      geomBig = noValidateReader.read(wkbBig, geomSrid);
     } else {
-      geomBig = validateReader.read(wkbBig, 0);
+      geomBig = validateReader.read(wkbBig, geomSrid);
     }
     Assertions.assertEquals(expectedType, geomBig.getTypeId(),
         "Geometry type mismatch (big endian)");
@@ -99,7 +103,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
 
     // Parse the geometry WKB (little endian).
     WkbReader reader = new WkbReader();
-    GeometryModel model = reader.read(wkbLittle, 0);
+    GeometryModel model = reader.read(wkbLittle, geomSrid);
     WkbWriter writer = new WkbWriter();
     byte[] writtenLittleFromModelLittle = writer.write(model, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelLittle = writer.write(model, ByteOrder.BIG_ENDIAN);
@@ -109,7 +113,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
         "WKB big endian round-trip failed");
 
     // Parse the geometry WKB (big endian).
-    GeometryModel geomFromBig = reader.read(wkbBig, 0);
+    GeometryModel geomFromBig = reader.read(wkbBig, geomSrid);
     byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelBig),
@@ -118,7 +122,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
       "WKB big endian round-trip from big endian failed");
 
     // Use Geometry.fromWkb (little endian).
-    Geometry geometryFromLittle = Geometry.fromWkb(wkbLittle, 0);
+    Geometry geometryFromLittle = Geometry.fromWkb(wkbLittle, geomSrid);
     byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
         "Geometry.fromWKB little endian round-trip failed");
@@ -127,7 +131,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
         "Geometry.fromWKB big endian round-trip failed");
 
     // Use Geometry.fromWkb (big endian).
-    Geometry geometryFromBig = Geometry.fromWkb(writtenBigFromModelLittle, 0);
+    Geometry geometryFromBig = Geometry.fromWkb(writtenBigFromModelLittle, geomSrid);
     byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
         "Geometry.fromWKB little endian round-trip from big endian failed");
@@ -142,7 +146,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
 
     // Parse the geography WKB (little endian).
     WkbReader reader = new WkbReader(true);
-    GeometryModel model = reader.read(wkbLittle, 0);
+    GeometryModel model = reader.read(wkbLittle, geogSrid);
     WkbWriter writer = new WkbWriter();
     byte[] writtenLittleFromModelLittle = writer.write(model, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelLittle = writer.write(model, ByteOrder.BIG_ENDIAN);
@@ -152,7 +156,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
         "WKB big endian round-trip failed");
 
     // Parse the geography WKB (big endian).
-    GeometryModel geomFromBig = reader.read(wkbBig, 0);
+    GeometryModel geomFromBig = reader.read(wkbBig, geogSrid);
     byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelBig),
@@ -161,7 +165,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
       "WKB big endian round-trip from big endian failed");
 
     // Use Geography.fromWkb (little endian).
-    Geography geometryFromLittle = Geography.fromWkb(wkbLittle, 0);
+    Geography geometryFromLittle = Geography.fromWkb(wkbLittle, geogSrid);
     byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
         "Geography.fromWKB little endian round-trip failed");
@@ -170,7 +174,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
         "Geography.fromWKB big endian round-trip failed");
 
     // Use Geography.fromWkb (big endian).
-    Geography geometryFromBig = Geography.fromWkb(writtenBigFromModelLittle, 0);
+    Geography geometryFromBig = Geography.fromWkb(writtenBigFromModelLittle, geogSrid);
     byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
         "Geography.fromWKB little endian round-trip from big endian failed");
