@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, OuterReferen
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.DataType
 
 /**
  * Resolver for [[AggregateExpressions]] that can come from either [[FunctionResolver]] or
@@ -122,12 +123,10 @@ class AggregateExpressionResolver(
               case Some(true) => // safe cast, allow
               case Some(false) => listAgg.child match {
                 case Cast(castChild, castType, _, _) =>
-                  throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-                    listAgg.prettyName, castChild.dataType, castType)
+                  throwFunctionAndOrderExpressionUnsafeCastError(listAgg, castChild, castType)
               }
               case None =>
-                throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-                  listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+                throwFunctionAndOrderExpressionMismatchError(listAgg)
             }
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
@@ -221,6 +220,17 @@ class AggregateExpressionResolver(
         )
         OuterReference(outerAggregateExpressionAlias.toAttribute)
     }
+  }
+
+  private def throwFunctionAndOrderExpressionMismatchError(listAgg: ListAgg) = {
+    throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+      listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+  }
+
+  private def throwFunctionAndOrderExpressionUnsafeCastError(
+      listAgg: ListAgg, castChild: Expression, castType: DataType) = {
+    throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+      listAgg.prettyName, castChild.dataType, castType)
   }
 
   private def throwNestedAggregateFunction(aggregateExpression: AggregateExpression): Nothing = {
