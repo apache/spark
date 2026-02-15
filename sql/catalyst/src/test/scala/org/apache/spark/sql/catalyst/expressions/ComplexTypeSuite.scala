@@ -790,36 +790,40 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
-  // map key can't be variant
-  val map6 = CreateMap(Seq(
-    Literal.create(new VariantVal(Array[Byte](), Array[Byte]())),
-    Literal.create(1)
-  ))
-  map6.checkInputDataTypes() match {
-    case TypeCheckResult.TypeCheckSuccess => fail("should not allow variant as a part of map key")
-    case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
-      assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
-      assert(messageParameters === Map("keyType" -> "\"VARIANT\""))
-  }
-
-  // map key can't contain variant
-  val map7 = CreateMap(
-    Seq(
-      CreateStruct(
-        Seq(Literal.create(1), Literal.create(new VariantVal(Array[Byte](), Array[Byte]())))
-      ),
+  test("CreateMap: variant key validation") {
+    // map key can't be variant
+    val map6 = CreateMap(Seq(
+      Literal.create(new VariantVal(Array[Byte](), Array[Byte]())),
       Literal.create(1)
-    )
-  )
-  map7.checkInputDataTypes() match {
-    case TypeCheckResult.TypeCheckSuccess => fail("should not allow variant as a part of map key")
-    case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
-      assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
-      assert(
-        messageParameters === Map(
-          "keyType" -> "\"STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>\""
-        )
+    ))
+    map6.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        fail("should not allow variant as a part of map key")
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(messageParameters === Map("keyType" -> "\"VARIANT\""))
+    }
+
+    // map key can't contain variant
+    val map7 = CreateMap(
+      Seq(
+        CreateStruct(
+          Seq(Literal.create(1), Literal.create(new VariantVal(Array[Byte](), Array[Byte]())))
+        ),
+        Literal.create(1)
       )
+    )
+    map7.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        fail("should not allow variant as a part of map key")
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(
+          messageParameters === Map(
+            "keyType" -> "\"STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>\""
+          )
+        )
+    }
   }
 
   test("MapFromArrays") {
@@ -846,8 +850,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(
       MapFromArrays(strArray, intWithNullArray), create_map(strSeq, intWithNullSeq))
-    checkEvaluation(
-      MapFromArrays(strArray, longWithNullArray), create_map(strSeq, longWithNullSeq))
     checkEvaluation(
       MapFromArrays(strArray, longWithNullArray), create_map(strSeq, longWithNullSeq))
     checkEvaluation(MapFromArrays(nullArray, nullArray), null)

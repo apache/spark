@@ -1774,23 +1774,6 @@ object PruneNestedFieldsThroughGenerateForScan
    * Note: This REPLACES the existing field with the pruned version. The inner
    * requirements are MORE specific (fewer fields needed) than the original.
    *
-   * @param outerSchema Current outer generate's required schema
-   * @param innerSourceField The field name in outer's element that inner explodes
-   * @param innerElementSchema The inner generate's required element schema
-   * @param outerElementStruct The original outer element struct (for field metadata)
-   * @return Schema with inner requirements embedded (field replaced, not merged)
-   */
-  private def mergeInnerRequirementsIntoOuter(
-      outerSchema: StructType,
-      innerSourceField: String,
-      innerElementSchema: StructType,
-      outerElementStruct: StructType): StructType = {
-    // Backward-compatible wrapper
-    mergeInnerRequirementsWithPath(
-      outerSchema, Seq(innerSourceField), innerElementSchema, outerElementStruct)
-  }
-
-  /**
    * Merges inner generate's requirements into outer schema following a field path.
    *
    * For example, with:
@@ -2379,53 +2362,7 @@ object PruneNestedFieldsThroughGenerateForScan
   // ---------------------------------------------------------------------------
 
   /**
-   * Extracts each required field from the source array with
-   * [[GetArrayStructFields]] (or [[GetNestedArrayStructFields]] for deeper
-   * nesting) and recombines them into a single array-of-struct using [[ArraysZip]].
-   *
-   * Field ordering follows the original struct order to keep ordinals
-   * predictable.
-   *
-   * For source arrays with deeper nesting (e.g., `array<array<struct>>`),
-   * uses [[GetNestedArrayStructFields]] which handles arbitrary array depth.
-   */
-  private def buildPrunedArray(
-      arrayExpr: Expression,
-      elementStruct: StructType,
-      requiredFieldNames: Seq[String],
-      containsNull: Boolean): Expression = {
-
-    val arrayDepth = computeArrayDepth(arrayExpr.dataType)
-
-    val fieldArrays = requiredFieldNames.map { fieldName =>
-      val ordinal = elementStruct.fieldIndex(fieldName)
-      val field = elementStruct(ordinal)
-
-      if (arrayDepth > 1) {
-        // Nested array (e.g., array<array<struct>>) - use GetNestedArrayStructFields
-        GetNestedArrayStructFields(
-          arrayExpr, field, ordinal, elementStruct.length,
-          containsNull || field.nullable)
-      } else {
-        // Simple array<struct> - use GetArrayStructFields
-        GetArrayStructFields(
-          arrayExpr, field, ordinal, elementStruct.length,
-          containsNull || field.nullable)
-      }
-    }
-
-    val names = requiredFieldNames.map(n => Literal(n))
-    ArraysZip(fieldArrays, names)
-  }
-
-  // ---------------------------------------------------------------------------
-  //  Schema-driven pruned-array builder (Step 13)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Builds a pruned array expression from a nested StructType schema.
-   *
-   * This is the schema-driven replacement for buildPrunedArray. It handles:
+   * Builds a pruned array expression from a nested StructType schema. It handles:
    * - Primitive fields: extracted with GetArrayStructFields
    * - Nested array fields: recursively builds pruned nested arrays
    * - Nested struct fields: preserved with nested pruning applied
@@ -2521,32 +2458,6 @@ object PruneNestedFieldsThroughGenerateForScan
   // ---------------------------------------------------------------------------
   //  Ordinal fixer (name-based)
   // ---------------------------------------------------------------------------
-
-  /**
-   * Rewrites [[GetStructField]] expressions that reference `colAttr` to use
-   * positions in `newStruct` (resolved by field name) and updates the child
-   * attribute's data type to match the pruned struct.
-   *
-   * This is critical: we must update BOTH the ordinal AND the child's data type.
-   * Otherwise, `GetStructField.dataType` would use the old struct type's field
-   * at the new ordinal position, returning the wrong field type.
-   */
-  private def fixOrdinalsInExpr(
-      expr: Expression,
-      colAttr: Attribute,
-      newStruct: StructType): Expression = {
-    // Create attribute with the pruned struct type
-    val newColAttr = colAttr.withDataType(newStruct)
-
-    expr.transformDown {
-      case gsf @ GetStructField(child, _, _)
-          if isAttrRef(child, colAttr) =>
-        val fieldName = gsf.extractFieldName
-        val newOrdinal = newStruct.fieldIndex(fieldName)
-        // Update both child (with new type) and ordinal
-        gsf.copy(child = newColAttr, ordinal = newOrdinal)
-    }
-  }
 
   /**
    * Rewrites [[GetArrayStructFields]] expressions that reference `srcAttr` to use
