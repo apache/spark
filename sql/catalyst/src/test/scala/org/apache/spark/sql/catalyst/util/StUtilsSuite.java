@@ -45,6 +45,7 @@ class STUtilsSuite {
   // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 0.
   private final int testGeometrySrid = 0;
   private final byte[] testGeometryBytes;
+  private final byte[] testGeometry4326Bytes;
 
   // Common constants used in geo value construction.
   private final ByteOrder end = Geo.DEFAULT_ENDIANNESS;
@@ -63,9 +64,24 @@ class STUtilsSuite {
     testGeometryBytes = new byte[sridLen + wkbLen];
     System.arraycopy(geomSrid, 0, testGeometryBytes, 0, sridLen);
     System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, wkbLen);
+    testGeometry4326Bytes = new byte[sridLen + wkbLen];
+    System.arraycopy(geogSrid, 0, testGeometry4326Bytes, 0, sridLen);
+    System.arraycopy(testWkb, 0, testGeometry4326Bytes, sridLen, wkbLen);
   }
 
   /** Geospatial type casting utility methods. */
+
+  @Test
+  void testGeometryToGeography() {
+    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometry4326Bytes);
+    GeographyVal geographyVal = STUtils.geometryToGeography(geometryVal);
+    assertNotNull(geographyVal);
+    assertArrayEquals(geometryVal.getBytes(), geographyVal.getBytes());
+    // Non-geographic SRID should not be allowed for geometry to geography casting.
+    SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+      () -> STUtils.geometryToGeography(GeometryVal.fromBytes(testGeometryBytes)));
+    assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+  }
 
   @Test
   void testGeographyToGeometry() {
