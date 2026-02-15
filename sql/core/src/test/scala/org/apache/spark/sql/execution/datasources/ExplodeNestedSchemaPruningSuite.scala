@@ -74,6 +74,10 @@ abstract class ExplodeNestedSchemaPruningSuite
     a_string: String,
     a_array: Array[AArrayElement])
 
+  case class ItemDetail(color: String, size: Int)
+  case class MixedItem(name: String, detail: ItemDetail, qty: Int)
+  case class MixedArrayRecord(id: Int, items: Array[MixedItem], tags: Array[String])
+
   // ---- Test data ----
 
   private val sampleData = Seq(
@@ -102,6 +106,18 @@ abstract class ExplodeNestedSchemaPruningSuite
         AArrayElement("a2_b2", 4, "da",
           Array(BArrayElement("a2_b2_c1", 1, "da"),
             BArrayElement("a2_b2_c2", 1, "da"))))))
+
+  // Mixed array data: struct array with nested struct + scalar array.
+  // Used to test Pattern 3 (non-struct Generate above struct chain).
+  private val mixedArrayData = Seq(
+    MixedArrayRecord(1,
+      Array(
+        MixedItem("apple", ItemDetail("red", 3), 5),
+        MixedItem("banana", ItemDetail("yellow", 2), 3)),
+      Array("fruit", "food")),
+    MixedArrayRecord(2,
+      Array(MixedItem("cherry", ItemDetail("dark red", 1), 1)),
+      Array("berry")))
 
   // ---- Infrastructure ----
 
@@ -172,6 +188,23 @@ abstract class ExplodeNestedSchemaPruningSuite
           |    `c_2`: STRING>>>>""".stripMargin
       spark.read.format(dataSourceName).schema(schema).load(path + "/double_nested")
         .createOrReplaceTempView("double_nested")
+
+      testThunk
+    }
+  }
+
+  private def withMixedArrayData(testThunk: => Unit): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      makeDataSourceFile(mixedArrayData, new File(path + "/mixed_array"))
+
+      val schema =
+        """`id` INT,
+          |`items` ARRAY<STRUCT<`name`: STRING,
+          |  `detail`: STRUCT<`color`: STRING, `size`: INT>, `qty`: INT>>,
+          |`tags` ARRAY<STRING>""".stripMargin
+      spark.read.format(dataSourceName).schema(schema).load(path + "/mixed_array")
+        .createOrReplaceTempView("mixed_array")
 
       testThunk
     }
@@ -1981,6 +2014,97 @@ abstract class ExplodeNestedSchemaPruningSuite
     }
   }
 
+  testExplodePruning("depth-2 nested arrays - filter on pruned fields") {
+    withDepth2NestedData {
+      // Select x and z (prune y), with filter on x
+      // Exercises filter ordinal fixup path with GetNestedArrayStructFields
+      val query = sql(
+        """SELECT id, inner_elem.x, inner_elem.z
+          |FROM depth2_nested
+          |LATERAL VIEW EXPLODE(deep) as outer_arr
+          |LATERAL VIEW EXPLODE(outer_arr) as inner_elem
+          |WHERE inner_elem.x > 2""".stripMargin)
+
+      checkScan(query,
+        "struct<id:bigint,deep:array<array<struct<x:int,z:int>>>>")
+
+      checkAnswer(query, Seq(
+        Row(1L, 3, 300),
+        Row(2L, 4, 400)
+      ))
+    }
+  }
+
+  testExplodePruning("depth-2 nested arrays - posexplode with pruning") {
+    withDepth2NestedData {
+      // POSEXPLODE on depth-2 array, select x only (prune y and z)
+      val query = sql(
+        """SELECT id, pos, inner_elem.x
+          |FROM depth2_nested
+          |LATERAL VIEW EXPLODE(deep) as outer_arr
+          |LATERAL VIEW POSEXPLODE(outer_arr) as pos, inner_elem""".stripMargin)
+
+      checkScan(query,
+        "struct<id:bigint,deep:array<array<struct<x:int>>>>")
+
+      checkAnswer(query, Seq(
+        Row(1L, 0, 1), Row(1L, 1, 2), Row(1L, 0, 3),
+        Row(2L, 0, 4)
+      ))
+    }
+  }
+
+  // =========================================================================
+  //  Leaf filter ordinal fixup tests
+  //
+  //  These tests verify that filters on the source array column (not on
+  //  exploded elements) have correct ordinals after pruning. When such filters
+  //  reference struct fields via GetArrayStructFields, the ordinals must be
+  //  updated to match the pruned schema.
+  // =========================================================================
+
+  testExplodePruning("leaf filter on source array field - ordinal fixup after pruning") {
+    withMixedArrayData {
+      // SELECT item.name with filter on items.qty (source array field access).
+      // Pruned schema: struct<name, qty> (detail pruned).
+      // The leaf filter contains GetArrayStructFields(items, qty, 2, 3) which must
+      // be rewritten to GetArrayStructFields(_pruned, qty, 1, 2) after pruning.
+      val query = sql(
+        """SELECT item.name
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |WHERE size(items) > 1""".stripMargin)
+
+      // qty not needed (no reference), detail not needed - only name needed
+      // But items (whole array) is referenced by size(), so all fields may be kept.
+      // The key thing is correctness of results.
+      checkAnswer(query,
+        Row("apple") :: Row("banana") :: Nil)
+    }
+  }
+
+  testExplodePruning("depth-2 nested arrays - leaf filter on source column") {
+    withDepth2NestedData {
+      // Filter on source column (deep IS NOT NULL) is a leaf filter that
+      // references the source array directly. After pruning to struct<x>,
+      // the direct reference is rewritten to use the pruned attribute.
+      val query = sql(
+        """SELECT id, inner_elem.x
+          |FROM depth2_nested
+          |LATERAL VIEW EXPLODE(deep) as outer_arr
+          |LATERAL VIEW EXPLODE(outer_arr) as inner_elem
+          |WHERE deep IS NOT NULL""".stripMargin)
+
+      checkScan(query,
+        "struct<id:bigint,deep:array<array<struct<x:int>>>>")
+
+      checkAnswer(query, Seq(
+        Row(1L, 1), Row(1L, 2), Row(1L, 3),
+        Row(2L, 4)
+      ))
+    }
+  }
+
   // =========================================================================
   //  OUTER POSEXPLODE with aggregation tests
   //
@@ -2699,6 +2823,270 @@ abstract class ExplodeNestedSchemaPruningSuite
           "a_array:array<struct<b:string,b_int:bigint>>>")
 
       query.collect()
+    }
+  }
+
+  // =========================================================================
+  //  Regression tests: non-struct Generate above struct chain (Pattern 3)
+  //
+  //  These verify that when a non-struct Generate (e.g., EXPLODE(tags) on
+  //  array<string>) sits above a struct Generate chain (EXPLODE(items) on
+  //  array<struct>), the scan includes the scalar array column even when it
+  //  is not explicitly selected, and Generate.unrequiredChildIndex is
+  //  preserved correctly.
+  // =========================================================================
+
+  testExplodePruning("mixed arrays - non-struct generate above struct chain") {
+    withMixedArrayData {
+      // Regression: tags is NOT in SELECT but is needed by EXPLODE(tags).
+      // Before fix, this failed with INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND
+      // because tags was dropped from scan and from Generate child output.
+      val query = sql(
+        """SELECT item.name, item.detail.color, tag
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |LATERAL VIEW EXPLODE(tags) AS tag""".stripMargin)
+
+      // tags must be in scan schema; qty is pruned (top-level field).
+      // detail is pruned to struct<color> since only detail.color is accessed.
+      checkScan(query,
+        "struct<items:array<struct<name:string," +
+          "detail:struct<color:string>>>,tags:array<string>>")
+
+      checkAnswer(query,
+        Row("apple", "red", "fruit") ::
+          Row("apple", "red", "food") ::
+          Row("banana", "yellow", "fruit") ::
+          Row("banana", "yellow", "food") ::
+          Row("cherry", "dark red", "berry") :: Nil)
+    }
+  }
+
+  testExplodePruning("mixed arrays - pass-through column from non-struct generate") {
+    withMixedArrayData {
+      // tags appears both as a pass-through column AND as the generator source
+      val query = sql(
+        """SELECT tags, item.name, item.detail.color, tag
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |LATERAL VIEW EXPLODE(tags) AS tag""".stripMargin)
+
+      checkScan(query,
+        "struct<items:array<struct<name:string," +
+          "detail:struct<color:string>>>,tags:array<string>>")
+
+      checkAnswer(query,
+        Row(Seq("fruit", "food"), "apple", "red", "fruit") ::
+          Row(Seq("fruit", "food"), "apple", "red", "food") ::
+          Row(Seq("fruit", "food"), "banana", "yellow", "fruit") ::
+          Row(Seq("fruit", "food"), "banana", "yellow", "food") ::
+          Row(Seq("berry"), "cherry", "dark red", "berry") :: Nil)
+    }
+  }
+
+  testExplodePruning("mixed arrays - scalar column with non-struct generate") {
+    withMixedArrayData {
+      // id (scalar) + tags (array for non-struct generate) + pruned struct fields
+      val query = sql(
+        """SELECT id, item.name, item.detail.color, tag
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |LATERAL VIEW EXPLODE(tags) AS tag""".stripMargin)
+
+      checkScan(query,
+        "struct<id:int,items:array<struct<name:string," +
+          "detail:struct<color:string>>>,tags:array<string>>")
+
+      checkAnswer(query,
+        Row(1, "apple", "red", "fruit") ::
+          Row(1, "apple", "red", "food") ::
+          Row(1, "banana", "yellow", "fruit") ::
+          Row(1, "banana", "yellow", "food") ::
+          Row(2, "cherry", "dark red", "berry") :: Nil)
+    }
+  }
+
+  testExplodePruning("mixed arrays - nested sub-field pruning with all top-level fields") {
+    withMixedArrayData {
+      // All top-level struct fields (name, detail, qty) are selected so no
+      // top-level pruning. detail is pruned to struct<color> (size not accessed).
+      val query = sql(
+        """SELECT item.name, item.detail.color, item.qty, tag
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |LATERAL VIEW EXPLODE(tags) AS tag""".stripMargin)
+
+      checkScan(query,
+        "struct<items:array<struct<name:string," +
+          "detail:struct<color:string>,qty:int>>,tags:array<string>>")
+
+      checkAnswer(query,
+        Row("apple", "red", 5, "fruit") ::
+          Row("apple", "red", 5, "food") ::
+          Row("banana", "yellow", 3, "fruit") ::
+          Row("banana", "yellow", 3, "food") ::
+          Row("cherry", "dark red", 1, "berry") :: Nil)
+    }
+  }
+
+  // Nested struct pruning within array element - prunes both top-level and nested fields
+  testExplodePruning("nested struct pruning - prune sub-fields of struct inside array") {
+    withMixedArrayData {
+      // Select name and detail.color only: prunes qty (top-level) AND detail.size (nested)
+      val query = sql(
+        """SELECT item.name, item.detail.color
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item""".stripMargin)
+
+      // detail should be pruned from struct<color,size> to struct<color>
+      checkScan(query,
+        "struct<items:array<struct<name:string,detail:struct<color:string>>>>")
+
+      checkAnswer(query,
+        Row("apple", "red") ::
+          Row("banana", "yellow") ::
+          Row("cherry", "dark red") :: Nil)
+    }
+  }
+
+  testExplodePruning("nested struct pruning - only nested sub-field selected") {
+    withMixedArrayData {
+      // Select only detail.color: prunes name, qty (top-level) AND detail.size (nested)
+      val query = sql(
+        """SELECT item.detail.color
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item""".stripMargin)
+
+      checkScan(query,
+        "struct<items:array<struct<detail:struct<color:string>>>>")
+
+      checkAnswer(query,
+        Row("red") :: Row("yellow") :: Row("dark red") :: Nil)
+    }
+  }
+
+  testExplodePruning("nested struct pruning - with filter on nested sub-field") {
+    withMixedArrayData {
+      // Select name, filter on detail.size: prunes qty but keeps detail.color + detail.size
+      val query = sql(
+        """SELECT item.name, item.detail.color
+          |FROM mixed_array
+          |LATERAL VIEW EXPLODE(items) AS item
+          |WHERE item.detail.size > 1""".stripMargin)
+
+      // detail needs both color (projected) and size (filtered), so no nested pruning on detail
+      checkScan(query,
+        "struct<items:array<struct<name:string,detail:struct<color:string,size:int>>>>")
+
+      checkAnswer(query,
+        Row("apple", "red") :: Row("banana", "yellow") :: Nil)
+    }
+  }
+
+  // ============================================================================
+  // Non-consecutive generates: generates separated by Aggregate nodes
+  // Verifies the rule handles broken chains gracefully and pruning still works
+  // ============================================================================
+
+  testExplodePruning("generate above aggregate - posexplode after group by") {
+    withMixedArrayData {
+      // Aggregate passes the array through, then posexplode selects only some fields.
+      // The Aggregate (first(items)) prevents scan-level pruning of array element fields
+      // because the aggregate function needs the full array value.
+      val query = sql(
+        """SELECT pos, elem.name
+          |FROM (
+          |  SELECT first(items) as items
+          |  FROM mixed_array
+          |  GROUP BY id
+          |) t
+          |LATERAL VIEW POSEXPLODE(items) AS pos, elem""".stripMargin)
+
+      // Scan reads full items array: the Aggregate blocks schema pruning push-down.
+      // The Generate chain is broken by the Aggregate, but the system handles this
+      // correctly - no crashes, correct results.
+      checkScan(query,
+        "struct<id:int,items:array<struct<name:string," +
+          "detail:struct<color:string,size:int>,qty:int>>>")
+
+      checkAnswer(query,
+        Row(0, "apple") :: Row(1, "banana") :: Row(0, "cherry") :: Nil)
+    }
+  }
+
+  testExplodePruning("non-consecutive generates separated by aggregate") {
+    withMixedArrayData {
+      // Pattern: Scan -> EXPLODE -> GROUP BY -> POSEXPLODE -> Project
+      // The Aggregate breaks the generate chain into two independent generates.
+      val query = sql(
+        """SELECT category, pos, agg_item.name
+          |FROM (
+          |  SELECT item.detail.color as category,
+          |    collect_list(named_struct('name', item.name, 'qty', item.qty)) as agg_items
+          |  FROM mixed_array
+          |  LATERAL VIEW EXPLODE(items) AS item
+          |  GROUP BY item.detail.color
+          |) t
+          |LATERAL VIEW POSEXPLODE(agg_items) AS pos, agg_item""".stripMargin)
+
+      // The inner EXPLODE needs name, qty, detail.color from items.
+      // The outer POSEXPLODE is on collect_list output (not a scan array).
+      checkScan(query,
+        "struct<items:array<struct<name:string,detail:struct<color:string>,qty:int>>>")
+
+      checkAnswer(query,
+        Row("dark red", 0, "cherry") ::
+        Row("red", 0, "apple") ::
+        Row("yellow", 0, "banana") :: Nil)
+    }
+  }
+
+  testExplodePruning(
+      "full pipeline: scan -> filter -> agg -> explode -> agg -> filter -> posexplode -> agg") {
+    withMixedArrayData {
+      // Full pipeline: Scan -> Filter -> Aggregate -> EXPLODE ->
+      //   GROUP BY + collect_list -> Filter -> POSEXPLODE -> Aggregate
+      // Tests that the system handles a complex pipeline with multiple generates
+      // separated by aggregates and filters without crashing, producing correct results.
+      val query = sql(
+        """WITH filtered_data AS (
+          |  SELECT flatten(collect_list(items)) as all_items
+          |  FROM mixed_array
+          |  WHERE id > 0
+          |),
+          |exploded AS (
+          |  SELECT item.name, item.detail.color as color, item.qty
+          |  FROM filtered_data
+          |  LATERAL VIEW EXPLODE(all_items) AS item
+          |),
+          |grouped AS (
+          |  SELECT color,
+          |    collect_list(named_struct('name', name, 'color', color, 'qty', qty)) as agg_items
+          |  FROM exploded
+          |  GROUP BY color
+          |),
+          |filtered_groups AS (
+          |  SELECT * FROM grouped WHERE size(agg_items) >= 1
+          |),
+          |posexploded AS (
+          |  SELECT color, pos, agg_item.name, agg_item.qty
+          |  FROM filtered_groups
+          |  LATERAL VIEW POSEXPLODE(agg_items) AS pos, agg_item
+          |)
+          |SELECT color, count(*) as cnt, sum(qty) as total_qty
+          |FROM posexploded
+          |GROUP BY color""".stripMargin)
+
+      // Aggregates block scan-level nested pruning: the full items array is read.
+      // detail.size is not used but cannot be pruned through flatten(collect_list(...)).
+      checkScan(query,
+        "struct<id:int,items:array<struct<name:string," +
+          "detail:struct<color:string,size:int>,qty:int>>>")
+
+      checkAnswer(query,
+        Row("dark red", 1, 1) ::
+        Row("red", 1, 5) ::
+        Row("yellow", 1, 3) :: Nil)
     }
   }
 }

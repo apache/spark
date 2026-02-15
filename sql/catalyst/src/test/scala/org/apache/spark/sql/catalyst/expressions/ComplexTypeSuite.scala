@@ -572,8 +572,8 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(zip, Seq(Seq(create_row(1, "a"))))
   }
 
-  test("NestedArraysZip - checkInputDataTypes validation") {
-    // Mismatched depths should fail validation
+  test("NestedArraysZip - checkInputDataTypes rejects insufficient depth") {
+    // Child with depth 1 when depth 2 is required
     val arr1 = AttributeReference("a", ArrayType(ArrayType(IntegerType)))()
     val arr2 = AttributeReference("b", ArrayType(StringType))()  // depth 1, not 2
     val names = Seq(Literal("x"), Literal("y"))
@@ -581,6 +581,43 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
     val result = zip.checkInputDataTypes()
     assert(result.isFailure)
+  }
+
+  test("NestedArraysZip - checkInputDataTypes accepts excess depth") {
+    // Children with depth 3 when depth 2 is specified - allowed because recursive
+    // buildPrunedArrayFromSchema may produce deeper arrays when inner struct fields
+    // are themselves arrays. NestedArraysZip zips at the specified depth, leaving
+    // deeper nesting intact.
+    val arr1 = AttributeReference("a", ArrayType(ArrayType(ArrayType(IntegerType))))()
+    val arr2 = AttributeReference("b", ArrayType(ArrayType(ArrayType(StringType))))()
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val result = zip.checkInputDataTypes()
+    assert(result.isSuccess,
+      "Should accept children with depth > specified depth (zips at specified level)")
+  }
+
+  test("NestedArraysZip - checkInputDataTypes rejects mixed depths") {
+    // Children with different depths should be rejected
+    val arr1 = AttributeReference("a", ArrayType(ArrayType(IntegerType)))()  // depth 2
+    val arr2 = AttributeReference("b", ArrayType(ArrayType(ArrayType(StringType))))()  // depth 3
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val result = zip.checkInputDataTypes()
+    assert(result.isFailure,
+      "Should reject children with different array depths")
+  }
+
+  test("NestedArraysZip - checkInputDataTypes accepts exact depth match") {
+    val arr1 = AttributeReference("a", ArrayType(ArrayType(IntegerType)))()
+    val arr2 = AttributeReference("b", ArrayType(ArrayType(StringType)))()
+    val names = Seq(Literal("x"), Literal("y"))
+
+    val zip = NestedArraysZip(Seq(arr1, arr2), names, 2)
+    val result = zip.checkInputDataTypes()
+    assert(result.isSuccess)
   }
 
   test("NestedArraysZip - withNewChildren preserves properties") {

@@ -504,10 +504,12 @@ object ArraysZip {
  * For depth>1: Recursively zips inner arrays at each position of outer arrays.
  *
  * Note: Uses CodegenFallback intentionally. Custom doGenCode implementations cause type
- * resolution errors ("cannot be converted to numeric type"). The performance impact is
- * acceptable since this expression is only used during query optimization for schema pruning,
- * and the arrays being zipped are typically from GetArrayStructFields extractions which
- * are small relative to the scan IO savings from pruning.
+ * resolution errors ("cannot be converted to numeric type"). This disables whole-stage
+ * codegen for the scan Project that contains this expression, which may affect throughput
+ * on large explode pipelines. However, the scan IO savings from nested field pruning
+ * (reading fewer columns/sub-fields from Parquet) typically outweigh the codegen overhead.
+ * This expression only appears in depth>=2 nested array pruning (array<array<struct>>);
+ * depth-1 cases use the standard ArraysZip which supports codegen.
  *
  * @param children The array expressions to zip
  * @param names The field names for the resulting struct
@@ -536,33 +538,27 @@ case class NestedArraysZip(children: Seq[Expression], names: Seq[Expression], de
       return TypeCheckResult.TypeCheckSuccess
     }
 
-    // Check that all children are arrays with the correct nesting depth
+    // All children must have at least the specified nesting depth.
+    // We use >= (not ==) because recursive buildPrunedArrayFromSchema may produce children
+    // with extra array nesting (e.g., array<array<array<struct>>> for depth=2 when
+    // the innermost struct itself contains array fields). NestedArraysZip.eval correctly
+    // handles this by zipping at the specified depth, leaving deeper nesting intact.
     val depths = children.map(c => computeArrayDepth(c.dataType))
     val depthErrors = children.zipWithIndex.flatMap { case (child, idx) =>
       val actualDepth = depths(idx)
       if (actualDepth < depth) {
-        Some(s"Argument ${idx + 1} has array depth $actualDepth but expected at least $depth")
+        Some(s"Argument ${idx + 1} has array depth $actualDepth but required at least $depth")
       } else {
         None
       }
     }
 
     if (depthErrors.nonEmpty) {
-      return TypeCheckResult.TypeCheckFailure(depthErrors.mkString("; "))
-    }
-
-    // All children must have the same depth to avoid mixed element types in result struct.
-    // E.g., if child1 has depth 3 and child2 has depth 2 with requested depth 2:
-    // - child1 at depth 2 yields array<T>
-    // - child2 at depth 2 yields T
-    // This creates struct<array<T>, T> which is likely unintended.
-    val uniqueDepths = depths.distinct
-    if (uniqueDepths.size > 1) {
-      val depthInfo = children.zipWithIndex.map { case (c, i) =>
-        s"arg${i + 1}=${depths(i)}"
-      }.mkString(", ")
+      TypeCheckResult.TypeCheckFailure(depthErrors.mkString("; "))
+    } else if (depths.distinct.size > 1) {
+      // All children must have the same depth to produce consistent struct element types
       TypeCheckResult.TypeCheckFailure(
-        s"All arguments must have the same array nesting depth, got: $depthInfo")
+        s"All arguments must have the same array depth, but got: ${depths.mkString(", ")}")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

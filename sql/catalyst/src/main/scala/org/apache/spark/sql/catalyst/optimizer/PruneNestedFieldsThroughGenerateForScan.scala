@@ -150,36 +150,6 @@ object PruneNestedFieldsThroughGenerateForScan
   }
 
   /**
-   * Checks if any generate in the chain explodes a field from another generate's output.
-   * This is the case where nested schema propagation can enable additional pruning.
-   *
-   * Note: The chain is ordered top-to-bottom (closer to Project first, closer to Scan last).
-   * So chain[0] may use output from chain[1], not vice versa.
-   *
-   * For a plan like:
-   *   Project -> Generate(explode(req.items)) -> Generate(explode(pv.requests)) -> Scan
-   * The chain is [inner, outer] where inner.source = req.items and outer.colAttr = req.
-   *
-   * We need to check if any generate's source comes from a LATER generate's output.
-   */
-  private def hasInnerGenerateFromOuter(chain: Seq[GenerateInfo]): Boolean = {
-    if (chain.length <= 1) return false
-
-    // For each generate (except the last), check if its source comes from a later generate's output
-    chain.indices.dropRight(1).exists { i =>
-      val currentInfo = chain(i)
-      // Check if current's source is from a later generate's output
-      extractRootAttribute(currentInfo.generator.child) match {
-        case Some(rootAttr) =>
-          // Look for a later generate whose colAttr matches this root
-          chain.drop(i + 1).exists(_.colAttr.exprId == rootAttr.exprId)
-        case None =>
-          false
-      }
-    }
-  }
-
-  /**
    * Checks if a plan node starts a Generate chain we can potentially prune.
    */
   private def startsGenerateChain(plan: LogicalPlan): Boolean = plan match {
@@ -474,6 +444,10 @@ object PruneNestedFieldsThroughGenerateForScan
       case gasf @ GetArrayStructFields(child, field, ordinal, numFields, containsNull) =>
         GetArrayStructFields(rebuildExprWithNewBase(child, oldBase, newBase),
           field, ordinal, numFields, containsNull)
+      case gnasf @ GetNestedArrayStructFields(
+          child, field, ordinal, numFields, containsNull) =>
+        GetNestedArrayStructFields(rebuildExprWithNewBase(child, oldBase, newBase),
+          field, ordinal, numFields, containsNull)
       case _ =>
         expr
     }
@@ -589,10 +563,20 @@ object PruneNestedFieldsThroughGenerateForScan
           case _ => actualLeaf
         }
 
-        // Compute pass-through attributes from the insertion point
+        // Compute pass-through attributes from the insertion point.
+        // Include references from above-chain nodes (non-struct Generates, Projects, Filters)
+        // that sit between the top Project and the chain. These nodes may reference scan
+        // attributes (e.g., explode(tags) needs tags from scan) that must be passed through.
+        val aboveChainNodeRefs: Seq[Attribute] = aboveChainNodes.flatMap {
+          case g: Generate => g.generator.references
+          case p: Project => p.projectList.flatMap(_.references)
+          case f: Filter => f.condition.references
+          case _ => Nil
+        }
         val aboveReferences: Set[Attribute] =
           (projectList.flatMap(_.references) ++
-            filterConditions.flatMap(_.references)).toSet
+            filterConditions.flatMap(_.references) ++
+            aboveChainNodeRefs).toSet
         val allGenOutputs = AttributeSet(chain.flatMap(_.generate.generatorOutput))
         val childAttrsNeededAbove: Seq[Attribute] = insertionPoint.output
           .filter(a => aboveReferences.exists(r =>
@@ -891,16 +875,13 @@ object PruneNestedFieldsThroughGenerateForScan
             case other => other // Keep as-is for other generator types
           }
 
-          // Recalculate unrequiredChildIndex based on which child attributes are consumed
-          // by the generator. The generator's source is the array being exploded.
-          val genSourceRefs = fixedGenChild.references
-          val newUnrequiredIdx = child.output.zipWithIndex.collect {
-            case (attr, idx) if genSourceRefs.exists(_.exprId == attr.exprId) => idx
-          }
-
+          // Preserve the original unrequiredChildIndex. It was correctly computed
+          // by ColumnPruning (which runs before this rule) based on which child
+          // columns are only needed by the generator and not by the plan above.
+          // Recomputing it from only generator references would incorrectly drop
+          // columns that are needed as pass-throughs (e.g., SELECT arr, explode(arr)).
           g.copy(
             generator = fixedGenerator,
-            unrequiredChildIndex = newUnrequiredIdx,
             child = child)
 
         case p: Project =>
@@ -1298,27 +1279,8 @@ object PruneNestedFieldsThroughGenerateForScan
       case a: Attribute => Some(a)
       case GetStructField(child, _, _) => extractRootAttribute(child)
       case GetArrayStructFields(child, _, _, _, _) => extractRootAttribute(child)
+      case GetNestedArrayStructFields(child, _, _, _, _) => extractRootAttribute(child)
       case _ => None
-    }
-  }
-
-  /**
-   * If the expression is an Attribute that's an alias defined in the leaf Project,
-   * resolve it to the aliased expression. This allows SchemaPruning to trace
-   * through the alias chain to the original scan attributes.
-   */
-  private def resolveAliasInLeaf(expr: Expression, leaf: LogicalPlan): Expression = {
-    expr match {
-      case attr: Attribute =>
-        leaf match {
-          case Project(projectList, _) =>
-            // Find the alias definition in the project list
-            projectList.collectFirst {
-              case a @ Alias(child, _) if a.exprId == attr.exprId => child
-            }.getOrElse(attr)
-          case _ => attr
-        }
-      case other => other
     }
   }
 
@@ -1359,12 +1321,20 @@ object PruneNestedFieldsThroughGenerateForScan
                 val traced = traceToScanAttribute(childAttr, chain, scanAttrIds)
                 if (traced.isDefined) return traced
               case None =>
-                // Child is a complex expression. Try GetArrayStructFields.
+                // Child is a complex expression. Try GetArrayStructFields
+                // or GetNestedArrayStructFields.
                 child match {
                   case gasf: GetArrayStructFields =>
                     extractRootAttribute(gasf.child) match {
                       case Some(gasfRootAttr) =>
                         val traced = traceToScanAttribute(gasfRootAttr, chain, scanAttrIds)
+                        if (traced.isDefined) return traced
+                      case None =>
+                    }
+                  case gnasf: GetNestedArrayStructFields =>
+                    extractRootAttribute(gnasf.child) match {
+                      case Some(gnasfRootAttr) =>
+                        val traced = traceToScanAttribute(gnasfRootAttr, chain, scanAttrIds)
                         if (traced.isDefined) return traced
                       case None =>
                     }
@@ -1477,6 +1447,11 @@ object PruneNestedFieldsThroughGenerateForScan
       case gasf: GetArrayStructFields =>
         extractFieldPath(gasf.child, colAttr, generateSourceMap, aliasMap)
           .map(_ :+ gasf.field.name)
+      case gnasf: GetNestedArrayStructFields if isAttrRef(gnasf.child, colAttr) =>
+        Some(Seq(gnasf.field.name))
+      case gnasf: GetNestedArrayStructFields =>
+        extractFieldPath(gnasf.child, colAttr, generateSourceMap, aliasMap)
+          .map(_ :+ gnasf.field.name)
 
       // Handle generate output attributes: l2.l3_f1 where l2 is from exploding an expression
       case attr: Attribute if generateSourceMap.contains(attr.exprId) =>
@@ -1508,6 +1483,10 @@ object PruneNestedFieldsThroughGenerateForScan
         gsf.copy(child = resolveAliasExpr(child, aliasMap))
       case gasf @ GetArrayStructFields(child, field, ordinal, numFields, containsNull) =>
         GetArrayStructFields(resolveAliasExpr(child, aliasMap), field, ordinal,
+          numFields, containsNull)
+      case gnasf @ GetNestedArrayStructFields(
+          child, field, ordinal, numFields, containsNull) =>
+        GetNestedArrayStructFields(resolveAliasExpr(child, aliasMap), field, ordinal,
           numFields, containsNull)
       case _ => expr
     }
@@ -1701,6 +1680,15 @@ object PruneNestedFieldsThroughGenerateForScan
             }
           }
 
+        // GetNestedArrayStructFields on our element attribute (single level access)
+        case gnasf: GetNestedArrayStructFields if isAttrRef(gnasf.child, colAttr) =>
+          val fieldName = gnasf.field.name
+          if (elementStruct.fieldNames.contains(fieldName)) {
+            if (!nestedReqs.contains(fieldName)) {
+              nestedReqs(fieldName) = mutable.Map.empty[String, Any]
+            }
+          }
+
         // Chained GetStructField or GetArrayStructFields - extract full path
         // Now also traces through generate outputs and aliases
         case gsf: GetStructField =>
@@ -1723,6 +1711,16 @@ object PruneNestedFieldsThroughGenerateForScan
             case _ =>
               // Not rooted at our colAttr, recurse
               gasf.children.foreach(analyze)
+          }
+
+        case gnasf: GetNestedArrayStructFields =>
+          extractFieldPath(gnasf, colAttr, generateSourceMap, aliasDefinitions) match {
+            case Some(path) if path.nonEmpty =>
+              if (elementStruct.fieldNames.contains(path.head)) {
+                addPathToNestedReqs(nestedReqs, path)
+              }
+            case _ =>
+              gnasf.children.foreach(analyze)
           }
 
         // Direct reference to the element attribute - all fields needed
@@ -2124,6 +2122,7 @@ object PruneNestedFieldsThroughGenerateForScan
         case a: Attribute => Some(a)
         case GetStructField(child, _, _) => extractRootAttrFromExpr(child)
         case GetArrayStructFields(child, _, _, _, _) => extractRootAttrFromExpr(child)
+        case GetNestedArrayStructFields(child, _, _, _, _) => extractRootAttrFromExpr(child)
         case _ => None
       }
     }
@@ -2188,6 +2187,10 @@ object PruneNestedFieldsThroughGenerateForScan
           Seq(gasf.field.name)
         case gasf: GetArrayStructFields =>
           extractPathFromExpr(gasf.child, colAttr) :+ gasf.field.name
+        case gnasf: GetNestedArrayStructFields if isAttrRef(gnasf.child, colAttr) =>
+          Seq(gnasf.field.name)
+        case gnasf: GetNestedArrayStructFields =>
+          extractPathFromExpr(gnasf.child, colAttr) :+ gnasf.field.name
         case _ =>
           Seq.empty
       }
@@ -2218,16 +2221,6 @@ object PruneNestedFieldsThroughGenerateForScan
       case _ =>
         Seq.empty
     }
-  }
-
-  /**
-   * Extracts the field name (backward-compatible wrapper for extractSourceFieldPath).
-   */
-  private def extractSourceFieldName(
-      sourceInfo: GenerateInfo,
-      currentInfo: GenerateInfo): Option[String] = {
-    val path = extractSourceFieldPath(sourceInfo, currentInfo)
-    path.headOption
   }
 
   /**
@@ -2269,6 +2262,9 @@ object PruneNestedFieldsThroughGenerateForScan
             case gasf: GetArrayStructFields if exprMatches(gasf.child, sourceArrayExpr) =>
               // Source array field access like someArray.field or col.structArr.field
               fieldNames += gasf.field.name
+            case gnasf: GetNestedArrayStructFields
+                if exprMatches(gnasf.child, sourceArrayExpr) =>
+              fieldNames += gnasf.field.name
             case _ =>
               // Direct attribute references like isnotnull(someArray) are OK -
               // they don't access specific struct fields.
@@ -2420,6 +2416,23 @@ object PruneNestedFieldsThroughGenerateForScan
           buildPrunedArrayFromSchema(
             fieldExpr, origInnerStruct, requiredInnerStruct, innerContainsNull)
 
+        // Nested struct field - recursively prune sub-fields
+        // e.g., meta:struct<a,b,c> to meta:struct<a> when only meta.a is accessed
+        case (origSt: StructType, reqSt: StructType)
+            if hasNestedTypePruning(reqSt, origSt) =>
+          val fieldExpr = if (arrayDepth > 1) {
+            GetNestedArrayStructFields(
+              arrayExpr, origField, origOrdinal, originalStruct.length,
+              containsNull || origField.nullable)
+          } else {
+            GetArrayStructFields(
+              arrayExpr, origField, origOrdinal, originalStruct.length,
+              containsNull || origField.nullable)
+          }
+          // fieldExpr is array<origSt>, recursively prune to array<reqSt>
+          buildPrunedArrayFromSchema(
+            fieldExpr, origSt, reqSt, containsNull || origField.nullable)
+
         // Non-nested field or no pruning needed for nested struct
         case _ =>
           if (arrayDepth > 1) {
@@ -2460,49 +2473,9 @@ object PruneNestedFieldsThroughGenerateForScan
   // ---------------------------------------------------------------------------
 
   /**
-   * Rewrites [[GetArrayStructFields]] expressions that reference `srcAttr` to use
-   * positions in `newStruct` (resolved by field name) and updates the child
-   * attribute to use the pruned array type with `newStruct` as element type.
-   *
-   * This is needed for leaf filters that access source array fields like
-   * `someArray.col3 IS NOT NULL`. After pruning to `{col1, col3}`, the ordinal
-   * changes from 2 to 1, and the source array type changes.
-   *
-   * @param expr The expression to fix
-   * @param srcAttr The original source array attribute
-   * @param prunedAttr The _pruned attribute to replace srcAttr with
-   * @param newStruct The pruned struct type (element type of the pruned array)
-   * @param containsNull Whether the array can contain nulls
-   */
-  private def fixArrayStructOrdinalsInExpr(
-      expr: Expression,
-      srcAttr: Attribute,
-      prunedAttr: Attribute,
-      newStruct: StructType,
-      containsNull: Boolean): Expression = {
-
-    expr.transformDown {
-      case gasf @ GetArrayStructFields(child, field, _, _, _)
-          if isAttrRef(child, srcAttr) =>
-        // Find the new ordinal in the pruned struct
-        val fieldName = field.name
-        val newOrdinal = newStruct.fieldIndex(fieldName)
-        val newField = newStruct(newOrdinal)
-        // Rebuild with updated child (pruned attr), field, ordinal, and numFields
-        GetArrayStructFields(
-          prunedAttr, newField, newOrdinal, newStruct.length,
-          containsNull || newField.nullable)
-
-      case a: Attribute if a.exprId == srcAttr.exprId =>
-        // Direct reference to source array - replace with pruned
-        prunedAttr
-    }
-  }
-
-  /**
-   * Rewrites [[GetArrayStructFields]] expressions that match the source array
-   * expression (supports both direct Attributes and GetStructField chains like
-   * `col.structArr`).
+   * Rewrites [[GetArrayStructFields]] and [[GetNestedArrayStructFields]] expressions
+   * that match the source array expression (supports both direct Attributes and
+   * GetStructField chains like `col.structArr`).
    *
    * This handles patterns like:
    * - `arr.field` where generator is `explode(arr)`
@@ -2530,6 +2503,15 @@ object PruneNestedFieldsThroughGenerateForScan
         val newField = newStruct(newOrdinal)
         // Rebuild with updated child (pruned attr), field, ordinal, and numFields
         GetArrayStructFields(
+          prunedAttr, newField, newOrdinal, newStruct.length,
+          containsNull || newField.nullable)
+
+      case gnasf @ GetNestedArrayStructFields(child, field, _, _, _)
+          if exprMatches(child, srcExpr) =>
+        val fieldName = field.name
+        val newOrdinal = newStruct.fieldIndex(fieldName)
+        val newField = newStruct(newOrdinal)
+        GetNestedArrayStructFields(
           prunedAttr, newField, newOrdinal, newStruct.length,
           containsNull || newField.nullable)
 
