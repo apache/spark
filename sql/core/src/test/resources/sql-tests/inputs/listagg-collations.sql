@@ -12,3 +12,4 @@ WITH t(c1) AS (SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 COLLATE unicode_
 
 -- Error case with collations
 SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('b'), ('A'), ('B')) AS t(c1);
+SELECT listagg(DISTINCT CAST(col AS STRING COLLATE UTF8_LCASE)) WITHIN GROUP (ORDER BY col) FROM VALUES (X'414243'), (X'616263'), (X'414243') AS t(col)

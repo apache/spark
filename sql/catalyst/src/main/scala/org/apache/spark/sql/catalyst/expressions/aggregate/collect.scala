@@ -601,16 +601,20 @@ case class ListAgg(
    * incorrect deduplication for types where equal values cast to different strings
    * (e.g., Float/Double where -0.0 and 0.0 are GROUP BY-equal but cast to different strings).
    *
-   * @return `Some(true)` if the mismatch is due to a cast with a safe source type,
-   *         `Some(false)` if the cast source type is unsafe (e.g., Float/Double),
+   * Safety is determined by both the source type (via [[isCastSafeForDistinct]]) and the target
+   * type's collation (via [[isCastTargetSafeForDistinct]]).
+   *
+   * @return `Some(true)` if the mismatch is due to a cast with safe source and target types,
+   *         `Some(false)` if the cast is unsafe (e.g., unsafe source type or non-binary collation),
    *         `None` if the mismatch is not due to a cast at all
    */
   def orderMismatchCastSafety: Option[Boolean] = {
     if (orderExpressions.size != 1) return None
     child match {
-      case Cast(castChild, _, _, _)
+      case Cast(castChild, castType, _, _)
         if orderExpressions.head.child.semanticEquals(castChild) =>
-        Some(isCastSafeForDistinct(castChild.dataType))
+          Some(isCastSafeForDistinct(castChild.dataType) &&
+            isCastTargetSafeForDistinct(castType))
       case _ => None
     }
   }
@@ -639,6 +643,23 @@ case class ListAgg(
     case BinaryType => true
     case st: StringType if st.supportsBinaryEquality => true
     case _: DoubleType | FloatType => false
+    case _ => false
+  }
+
+  /**
+   * Checks whether the cast target type preserves equality semantics for DISTINCT deduplication.
+   *
+   * A non-binary-equality collation on the target [[StringType]] can cause different source values
+   * to become equal after casting (e.g., binary values 0x414243 ("ABC") and 0x616263 ("abc") are
+   * different, but equal under UTF8_LCASE collation after casting to string).
+   *
+   * @param dt the target [[DataType]] of the cast
+   * @return true if the target type's equality semantics are safe for DISTINCT deduplication
+   * @see [[orderMismatchCastSafety]]
+   */
+  private def isCastTargetSafeForDistinct(dt: DataType): Boolean = dt match {
+    case st: StringType => st.supportsBinaryEquality
+    case BinaryType => true
     case _ => false
   }
 
