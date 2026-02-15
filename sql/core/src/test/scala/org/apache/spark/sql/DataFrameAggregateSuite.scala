@@ -635,6 +635,28 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df.selectExpr("collect_list(b) RESPECT NULLS"), Seq(Row(Seq(2, null, 4))))
   }
 
+  test("collect_set skips nulls by default") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(2))).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("sort_array(collect_set(b))"), Seq(Row(Seq(2))))
+    checkAnswer(df.select(sort_array(collect_set($"b"))), Seq(Row(Seq(2))))
+  }
+
+  test("collect_set with IGNORE NULLS explicitly skips nulls") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(4))).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("sort_array(collect_set(b) IGNORE NULLS)"), Seq(Row(Seq(2, 4))))
+  }
+
+  test("collect_set with RESPECT NULLS preserves null in set") {
+    val df = Seq((1, Some(2)), (2, None), (3, Some(2))).toDF("a", "b")
+
+    // RESPECT NULLS preserves null value in the set
+    checkAnswer(
+      df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
