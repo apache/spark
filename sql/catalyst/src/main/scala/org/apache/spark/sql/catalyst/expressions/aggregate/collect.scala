@@ -593,41 +593,39 @@ case class ListAgg(
   }
 
   /**
-   * Whether the order mismatch is only due to a cast on child,
-   * and the cast preserves GROUP BY equality semantics for the source type.
-   * A type is safe if its cast to string is injective w.r.t. GROUP BY equality:
-   * equal values always produce equal strings, and different strings imply
-   * different values.
+   * Determines whether the order mismatch between [[child]] and [[orderExpressions]] is due to
+   * a cast, and if so, whether that cast is safe for DISTINCT deduplication.
    *
-   * Note: collation mismatches between child and order expression are already
-   * caught by LISTAGG's inputTypes validation, so we
-   * only need to check the source type here.
+   * When LISTAGG(DISTINCT) is used with a non-string column, a Cast is applied to the
+   * child expression. The DISTINCT rewrite uses GROUP BY on the cast result, which can produce
+   * incorrect deduplication for types where equal values cast to different strings
+   * (e.g., Float/Double where -0.0 and 0.0 are GROUP BY-equal but cast to different strings).
+   *
+   * @return `Some(true)` if the mismatch is due to a cast with a safe source type,
+   *         `Some(false)` if the cast source type is unsafe (e.g., Float/Double),
+   *         `None` if the mismatch is not due to a cast at all
    */
-  def isOrderMismatchDueToCast: Boolean = orderExpressions.size == 1 &&
-    (child match {
-      case Cast(castChild, _, _, _) =>
-        orderExpressions.head.child.semanticEquals(castChild) &&
-        isCastSafeForDistinct(castChild.dataType)
-      case _ => false
-    })
+  def orderMismatchCastSafety: Option[Boolean] = {
+    if (orderExpressions.size != 1) return None
+    child match {
+      case Cast(castChild, _, _, _)
+        if orderExpressions.head.child.semanticEquals(castChild) =>
+        Some(isCastSafeForDistinct(castChild.dataType))
+      case _ => None
+    }
+  }
 
   /**
-   * Whether the order mismatch is due to a cast on child,
-   * but the source type is not safe for DISTINCT deduplication after casting.
-   * For example, floating-point types where -0.0 and 0.0 are equal but cast
-   * to different strings.
-   */
-  def isOrderMismatchDueToUnsafeCast: Boolean = orderExpressions.size == 1 &&
-    (child match {
-      case Cast(castChild, _, _, _) =>
-        orderExpressions.head.child.semanticEquals(castChild) &&
-        !isCastSafeForDistinct(castChild.dataType)
-      case _ => false
-    })
-
-  /**
-   * Whitelist of source types that are safe for DISTINCT deduplication after casting
-   * to STRING/BINARY.
+   * Checks whether a source type preserves equality semantics after casting to STRING/BINARY.
+   *
+   * A type is safe if equal values always produce equal string representations and different
+   * string representations always imply different values. Types like Float/Double are unsafe
+   * because IEEE 754 negative zero (-0.0) and positive zero (0.0) are equal but produce
+   * different string representations.
+   *
+   * @param dt the source [[DataType]] before casting
+   * @return true if the cast preserves equality semantics for DISTINCT deduplication
+   * @see [[orderMismatchCastSafety]]
    */
   private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
@@ -640,6 +638,7 @@ case class ListAgg(
     case BooleanType => true
     case BinaryType => true
     case st: StringType if st.supportsBinaryEquality => true
+    case _: DoubleType | FloatType => false
     case _ => false
   }
 

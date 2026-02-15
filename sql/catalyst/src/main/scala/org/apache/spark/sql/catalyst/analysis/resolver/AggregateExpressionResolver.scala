@@ -117,8 +117,18 @@ class AggregateExpressionResolver(
   private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-          if agg.isDistinct && listAgg.needSaveOrderValue && !listAgg.isOrderMismatchDueToCast =>
-            throwListAggDistinctOrderMismatchError(listAgg)
+          if agg.isDistinct && listAgg.needSaveOrderValue =>
+            listAgg.orderMismatchCastSafety match {
+              case Some(true) => // safe cast, allow
+              case Some(false) => listAgg.child match {
+                case Cast(castChild, castType, _, _) =>
+                  throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+                    listAgg.prettyName, castChild.dataType, castType)
+              }
+              case None =>
+                throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+                  listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+            }
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
           throwNestedAggregateFunction(aggregateExpression)
@@ -210,25 +220,6 @@ class AggregateExpressionResolver(
           outerAggregateExpressionAlias
         )
         OuterReference(outerAggregateExpressionAlias.toAttribute)
-    }
-  }
-
-  private def throwListAggDistinctOrderMismatchError(listAgg: ListAgg): Nothing = {
-    if (listAgg.isOrderMismatchDueToUnsafeCast) {
-      listAgg.child match {
-        case Cast(castChild, castType, _, _) =>
-          throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-            listAgg.prettyName,
-            castChild.dataType,
-            castType
-          )
-      }
-    } else {
-      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-        listAgg.prettyName,
-        listAgg.child,
-        listAgg.orderExpressions
-      )
     }
   }
 
