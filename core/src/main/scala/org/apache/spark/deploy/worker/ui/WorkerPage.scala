@@ -101,8 +101,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <div class="row"> <!-- Executors and Drivers -->
         <div class="col-12">
           <span class="collapse-aggregated-runningExecutors collapse-table"
-              onClick="collapseTable('collapse-aggregated-runningExecutors',
-              'aggregated-runningExecutors')">
+              data-collapse-name="collapse-aggregated-runningExecutors"
+              data-collapse-table="aggregated-runningExecutors">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Executors ({runningExecutors.size})</a>
@@ -114,8 +114,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           {
             if (runningDrivers.nonEmpty) {
               <span class="collapse-aggregated-runningDrivers collapse-table"
-                  onClick="collapseTable('collapse-aggregated-runningDrivers',
-                  'aggregated-runningDrivers')">
+                  data-collapse-name="collapse-aggregated-runningDrivers"
+                  data-collapse-table="aggregated-runningDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Running Drivers ({runningDrivers.size})</a>
@@ -129,8 +129,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           {
             if (finishedExecutors.nonEmpty) {
               <span class="collapse-aggregated-finishedExecutors collapse-table"
-                  onClick="collapseTable('collapse-aggregated-finishedExecutors',
-                  'aggregated-finishedExecutors')">
+                  data-collapse-name="collapse-aggregated-finishedExecutors"
+                  data-collapse-table="aggregated-finishedExecutors">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Executors ({finishedExecutors.size})</a>
@@ -144,8 +144,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           {
             if (finishedDrivers.nonEmpty) {
               <span class="collapse-aggregated-finishedDrivers collapse-table"
-                  onClick="collapseTable('collapse-aggregated-finishedDrivers',
-                  'aggregated-finishedDrivers')">
+                  data-collapse-name="collapse-aggregated-finishedDrivers"
+                  data-collapse-table="aggregated-finishedDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Drivers ({finishedDrivers.size})</a>
