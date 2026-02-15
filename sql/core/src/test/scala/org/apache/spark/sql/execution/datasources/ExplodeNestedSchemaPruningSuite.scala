@@ -2065,19 +2065,23 @@ abstract class ExplodeNestedSchemaPruningSuite
 
   testExplodePruning("leaf filter on source array field - ordinal fixup after pruning") {
     withMixedArrayData {
-      // SELECT item.name with filter on items.qty (source array field access).
-      // Pruned schema: struct<name, qty> (detail pruned).
-      // The leaf filter contains GetArrayStructFields(items, qty, 2, 3) which must
-      // be rewritten to GetArrayStructFields(_pruned, qty, 1, 2) after pruning.
+      // SELECT item.name with filter on items.qty (source array struct field access).
+      // items.qty generates GetArrayStructFields(items, qty, 2, 3, false) to extract
+      // the qty field from each struct element. After pruning detail (not needed),
+      // the ordinal must be rewritten: GetArrayStructFields(_pruned, qty, 1, 2, false).
       val query = sql(
         """SELECT item.name
           |FROM mixed_array
           |LATERAL VIEW EXPLODE(items) AS item
-          |WHERE size(items) > 1""".stripMargin)
+          |WHERE size(items.qty) > 1""".stripMargin)
 
-      // qty not needed (no reference), detail not needed - only name needed
-      // But items (whole array) is referenced by size(), so all fields may be kept.
-      // The key thing is correctness of results.
+      // Scan needs name (projected) and qty (leaf filter via items.qty).
+      // detail is not referenced anywhere, so it's pruned.
+      checkScan(query,
+        "struct<items:array<struct<name:string,qty:int>>>")
+
+      // id=1: items.qty = [5,3], size=2 > 1 -> apple, banana included
+      // id=2: items.qty = [1], size=1 > 1 -> cherry excluded
       checkAnswer(query,
         Row("apple") :: Row("banana") :: Nil)
     }

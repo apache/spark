@@ -498,18 +498,19 @@ object ArraysZip {
  */
 /**
  * Zips multiple arrays at a specified nesting depth, creating struct elements at the innermost
- * level. This is used by PruneNestedFieldsThroughGenerateForScan for nested array pruning.
+ * level. Created by PruneNestedFieldsThroughGenerateForScan during optimization, then executed
+ * at runtime in the scan Project to reconstruct pruned nested arrays from individual field arrays.
  *
  * For depth=1: Standard arrays_zip semantics (array<T1>, array<T2>) -> array<struct<T1, T2>>
  * For depth>1: Recursively zips inner arrays at each position of outer arrays.
  *
  * Note: Uses CodegenFallback intentionally. Custom doGenCode implementations cause type
  * resolution errors ("cannot be converted to numeric type"). This disables whole-stage
- * codegen for the scan Project that contains this expression, which may affect throughput
- * on large explode pipelines. However, the scan IO savings from nested field pruning
- * (reading fewer columns/sub-fields from Parquet) typically outweigh the codegen overhead.
- * This expression only appears in depth>=2 nested array pruning (array<array<struct>>);
- * depth-1 cases use the standard ArraysZip which supports codegen.
+ * codegen for the scan Project that contains this expression, which may affect runtime
+ * throughput on large explode pipelines. However, the scan IO savings from nested field
+ * pruning (reading fewer columns/sub-fields from Parquet) typically outweigh the codegen
+ * overhead. This expression only appears in depth>=2 nested array pruning
+ * (array<array<struct>>); depth-1 cases use the standard ArraysZip which supports codegen.
  *
  * @param children The array expressions to zip
  * @param names The field names for the resulting struct
