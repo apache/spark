@@ -406,7 +406,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       test(s"Event time as $encoderType: ordering with diverse timestamps" +
-        s"$(encoding = $encoding)") {
+        s" (encoding = $encoding)") {
         testDiverseTimestampOrdering(encoderType, encoding)
       }
     }
