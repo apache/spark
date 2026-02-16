@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioningLike, Partitioning, PartitioningCollection, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -72,10 +72,11 @@ case class BroadcastHashJoinExec private(
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
       case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
-        streamedPlan.outputPartitioning match {
-          case h: HashPartitioningLike => expandOutputPartitioning(h)
-          case c: PartitioningCollection => expandOutputPartitioning(c)
-          case other => other
+        val expandedPartitioning = expandOutputPartitioning(streamedPlan.outputPartitioning)
+        expandedPartitioning match {
+          case Nil => UnknownPartitioning(streamedPlan.outputPartitioning.numPartitions)
+          case p :: Nil => p
+          case ps => PartitioningCollection(ps)
         }
       case _ => streamedPlan.outputPartitioning
     }
@@ -96,28 +97,23 @@ case class BroadcastHashJoinExec private(
   }
 
   // Expands the given partitioning collection recursively.
-  private def expandOutputPartitioning(
-      partitioning: PartitioningCollection): PartitioningCollection = {
-    PartitioningCollection(partitioning.partitionings.flatMap {
-      case h: HashPartitioningLike => expandOutputPartitioning(h).partitionings
-      case c: PartitioningCollection => Seq(expandOutputPartitioning(c))
+  private def expandOutputPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
+    partitioning match {
+      case c: PartitioningCollection => c.partitionings.flatMap(expandOutputPartitioning)
+      case p: Partitioning with Expression =>
+        // Expands the given partitioning by substituting streamed keys with build keys.
+        // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
+        // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
+        // the expanded partitioning will have the following expressions:
+        // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
+        // The expanded expressions are returned as PartitioningCollection.
+        p.multiTransformDown {
+          case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
+            e +: streamedKeyToBuildKeyMapping(e.canonicalized)
+        }.asInstanceOf[LazyList[Partitioning]]
+          .take(conf.broadcastHashJoinOutputPartitioningExpandLimit)
       case other => Seq(other)
-    })
-  }
-
-  // Expands the given hash partitioning by substituting streamed keys with build keys.
-  // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
-  // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
-  // the expanded partitioning will have the following expressions:
-  // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
-  // The expanded expressions are returned as PartitioningCollection.
-  private def expandOutputPartitioning(
-      partitioning: HashPartitioningLike): PartitioningCollection = {
-    PartitioningCollection(partitioning.multiTransformDown {
-      case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
-        e +: streamedKeyToBuildKeyMapping(e.canonicalized)
-    }.asInstanceOf[LazyList[HashPartitioningLike]]
-      .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
