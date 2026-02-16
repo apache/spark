@@ -4951,13 +4951,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0    1
         1    2
         2    1
-        dtype: int64
+        dtype: int32
 
         >>> df.nunique(axis=1, dropna=False)
         0    2
         1    2
         2    2
-        dtype: int64
+        dtype: int32
 
         On big data, we recommend using the approximate algorithm to speed up this function.
         The result will be very close to the exact unique count.
