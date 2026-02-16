@@ -638,6 +638,36 @@ case class RangeKeyScanStateEncoderSpec(
   }
 }
 
+/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPrefixKeyStateEncoderSpec")
+  }
+}
+
+/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPostfixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPostfixKeyStateEncoderSpec")
+  }
+}
+
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
  * versions of state data.
@@ -1080,7 +1110,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
     this
   }
 }
-
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
