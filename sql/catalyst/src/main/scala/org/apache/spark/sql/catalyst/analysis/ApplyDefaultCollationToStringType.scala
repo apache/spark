@@ -42,7 +42,44 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
 
     fetchDefaultCollation(preprocessedPlan) match {
       case Some(collation) =>
-        transform(preprocessedPlan, StringType(collation))
+        val transformedPlan = transform(preprocessedPlan, StringType(collation))
+        if (preprocessedPlan fastEquals transformedPlan) {
+          preprocessedPlan
+        } else {
+          // Call CollationTypeCasts immediately to avoid cycle between ApplyDefaultCollation,
+          // ExtractWindowExpressions and CollationTypeCasts.
+          //
+          // Example: CREATE TABLE t (c1 STRING, c2 STRING);  -- c1 is UTF8_BINARY
+          //          CREATE TABLE t2 DEFAULT COLLATION UTF8_LCASE AS
+          //            SELECT c1 = 'HELLO', ROW_NUMBER() OVER (PARTITION BY c1 ORDER BY c2) FROM t;
+          //
+          // Analyzer runs rules in batches sequentially, and the rule order is:
+          // ApplyDefaultCollation -> ExtractWindowExpressions -> CollationTypeCasts.
+          //
+          // Iteration 1:
+          //  - ApplyDefaultCollation applies UTF8_LCASE collation to the literal 'HELLO'.
+          //    Expression EqualTo (c1 = 'HELLO') is not resolved after this because c1 and the
+          //    literal have different types.
+          //  - ExtractWindowExpressions tries to extract the window expressions, but it can't
+          //    because it expects the whole projectList to be resolved (both EqualTo and
+          //    ROW_NUMBER()). EqualTo is not resolved, so it can't apply the rule.
+          //  - CollationTypeCasts applies coercion rules, changing the type of the literal to
+          //    the default StringType again (because that's the type of the column). Now
+          //    EqualTo is resolved.
+          //
+          // Iteration 2:
+          //  - ApplyDefaultCollation again applies UTF8_LCASE collation to the literal, because
+          //    its type is default StringType again.
+          //  - ExtractWindowExpressions again can't extract the window expressions for the same
+          //    reason as before.
+          //  - CollationTypeCasts applies the same coercion rules again, changing the type of
+          //    the literal back to the default StringType.
+          //
+          // This cycle continues, and the plan never gets resolved. By calling CollationTypeCasts
+          // right after this rule, we ensure that other rules like ExtractWindowExpressions that
+          // expect resolved expressions can be applied.
+          CollationTypeCasts(transformedPlan)
+        }
       case None => preprocessedPlan
     }
   }
