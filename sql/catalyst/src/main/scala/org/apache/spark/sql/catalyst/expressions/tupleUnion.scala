@@ -85,7 +85,8 @@ case class TupleUnionDouble(
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
-      union: Union[DoubleSummary]): Unit = {
+      union: Union[DoubleSummary],
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyDoubleSketch(sketch2Bytes, prettyName)
 
@@ -152,12 +153,151 @@ case class TupleUnionInteger(
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
-      union: Union[IntegerSummary]): Unit = {
+      union: Union[IntegerSummary],
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyIntegerSketch(sketch2Bytes, prettyName)
 
     union.union(tupleSketch1)
     union.union(tupleSketch2)
+  }
+}
+
+/**
+ * The TupleUnionThetaDouble function merges the binary representation of a Datasketches
+ * TupleSketch with double summary data type with the binary representation of a Datasketches
+ * ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned a default
+ * double summary value. When duplicate keys appear, their summary values are combined according
+ * to the specified mode (sum, min, max, or alwaysone).
+ *
+ * Keys are hashed internally based on their type and value - the same logical value in different
+ * types (e.g., String("123") and Int(123)) will be treated as distinct keys.
+ *
+ * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
+ *
+ * @param first
+ *   TupleSketch binary representation with double summaries
+ * @param second
+ *   ThetaSketch binary representation
+ * @param third
+ *   lgNomEntries - the log-base-2 of nominal entries that determines the result sketch size
+ * @param fourth
+ *   mode - the aggregation mode for combining duplicate key summaries (sum, min, max, alwaysone)
+ */
+case class TupleUnionThetaDouble(
+    first: Expression,
+    second: Expression,
+    third: Expression,
+    fourth: Expression)
+    extends TupleUnionBase[DoubleSummary] {
+
+  def this(first: Expression, second: Expression) = {
+    this(
+      first,
+      second,
+      Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
+      Literal(TupleSummaryMode.Sum.toString))
+  }
+
+  def this(first: Expression, second: Expression, third: Expression) = {
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
+  }
+
+  override def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression,
+      newFourth: Expression): TupleUnionThetaDouble =
+    copy(first = newFirst, second = newSecond, third = newThird, fourth = newFourth)
+
+  override def prettyName: String = "tuple_union_theta_double"
+
+  override protected def createSummarySetOperations(
+      mode: TupleSummaryMode): SummarySetOperations[DoubleSummary] =
+    new DoubleSummarySetOperations(mode.toDoubleSummaryMode)
+
+  override protected def unionSketches(
+      sketch1Bytes: Array[Byte],
+      sketch2Bytes: Array[Byte],
+      union: Union[DoubleSummary],
+      mode: TupleSummaryMode): Unit = {
+    val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
+    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
+
+    val defaultSummary = new DoubleSummary(mode.toDoubleSummaryMode)
+
+    union.union(tupleSketch)
+    union.union(thetaSketch, defaultSummary)
+  }
+}
+
+/**
+ * The TupleUnionThetaInteger function merges the binary representation of a Datasketches
+ * TupleSketch with integer summary data type with the binary representation of a Datasketches
+ * ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned a default
+ * integer summary value. When duplicate keys appear, their summary values are combined according
+ * to the specified mode (sum, min, max, or alwaysone).
+ *
+ * Keys are hashed internally based on their type and value - the same logical value in different
+ * types (e.g., String("123") and Int(123)) will be treated as distinct keys.
+ *
+ * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
+ *
+ * @param first
+ *   TupleSketch binary representation with integer summaries
+ * @param second
+ *   ThetaSketch binary representation
+ * @param third
+ *   lgNomEntries - the log-base-2 of nominal entries that determines the result sketch size
+ * @param fourth
+ *   mode - the aggregation mode for combining duplicate key summaries (sum, min, max, alwaysone)
+ */
+case class TupleUnionThetaInteger(
+    first: Expression,
+    second: Expression,
+    third: Expression,
+    fourth: Expression)
+    extends TupleUnionBase[IntegerSummary] {
+
+  def this(first: Expression, second: Expression) = {
+    this(
+      first,
+      second,
+      Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
+      Literal(TupleSummaryMode.Sum.toString))
+  }
+
+  def this(first: Expression, second: Expression, third: Expression) = {
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
+  }
+
+  override def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression,
+      newFourth: Expression): TupleUnionThetaInteger =
+    copy(first = newFirst, second = newSecond, third = newThird, fourth = newFourth)
+
+  override def prettyName: String = "tuple_union_theta_integer"
+
+  override protected def createSummarySetOperations(
+      mode: TupleSummaryMode): SummarySetOperations[IntegerSummary] = {
+    val integerMode = mode.toIntegerSummaryMode
+    new IntegerSummarySetOperations(integerMode, integerMode)
+  }
+
+  override protected def unionSketches(
+      sketch1Bytes: Array[Byte],
+      sketch2Bytes: Array[Byte],
+      union: Union[IntegerSummary],
+      mode: TupleSummaryMode): Unit = {
+    val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
+    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
+
+    val defaultSummary = new IntegerSummary(mode.toIntegerSummaryMode)
+
+    union.union(tupleSketch)
+    union.union(thetaSketch, defaultSummary)
   }
 }
 
@@ -203,7 +343,8 @@ abstract class TupleUnionBase[S <: Summary]
   protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
-      union: Union[S]): Unit
+      union: Union[S],
+      mode: TupleSummaryMode): Unit
 
   override def nullSafeEval(
       sketch1Binary: Any,
@@ -223,7 +364,7 @@ abstract class TupleUnionBase[S <: Summary]
     val summarySetOps = createSummarySetOperations(tupleSummaryMode)
     val union = new Union(nominalEntries, summarySetOps)
 
-    unionSketches(sketch1Bytes, sketch2Bytes, union)
+    unionSketches(sketch1Bytes, sketch2Bytes, union, tupleSummaryMode)
 
     union.getResult.toByteArray
   }
@@ -286,5 +427,67 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
     // The rearrange method ensures expressions.size == 4 with defaults filled in
     assert(expressions.size == 4)
     new TupleUnionInteger(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
+    Datasketches TupleSketch with double summary data type with the binary representation of a
+    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
+    a default double summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults
+    to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
+       6.0
+  """,
+  group = "sketch_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
+object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionThetaDouble(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
+    Datasketches TupleSketch with integer summary data type with the binary representation of a
+    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
+    a default integer summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults
+    to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2);
+       6.0
+  """,
+  group = "sketch_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
+object TupleUnionThetaIntegerExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionThetaInteger(expressions(0), expressions(1), expressions(2), expressions(3))
   }
 }
