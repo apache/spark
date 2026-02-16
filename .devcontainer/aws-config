@@ -1,0 +1,13 @@
+[profile default-engineering]
+sso_start_url = https://6si-mgmt.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 242358675102
+sso_role_name = BigData
+region = us-east-1
+output = json
+sso_session = default
+
+[sso-session default]
+sso_start_url = https://6si-mgmt.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access

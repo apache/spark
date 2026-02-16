@@ -1,0 +1,52 @@
+{
+  // Devcontainer config for x86_64 (amd64) development
+  "name": "Apache Spark Development (Multi-JDK, x86_64)",
+  // CHANGE: Use 'build' instead of 'image'
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  // Force running the container as linux/amd64 via Docker run args
+  "runArgs": ["--platform=linux/amd64"],
+  
+  "features": {
+    // Installs SDKMAN and multiple Java versions
+    // 1. Install multiple JDKs (8, 11, 17, 21)
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17",
+      "installMaven": "true",
+      "installGradle": "false",
+      "jdkDistro": "amzn"
+    },
+    // Common utilities for Spark building
+    "ghcr.io/devcontainers/features/common-utils:1": {
+      "installZsh": "true",
+      "configureZshAsDefaultShell": "true"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.vscode-pull-request-github",
+        "vscjava.vscode-java-pack",
+        "vscjava.vscode-maven",
+        "vscjava.vscode-java-dependency",
+        "rebornix.project-config",
+        "mtxr.sqltools"
+      ],
+      "settings": {
+        "java.configuration.runtimes": [
+          { "name": "JavaSE-1.8", "path": "/usr/local/sdkman/candidates/java/8.0.402-amzn" },
+          { "name": "JavaSE-11", "path": "/usr/local/sdkman/candidates/java/11.0.22-amzn" },
+          { "name": "JavaSE-17", "path": "/usr/local/sdkman/candidates/java/17.0.10-amzn", "default": true }
+        ],
+        "files.watcherExclude": {
+					"**/target/**": true
+				}
+      }
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup-sparkdev.sh",
+  "remoteUser": "vscode"
+}
