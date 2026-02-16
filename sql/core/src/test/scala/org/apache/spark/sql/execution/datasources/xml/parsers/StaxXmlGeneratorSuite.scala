@@ -75,7 +75,8 @@ final class StaxXmlGeneratorSuite extends SharedSparkSession {
     assert(df.collect().toSeq === newDf.collect().toSeq)
   }
 
-  // SPARK-45414: Test for string tag content misplacement with mixed column types
+  // SPARK-45414: Test for string tag content misplacement issue (found in spark-xml library)
+  // with mixed column types
   test("SPARK-45414: write mixed types with string columns between and after nested types") {
     import org.apache.spark.sql.Row
 
