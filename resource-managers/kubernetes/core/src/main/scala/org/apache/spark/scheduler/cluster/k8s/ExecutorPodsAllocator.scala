@@ -499,8 +499,8 @@ class ExecutorPodsAllocator(
         // Find one with the same storage class and size.
         val index = reusablePVCs.indexWhere { p =>
           p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
-            p.getSpec.getResources.getRequests.get("storage") ==
-              pvc.getSpec.getResources.getRequests.get("storage")
+          p.getSpec.getResources.getRequests.get("storage")
+            .compareTo(pvc.getSpec.getResources.getRequests.get("storage")) >= 0
         }
         if (index >= 0) {
           val volume = pod.getSpec.getVolumes.asScala.find { v =>
