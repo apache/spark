@@ -433,8 +433,7 @@ class JDBCTableCatalog extends TableCatalog
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
     if (ident.namespace().nonEmpty) {
-      throw QueryCompilationErrors.identifierTooManyNamePartsError(
-        (ident.namespace().toSeq :+ ident.name()))
+      throw new NoSuchFunctionException(ident)
     }
     functions.get(ident.name()) match {
       case Some(func) =>
