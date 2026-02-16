@@ -5145,6 +5145,362 @@ object functions {
     Column.fn("tuple_union_integer", c1, c2, lgNomEntries, mode)
 
   /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * double summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_theta_double", c1, c2)
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * double summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_difference_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * integer summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_difference_theta_integer", c1, c2)
+
+  /**
+   * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
+   * integer summary data type in the input columns using a Datasketches AnotB object. Returns
+   * elements in the TupleSketch that are not in the ThetaSketch.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_difference_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_difference_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_intersection_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2, lit(mode))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(
+      columnName1: String,
+      columnName2: String,
+      mode: String): Column =
+    tuple_intersection_theta_double(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with double summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_double(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_theta_double", c1, c2, mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone). It is configured with the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_intersection_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: String): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2, lit(mode))
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      mode: String): Column =
+    tuple_intersection_theta_integer(Column(columnName1), Column(columnName2), mode)
+
+  /**
+   * Intersects the binary representation of a Datasketches TupleSketch with integer summary data
+   * type with a Datasketches ThetaSketch in the input columns using a Datasketches Intersection
+   * object. The mode parameter specifies the aggregation mode for numeric summaries during
+   * intersection (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: Column): Column =
+    Column.fn("tuple_intersection_theta_integer", c1, c2, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_theta_double", c1, c2)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(columnName1: String, columnName2: String): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_theta_double(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with double summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_double(
+      c1: Column,
+      c2: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_union_theta_double", c1, c2, lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It is
+   * configured with the default values of 12 for `lgNomEntries` and 'sum' for mode.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(columnName1: String, columnName2: String): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer. It uses
+   * the default mode of 'sum'.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2), lgNomEntries)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries), lit(mode))
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      columnName1: String,
+      columnName2: String,
+      lgNomEntries: Int,
+      mode: String): Column =
+    tuple_union_theta_integer(Column(columnName1), Column(columnName2), lgNomEntries, mode)
+
+  /**
+   * Unions the binary representation of a Datasketches TupleSketch with integer summary data type
+   * with a Datasketches ThetaSketch in the input columns using a Datasketches Union object. It
+   * allows the configuration of `lgNomEntries` log nominal entries for the union buffer and the
+   * aggregation mode for numeric summaries (sum, min, max, alwaysone).
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def tuple_union_theta_integer(
+      c1: Column,
+      c2: Column,
+      lgNomEntries: Column,
+      mode: Column): Column =
+    Column.fn("tuple_union_theta_integer", c1, c2, lgNomEntries, mode)
+
+  /**
    * Returns a string with human readable summary information about the KLL bigint sketch.
    *
    * @group misc_funcs
