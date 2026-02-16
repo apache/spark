@@ -673,8 +673,12 @@ Misc Functions
     theta_union
     tuple_difference_double
     tuple_difference_integer
+    tuple_difference_theta_double
+    tuple_difference_theta_integer
     tuple_intersection_double
     tuple_intersection_integer
+    tuple_intersection_theta_double
+    tuple_intersection_theta_integer
     tuple_sketch_estimate_double
     tuple_sketch_estimate_integer
     tuple_sketch_summary_double
@@ -683,6 +687,8 @@ Misc Functions
     tuple_sketch_theta_integer
     tuple_union_double
     tuple_union_integer
+    tuple_union_theta_double
+    tuple_union_theta_integer
     try_aes_decrypt
     try_reflect
     typeof
