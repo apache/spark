@@ -604,17 +604,21 @@ case class ListAgg(
    * Safety is determined by both the source type (via [[isCastSafeForDistinct]]) and the target
    * type's collation (via [[isCastTargetSafeForDistinct]]).
    *
-   * @return `Some(true)` if the mismatch is due to a cast with safe source and target types,
-   *         `Some(false)` if the cast is unsafe (e.g., unsafe source type or non-binary collation),
+   * @return `Some(Right(()))` if the mismatch is due to a safe cast,
+   *         `Some(Left((inputType, castType)))` if the cast is unsafe, carrying the source and
+   *         target types for use in the error message,
    *         `None` if the mismatch is not due to a cast at all
    */
-  def orderMismatchCastSafety: Option[Boolean] = {
+  def orderMismatchCastSafety: Option[Either[(DataType, DataType), Unit]] = {
     if (orderExpressions.size != 1) return None
     child match {
       case Cast(castChild, castType, _, _)
         if orderExpressions.head.child.semanticEquals(castChild) =>
-          Some(isCastSafeForDistinct(castChild.dataType) &&
-            isCastTargetSafeForDistinct(castType))
+          if (isCastSafeForDistinct(castChild.dataType) && isCastTargetSafeForDistinct(castType)) {
+            Some(Right(()))
+          } else {
+            Some(Left((castChild.dataType, castType)))
+          }
       case _ => None
     }
   }

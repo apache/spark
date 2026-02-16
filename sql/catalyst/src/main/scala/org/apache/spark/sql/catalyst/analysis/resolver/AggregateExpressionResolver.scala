@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, OuterReference, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SubExprUtils}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -120,11 +120,9 @@ class AggregateExpressionResolver(
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
           if agg.isDistinct && listAgg.needSaveOrderValue =>
             listAgg.orderMismatchCastSafety match {
-              case Some(true) => // safe cast, allow
-              case Some(false) => listAgg.child match {
-                case Cast(castChild, castType, _, _) =>
-                  throwFunctionAndOrderExpressionUnsafeCastError(listAgg, castChild, castType)
-              }
+              case Some(Right(_)) => // safe cast, allow
+              case Some(Left((inputType, castType))) =>
+                throwFunctionAndOrderExpressionUnsafeCastError(listAgg, inputType, castType)
               case None =>
                 throwFunctionAndOrderExpressionMismatchError(listAgg)
             }
@@ -228,9 +226,9 @@ class AggregateExpressionResolver(
   }
 
   private def throwFunctionAndOrderExpressionUnsafeCastError(
-      listAgg: ListAgg, castChild: Expression, castType: DataType) = {
+      listAgg: ListAgg, inputType: DataType, castType: DataType) = {
     throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-      listAgg.prettyName, castChild.dataType, castType)
+      listAgg.prettyName, inputType, castType)
   }
 
   private def throwNestedAggregateFunction(aggregateExpression: AggregateExpression): Nothing = {

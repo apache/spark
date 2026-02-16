@@ -453,12 +453,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
             if agg.isDistinct && listAgg.needSaveOrderValue =>
               listAgg.orderMismatchCastSafety match {
-                case Some(true) => // safe cast, allow
-                case Some(false) => listAgg.child match {
-                  case Cast(castChild, castType, _, _) =>
-                    throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-                      listAgg.prettyName, castChild.dataType, castType)
-                }
+                case Some(scala.util.Right(_)) => // safe cast, allow
+                case Some(scala.util.Left((inputType, castType))) =>
+                  throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+                    listAgg.prettyName, inputType, castType)
                 case None =>
                   throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
                     listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
