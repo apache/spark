@@ -22,8 +22,11 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
@@ -261,6 +264,62 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
         func
       }
+    }
+  }
+
+  private def createReaderWithMockedStrategy(
+      mockStrategy: ConsumerStrategy): KafkaOffsetReaderAdmin = {
+    new KafkaOffsetReaderAdmin(
+      mockStrategy,
+      KafkaSourceProvider.kafkaParamsForDriver(Map(
+        "bootstrap.servers" -> testUtils.brokerAddress
+      )),
+      CaseInsensitiveMap(Map(
+        KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY -> "3",
+        KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS -> "0"
+      )),
+      ""
+    )
+  }
+
+  test("SPARK-55561: fetchPartitionOffsets retries on transient failures") {
+    val tp0 = new TopicPartition("topic", 0)
+    val tp1 = new TopicPartition("topic", 1)
+    val expectedPartitions = Set(tp0, tp1)
+
+    val mockStrategy = mock(classOf[ConsumerStrategy])
+    val mockAdmin = mock(classOf[Admin])
+    when(mockStrategy.createAdmin(any())).thenReturn(mockAdmin)
+    when(mockStrategy.assignedTopicPartitions(any()))
+      .thenThrow(new RuntimeException("Transient error"))
+      .thenThrow(new RuntimeException("Transient error"))
+      .thenReturn(expectedPartitions)
+
+    val reader = createReaderWithMockedStrategy(mockStrategy)
+    try {
+      val result = reader.fetchPartitionOffsets(
+        EarliestOffsetRangeLimit, isStartingOffsets = true)
+      assert(result === expectedPartitions.map(tp => tp -> KafkaOffsetRangeLimit.EARLIEST).toMap)
+    } finally {
+      reader.close()
+    }
+  }
+
+  test("SPARK-55561: fetchPartitionOffsets throws after all retries exhausted") {
+    val mockStrategy = mock(classOf[ConsumerStrategy])
+    val mockAdmin = mock(classOf[Admin])
+    when(mockStrategy.createAdmin(any())).thenReturn(mockAdmin)
+    when(mockStrategy.assignedTopicPartitions(any()))
+      .thenThrow(new RuntimeException("Persistent error"))
+
+    val reader = createReaderWithMockedStrategy(mockStrategy)
+    try {
+      val ex = intercept[RuntimeException] {
+        reader.fetchPartitionOffsets(EarliestOffsetRangeLimit, isStartingOffsets = true)
+      }
+      assert(ex.getMessage === "Persistent error")
+    } finally {
+      reader.close()
     }
   }
 }
