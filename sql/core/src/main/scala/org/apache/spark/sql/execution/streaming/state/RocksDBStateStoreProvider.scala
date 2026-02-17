@@ -1477,8 +1477,8 @@ class RocksDBStateStoreChangeDataReader(
     }
 
     if (currRecord._1 == RecordType.DELETE_RANGE_RECORD) {
-      // For delete_range entries, the key and value bytes represent beginKey and endKey
-      // rather than actual state rows, so we leave them as null.
+      // For delete_range entries, the key and value have different schemas so we cannot
+      // put endKey into the value field. Leave both key and value as null.
       (currRecord._1, null, null, currentChangelogVersion - 1)
     } else {
       val keyRow = currEncoder._1.decodeKey(currRecord._2)
