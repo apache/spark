@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -45,6 +45,8 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 import org.apache.spark.util.ManualClock
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   private val driverPodName = "driver"
 
@@ -112,6 +114,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
+  @Mock
+  private var resourceList: RESOURCE_LIST = _
+
+  private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
+
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
@@ -121,6 +128,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   val appId = "testapp"
 
   before {
+    createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
     MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace("default")).thenReturn(podsWithNamespace)
@@ -150,6 +158,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
+    when(resourceList.forceConflicts()).thenReturn(resourceList)
+    doReturn(resourceList)
+      .when(kubernetesClient)
+      .resourceList(createdResourcesArgumentCaptor.capture(): _*)
   }
 
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {
@@ -773,6 +785,38 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!podsAllocatorUnderTest.isDeleted("5"))
     assert(!podsAllocatorUnderTest.isDeleted("6"))
     assert(!podsAllocatorUnderTest.isDeleted("7"))
+  }
+
+  test("SPARK-55585: executor feature steps can create resources") {
+    val service = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("servicename")
+      .endMetadata()
+      .build()
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      // have the feature step define a kubernetes service (resource)
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithId(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(service))
+      })
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Scale up to one executor
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
+      Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+
+    // service is considered for creation
+    // resources should have been created
+    verify(kubernetesClient, times(1)).resourceList(meq(service))
+    verify(resourceList).serverSideApply()
   }
 
   test("SPARK-33262: pod allocator does not stall with pending pods") {
