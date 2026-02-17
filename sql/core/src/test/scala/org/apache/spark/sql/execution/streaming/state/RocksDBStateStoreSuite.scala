@@ -2606,6 +2606,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         } finally {
           if (!reloadedStore.hasCommitted) reloadedStore.abort()
         }
+
+        // Verify that the change data reader returns DELETE_RANGE_RECORD with null key
+        // and value, since beginKey/endKey cannot be decoded into the key/value schema.
+        val reader = reloadedProvider.asInstanceOf[SupportsFineGrainedReplay]
+          .getStateStoreChangeDataReader(2, 2, Some(cfName))
+        val record = reader.next()
+        assert(record._1 === RecordType.DELETE_RANGE_RECORD)
+        assert(record._2 === null)
+        assert(record._3 === null)
+        assert(record._4 === 1L)
+        assert(reader.next() === null)
+        reader.closeIfNeeded()
       }
     }
   }
