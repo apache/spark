@@ -166,6 +166,9 @@ case class CollectList(
 
 /**
  * Collect a set of unique elements.
+ *
+ * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
+ *                    When false (RESPECT NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
@@ -184,14 +187,31 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    ignoreNulls: Boolean = true)
   extends Collect[mutable.HashSet[Any]] with QueryErrorsBase with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, 0, 0, true)
+
+  // Buffer can contain nulls when ignoreNulls is false (RESPECT NULLS)
+  override protected def bufferContainsNull: Boolean = !ignoreNulls
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
     case other => other
+  }
+
+  override def update(
+      buffer: mutable.HashSet[Any],
+      input: InternalRow): mutable.HashSet[Any] = {
+    val value = child.eval(input)
+    if (value != null) {
+      buffer += convertToBufferElement(value)
+    } else if (!ignoreNulls) {
+      // RESPECT NULLS: preserve null value in result
+      buffer += null
+    }
+    buffer
   }
 
   override def convertToBufferElement(value: Any): Any = child.dataType match {
@@ -207,7 +227,10 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray[Any]
+        buffer.iterator.map {
+          case null => null
+          case v => v.asInstanceOf[ArrayData].toByteArray()
+        }.toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
@@ -237,6 +260,11 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
+
+  override def toString: String = {
+    val ignoreNullsStr = if (ignoreNulls) "" else " respect nulls"
+    s"$prettyName($child)$ignoreNullsStr"
+  }
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =
     copy(child = newChild)

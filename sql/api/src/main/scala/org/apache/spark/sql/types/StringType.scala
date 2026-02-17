@@ -78,12 +78,10 @@ class StringType private[sql] (
    * `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
-    else s"string collate $collationName"
+    s"string collate $collationName"
 
   override def toString: String =
-    if (isUTF8BinaryCollation) "StringType"
-    else s"StringType($collationName)"
+    s"StringType($collationName)"
 
   private[sql] def collationName: String =
     CollationFactory.fetchCollation(collationId).collationName
@@ -119,6 +117,10 @@ case object StringType
     val collationId = CollationFactory.collationNameToId(collation)
     new StringType(collationId)
   }
+
+  override def typeName: String = "string"
+
+  override def toString: String = "StringType"
 }
 
 /**
