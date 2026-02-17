@@ -74,7 +74,11 @@ case class BroadcastHashJoinExec private(
       case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         val expandedPartitioning = expandOutputPartitioning(streamedPlan.outputPartitioning)
         expandedPartitioning match {
-          case Nil => UnknownPartitioning(streamedPlan.outputPartitioning.numPartitions)
+          case Nil =>
+            // This could only happen if `streamedPlan.outputPartitioning` was an empty
+            // `PartitioningCollection`, but in that case `UnknownPartitioning` is always a valid
+            // alternative.
+            UnknownPartitioning(streamedPlan.outputPartitioning.numPartitions)
           case p :: Nil => p
           case ps => PartitioningCollection(ps)
         }
@@ -96,17 +100,18 @@ case class BroadcastHashJoinExec private(
     mapping.toMap
   }
 
-  // Expands the given partitioning collection recursively.
+  // Expands the given partitioning recursively.
   private def expandOutputPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
     partitioning match {
       case c: PartitioningCollection => c.partitionings.flatMap(expandOutputPartitioning)
       case p: Partitioning with Expression =>
-        // Expands the given partitioning by substituting streamed keys with build keys.
-        // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
-        // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
-        // the expanded partitioning will have the following expressions:
+        // Expands the given partitioning, that is also an expression, by substituting streamed keys
+        // with build keys.
+        // For example, if the expressions for the given partitioning are Seq("a", "b", "c") where
+        // the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"), the expanded
+        // partitioning will have the following expressions:
         // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
-        // The expanded expressions are returned as PartitioningCollection.
+        // The expanded expressions are returned as `Seq[Partitioning]`.
         p.multiTransformDown {
           case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
             e +: streamedKeyToBuildKeyMapping(e.canonicalized)
