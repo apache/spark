@@ -4023,6 +4023,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
 /**
  * Validates that the event time column in EventTimeWatermark is a top-level column reference
  * (e.g. a single name), not a nested field (e.g. "struct_col.field").
+ *
+ * Multi-part names are allowed when they resolve to a top-level attribute via a table alias
+ * (e.g. "alias.column"), but rejected when they resolve to a nested struct field extraction.
  */
 object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
@@ -4030,9 +4033,17 @@ object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
     case etw: EventTimeWatermark =>
       etw.eventTime match {
         case u: UnresolvedAttribute if u.nameParts.length > 1 =>
-          etw.failAnalysis(
-            errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
-            messageParameters = Map("eventExpr" -> u.sql))
+          // Try to resolve the multi-part name against the child output.
+          // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+          // while a nested struct field (e.g. "struct_col.field") resolves to an
+          // Alias(ExtractValue(...)) which is not an Attribute.
+          etw.child.resolve(u.nameParts, conf.resolver) match {
+            case Some(_: Attribute) => etw
+            case _ =>
+              etw.failAnalysis(
+                errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                messageParameters = Map("eventExpr" -> u.sql))
+          }
         case _ => etw
       }
   }

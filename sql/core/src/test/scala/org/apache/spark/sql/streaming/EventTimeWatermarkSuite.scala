@@ -153,6 +153,28 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       matchPVals = true)
   }
 
+  test("withWatermark should work with alias-qualified column name") {
+    // When a DataFrame has an alias, referencing the event time column via
+    // "alias.columnName" should be allowed because it still refers to a top-level column.
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .alias("a")
+      .withWatermark("a.eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(df)(
+      AddData(inputData, 15),
+      CheckAnswer(),
+      AddData(inputData, 10, 12, 14),
+      CheckAnswer(),
+      AddData(inputData, 25),
+      CheckAnswer((10, 3))
+    )
+  }
+
   test("event time and watermark metrics") {
     // No event time metrics when there is no watermarking
     val inputData1 = MemoryStream[Int]
