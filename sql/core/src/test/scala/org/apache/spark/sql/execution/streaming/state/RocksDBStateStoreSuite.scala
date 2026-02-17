@@ -2616,7 +2616,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(record._2 === null)
         assert(record._3 === null)
         assert(record._4 === 1L)
-        assert(reader.next() === null)
+        assert(!reader.hasNext)
         reader.closeIfNeeded()
       }
     }
