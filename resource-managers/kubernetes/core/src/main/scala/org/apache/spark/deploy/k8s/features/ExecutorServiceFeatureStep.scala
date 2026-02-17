@@ -22,6 +22,7 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, ServiceBu
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
+import org.apache.spark.deploy.k8s.Constants.{OWNER_REFERENCE_ANNOTATION, OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE}
 import org.apache.spark.internal.config.{BLOCK_MANAGER_PORT, SHUFFLE_SERVICE_PORT}
 
 class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends KubernetesFeatureConfigStep {
@@ -66,9 +67,11 @@ class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends Kubernete
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    val annotation = Map(OWNER_REFERENCE_ANNOTATION -> OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE)
     val service = new ServiceBuilder()
       .withNewMetadata()
       .withName(serviceName)
+      .withAnnotations(annotation.asJava)
       .endMetadata()
       .withNewSpec()
       .withSelector(selector.asJava)
