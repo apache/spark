@@ -1408,29 +1408,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
-  /**
-   * Read the next changelog record, skipping DELETE_RANGE_RECORD entries as they cannot
-   * be represented as individual key-value change records in the state change data feed.
-   * Returns null if there are no more records.
-   */
-  private def readNextChangelogRecord():
-      (RecordType.Value, Array[Byte], Array[Byte]) = {
-    var reader = currentChangelogReader()
-    while (reader != null) {
-      val nextRecord = reader.next()
-      if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
-        logWarning(log"Skipping DELETE_RANGE_RECORD in state change data feed " +
-          log"for store ${MDC(STATE_STORE_ID, storeId)} as range deletions cannot be " +
-          log"represented as individual change records.")
-      } else {
-        return nextRecord
-      }
-      reader = currentChangelogReader()
-    }
-    null
-  }
-
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1443,65 +1421,44 @@ class RocksDBStateStoreChangeDataReader(
       // the next record. Note that this has be handled across multiple changelog files and we
       // rely on the currentChangelogReader to move to the next changelog file when needed.
       while (currRecord == null) {
-        val nextRecord = readNextChangelogRecord()
-        if (nextRecord == null) {
+        val reader = currentChangelogReader()
+        if (reader == null) {
           return null
         }
 
-        val keyBytes = if (storeConf.rowChecksumEnabled
-          && nextRecord._1 == RecordType.DELETE_RECORD) {
-          // remove checksum and decode to the original key
-          KeyValueChecksumEncoder
-            .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
-        } else {
-          nextRecord._2
-        }
+        val nextRecord = reader.next()
         val colFamilyIdBytes: Array[Byte] =
           RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
-        if (java.util.Arrays.equals(keyBytes, 0, endIndex,
+        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          val valueBytes = if (storeConf.rowChecksumEnabled &&
-            nextRecord._1 != RecordType.DELETE_RECORD) {
-            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, keyBytes, nextRecord._3, rocksDB.delimiterSize)
-          } else {
-            nextRecord._3
-          }
-          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(keyBytes)
-          val result = (nextRecord._1, extractedKey, valueBytes)
+          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(nextRecord._2)
+          val result = (nextRecord._1, extractedKey, nextRecord._3)
           currRecord = result
         }
       }
     } else {
-      val nextRecord = readNextChangelogRecord()
-      if (nextRecord == null) {
+      val reader = currentChangelogReader()
+      if (reader == null) {
         return null
       }
-      currRecord = if (storeConf.rowChecksumEnabled) {
-        nextRecord._1 match {
-          case RecordType.DELETE_RECORD =>
-            val key = KeyValueChecksumEncoder
-              .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
-            (nextRecord._1, key, nextRecord._3)
-          case _ =>
-            val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, nextRecord._2, nextRecord._3, rocksDB.delimiterSize)
-            (nextRecord._1, nextRecord._2, value)
-        }
-      } else {
-        nextRecord
-      }
+      currRecord = reader.next()
     }
 
-    val keyRow = currEncoder._1.decodeKey(currRecord._2)
-    if (currRecord._3 == null) {
-      (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+    if (currRecord._1 == RecordType.DELETE_RANGE_RECORD) {
+      // For delete_range entries, the key and value bytes represent beginKey and endKey
+      // rather than actual state rows, so we leave them as null.
+      (currRecord._1, null, null, currentChangelogVersion - 1)
     } else {
-      val valueRow = currEncoder._2.decodeValue(currRecord._3)
-      (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+      val keyRow = currEncoder._1.decodeKey(currRecord._2)
+      if (currRecord._3 == null) {
+        (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+      } else {
+        val valueRow = currEncoder._2.decodeValue(currRecord._3)
+        (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+      }
     }
   }
 }
