@@ -4489,6 +4489,8 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
+# Datasketch Functions
+
 
 def hll_sketch_agg(
     col: "ColumnOrName",
