@@ -1408,7 +1408,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
-override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1427,15 +1427,30 @@ override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
         }
 
         val nextRecord = reader.next()
+        val keyBytes = if (storeConf.rowChecksumEnabled
+          && nextRecord._1 == RecordType.DELETE_RECORD) {
+          // remove checksum and decode to the original key
+          KeyValueChecksumEncoder
+            .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+        } else {
+          nextRecord._2
+        }
         val colFamilyIdBytes: Array[Byte] =
           RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
-        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
+        if (java.util.Arrays.equals(keyBytes, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(nextRecord._2)
-          val result = (nextRecord._1, extractedKey, nextRecord._3)
+          val valueBytes = if (storeConf.rowChecksumEnabled &&
+            nextRecord._1 != RecordType.DELETE_RECORD) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, keyBytes, nextRecord._3, rocksDB.delimiterSize)
+          } else {
+            nextRecord._3
+          }
+          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(keyBytes)
+          val result = (nextRecord._1, extractedKey, valueBytes)
           currRecord = result
         }
       }
@@ -1444,7 +1459,21 @@ override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
       if (reader == null) {
         return null
       }
-      currRecord = reader.next()
+      val nextRecord = reader.next()
+      currRecord = if (storeConf.rowChecksumEnabled) {
+        nextRecord._1 match {
+          case RecordType.DELETE_RECORD =>
+            val key = KeyValueChecksumEncoder
+              .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+            (nextRecord._1, key, nextRecord._3)
+          case _ =>
+            val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, nextRecord._2, nextRecord._3, rocksDB.delimiterSize)
+            (nextRecord._1, nextRecord._2, value)
+        }
+      } else {
+        nextRecord
+      }
     }
 
     if (currRecord._1 == RecordType.DELETE_RANGE_RECORD) {
