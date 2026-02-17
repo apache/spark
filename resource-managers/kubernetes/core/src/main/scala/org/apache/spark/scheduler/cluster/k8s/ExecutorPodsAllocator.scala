@@ -459,10 +459,22 @@ class ExecutorPodsAllocator(
         .build()
       val resources = replacePVCsIfNeeded(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
+      val annotation = OWNER_REFERENCE_ANNOTATION
+      val driverValue = OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE
+      val executorValue = OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE
+      val getOwnerReference = (r: HasMetadata) =>
+        r.getMetadata.getAnnotations.getOrDefault(annotation, executorValue)
+      val (driverResources, executorResources) =
+        resources
+          .filter(r => Set(driverValue, executorValue).contains(getOwnerReference(r)))
+          .partition(r => getOwnerReference(r) == driverValue)
       val createdExecutorPod =
         kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
       try {
-        addOwnerReference(createdExecutorPod, resources)
+        addOwnerReference(createdExecutorPod, executorResources)
+        if (driverResources.nonEmpty && driverPod.nonEmpty) {
+          addOwnerReference(driverPod.get, driverResources)
+        }
         kubernetesClient.resourceList(resources: _*).forceConflicts().serverSideApply()
         resources
           .filter(_.getKind == "PersistentVolumeClaim")
@@ -485,6 +497,7 @@ class ExecutorPodsAllocator(
             .inNamespace(namespace)
             .resource(createdExecutorPod)
             .delete()
+          kubernetesClient.resourceList(resources: _*).delete()
           throw e
       }
     }

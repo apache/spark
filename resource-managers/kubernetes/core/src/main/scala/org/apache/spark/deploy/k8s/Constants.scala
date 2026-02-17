@@ -109,6 +109,9 @@ object Constants {
   val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
   val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"
   val POD_DELETION_COST = "controller.kubernetes.io/pod-deletion-cost"
+  val OWNER_REFERENCE_ANNOTATION = "spark.owner-reference"
+  val OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE = "driver"
+  val OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE = "executor"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

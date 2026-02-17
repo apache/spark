@@ -33,6 +33,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
@@ -817,6 +818,135 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // resources should have been created
     verify(kubernetesClient, times(1)).resourceList(meq(service))
     verify(resourceList).serverSideApply()
+  }
+
+  test("SPARK-55587: executor feature steps resources ownership") {
+    val executorMetadata = mock[ObjectMeta]
+    when(executorMetadata.getName).thenReturn("executor-name")
+    when(executorMetadata.getUid).thenReturn("executor-uid")
+
+    val executorPod = mock[Pod]
+    when(podResource.create()).thenReturn(executorPod)
+    when(executorPod.getMetadata).thenReturn(executorMetadata)
+    when(executorPod.getApiVersion).thenReturn("executor-version")
+    when(executorPod.getKind).thenReturn("executor-kind")
+
+    val service1 = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service1")
+      .endMetadata()
+      .build()
+    val service2 = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service2")
+      .withAnnotations(
+        Map(OWNER_REFERENCE_ANNOTATION -> OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE).asJava
+      )
+      .endMetadata()
+      .build()
+    val service3 = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service3")
+      .withAnnotations(
+        Map(OWNER_REFERENCE_ANNOTATION -> OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE).asJava
+      )
+      .endMetadata()
+      .build()
+    val service4 = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service4")
+      .withAnnotations(
+        Map(OWNER_REFERENCE_ANNOTATION -> "none").asJava
+      )
+      .endMetadata()
+      .build()
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      // have the feature step define a kubernetes service (resource)
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithId(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(service1, service2, service3, service4))
+      })
+
+    assert(service1.getMetadata.getOwnerReferences.isEmpty)
+    assert(service2.getMetadata.getOwnerReferences.isEmpty)
+    assert(service3.getMetadata.getOwnerReferences.isEmpty)
+    assert(service4.getMetadata.getOwnerReferences.isEmpty)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Scale up to one executor
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
+      Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+    verify(podResource).create()
+
+    // ownership references of services updated
+    // executor owns service1 (default)
+    assert(service1.getMetadata.getOwnerReferences.size() === 1)
+    assert(service1.getMetadata.getOwnerReferences.get(0).getName === "executor-name")
+    // executor owns service2 (through annotation)
+    assert(service2.getMetadata.getOwnerReferences.size() === 1)
+    assert(service2.getMetadata.getOwnerReferences.get(0).getName === "executor-name")
+    // driver owns service3 (through annotation)
+    assert(service3.getMetadata.getOwnerReferences.size() === 1)
+    assert(service3.getMetadata.getOwnerReferences.get(0).getName === "driver")
+    // nothing owns service 4
+    assert(service4.getMetadata.getOwnerReferences.isEmpty)
+  }
+
+  test("SPARK-55587: executor feature steps resources deleted on failure") {
+    val executorMetadata = mock[ObjectMeta]
+    when(executorMetadata.getName).thenReturn("executor-name")
+    when(executorMetadata.getUid).thenReturn("executor-uid")
+
+    val executorPod = mock[Pod]
+    when(podResource.create()).thenReturn(executorPod)
+    when(executorPod.getMetadata).thenReturn(executorMetadata)
+    when(executorPod.getApiVersion).thenReturn("executor-version")
+    when(executorPod.getKind).thenReturn("executor-kind")
+
+    val service = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service")
+      .withAnnotations(
+        Map(OWNER_REFERENCE_ANNOTATION -> "none").asJava
+      )
+      .endMetadata()
+      .build()
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      // have the feature step define a kubernetes service (resource)
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithId(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(service))
+      })
+
+    // force an exception on resourceList.serverSideApply
+    when(resourceList.serverSideApply()).thenAnswer(
+      _ => throw new RuntimeException("test exception")
+    )
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Scale up to one executor, this should fail
+    intercept[RuntimeException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(
+        Map(defaultProfile -> 1))
+    }
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+
+    // resources should have been deleted on failure
+    verify(resourceList).delete()
   }
 
   test("SPARK-33262: pod allocator does not stall with pending pods") {
