@@ -273,11 +273,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
-    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression),
-    // Validate that nested SequentialStreamingUnions have been properly flattened.
-    // Must run after CombineUnions in the "Union" batch.
-    Batch("Validate SequentialStreamingUnion", Once,
-      ValidateSequentialStreamingUnionNesting)))
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -1042,7 +1038,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     case project @ Project(projectList, SequentialOrSimpleUnion(u))
       if projectList.forall(_.deterministic) && u.children.nonEmpty &&
         canPushProjectionThroughUnion(project) =>
-      SequentialOrSimpleUnion.withNewChildren(u, pushProjectionThroughUnion(projectList, u))
+      u.withNewChildren(pushProjectionThroughUnion(projectList, u))
   }
 }
 

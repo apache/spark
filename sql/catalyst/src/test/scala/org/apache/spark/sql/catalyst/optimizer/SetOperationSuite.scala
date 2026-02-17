@@ -414,6 +414,11 @@ class SetOperationSuite extends PlanTest {
 
   }
 
+  // SequentialStreamingUnion optimizer tests verify that CombineUnions correctly flattens
+  // nested SequentialStreamingUnions and applies other union optimizations while preserving
+  // child ordering. Flattening is an optimization, not a strict requirement - these tests
+  // verify the optimizer's expected behavior.
+
   test("SequentialStreamingUnion: combine nested unions into one") {
     // Mark relations as streaming for SequentialStreamingUnion
     val streamRel1 = testRelation.copy(isStreaming = true)

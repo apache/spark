@@ -608,6 +608,8 @@ object SequentialOrSimpleUnion {
 
   /**
    * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
    */
   def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
     case union: Union => union.copy(children = newChildren)

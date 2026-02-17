@@ -136,47 +136,6 @@ class SequentialStreamingUnionAnalysisSuite extends AnalysisTest with DataTypeEr
       parameters = Map("operator" -> "SequentialStreamingUnion"))
   }
 
-  test("ValidateSequentialStreamingUnionNesting - rejects directly nested unions") {
-    val streamingRelation1 = testRelation1.copy(isStreaming = true)
-    val streamingRelation2 = testRelation2.copy(isStreaming = true)
-    val streamingRelation3 = testRelation3.copy(isStreaming = true)
-
-    // Manually create a nested union without running flatten
-    // (In practice, flatten would handle this, but validation catches it as a safeguard)
-    val innerUnion = SequentialStreamingUnion(streamingRelation1, streamingRelation2)
-    val outerUnion = SequentialStreamingUnion(innerUnion, streamingRelation3)
-
-    // Note: This validation now runs AFTER optimizer flattening
-    checkError(
-      exception = intercept[AnalysisException] {
-        ValidateSequentialStreamingUnionNesting(outerUnion)
-      },
-      condition = "NESTED_SEQUENTIAL_STREAMING_UNION",
-      parameters = Map(
-        "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
-  }
-
-  test("ValidateSequentialStreamingUnionNesting - rejects nested unions through other operators") {
-    val streamingRelation1 = testRelation1.copy(isStreaming = true)
-    val streamingRelation2 = testRelation2.copy(isStreaming = true)
-    val streamingRelation3 = testRelation3.copy(isStreaming = true)
-
-    // Create a nested union through a Project operator
-    // e.g., from df1.select("a", "b").followedBy(df2)
-    val innerUnion = SequentialStreamingUnion(streamingRelation1, streamingRelation2)
-    val projectOverUnion = Project(Seq($"a", $"b"), innerUnion)
-    val outerUnion = SequentialStreamingUnion(projectOverUnion, streamingRelation3)
-
-    // Note: This validation now runs AFTER optimizer flattening
-    checkError(
-      exception = intercept[AnalysisException] {
-        ValidateSequentialStreamingUnionNesting(outerUnion)
-      },
-      condition = "NESTED_SEQUENTIAL_STREAMING_UNION",
-      parameters = Map(
-        "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
-  }
-
   test("ValidateSequentialStreamingUnion - three or more children allowed") {
     val streamingRelation1 = testRelation1.copy(isStreaming = true)
     val streamingRelation2 = testRelation2.copy(isStreaming = true)
