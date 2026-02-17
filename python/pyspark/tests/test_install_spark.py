@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 import os
+import re
 import tempfile
 import unittest
+import urllib.request
 
 from pyspark.install import (
     install_spark,
@@ -29,10 +31,19 @@ from pyspark.install import (
 
 
 class SparkInstallationTestCase(unittest.TestCase):
+    def get_latest_spark_version(self):
+        url = "https://spark.apache.org/releases/"
+        with urllib.request.urlopen(url) as response:
+            html = response.read().decode("utf-8")
+        versions = re.findall(r"spark-release-(\d+[\.-]\d+[\.-]\d+)", html)
+        versions = [v.replace("-", ".") for v in versions]
+        return max(versions)
+
     def test_install_spark(self):
         # Test only one case. Testing this is expensive because it needs to download
         # the Spark distribution, ensure it is available at https://dlcdn.apache.org/spark/
-        spark_version, hadoop_version, hive_version = checked_versions("3.5.7", "3", "2.3")
+        spark_version = self.get_latest_spark_version()
+        spark_version, hadoop_version, hive_version = checked_versions(spark_version, "3", "2.3")
 
         with tempfile.TemporaryDirectory(prefix="test_install_spark") as tmp_dir:
             install_spark(
