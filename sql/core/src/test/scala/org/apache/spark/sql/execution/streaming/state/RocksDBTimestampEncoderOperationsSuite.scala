@@ -223,7 +223,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
-  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
+  //  encoding
   Seq("unsaferow").foreach { encoding =>
     test(s"Event time as prefix: iterator operations (encoding = $encoding)") {
       tryWithProviderResource(
@@ -528,12 +529,18 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val iter = encoderType match {
           // For prefix encoder, we use iterator
           case "prefix" =>
-            if (useMultipleValuesPerKey) store.iteratorWithMultiValues()
-            else store.iterator()
+            if (useMultipleValuesPerKey) {
+              store.iteratorWithMultiValues()
+            } else {
+              store.iterator()
+            }
           // For postfix encoder, we use prefix scan with ("key1", 1) as the prefix key
           case "postfix" =>
-            if (useMultipleValuesPerKey) store.prefixScanWithMultiValues(keyToRow("key1", 1))
-            else store.prefixScan(keyToRow("key1", 1))
+            if (useMultipleValuesPerKey) {
+              store.prefixScanWithMultiValues(keyToRow("key1", 1))
+            } else {
+              store.prefixScan(keyToRow("key1", 1))
+            }
         }
 
         val results = iter.map(_.key.getLong(2)).toList
