@@ -36,7 +36,11 @@ What is NOT compared by default:
   - Duplicate ZIP entries (sets collapse multiplicity)
 
 Use --check-bytes to additionally compare CRC-32 checksums of .class files
-that share the same path, detecting bytecode differences.
+that share the same path, detecting bytecode differences. Note: CRC
+differences between Maven and SBT builds are expected — the Scala compiler
+is non-deterministic across build tools (Zinc vs batch), so identical source
+produces different bytecode. This flag is most useful when comparing two
+builds from the same build system (e.g., before/after a code change).
 
 Two-Level Comparison (default)
 ------------------------------
@@ -801,7 +805,17 @@ def analyze_equivalence(
         # Check if known fat-JAR module
         is_fat_jar = _is_fat_jar_module(name)
 
-        if not only_sbt and is_fat_jar:
+        has_crc_diff = bool(differing_jars[name].class_crc_mismatches)
+        has_svc_diff = bool(
+            differing_jars[name].services_only_in_maven
+            or differing_jars[name].services_only_in_sbt
+            or differing_jars[name].services_content_differ
+        )
+
+        if has_crc_diff or has_svc_diff:
+            # CRC or service differences can't be explained by shading/structure
+            classifications[name] = "unexplained"
+        elif not only_sbt and is_fat_jar:
             # All SBT module classes found in Maven; extra Maven classes are bundled deps
             classifications[name] = "equivalent_structure"
         elif not only_maven and not only_sbt:
@@ -1048,6 +1062,26 @@ def format_two_level_report(
                     lines.append(f"  Classes only in SBT ({len(r.only_in_sbt)}):")
                     for line in _summarize_classes(r.only_in_sbt)[:5]:
                         lines.append(f"    {line}")
+                if r.class_crc_mismatches:
+                    lines.append(
+                        f"  Classes with different bytecode ({len(r.class_crc_mismatches)}):"
+                    )
+                    for line in _summarize_classes(r.class_crc_mismatches)[:5]:
+                        lines.append(f"    {line}")
+                if r.services_content_differ:
+                    lines.append(
+                        f"  Services with different content ({len(r.services_content_differ)}):"
+                    )
+                    for svc in sorted(r.services_content_differ):
+                        lines.append(f"    {svc}")
+                if r.services_only_in_maven:
+                    lines.append(f"  Services only in Maven ({len(r.services_only_in_maven)}):")
+                    for svc in sorted(r.services_only_in_maven):
+                        lines.append(f"    {svc}")
+                if r.services_only_in_sbt:
+                    lines.append(f"  Services only in SBT ({len(r.services_only_in_sbt)}):")
+                    for svc in sorted(r.services_only_in_sbt):
+                        lines.append(f"    {svc}")
 
             elif cls == "only_in_build":
                 if not r.maven_jar:
@@ -1756,7 +1790,11 @@ def main():
     parser.add_argument(
         "--check-bytes",
         action="store_true",
-        help="Compare CRC-32 of .class files with matching paths to detect bytecode differences",
+        help=(
+            "Compare CRC-32 of .class files with matching paths to detect bytecode"
+            " differences. Note: differences between Maven and SBT are expected due"
+            " to non-deterministic compilation; most useful for same-tool comparisons"
+        ),
     )
     parser.add_argument(
         "--verbose",
