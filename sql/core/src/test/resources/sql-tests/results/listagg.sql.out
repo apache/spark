@@ -546,3 +546,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"FLOAT\""
   }
 }
+
+
+-- !query
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (TIMESTAMP'2024-01-01 10:00:00'), (TIMESTAMP'2024-01-02 12:00:00'), (TIMESTAMP'2024-01-01 10:00:00') AS t(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"TIMESTAMP\""
+  }
+}

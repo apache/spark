@@ -60,3 +60,4 @@ SELECT listagg(DISTINCT col1) WITHIN GROUP (ORDER BY col2) FROM df;
 SELECT listagg(DISTINCT col1) WITHIN GROUP (ORDER BY col1, col2) FROM df;
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.1 as double)), (cast(2.2 as double)), (cast(2.2 as double)), (cast(3.3 as double)) AS t(col);
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.0 as float)), (cast(2.0 as float)), (cast(2.0 as float)) AS t(col);
+SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (TIMESTAMP'2024-01-01 10:00:00'), (TIMESTAMP'2024-01-02 12:00:00'), (TIMESTAMP'2024-01-01 10:00:00') AS t(col);

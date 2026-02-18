@@ -658,7 +658,7 @@ case class ListAgg(
    *         and target types for use in the error message,
    *         [[CastSafetyResult.NotACast]] if the mismatch is not due to a cast at all
    */
-  def orderMismatchCastSafety: CastSafetyResult = {
+  private def orderMismatchCastSafety: CastSafetyResult = {
     if (orderExpressions.size != 1) return CastSafetyResult.NotACast
     child match {
       case Cast(castChild, castType, _, _)
@@ -720,6 +720,25 @@ case class ListAgg(
     case _ => false
   }
 
+  /**
+   * Result of checking whether a LISTAGG(DISTINCT) order-expression mismatch
+   * is caused by a cast and whether that cast is safe for deduplication.
+   */
+  sealed trait CastSafetyResult
+
+  object CastSafetyResult {
+    /** The mismatch is not due to a cast at all. */
+    case object NotACast extends CastSafetyResult
+
+    /** The mismatch is due to a cast that is safe for DISTINCT. */
+    case object SafeCast extends CastSafetyResult
+
+    /** The mismatch is due to a cast that is unsafe for DISTINCT. */
+    case class UnsafeCast(
+        inputType: DataType,
+        castType: DataType) extends CastSafetyResult
+  }
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
       child = newChildren.head,
@@ -734,23 +753,4 @@ case class ListAgg(
       case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
     }
   }
-}
-
-/**
- * Result of checking whether a LISTAGG(DISTINCT) order-expression mismatch
- * is caused by a cast and whether that cast is safe for deduplication.
- */
-sealed trait CastSafetyResult
-
-object CastSafetyResult {
-  /** The mismatch is not due to a cast at all. */
-  case object NotACast extends CastSafetyResult
-
-  /** The mismatch is due to a cast that is safe for DISTINCT. */
-  case object SafeCast extends CastSafetyResult
-
-  /** The mismatch is due to a cast that is unsafe for DISTINCT. */
-  case class UnsafeCast(
-      inputType: DataType,
-      castType: DataType) extends CastSafetyResult
 }
