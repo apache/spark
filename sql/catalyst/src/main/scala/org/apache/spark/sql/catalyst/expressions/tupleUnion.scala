@@ -436,8 +436,10 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
     _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
     Datasketches TupleSketch with double summary data type with the binary representation of a
     Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
-    a default double summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults
-    to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+    a default double summary value based on the mode: 0.0 for 'sum' mode, +Infinity for 'min' mode,
+    -Infinity for 'max' mode, or 1.0 for 'alwaysone' mode. Users can set lgNomEntries to a value
+    between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to
+    'sum'). """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
@@ -467,8 +469,10 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
     _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
     Datasketches TupleSketch with integer summary data type with the binary representation of a
     Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
-    a default integer summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults
-    to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+    a default integer summary value based on the mode: 0 for 'sum' mode, Integer.MAX_VALUE for 'min'
+    mode, Integer.MIN_VALUE for 'max' mode, or 1 for 'alwaysone' mode. Users can set lgNomEntries to
+    a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max', or 'alwaysone'
+    (defaults to 'sum'). """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2);

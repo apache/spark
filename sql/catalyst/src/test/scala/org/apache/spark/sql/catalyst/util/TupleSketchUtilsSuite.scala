@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.datasketches.theta.UpdateSketch
 import org.apache.datasketches.tuple.UpdatableSketchBuilder
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
@@ -133,6 +134,42 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
       parameters = Map("function" -> "`test_function`"))
+  }
+
+  test("heapifyDoubleSketch: throws detailed error when passing Theta sketch") {
+    // Create a Theta sketch (COMPACT family)
+    val thetaSketch = UpdateSketch.builder().build()
+    thetaSketch.update("test1")
+    thetaSketch.update("test2")
+    val thetaBytes = thetaSketch.compact().toByteArray
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        TupleSketchUtils.heapifyDoubleSketch(thetaBytes, "test_function")
+      },
+      condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      parameters = Map(
+        "function" -> "`test_function`",
+        "expectedFamily" -> "TUPLE",
+        "actualFamily" -> "COMPACT"))
+  }
+
+  test("heapifyIntegerSketch: throws detailed error when passing Theta sketch") {
+    // Create a Theta sketch (COMPACT family)
+    val thetaSketch = UpdateSketch.builder().build()
+    thetaSketch.update("test1")
+    thetaSketch.update("test2")
+    val thetaBytes = thetaSketch.compact().toByteArray
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        TupleSketchUtils.heapifyIntegerSketch(thetaBytes, "test_function")
+      },
+      condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      parameters = Map(
+        "function" -> "`test_function`",
+        "expectedFamily" -> "TUPLE",
+        "actualFamily" -> "COMPACT"))
   }
 
   test("aggregateNumericSummaries: sum mode aggregates correctly for Double") {

@@ -770,6 +770,13 @@ tuple_union_theta_integer(tupleSketch, thetaSketch [, lgNomEntries] [, mode])
 
 Returns a BINARY containing the merged Tuple sketch.
 
+**Notes:**
+- When Theta sketch entries (keys without summary values) are merged with Tuple sketch entries, they receive default summary values based on the mode:
+  - **sum mode**: 0.0 (identity element for addition)
+  - **min mode**: +Infinity (identity element for minimum)
+  - **max mode**: -Infinity (identity element for maximum)
+  - **alwaysone mode**: 1.0 (all entries set to 1)
+
 **Examples:**
 ```sql
 -- Union a Tuple sketch with a Theta sketch
@@ -814,6 +821,13 @@ tuple_intersection_theta_integer(tupleSketch, thetaSketch [, mode])
 | `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" |
 
 Returns a BINARY containing the intersected Tuple sketch.
+
+**Notes:**
+- When Theta sketch entries (keys without summary values) are intersected with Tuple sketch entries, they receive default summary values based on the mode:
+  - **sum mode**: 0.0 (identity element for addition)
+  - **min mode**: +Infinity (identity element for minimum)
+  - **max mode**: -Infinity (identity element for maximum)
+  - **alwaysone mode**: 1.0 (all entries set to 1)
 
 **Examples:**
 ```sql

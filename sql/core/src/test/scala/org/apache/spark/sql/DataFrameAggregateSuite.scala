@@ -3926,12 +3926,19 @@ class DataFrameAggregateSuite extends QueryTest
       .collect()(0)(0)
     assert(difference2 != null)
 
-    // Verify estimate from difference
+    // Verify estimate from difference (keys 3 and 5 remain)
     val estimate = joined
       .select(tuple_sketch_estimate_double(
         tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 2.0)
+
+    // Verify summary value from difference (3.5 + 5.5 = 9.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_difference_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 9.0)
   }
 
   test("SPARK-55558: tuple_difference_theta_integer basic functionality") {
@@ -3955,12 +3962,19 @@ class DataFrameAggregateSuite extends QueryTest
       .collect()(0)(0)
     assert(difference2 != null)
 
-    // Verify estimate from difference
+    // Verify estimate from difference (keys 3 and 5 remain)
     val estimate = joined
       .select(tuple_sketch_estimate_integer(
         tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 2.0)
+
+    // Verify summary value from difference (30 + 50 = 80)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_difference_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 80)
   }
 
   test("SPARK-55558: tuple_intersection_theta_double basic functionality") {
@@ -3997,6 +4011,13 @@ class DataFrameAggregateSuite extends QueryTest
         tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 2.0)
+
+    // Verify summary value from intersection (2.5 + 3.5 = 6.0)
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_intersection_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 6.0)
   }
 
   test("SPARK-55558: tuple_intersection_theta_integer basic functionality") {
@@ -4032,6 +4053,13 @@ class DataFrameAggregateSuite extends QueryTest
         tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 2.0)
+
+    // Verify summary value from intersection (20 + 30 = 50)
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_intersection_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 50)
   }
 
   test("SPARK-55558: tuple_union_theta_double basic functionality") {
@@ -4068,12 +4096,20 @@ class DataFrameAggregateSuite extends QueryTest
       .collect()(0)(0)
     assert(union4 != null)
 
-    // Verify estimate from union (all 4 keys)
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
     val estimate = joined
       .select(tuple_sketch_estimate_double(
         tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 4.0)
+
+    // Verify summary value from union (1.5 + 2.5 + 0.0 + 0.0 = 4.0)
+    // Theta sketch entries (3, 4) get default value 0.0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_double(
+        tuple_union_theta_double($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 4.0)
   }
 
   test("SPARK-55558: tuple_union_theta_integer basic functionality") {
@@ -4103,12 +4139,20 @@ class DataFrameAggregateSuite extends QueryTest
       .collect()(0)(0)
     assert(union3 != null)
 
-    // Verify estimate from union (all 4 keys)
+    // Verify estimate from union (all 4 keys: 1, 2, 3, 4)
     val estimate = joined
       .select(tuple_sketch_estimate_integer(
         tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
       .collect()(0)(0)
     assert(estimate == 4.0)
+
+    // Verify summary value from union (10 + 20 + 0 + 0 = 30)
+    // Theta sketch entries (3, 4) get default value 0 for sum mode
+    val summary = joined
+      .select(tuple_sketch_summary_integer(
+        tuple_union_theta_integer($"tuple_sketch", $"theta_sketch")))
+      .collect()(0)(0)
+    assert(summary == 30)
   }
 
   test("SPARK-54179: tuple_union_agg_double basic functionality") {

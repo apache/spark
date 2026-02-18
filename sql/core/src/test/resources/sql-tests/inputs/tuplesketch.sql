@@ -504,6 +504,87 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2)))
 FROM t_int_int_1_5_through_7_11;
 
+-- Test tuple_union_theta_double with different modes
+-- Test tuple_union_theta_double with 'max' mode
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'max'),
+    theta_sketch_agg(key2), 12, 'max'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with 'min' mode
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'min'),
+    theta_sketch_agg(key2), 12, 'min'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with 'alwaysone' mode
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'),
+    theta_sketch_agg(key2), 12, 'alwaysone'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with different modes
+-- Test tuple_union_theta_integer with 'max' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'max'),
+    theta_sketch_agg(key2), 12, 'max'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with 'min' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'min'),
+    theta_sketch_agg(key2), 12, 'min'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with 'alwaysone' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'alwaysone'),
+    theta_sketch_agg(key2), 12, 'alwaysone'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_double with different modes
+-- Test tuple_intersection_theta_double with 'max' mode
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'max'),
+    theta_sketch_agg(key2), 'max'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_double with 'alwaysone' mode
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'),
+    theta_sketch_agg(key2), 'alwaysone'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_integer with different modes
+-- Test tuple_intersection_theta_integer with 'max' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_intersection_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'max'),
+    theta_sketch_agg(key2), 'max'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_integer with 'min' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_intersection_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'min'),
+    theta_sketch_agg(key2), 'min'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_integer with 'alwaysone' mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_intersection_theta_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'alwaysone'),
+    theta_sketch_agg(key2), 'alwaysone'))
+FROM t_int_int_1_5_through_7_11;
+
 -- Test tuple_union_agg_double with IntegerType key and explicit lgNomEntries parameter
 SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, 'sum'))
 FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
@@ -870,6 +951,210 @@ SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum')
 FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11 WHERE key1 > 100
       UNION ALL
       SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11 WHERE key2 > 100);
+
+-- Edge case tests for tuple_union_theta, tuple_intersection_theta, and tuple_difference_theta
+
+-- Test tuple_union_theta_double with non-empty TupleSketch and empty ThetaSketch
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch)) as summary
+FROM non_empty_tuple, empty_theta;
+
+-- Test tuple_union_theta_double with empty TupleSketch and non-empty ThetaSketch
+WITH empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11 WHERE key1 > 100
+),
+non_empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch)) as summary
+FROM empty_tuple, non_empty_theta;
+
+-- Test tuple_union_theta_integer with non-empty TupleSketch and empty ThetaSketch
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_integer(key1, val1) as tuple_sketch FROM t_int_int_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_int_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_integer(
+    tuple_union_theta_integer(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_integer(
+    tuple_union_theta_integer(tuple_sketch, theta_sketch)) as summary
+FROM non_empty_tuple, empty_theta;
+
+-- Test tuple_intersection_theta_double with empty ThetaSketch (should return empty)
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_intersection_theta_double(tuple_sketch, theta_sketch)) as estimate
+FROM non_empty_tuple, empty_theta;
+
+-- Test tuple_intersection_theta_double with empty TupleSketch (should return empty)
+WITH empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11 WHERE key1 > 100
+),
+non_empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_intersection_theta_double(tuple_sketch, theta_sketch)) as estimate
+FROM empty_tuple, non_empty_theta;
+
+-- Test tuple_intersection_theta_integer with empty ThetaSketch (should return empty)
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_integer(key1, val1) as tuple_sketch FROM t_int_int_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_int_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_integer(
+    tuple_intersection_theta_integer(tuple_sketch, theta_sketch)) as estimate
+FROM non_empty_tuple, empty_theta;
+
+-- Test tuple_difference_theta_double with empty ThetaSketch (should return original TupleSketch)
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_difference_theta_double(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_double(
+    tuple_difference_theta_double(tuple_sketch, theta_sketch)) as summary
+FROM non_empty_tuple, empty_theta;
+
+-- Test tuple_difference_theta_double with empty TupleSketch (should return empty)
+WITH empty_tuple AS (
+  SELECT tuple_sketch_agg_double(key1, val1) as tuple_sketch FROM t_int_double_1_5_through_7_11 WHERE key1 > 100
+),
+non_empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_double_1_5_through_7_11
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_difference_theta_double(tuple_sketch, theta_sketch)) as estimate
+FROM empty_tuple, non_empty_theta;
+
+-- Test tuple_difference_theta_integer with empty ThetaSketch (should return original TupleSketch)
+WITH non_empty_tuple AS (
+  SELECT tuple_sketch_agg_integer(key1, val1) as tuple_sketch FROM t_int_int_1_5_through_7_11
+),
+empty_theta AS (
+  SELECT theta_sketch_agg(key2) as theta_sketch FROM t_int_int_1_5_through_7_11 WHERE key2 > 100
+)
+SELECT
+  tuple_sketch_estimate_integer(
+    tuple_difference_theta_integer(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_integer(
+    tuple_difference_theta_integer(tuple_sketch, theta_sketch)) as summary
+FROM non_empty_tuple, empty_theta;
+
+-- Test summary preservation after tuple_intersection_theta_double
+-- Summaries should be preserved from the TupleSketch side (keys 5, 6, 7 are common)
+WITH tuple_sketch_data AS (
+  SELECT tuple_sketch_agg_double(key, val, 12, 'sum') as tuple_sketch
+  FROM VALUES (5, 5.0D), (6, 6.0D), (7, 7.0D), (8, 8.0D) tab(key, val)
+),
+theta_sketch_data AS (
+  SELECT theta_sketch_agg(key) as theta_sketch
+  FROM VALUES (5), (6), (7), (9) tab(key)
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_intersection_theta_double(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_double(
+    tuple_intersection_theta_double(tuple_sketch, theta_sketch)) as summary
+FROM tuple_sketch_data, theta_sketch_data;
+
+-- Test summary preservation after tuple_difference_theta_double
+-- Summaries should be retained for remaining entries (key 8)
+WITH tuple_sketch_data AS (
+  SELECT tuple_sketch_agg_double(key, val, 12, 'sum') as tuple_sketch
+  FROM VALUES (5, 5.0D), (6, 6.0D), (7, 7.0D), (8, 8.0D) tab(key, val)
+),
+theta_sketch_data AS (
+  SELECT theta_sketch_agg(key) as theta_sketch
+  FROM VALUES (5), (6), (7), (9) tab(key)
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_difference_theta_double(tuple_sketch, theta_sketch)) as estimate,
+  tuple_sketch_summary_double(
+    tuple_difference_theta_double(tuple_sketch, theta_sketch)) as summary
+FROM tuple_sketch_data, theta_sketch_data;
+
+-- Test summary preservation after tuple_intersection_theta_integer with 'max' mode
+WITH tuple_sketch_data AS (
+  SELECT tuple_sketch_agg_integer(key, val, 12, 'max') as tuple_sketch
+  FROM VALUES (5, 50), (5, 55), (6, 60), (7, 70) tab(key, val)
+),
+theta_sketch_data AS (
+  SELECT theta_sketch_agg(key) as theta_sketch
+  FROM VALUES (5), (6), (8) tab(key)
+)
+SELECT
+  tuple_sketch_estimate_integer(
+    tuple_intersection_theta_integer(tuple_sketch, theta_sketch, 'max')) as estimate,
+  tuple_sketch_summary_integer(
+    tuple_intersection_theta_integer(tuple_sketch, theta_sketch, 'max')) as summary
+FROM tuple_sketch_data, theta_sketch_data;
+
+-- Test summary preservation with 'min' mode on union_theta
+-- Theta entries get +Infinity for min mode, tuple entries keep their values
+WITH tuple_sketch_data AS (
+  SELECT tuple_sketch_agg_double(key, val, 12, 'min') as tuple_sketch
+  FROM VALUES (1, 1.5), (2, 2.5) tab(key, val)
+),
+theta_sketch_data AS (
+  SELECT theta_sketch_agg(key) as theta_sketch
+  FROM VALUES (3), (4) tab(key)
+)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch, 12, 'min')) as estimate,
+  tuple_sketch_summary_double(
+    tuple_union_theta_double(tuple_sketch, theta_sketch, 12, 'min'), 'min') as summary
+FROM tuple_sketch_data, theta_sketch_data;
+
+-- Test summary preservation with 'max' mode on union_theta
+-- Theta entries get -Infinity for max mode, tuple entries keep their values
+WITH tuple_sketch_data AS (
+  SELECT tuple_sketch_agg_integer(key, val, 12, 'max') as tuple_sketch
+  FROM VALUES (1, 10), (2, 20) tab(key, val)
+),
+theta_sketch_data AS (
+  SELECT theta_sketch_agg(key) as theta_sketch
+  FROM VALUES (3), (4) tab(key)
+)
+SELECT
+  tuple_sketch_estimate_integer(
+    tuple_union_theta_integer(tuple_sketch, theta_sketch, 12, 'max')) as estimate,
+  tuple_sketch_summary_integer(
+    tuple_union_theta_integer(tuple_sketch, theta_sketch, 12, 'max'), 'max') as summary
+FROM tuple_sketch_data, theta_sketch_data;
 
 -- Comprehensive test using all TupleSketch functions in a single query
 WITH sketches AS (
@@ -1395,6 +1680,63 @@ SELECT tuple_difference_theta_integer(
     tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2))
 FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with null TupleSketch - should fail
+SELECT tuple_union_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with null ThetaSketch - should fail
+SELECT tuple_union_theta_double(tuple_sketch_agg_double(key1, val1), CAST(NULL AS BINARY))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with both null inputs - should fail
+SELECT tuple_union_theta_integer(CAST(NULL AS BINARY), CAST(NULL AS BINARY));
+
+-- Test tuple_intersection_theta_double with null TupleSketch - should fail
+SELECT tuple_intersection_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_double with null ThetaSketch - should fail
+SELECT tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1), CAST(NULL AS BINARY))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_integer with both null inputs - should fail
+SELECT tuple_intersection_theta_integer(CAST(NULL AS BINARY), CAST(NULL AS BINARY));
+
+-- Test tuple_difference_theta_double with null TupleSketch - should fail
+SELECT tuple_difference_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_difference_theta_double with null ThetaSketch - should fail
+SELECT tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1), CAST(NULL AS BINARY))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_difference_theta_integer with both null inputs - should fail
+SELECT tuple_difference_theta_integer(CAST(NULL AS BINARY), CAST(NULL AS BINARY));
+
+-- Test tuple_union_theta_double with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_union_theta_double(theta_sketch_agg(key1), tuple_sketch_agg_double(key2, val2))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_union_theta_integer(theta_sketch_agg(key1), tuple_sketch_agg_integer(key2, val2))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_double with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_intersection_theta_double(theta_sketch_agg(key1), tuple_sketch_agg_double(key2, val2))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_intersection_theta_integer with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_intersection_theta_integer(theta_sketch_agg(key1), tuple_sketch_agg_integer(key2, val2))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_difference_theta_double with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_difference_theta_double(theta_sketch_agg(key1), tuple_sketch_agg_double(key2, val2))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_difference_theta_integer with swapped sketch types (ThetaSketch first, TupleSketch second) - should fail
+SELECT tuple_difference_theta_integer(theta_sketch_agg(key1), tuple_sketch_agg_integer(key2, val2))
+FROM t_int_int_1_5_through_7_11;
 
 -- Clean up
 DROP TABLE IF EXISTS t_int_double_1_5_through_7_11;

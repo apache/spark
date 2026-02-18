@@ -6751,7 +6751,7 @@ object functions {
    */
   def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Column, mode: Column): Column =
     Column.fn("tuple_union_integer", c1, c2, lgNomEntries, mode)
-  
+
   /**
    * Subtracts the binary representation of a Datasketches ThetaSketch from a TupleSketch with
    * double summary data type in the input columns using a Datasketches AnotB object. Returns
