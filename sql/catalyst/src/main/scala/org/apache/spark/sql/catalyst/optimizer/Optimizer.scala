@@ -2102,6 +2102,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if (!SQLConf.get.avoidDoubleFilterEval) {
           (cond, AttributeMap.empty[Alias])
         } else {
+          // Here we get which aliases were used in a given filter so we can see if the filter
+          // referenced an expensive alias v.s. just checking if the filter is expensive.
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
           (cond, usedAliases)
         }
