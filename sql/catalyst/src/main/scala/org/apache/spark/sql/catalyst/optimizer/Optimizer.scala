@@ -2105,7 +2105,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // Here we get which aliases were used in a given filter so we can see if the filter
           // referenced an expensive alias v.s. just checking if the filter is expensive.
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
-          (cond, usedAliases)
+          (cond, usedAliases, replaced)
         }
       }
       // Split the filter's components into cheap and expensive while keeping track of
@@ -2133,13 +2133,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if (cheapWithUsed.isEmpty) {
         f
       } else {
-        val cheap: Seq[Expression] = cheapWithUsed.map(_._1)
+        val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
         // Make a base instance which has all of the cheap filters pushed down.
         // For all filter which do not reference any expensive aliases then
         // just push the filter while resolving the non-expensive aliases.
         val combinedCheapFilter = cheap.reduce(And)
-        val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
-        val baseChild: LogicalPlan = Filter(resolvedCheapFilter, child = grandChild)
+        val baseChild: LogicalPlan = Filter(combinedCheapFilter, child = grandChild)
         // Take our projection and place it on top of the pushed filters.
         val topProjection = project.copy(child = baseChild)
 
