@@ -1697,7 +1697,9 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            it = iter(self._stub.ExecutePlan(req, metadata=self._builder.metadata()))
+                            it = iter(
+                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                            )
                         while True:
                             try:
                                 with disable_gc():
