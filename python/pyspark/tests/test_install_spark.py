@@ -21,6 +21,7 @@ import unittest
 import urllib.request
 
 from pyspark.install import (
+    get_preferred_mirrors,
     install_spark,
     DEFAULT_HADOOP,
     DEFAULT_HIVE,
@@ -32,17 +33,29 @@ from pyspark.install import (
 
 class SparkInstallationTestCase(unittest.TestCase):
     def get_latest_spark_version(self):
-        url = "https://spark.apache.org/releases/"
-        with urllib.request.urlopen(url) as response:
-            html = response.read().decode("utf-8")
-        versions = re.findall(r"spark-release-(\d+[\.-]\d+[\.-]\d+)", html)
-        versions = [v.replace("-", ".") for v in versions]
-        return max(versions)
+        if "PYSPARK_RELEASE_MIRROR" in os.environ:
+            sites = [os.environ["PYSPARK_RELEASE_MIRROR"]]
+        else:
+            sites = get_preferred_mirrors()
+        # Filter out the archive sites
+        sites = [site for site in sites if "archive.apache.org" not in site]
+        for site in sites:
+            url = site + "/spark/"
+            try:
+                with urllib.request.urlopen(url) as response:
+                    html = response.read().decode("utf-8")
+                    versions = re.findall(r"spark-(\d+[\.-]\d+[\.-]\d+)/", html)
+                    versions = [v.replace("-", ".") for v in versions]
+                    return max(versions)
+            except Exception:
+                continue
+        return None
 
     def test_install_spark(self):
         # Test only one case. Testing this is expensive because it needs to download
-        # the Spark distribution, ensure it is available at https://dlcdn.apache.org/spark/
-        spark_version = self.get_latest_spark_version()
+        # the Spark distribution. We try to get the latest version, but if we can't,
+        # we just use a hard-coded version.
+        spark_version = self.get_latest_spark_version() or "4.1.1"
         spark_version, hadoop_version, hive_version = checked_versions(spark_version, "3", "2.3")
 
         with tempfile.TemporaryDirectory(prefix="test_install_spark") as tmp_dir:
