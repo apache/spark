@@ -496,11 +496,12 @@ class ExecutorPodsAllocator(
     val replacedResources = mutable.Set[HasMetadata]()
     resources.foreach {
       case pvc: PersistentVolumeClaim =>
-        // Find one with the same storage class and size.
+        // Find one with the same storage class and same or greater size.
+        // Larger disks will be encountered when they have been expanded by an external actor.
         val index = reusablePVCs.indexWhere { p =>
           p.getSpec.getStorageClassName == pvc.getSpec.getStorageClassName &&
-            p.getSpec.getResources.getRequests.get("storage") ==
-              pvc.getSpec.getResources.getRequests.get("storage")
+          p.getSpec.getResources.getRequests.get("storage")
+            .compareTo(pvc.getSpec.getResources.getRequests.get("storage")) >= 0
         }
         if (index >= 0) {
           val volume = pod.getSpec.getVolumes.asScala.find { v =>

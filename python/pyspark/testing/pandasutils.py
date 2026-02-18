@@ -47,7 +47,6 @@ def _assert_pandas_equal(
     right: Union[pd.DataFrame, pd.Series, pd.Index],
     checkExact: bool,
 ):
-    from pandas.core.dtypes.common import is_numeric_dtype
     from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util.geo;
 
+import org.apache.spark.sql.catalyst.util.Geography;
 import org.apache.spark.sql.catalyst.util.Geometry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -88,10 +89,15 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
    * Test helper to verify WKB round-trip (write and read back)
    */
   private void checkWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
+    checkGeometryWkbRoundTrip(wkbHexLittle, wkbHexBig);
+    checkGeographyWkbRoundTrip(wkbHexLittle, wkbHexBig);
+  }
+
+  private void checkGeometryWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
     byte[] wkbLittle = hexToBytes(wkbHexLittle);
     byte[] wkbBig = hexToBytes(wkbHexBig);
 
-    // Parse the WKB (little)
+    // Parse the geometry WKB (little endian).
     WkbReader reader = new WkbReader();
     GeometryModel model = reader.read(wkbLittle, 0);
     WkbWriter writer = new WkbWriter();
@@ -102,7 +108,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelLittle),
         "WKB big endian round-trip failed");
 
-    // Parse the WKB (big)
+    // Parse the geometry WKB (big endian).
     GeometryModel geomFromBig = reader.read(wkbBig, 0);
     byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
     byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
@@ -111,7 +117,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelBig),
       "WKB big endian round-trip from big endian failed");
 
-    // Use Geometry.fromWkb (little)
+    // Use Geometry.fromWkb (little endian).
     Geometry geometryFromLittle = Geometry.fromWkb(wkbLittle, 0);
     byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
@@ -120,7 +126,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryLittle),
         "Geometry.fromWKB big endian round-trip failed");
 
-    // Use Geometry.fromWkb (big)
+    // Use Geometry.fromWkb (big endian).
     Geometry geometryFromBig = Geometry.fromWkb(writtenBigFromModelLittle, 0);
     byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
     Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
@@ -128,7 +134,49 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     byte[] wkbBigFromGeometryBig = geometryFromBig.toWkb(ByteOrder.BIG_ENDIAN);
     Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryBig),
         "Geometry.fromWKB big endian round-trip from big endian failed");
+  }
 
+  private void checkGeographyWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
+    byte[] wkbLittle = hexToBytes(wkbHexLittle);
+    byte[] wkbBig = hexToBytes(wkbHexBig);
+
+    // Parse the geography WKB (little endian).
+    WkbReader reader = new WkbReader(true);
+    GeometryModel model = reader.read(wkbLittle, 0);
+    WkbWriter writer = new WkbWriter();
+    byte[] writtenLittleFromModelLittle = writer.write(model, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelLittle = writer.write(model, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelLittle),
+        "WKB little endian round-trip failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelLittle),
+        "WKB big endian round-trip failed");
+
+    // Parse the geography WKB (big endian).
+    GeometryModel geomFromBig = reader.read(wkbBig, 0);
+    byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelBig),
+      "WKB little endian round-trip from big endian failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelBig),
+      "WKB big endian round-trip from big endian failed");
+
+    // Use Geography.fromWkb (little endian).
+    Geography geometryFromLittle = Geography.fromWkb(wkbLittle, 0);
+    byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
+        "Geography.fromWKB little endian round-trip failed");
+    byte[] wkbBigFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryLittle),
+        "Geography.fromWKB big endian round-trip failed");
+
+    // Use Geography.fromWkb (big endian).
+    Geography geometryFromBig = Geography.fromWkb(writtenBigFromModelLittle, 0);
+    byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
+        "Geography.fromWKB little endian round-trip from big endian failed");
+    byte[] wkbBigFromGeometryBig = geometryFromBig.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryBig),
+        "Geography.fromWKB big endian round-trip from big endian failed");
   }
 
   // ========== Point Tests (2D) ==========
@@ -580,7 +628,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOINT(EMPTY,EMPTY)
     String wkbLe = "0104000000020000000101000000000000000000f87f000000000000f87f0101000000000000000000f87f000000000000f87f"; // checkstyle.off: LineLength
     String wkbBe = "00000000040000000200000000017ff80000000000007ff800000000000000000000017ff80000000000007ff8000000000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -627,7 +675,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOINT Z (EMPTY,EMPTY)
     String wkbLe = "01ec0300000200000001e9030000000000000000f87f000000000000f87f000000000000f87f01e9030000000000000000f87f000000000000f87f000000000000f87f"; // checkstyle.off: LineLength
     String wkbBe = "00000003ec0000000200000003e97ff80000000000007ff80000000000007ff800000000000000000003e97ff80000000000007ff80000000000007ff8000000000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -674,7 +722,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOINT M (EMPTY,EMPTY)
     String wkbLe = "01d40700000200000001d1070000000000000000f87f000000000000f87f000000000000f87f01d1070000000000000000f87f000000000000f87f000000000000f87f"; // checkstyle.off: LineLength
     String wkbBe = "00000007d40000000200000007d17ff80000000000007ff80000000000007ff800000000000000000007d17ff80000000000007ff80000000000007ff8000000000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -703,7 +751,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOINT ZM (EMPTY,EMPTY)
     String wkbLe = "01bc0b00000200000001b90b0000000000000000f87f000000000000f87f000000000000f87f000000000000f87f01b90b0000000000000000f87f000000000000f87f000000000000f87f000000000000f87f"; // checkstyle.off: LineLength
     String wkbBe = "0000000bbc000000020000000bb97ff80000000000007ff80000000000007ff80000000000007ff80000000000000000000bb97ff80000000000007ff80000000000007ff80000000000007ff8000000000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -750,7 +798,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTILINESTRING(EMPTY,EMPTY,EMPTY)
     String wkbLe = "010500000003000000010200000000000000010200000000000000010200000000000000";
     String wkbBe = "000000000500000003000000000200000000000000000200000000000000000200000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -797,7 +845,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTILINESTRING Z (EMPTY,EMPTY,EMPTY)
     String wkbLe = "01ed0300000300000001ea0300000000000001ea0300000000000001ea03000000000000";
     String wkbBe = "00000003ed0000000300000003ea0000000000000003ea0000000000000003ea00000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -826,7 +874,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTILINESTRING M (EMPTY,EMPTY,EMPTY)
     String wkbLe = "01d50700000300000001d20700000000000001d20700000000000001d207000000000000";
     String wkbBe = "00000007d50000000300000007d20000000000000007d20000000000000007d200000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -855,7 +903,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTILINESTRING ZM (EMPTY,EMPTY,EMPTY)
     String wkbLe = "01bd0b00000300000001ba0b00000000000001ba0b00000000000001ba0b000000000000";
     String wkbBe = "0000000bbd000000030000000bba000000000000000bba000000000000000bba00000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -884,7 +932,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOLYGON(EMPTY,((),()))
     String wkbLe = "0106000000020000000103000000000000000103000000020000000000000000000000";
     String wkbBe = "0000000006000000020000000003000000000000000003000000020000000000000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, false, true);
     // Invalid with too few points in ring
   }
 
@@ -913,7 +961,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOLYGON Z (EMPTY,((),()))
     String wkbLe = "01ee0300000200000001eb0300000000000001eb030000020000000000000000000000";
     String wkbBe = "00000003ee0000000200000003eb0000000000000003eb000000020000000000000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, false, true);
     // Invalid with too few points in ring
   }
 
@@ -942,7 +990,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOLYGON M (EMPTY,((),()))
     String wkbLe = "01d60700000200000001d30700000000000001d3070000020000000000000000000000";
     String wkbBe = "00000007d60000000200000007d30000000000000007d3000000020000000000000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, false, true);
     // Invalid with too few points in ring
   }
 
@@ -971,7 +1019,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     // WKT: MULTIPOLYGON ZM (EMPTY,((),()))
     String wkbLe = "01be0b00000200000001bb0b00000000000001bb0b0000020000000000000000000000";
     String wkbBe = "0000000bbe000000020000000bbb000000000000000bbb000000020000000000000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, false, true);
     // Invalid with too few points in ring
   }
 
@@ -1004,7 +1052,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     //      GEOMETRYCOLLECTION(MULTILINESTRING EMPTY,MULTIPOLYGON EMPTY,GEOMETRYCOLLECTION EMPTY)))
     String wkbLe = "0107000000050000000101000000000000000000f87f000000000000f87f0102000000000000000107000000000000000107000000020000000107000000000000000107000000000000000107000000030000000104000000000000000104000000010000000101000000000000000000f87f000000000000f87f010700000003000000010500000000000000010600000000000000010700000000000000"; // checkstyle.off: LineLength
     String wkbBe = "00000000070000000500000000017ff80000000000007ff800000000000000000000020000000000000000070000000000000000070000000200000000070000000000000000070000000000000000070000000300000000040000000000000000040000000100000000017ff80000000000007ff8000000000000000000000700000003000000000500000000000000000600000000000000000700000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -1016,7 +1064,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     //      MULTIPOLYGON EMPTY))
     String wkbLe = "0107000000070000000101000000000000000000f87f000000000000f87f0102000000000000000103000000000000000104000000000000000105000000000000000106000000000000000107000000060000000101000000000000000000f87f000000000000f87f010200000000000000010300000000000000010400000000000000010500000000000000010600000000000000"; // checkstyle.off: LineLength
     String wkbBe = "00000000070000000700000000017ff80000000000007ff800000000000000000000020000000000000000030000000000000000040000000000000000050000000000000000060000000000000000070000000600000000017ff80000000000007ff8000000000000000000000200000000000000000300000000000000000400000000000000000500000000000000000600000000"; // checkstyle.off: LineLength
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, true);
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, false);
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
@@ -1127,9 +1175,75 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
   public void testSridPreservation() {
     String wkbLe = "0101000000000000000000f03f0000000000000040";
     byte[] wkb = hexToBytes(wkbLe);
-    WkbReader reader = new WkbReader();
-    GeometryModel geom = reader.read(wkb, 4326);
 
+    WkbReader geomReader = new WkbReader();
+    GeometryModel geom = geomReader.read(wkb, 4326);
     Assertions.assertEquals(4326, geom.srid());
+
+    WkbReader geogReader = new WkbReader(true);
+    GeometryModel geog = geogReader.read(wkb, 4326);
+    Assertions.assertEquals(4326, geog.srid());
+  }
+
+  // ========== Geography Coordinate Bounds Validation Tests ==========
+
+  /**
+   * Test helper to verify that geography bounds validation rejects out-of-bounds coordinates.
+   */
+  private void checkGeographyBoundsError(String wkbHexLe, String wkbHexBe) {
+    for (String wkbHex : new String[]{wkbHexLe, wkbHexBe}) {
+      byte[] wkb = hexToBytes(wkbHex);
+
+      // Geography mode with validation should reject non-geographic coordinate values.
+      WkbReader geographyReader = new WkbReader(true);
+      WkbParseException ex = Assertions.assertThrows(
+          WkbParseException.class, () -> geographyReader.read(wkb, 0));
+      Assertions.assertTrue(ex.getMessage().contains("Invalid coordinate value"));
+      // Geography mode without validation should accept non-geographic coordinate values.
+      WkbReader noValidateGeographyReader = new WkbReader(0, true);
+      Assertions.assertDoesNotThrow(() -> noValidateGeographyReader.read(wkb, 0));
+
+      // Geometry mode should always accept non-geographic coordinate values.
+      WkbReader geometryReader = new WkbReader();
+      Assertions.assertDoesNotThrow(() -> geometryReader.read(wkb, 0));
+      WkbReader noValidateGeometryReader = new WkbReader(0);
+      Assertions.assertDoesNotThrow(() -> noValidateGeometryReader.read(wkb, 0));
+    }
+  }
+
+  @Test
+  public void testGeographyBoundsLongitudeTooHigh() {
+    // WKB values for: POINT(200 0); longitude > 180.
+    checkGeographyBoundsError(
+      "010100000000000000000069400000000000000000",
+      "000000000140690000000000000000000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLongitudeTooLow() {
+    // WKB values for: POINT(-200 0); longitude < -180.
+    checkGeographyBoundsError(
+      "010100000000000000000069c00000000000000000",
+      "0000000001c0690000000000000000000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLatitudeTooHigh() {
+    // WKB values for: POINT(0 100); latitude > 90.
+    checkGeographyBoundsError(
+      "010100000000000000000000000000000000005940",
+      "000000000100000000000000004059000000000000"
+    );
+  }
+
+  @Test
+  public void testGeographyBoundsLatitudeTooLow() {
+    // WKB values for: POINT(0 -100); latitude < -90.
+    checkGeographyBoundsError(
+      "0101000000000000000000000000000000000059c0",
+      "00000000010000000000000000c059000000000000"
+    );
   }
 }

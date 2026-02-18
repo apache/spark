@@ -1041,25 +1041,25 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, TimestampType):
 
-            def convert_timestample(value: Any) -> Any:
+            def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value.astimezone().replace(tzinfo=None)
 
-            return convert_timestample
+            return convert_timestamp
 
         elif isinstance(dataType, TimestampNTZType):
 
-            def convert_timestample_ntz(value: Any) -> Any:
+            def convert_timestamp_ntz(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value
 
-            return convert_timestample_ntz
+            return convert_timestamp_ntz
 
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
@@ -1592,6 +1592,8 @@ class ArrowArrayToPandasConversion:
             ShortType,
             IntegerType,
             LongType,
+            DateType,
+            TimeType,
             TimestampType,
             TimestampNTZType,
             UserDefinedType,
@@ -1716,17 +1718,10 @@ class ArrowArrayToPandasConversion:
                 YearMonthIntervalType,
             ),
         ):
-            # TODO(SPARK-55333): Revisit date_as_object in arrow->pandas conversion
-            # If the given column is a date type column, creates a series of datetime.date directly
-            # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-            # datetime64[ns] type handling.
-            pandas_options = {
-                "date_as_object": True,
-            }
-            series = arr.to_pandas(**pandas_options)
+            series = arr.to_pandas()
         elif isinstance(spark_type, UserDefinedType):
             udt: UserDefinedType = spark_type
-            series = arr.to_pandas(date_as_object=True)
+            series = arr.to_pandas()
             series = series.apply(
                 lambda v: v
                 if hasattr(v, "__UDT__")

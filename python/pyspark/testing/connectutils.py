@@ -28,16 +28,6 @@ from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import (
     have_pandas,
-    pandas_requirement_message,
-    pyarrow_requirement_message,
-    have_graphviz,
-    graphviz_requirement_message,
-    grpc_requirement_message,
-    have_grpc,
-    grpc_status_requirement_message,
-    have_grpc_status,
-    googleapis_common_protos_requirement_message,
-    have_googleapis_common_protos,
     connect_requirement_message,
     should_test_connect,
     PySparkErrorTestUtils,
