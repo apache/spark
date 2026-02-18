@@ -20,20 +20,28 @@
 """
 Compare SBT and Maven builds to verify they produce equivalent artifacts.
 
-This script validates the migration from sbt-pom-reader to native SBT by
-comparing JAR files between the two build systems using a two-level analysis:
+This script compares JAR files between Maven and SBT builds using a two-level
+analysis that automatically accounts for shading and structural differences.
 
-Two-Level Comparison
---------------------
+Two-Level Comparison (default)
+------------------------------
 Level 1: Physical Equivalence
-  - Compare module JARs class-by-class for byte-level sameness
+  - Compare module JARs class-by-class
   - Reports which JARs match exactly vs which differ
 
 Level 2: Logical Equivalence (if Level 1 finds differences)
-  - Analyzes whether physical differences are explained by:
-    * Shading: Maven embeds org/sparkproject/* (shaded), SBT has originals
-    * Structure: Maven fat JARs vs SBT thin JARs + assemblies
+  - Classifies each difference as:
+    * Shading: Maven embeds org/sparkproject/* classes, SBT doesn't
+    * Structure: Maven fat JAR vs SBT thin JAR + separate assembly
+    * Only-in-build: JAR exists in only one build (build scope difference)
   - Verdict: IDENTICAL / EQUIVALENT / DIFFER
+
+Direct JAR Comparison (--compare)
+---------------------------------
+  - Compare any two JAR files side by side
+  - Automatically detects matching classes across different shading prefixes
+    (e.g., Maven's org/sparkproject/io/grpc/* matches SBT's
+    org/sparkproject/connect/client/io/grpc/*)
 
 Modes
 -----
@@ -58,32 +66,22 @@ Build
 
 Examples
 --------
-    # Default: two-level comparison
+    # Default: two-level comparison of all module JARs
     python ./dev/compare-builds.py
 
-    # Physical comparison only
-    python ./dev/compare-builds.py --physical-only
-
-    # Verbose with details
+    # Verbose with per-JAR evidence
     python ./dev/compare-builds.py -v
 
-    # Compare two specific JARs
+    # Compare specific module
+    python ./dev/compare-builds.py --modules spark-connect-client-jvm -v
+
+    # Compare two assembly JARs directly (e.g., from assembly/target/)
     python ./dev/compare-builds.py --compare \
-      sql/connect/client/jvm/target/spark-connect-client-jvm_2.13-*.jar \
-      sql/connect/client/jvm/target/scala-2.13/spark-connect-client-jvm-assembly-*.jar
+      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm_2.13-*.jar \
+      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm-assembly-*.jar
 
     # JSON report for CI
     python ./dev/compare-builds.py --matching-only --json -o report.json
-
-How Maven and SBT differ
--------------------------
-Maven: The maven-shade-plugin embeds shaded classes directly in the module JAR
-       (e.g., spark-core_2.13.jar contains org/sparkproject/guava/*).
-
-SBT:   sbt-assembly produces separate assembly JARs with shaded classes
-       (e.g., spark-core-assembly-*.jar contains org/sparkproject/guava/*).
-
-The two-level comparison automatically accounts for these structural differences.
 """
 
 import argparse
