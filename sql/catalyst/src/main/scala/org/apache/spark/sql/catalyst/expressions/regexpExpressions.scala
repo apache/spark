@@ -88,7 +88,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
   // Heuristic, not designed to be perfect. Look for things likely to have
   // back tracking.
-  private val expensiveRegexPattern = Pattern.compile("\+\*\{")
+  private val detectExpensiveRegexPattern = Pattern.compile("\\+\\*\\{")
 
   private lazy val _expensiveRegex = {
     // A quick heuristic for expensive a pattern is.
@@ -97,7 +97,7 @@ abstract class StringRegexExpression extends BinaryExpression
         // If we have a clear start limited back tracking required.
         if (str.startsWith("^") || str.startsWith("\\b")) {
           false
-        } else if (p.matcher(str).matches()) {
+        } else if (detectExpensiveRegexPattern.matcher(str).matches()) {
           // Greedy matching can be tricky.
           true
         } else {
