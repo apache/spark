@@ -9870,6 +9870,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Use window function to rank values by count within each column
             # When counts tie, pick the first value alphabetically like pandas
             window = Window.partitionBy("column_name").orderBy(F.desc("count"), F.asc("value"))
+            # Unfortunately, there's no straightforward way to get the top value and its frequency
+            # for each column without collecting the data to the driver side.
             top_values = (
                 value_counts.withColumn("rank", F.row_number().over(window))
                 .filter(F.col("rank") == 1)
@@ -9881,6 +9883,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             freqs = [str(top_freq_dict[col_name][1]) for col_name in column_names]
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
+
             result: DataFrame = DataFrame(
                 data=stats,
                 index=stats_names,
