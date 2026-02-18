@@ -79,6 +79,7 @@ object SchemaUtil {
         .add("change_type", StringType)
         .add("key", keySchema)
         .add("value", valueSchema)
+        .add("end_key", keySchema)
         .add("partition_id", IntegerType)
     } else {
       new StructType()
@@ -269,6 +270,7 @@ object SchemaUtil {
       "map_value" -> classOf[MapType],
       "user_map_key" -> classOf[StructType],
       "user_map_value" -> classOf[StructType],
+      "end_key" -> classOf[StructType],
       "expiration_timestamp_ms" -> classOf[LongType],
       "partition_id" -> classOf[IntegerType],
       "partition_key" -> classOf[StructType],
@@ -285,14 +287,14 @@ object SchemaUtil {
       stateVarType match {
         case ValueState =>
           if (sourceOptions.readChangeFeed) {
-            Seq("batch_id", "change_type", "key", "value", "partition_id")
+            Seq("batch_id", "change_type", "key", "value", "end_key", "partition_id")
           } else {
             Seq("key", "value", "partition_id")
           }
 
         case ListState =>
           if (sourceOptions.readChangeFeed) {
-            Seq("batch_id", "change_type", "key", "list_element", "partition_id")
+            Seq("batch_id", "change_type", "key", "list_element", "end_key", "partition_id")
           } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "list_element", "partition_id")
           } else {
@@ -316,7 +318,7 @@ object SchemaUtil {
             .internalError(s"Unsupported state variable type $stateVarType")
       }
     } else if (sourceOptions.readChangeFeed) {
-      Seq("batch_id", "change_type", "key", "value", "partition_id")
+      Seq("batch_id", "change_type", "key", "value", "end_key", "partition_id")
     } else {
       Seq("key", "value", "partition_id")
     }
@@ -345,6 +347,7 @@ object SchemaUtil {
             .add("change_type", StringType)
             .add("key", stateStoreColFamilySchema.keySchema)
             .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("end_key", stateStoreColFamilySchema.keySchema)
             .add("partition_id", IntegerType)
         } else {
           new StructType()
@@ -360,6 +363,7 @@ object SchemaUtil {
             .add("change_type", StringType)
             .add("key", stateStoreColFamilySchema.keySchema)
             .add("list_element", stateStoreColFamilySchema.valueSchema)
+            .add("end_key", stateStoreColFamilySchema.keySchema)
             .add("partition_id", IntegerType)
         } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()

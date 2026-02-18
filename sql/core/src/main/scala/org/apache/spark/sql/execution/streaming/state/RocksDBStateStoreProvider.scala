@@ -1408,7 +1408,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1477,16 +1477,26 @@ class RocksDBStateStoreChangeDataReader(
     }
 
     if (currRecord._1 == RecordType.DELETE_RANGE_RECORD) {
-      // For delete_range entries, the key and value have different schemas so we cannot
-      // put endKey into the value field. Leave both key and value as null.
-      (currRecord._1, null, null, currentChangelogVersion - 1)
+      // For delete_range entries, decode beginKey from _2 and endKey from _3.
+      // Both follow the key schema. endKey is placed in a separate field since it
+      // cannot go into the value field (different schema).
+      val beginKeyRow = currEncoder._1.decodeKey(currRecord._2).copy()
+      // When colFamilyNameOpt is defined, the beginKey prefix was already stripped
+      // (via decodeStateRowWithPrefix) but endKey still has it. Strip it here.
+      val endKeyBytes = if (colFamilyNameOpt.isDefined) {
+        RocksDBStateStoreProvider.decodeStateRowWithPrefix(currRecord._3)
+      } else {
+        currRecord._3
+      }
+      val endKeyRow = currEncoder._1.decodeKey(endKeyBytes)
+      (currRecord._1, beginKeyRow, null, currentChangelogVersion - 1, endKeyRow)
     } else {
       val keyRow = currEncoder._1.decodeKey(currRecord._2)
       if (currRecord._3 == null) {
-        (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+        (currRecord._1, keyRow, null, currentChangelogVersion - 1, null)
       } else {
         val valueRow = currEncoder._2.decodeValue(currRecord._3)
-        (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+        (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1, null)
       }
     }
   }

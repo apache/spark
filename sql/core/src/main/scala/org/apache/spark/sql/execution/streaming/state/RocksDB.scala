@@ -984,7 +984,14 @@ class RocksDB(
 
             case RecordType.DELETE_RANGE_RECORD =>
               // For deleteRange, 'key' is beginKey and 'value' is endKey
-              deleteRange(key, value, includesPrefix = useColumnFamilies)
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              val endKey = if (conf.rowChecksumEnabled) {
+                KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+                  kvVerifier, key, value, delimiterSize)
+              } else {
+                value
+              }
+              deleteRange(key, endKey, includesPrefix = useColumnFamilies)
           }
         }
       } finally {
@@ -1468,7 +1475,15 @@ class RocksDB(
     }
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
-    changelogWriter.foreach(_.deleteRange(beginKeyWithPrefix, endKeyWithPrefix))
+    changelogWriter.foreach { writer =>
+      val endKeyForChangelog = if (conf.rowChecksumEnabled) {
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(endKeyWithPrefix,
+          KeyValueChecksum.create(beginKeyWithPrefix, Some(endKeyWithPrefix)))
+      } else {
+        endKeyWithPrefix
+      }
+      writer.deleteRange(beginKeyWithPrefix, endKeyForChangelog)
+    }
     // TODO: Add metrics update for deleteRange operations
   }
 

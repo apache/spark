@@ -1354,7 +1354,7 @@ class HDFSBackedStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "delta"
 
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow) = {
     val reader = currentChangelogReader()
     if (reader == null) {
       return null
@@ -1369,7 +1369,7 @@ class HDFSBackedStateStoreChangeDataReader(
         keyArray
       }
       keyRow.pointTo(originalKeyBytes, originalKeyBytes.length)
-      (recordType, keyRow, null, currentChangelogVersion - 1)
+      (recordType, keyRow, null, currentChangelogVersion - 1, null)
     } else {
       keyRow.pointTo(keyArray, keyArray.length)
 
@@ -1387,7 +1387,7 @@ class HDFSBackedStateStoreChangeDataReader(
       // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
       // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
       valueRow.pointTo(originalValueBytes, (originalValueBytes.length / 8) * 8)
-      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
+      (recordType, keyRow, valueRow, currentChangelogVersion - 1, null)
     }
   }
 }

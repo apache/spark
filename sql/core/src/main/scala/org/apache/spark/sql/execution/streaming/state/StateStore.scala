@@ -992,23 +992,24 @@ trait SupportsFineGrainedReplay {
    * Return an iterator that reads all the entries of changelogs from startVersion to
    * endVersion.
    * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
-   * value: [[UnsafeRow]], batchId: [[Long]])
-   * A put record is returned as a tuple(recordType, key, value, batchId)
-   * A delete record is return as a tuple(recordType, key, null, batchId)
+   * value: [[UnsafeRow]], batchId: [[Long]], endKey: [[UnsafeRow]])
+   * A put record is returned as a tuple(recordType, key, value, batchId, null)
+   * A delete record is return as a tuple(recordType, key, null, batchId, null)
+   * A delete_range record is returned as a tuple(recordType, beginKey, null, batchId, endKey)
    *
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
    * @param colFamilyNameOpt optional column family name to read from
    * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
-   *         nested value: [[UnsafeRow]], batchId: [[Long]])
+   *         nested value: [[UnsafeRow]], batchId: [[Long]], endKey: [[UnsafeRow]])
    */
   def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
       colFamilyNameOpt: Option[String] = None,
       endVersionStateStoreCkptId: Option[String] = None):
-    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow)]
 }
 
 /**
