@@ -451,7 +451,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       cause,
       condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
       parameters = Map(
-        "action" -> "read",
+        "action" -> "planPartitions",
         "msg" -> "(?s).*DATA_SOURCE_RETURN_SCHEMA_MISMATCH.*"
       )
     )
