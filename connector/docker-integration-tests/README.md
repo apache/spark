@@ -55,6 +55,7 @@ The following environment variables can be used to specify the custom Docker ima
 - MYSQL_DOCKER_IMAGE_NAME
 - ORACLE_DOCKER_IMAGE_NAME
 - POSTGRES_DOCKER_IMAGE_NAME
+- STARROCKS_DOCKER_IMAGE_NAME
 
 ## Using a custom Docker context
 
