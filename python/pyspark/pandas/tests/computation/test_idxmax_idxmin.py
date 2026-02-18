@@ -136,6 +136,26 @@ class FrameIdxMaxMinMixin:
         with self.assertRaises(NotImplementedError):
             psdf.idxmax(axis=1)
 
+    def test_idxmax_empty_dataframe(self):
+        # Test empty DataFrame with no rows and no columns - should return empty Series
+        pdf = pd.DataFrame({})
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.idxmax(axis=1), pdf.idxmax(axis=1))
+
+        # Test empty DataFrame with rows but no columns - should raise ValueError
+        pdf = pd.DataFrame(index=range(3))
+        psdf = ps.from_pandas(pdf)
+
+        with self.assertRaises(ValueError) as pdf_context:
+            pdf.idxmax(axis=1)
+
+        with self.assertRaises(ValueError) as psdf_context:
+            psdf.idxmax(axis=1)
+
+        # Verify both raise the same error message
+        self.assertEqual(str(pdf_context.exception), str(psdf_context.exception))
+
 
 class FrameIdxMaxMinTests(
     FrameIdxMaxMinMixin,

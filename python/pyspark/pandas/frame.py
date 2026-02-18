@@ -4906,49 +4906,49 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         rsd: float = 0.05,
     ) -> "Series":
         """
-        Return number of unique elements in the object.
+                Return number of unique elements in the object.
 
-        Excludes NA values by default.
+                Excludes NA values by default.
 
-        Parameters
-        ----------
-        axis : int, default 0 or 'index'
-            Can only be set to 0 now.
-        dropna : bool, default True
-            Don’t include NaN in the count.
-        approx: bool, default False
-            If False, will use the exact algorithm and return the exact number of unique.
-            If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
-            for large amounts of data.
-            Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
-        rsd: float, default 0.05
-            Maximum estimation error allowed in the HyperLogLog algorithm.
-            Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
+                Parameters
+                ----------
+                axis : int, default 0 or 'index'
+                    Can only be set to 0 now.
+                dropna : bool, default True
+                    Don’t include NaN in the count.
+                approx: bool, default False
+                    If False, will use the exact algorithm and return the exact number of unique.
+                    If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
+                    for large amounts of data.
+                    Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
+                rsd: float, default 0.05
+                    Maximum estimation error allowed in the HyperLogLog algorithm.
+                    Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
 
-        Returns
-        -------
-        The number of unique values per column as a pandas-on-Spark Series.
+                Returns
+                -------
+                The number of unique values per column as a pandas-on-Spark Series.
 
-        Examples
-        --------
-        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
-        >>> df.nunique()
-        A    3
-        B    1
-        dtype: int64
+                Examples
+                --------
+                >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
+                >>> df.nunique()
+                A    3
+                B    1
+                dtype: int64
 
-        >>> df.nunique(dropna=False)
-        A    3
-        B    2
-        dtype: int64
+                >>> df.nunique(dropna=False)
+                A    3
+                B    2
+                dtype: int64
+        di
+                On big data, we recommend using the approximate algorithm to speed up this function.
+                The result will be very close to the exact unique count.
 
-        On big data, we recommend using the approximate algorithm to speed up this function.
-        The result will be very close to the exact unique count.
-
-        >>> df.nunique(approx=True)
-        A    3
-        B    1
-        dtype: int64
+                >>> df.nunique(approx=True)
+                A    3
+                B    1
+                dtype: int64
         """
         from pyspark.pandas.series import first_series
 
@@ -12248,7 +12248,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels = self._internal.column_labels
 
             if len(column_labels) == 0:
-                return ps.Series([], dtype=np.int64)
+                # Check if DataFrame has rows - if yes, raise error; if no, return empty Series
+                # to match pandas behavior
+                if len(self) > 0:
+                    raise ValueError("attempt to get argmax of an empty sequence")
+                else:
+                    return ps.Series([], dtype=np.int64)
 
             if self._internal.column_labels_level > 1:
                 raise NotImplementedError(
@@ -12264,6 +12269,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             result = None
+            # Iterate over the column labels in reverse order to get the first occurrence of the
+            # maximum value.
             for label in reversed(column_labels):
                 scol = self._internal.spark_column_for(label)
                 label_value = label[0] if len(label) == 1 else label
@@ -12277,22 +12284,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             result = F.when(max_value == float("-inf"), F.lit(None)).otherwise(result)
 
-            sdf = self._internal.spark_frame.select(
-                *self._internal_frame.index_spark_columns,
-                result.alias(SPARK_DEFAULT_SERIES_NAME),
+            internal = self._internal.with_new_columns(
+                [result.alias(SPARK_DEFAULT_SERIES_NAME)],
+                column_labels=[None],
             )
 
-            return first_series(
-                DataFrame(
-                    InternalFrame(
-                        spark_frame=sdf,
-                        index_spark_columns=self._internal.index_spark_columns,
-                        index_names=self._internal.index_names,
-                        index_fields=self._internal.index_fields,
-                        column_labels=[None],
-                    )
-                )
-            )
+            return first_series(DataFrame(internal))
 
     # TODO(SPARK-46168): axis = 1
     def idxmin(self, axis: Axis = 0) -> "Series":
