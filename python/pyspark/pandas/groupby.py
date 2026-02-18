@@ -329,7 +329,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
                 )
             else:
-                column_names = [column.name for column in self._agg_columns]
+                column_names = set(func_or_funcs)
                 should_drop_index = set(
                     i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
                 )
