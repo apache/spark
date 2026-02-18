@@ -23,10 +23,25 @@ Compare SBT and Maven builds to verify they produce equivalent artifacts.
 This script compares JAR files between Maven and SBT builds using a two-level
 analysis that automatically accounts for shading and structural differences.
 
+What is compared
+----------------
+By default, the comparison checks path-level equivalence (fast):
+  - .class file paths (presence/absence, excluding multi-release META-INF/versions/)
+  - META-INF/services/ file paths AND content (normalized: comments stripped, sorted)
+
+What is NOT compared by default:
+  - Class file bytecode (same path does not guarantee identical bytes)
+  - Non-service resources (conf, properties, proto descriptors, etc.)
+  - Other META-INF/ entries (manifests, signatures, etc.)
+  - Duplicate ZIP entries (sets collapse multiplicity)
+
+Use --check-bytes to additionally compare CRC-32 checksums of .class files
+that share the same path, detecting bytecode differences.
+
 Two-Level Comparison (default)
 ------------------------------
 Level 1: Physical Equivalence
-  - Compare module JARs class-by-class
+  - Compare module JARs class-by-class (path-level)
   - Reports which JARs match exactly vs which differ
 
 Level 2: Logical Equivalence (if Level 1 finds differences)
@@ -54,6 +69,8 @@ Options
 -------
   --matching-only     Only compare JARs present in both builds
   --modules M1,M2     Restrict comparison to specific modules
+  --ignore-shaded     Exclude shaded classes (org/sparkproject/*) from comparison
+  --check-bytes       Compare CRC-32 of .class files with matching paths
   -v, --verbose       Show detailed class-level differences
   --json              Output structured JSON to stdout
   -o FILE             Write JSON report to FILE
@@ -77,8 +94,11 @@ Examples
 
     # Compare two assembly JARs directly (e.g., from assembly/target/)
     python ./dev/compare-builds.py --compare \
-      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm_2.13-*.jar \
-      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm-assembly-*.jar
+      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm_2.13-4.2.0-SNAPSHOT.jar \
+      assembly/target/scala-2.13/jars/connect-repl/spark-connect-client-jvm-assembly-4.2.0-SNAPSHOT.jar
+
+    # Deep comparison: also check class bytecode via CRC
+    python ./dev/compare-builds.py --modules spark-sql --check-bytes -v
 
     # JSON report for CI
     python ./dev/compare-builds.py --matching-only --json -o report.json
@@ -89,6 +109,7 @@ import json
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from dataclasses import dataclass, field
@@ -101,6 +122,14 @@ SPARK_HOME = Path(__file__).parent.parent.resolve()
 
 # Maximum number of package lines to show in --compare output before truncating
 MAX_PKG_LINES = 20
+
+
+def _rel_path(p: Path) -> str:
+    """Return path relative to SPARK_HOME, falling back to absolute if not under it."""
+    try:
+        return str(p.relative_to(SPARK_HOME))
+    except ValueError:
+        return str(p)
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +157,9 @@ class ComparisonResultDict(TypedDict, total=False):
     only_in_sbt_count: int
     services_only_in_maven: List[str]
     services_only_in_sbt: List[str]
+    services_content_differ: List[str]
+    class_crc_mismatches: List[str]
+    class_crc_mismatch_count: int
 
 
 class JarsSummaryDict(TypedDict, total=False):
@@ -163,6 +195,9 @@ class TwoJarReportDict(TypedDict, total=False):
     only_in_jar2_count: int
     services_only_in_jar1: List[str]
     services_only_in_jar2: List[str]
+    services_content_differ: List[str]
+    class_crc_mismatches: List[str]
+    class_crc_mismatch_count: int
 
 
 class TwoLevelSummaryDict(TypedDict):
@@ -198,9 +233,9 @@ class JarInfo:
     size: int
     classes: Set[str] = field(default_factory=set)
     resources: Set[str] = field(default_factory=set)
-    meta_inf: Set[str] = field(default_factory=set)
-    services: Set[str] = field(default_factory=set)
+    services: Dict[str, str] = field(default_factory=dict)  # path → normalized content
     multi_release_classes: Set[str] = field(default_factory=set)
+    class_crcs: Dict[str, int] = field(default_factory=dict)  # class path → CRC-32
 
     @property
     def name(self) -> str:
@@ -211,7 +246,7 @@ class JarInfo:
 
     def to_dict(self) -> JarInfoDict:
         d: JarInfoDict = {
-            "path": str(self.path.relative_to(SPARK_HOME)),
+            "path": _rel_path(self.path),
             "size": self.size,
             "class_count": self.class_count(),
             "resource_count": len(self.resources),
@@ -233,7 +268,8 @@ class ComparisonResult:
     only_in_sbt: Set[str] = field(default_factory=set)
     services_only_in_maven: Set[str] = field(default_factory=set)
     services_only_in_sbt: Set[str] = field(default_factory=set)
-    size_diff_pct: float = 0.0
+    services_content_differ: Set[str] = field(default_factory=set)  # same path, different content
+    class_crc_mismatches: Set[str] = field(default_factory=set)  # same path, different CRC
 
     @property
     def status(self) -> str:
@@ -254,6 +290,8 @@ class ComparisonResult:
             and len(self.only_in_sbt) == 0
             and len(self.services_only_in_maven) == 0
             and len(self.services_only_in_sbt) == 0
+            and len(self.services_content_differ) == 0
+            and len(self.class_crc_mismatches) == 0
         )
 
     @property
@@ -263,6 +301,8 @@ class ComparisonResult:
             or len(self.only_in_sbt) > 0
             or len(self.services_only_in_maven) > 0
             or len(self.services_only_in_sbt) > 0
+            or len(self.services_content_differ) > 0
+            or len(self.class_crc_mismatches) > 0
         )
 
     def to_dict(self) -> ComparisonResultDict:
@@ -283,6 +323,11 @@ class ComparisonResult:
             d["services_only_in_maven"] = sorted(self.services_only_in_maven)
         if self.services_only_in_sbt:
             d["services_only_in_sbt"] = sorted(self.services_only_in_sbt)
+        if self.services_content_differ:
+            d["services_content_differ"] = sorted(self.services_content_differ)
+        if self.class_crc_mismatches:
+            d["class_crc_mismatches"] = sorted(self.class_crc_mismatches)
+            d["class_crc_mismatch_count"] = len(self.class_crc_mismatches)
         return d
 
 
@@ -326,26 +371,40 @@ def build_sbt() -> bool:
     return True
 
 
+def _normalize_service_content(raw: bytes) -> str:
+    """Normalize a META-INF/services/ file for comparison.
+
+    Strips comments and blank lines, sorts remaining lines.
+    """
+    lines = []
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            lines.append(line)
+    return "\n".join(sorted(lines))
+
+
 def get_jar_contents(jar_path: Path) -> JarInfo:
     """Extract information about a JAR file's contents."""
     info = JarInfo(path=jar_path, size=jar_path.stat().st_size)
 
     try:
         with zipfile.ZipFile(jar_path, "r") as zf:
-            for name in zf.namelist():
+            for zi in zf.infolist():
+                name = zi.filename
                 if name.endswith("/"):
                     continue  # Skip directories
                 if name.startswith("META-INF/services/"):
-                    info.services.add(name)
+                    info.services[name] = _normalize_service_content(zf.read(name))
                 elif name.endswith(".class"):
                     if name.startswith("META-INF/versions/"):
                         info.multi_release_classes.add(name)
                     else:
                         info.classes.add(name)
-                elif name.startswith("META-INF/"):
-                    info.meta_inf.add(name)
-                else:
+                        info.class_crcs[name] = zi.CRC
+                elif not name.startswith("META-INF/"):
                     info.resources.add(name)
+                # Other META-INF/ entries (manifests, etc.) are not tracked
     except zipfile.BadZipFile:
         print(f"[warn] Could not read JAR: {jar_path}")
 
@@ -405,12 +464,19 @@ def _find_module_dirs() -> List[Path]:
     if not pom_path.exists():
         return []
 
-    pom_text = pom_path.read_text()
+    tree = ET.parse(pom_path)
+    root = tree.getroot()
+    # Maven POM uses a namespace; detect it from the root tag
+    ns = ""
+    if root.tag.startswith("{"):
+        ns = root.tag[: root.tag.index("}") + 1]
+
     dirs: List[Path] = []
-    for match in re.finditer(r"<module>(.*?)</module>", pom_text):
-        module_dir = SPARK_HOME / match.group(1)
-        if module_dir.is_dir():
-            dirs.append(module_dir)
+    for module_elem in root.iter(f"{ns}module"):
+        if module_elem.text:
+            module_dir = SPARK_HOME / module_elem.text.strip()
+            if module_dir.is_dir():
+                dirs.append(module_dir)
     return dirs
 
 
@@ -420,6 +486,22 @@ def _should_skip_jar_file(jar_path: Path) -> bool:
     if "-tests.jar" in name or "-sources.jar" in name or "-javadoc.jar" in name:
         return True
     return should_skip_jar(name)
+
+
+def _matches_module_filter(norm_name: str, modules: List[str]) -> bool:
+    """Check if a normalized JAR name matches any module filter.
+
+    Matches against the artifact base name (before the Scala suffix).
+    E.g. filter "spark-core" matches "spark-core_2.13",
+         filter "spark-connect" matches "spark-connect_2.13" but NOT
+         "spark-connect-client-jvm_2.13".
+    """
+    # Extract base name before Scala suffix: "spark-core_2.13" -> "spark-core"
+    base = norm_name.split("_")[0] if "_" in norm_name else norm_name
+    for m in modules:
+        if base == m:
+            return True
+    return False
 
 
 def find_maven_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
@@ -439,18 +521,18 @@ def find_maven_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
             if _should_skip_jar_file(jar_path):
                 continue
 
-            # Filter by module if specified
-            if modules:
-                if not any(m in str(jar_path) for m in modules):
-                    continue
-
             norm_name = normalize_jar_name(jar_path.name)
+
+            # Filter by module if specified
+            if modules and not _matches_module_filter(norm_name, modules):
+                continue
+
             if norm_name in jars:
                 prev = jars[norm_name].path
                 print(
                     f"[warn] duplicate Maven JAR key '{norm_name}':"
-                    f" {prev.relative_to(SPARK_HOME)} vs"
-                    f" {jar_path.relative_to(SPARK_HOME)}, keeping latter"
+                    f" {_rel_path(prev)} vs"
+                    f" {_rel_path(jar_path)}, keeping latter"
                 )
             jars[norm_name] = get_jar_contents(jar_path)
 
@@ -477,18 +559,18 @@ def find_sbt_jars(modules: Optional[List[str]] = None) -> Dict[str, JarInfo]:
                 if _should_skip_jar_file(jar_path):
                     continue
 
-                # Filter by module if specified
-                if modules:
-                    if not any(m in str(jar_path) for m in modules):
-                        continue
-
                 norm_name = normalize_jar_name(jar_path.name)
+
+                # Filter by module if specified
+                if modules and not _matches_module_filter(norm_name, modules):
+                    continue
+
                 if norm_name in jars:
                     prev = jars[norm_name].path
                     print(
                         f"[warn] duplicate SBT JAR key '{norm_name}':"
-                        f" {prev.relative_to(SPARK_HOME)} vs"
-                        f" {jar_path.relative_to(SPARK_HOME)}, keeping latter"
+                        f" {_rel_path(prev)} vs"
+                        f" {_rel_path(jar_path)}, keeping latter"
                     )
                 jars[norm_name] = get_jar_contents(jar_path)
 
@@ -568,6 +650,7 @@ def compare_jars_physical(
     sbt_jars: Dict[str, JarInfo],
     matching_only: bool = False,
     ignore_shaded: bool = False,
+    check_bytes: bool = False,
 ) -> Dict[str, ComparisonResult]:
     """Compare JAR files from both builds."""
     results = {}
@@ -596,9 +679,23 @@ def compare_jars_physical(
             result.only_in_maven = maven_classes - sbt_classes
             result.only_in_sbt = sbt_classes - maven_classes
 
-            # Compare META-INF/services/ (service loader configs)
-            result.services_only_in_maven = maven_jar.services - sbt_jar.services
-            result.services_only_in_sbt = sbt_jar.services - maven_jar.services
+            # Compare META-INF/services/ (paths and content)
+            mvn_svc_keys = set(maven_jar.services.keys())
+            sbt_svc_keys = set(sbt_jar.services.keys())
+            result.services_only_in_maven = mvn_svc_keys - sbt_svc_keys
+            result.services_only_in_sbt = sbt_svc_keys - mvn_svc_keys
+            result.services_content_differ = {
+                s
+                for s in mvn_svc_keys & sbt_svc_keys
+                if maven_jar.services[s] != sbt_jar.services[s]
+            }
+
+            # Compare CRC-32 of classes present in both JARs
+            if check_bytes:
+                shared = maven_classes & sbt_classes
+                result.class_crc_mismatches = {
+                    c for c in shared if maven_jar.class_crcs.get(c) != sbt_jar.class_crcs.get(c)
+                }
 
             if ignore_shaded:
                 # Filter out service files that reference shaded packages
@@ -616,11 +713,7 @@ def compare_jars_physical(
                     result.only_in_maven = set()
                     if not result.services_only_in_sbt:
                         result.services_only_in_maven = set()
-
-            # Calculate size difference as percentage of the smaller JAR
-            min_size = min(maven_jar.size, sbt_jar.size)
-            if min_size > 0:
-                result.size_diff_pct = abs(maven_jar.size - sbt_jar.size) / min_size * 100
+                        result.services_content_differ = set()
 
         results[name] = result
 
@@ -662,10 +755,12 @@ def analyze_equivalence(
     Analyze physical differences to determine if they're explained.
 
     Returns dict mapping jar_name -> classification:
-    - "equivalent_shading": Maven has shaded classes, SBT has unshaded in assembly
-    - "equivalent_structure": Maven fat JAR vs SBT thin JAR (all SBT classes in Maven)
-    - "only_in_build": JAR exists in only one build (not a build artifact difference)
-    - "unexplained": real content differences
+    - "equivalent_shading": differences are only shaded classes (org/sparkproject/*);
+      non-shaded classes match exactly after filtering
+    - "equivalent_structure": Maven fat JAR vs SBT thin JAR — all SBT module classes
+      are a subset of Maven's (Maven bundles deps into the module JAR)
+    - "only_in_build": JAR exists in only one build (build scope difference)
+    - "unexplained": non-shaded class differences remain after filtering
     """
     classifications = {}
 
@@ -689,13 +784,13 @@ def analyze_equivalence(
         is_fat_jar = _is_fat_jar_module(name)
 
         if not only_sbt and is_fat_jar:
-            # SBT classes are subset of Maven (Maven bundles deps)
+            # All SBT module classes found in Maven; extra Maven classes are bundled deps
             classifications[name] = "equivalent_structure"
         elif not only_maven and not only_sbt:
-            # All non-shaded classes match
+            # Non-shaded classes match; differences are only in shaded packages
             classifications[name] = "equivalent_shading"
         else:
-            # Real differences remain after filtering
+            # Non-shaded class differences remain after filtering
             classifications[name] = "unexplained"
 
     return classifications
@@ -705,6 +800,7 @@ def run_two_level_comparison(
     maven_jars: Dict[str, JarInfo],
     sbt_jars: Dict[str, JarInfo],
     matching_only: bool = False,
+    check_bytes: bool = False,
 ) -> Tuple[Dict[str, ComparisonResult], Dict[str, str], str]:
     """
     Run two-level comparison: physical then equivalence.
@@ -715,7 +811,7 @@ def run_two_level_comparison(
     - verdict: "IDENTICAL" / "EQUIVALENT" / "DIFFER"
     """
     # Level 1: Physical comparison
-    results = compare_jars_physical(maven_jars, sbt_jars, matching_only)
+    results = compare_jars_physical(maven_jars, sbt_jars, matching_only, check_bytes=check_bytes)
 
     differing = {k: v for k, v in results.items() if not v.is_match}
 
@@ -825,7 +921,7 @@ def format_two_level_report(
                 asm_jar = sbt_assemblies.get(asm_key)
                 if asm_jar and asm_jar.exists():
                     asm_size = asm_jar.stat().st_size
-                    asm_path = str(asm_jar.relative_to(SPARK_HOME))
+                    asm_path = _rel_path(asm_jar)
                     lines.append(f"    SBT asm: {asm_size:,} bytes → {asm_path}")
                 else:
                     # core has no separate assembly; deps go into uber assembly
@@ -907,7 +1003,7 @@ def format_two_level_report(
                 sbt_asm = find_shaded_jars("sbt").get(asm_key)
                 if sbt_asm and sbt_asm.exists():
                     asm_info = get_jar_contents(sbt_asm)
-                    lines.append(f"  SBT assembly JAR: {str(sbt_asm.relative_to(SPARK_HOME))}")
+                    lines.append(f"  SBT assembly JAR: {_rel_path(sbt_asm)}")
                     lines.append(
                         f"    {asm_info.size:,} bytes, {asm_info.class_count()} classes, "
                         f"{len(asm_info.resources)} resources"
@@ -1015,9 +1111,13 @@ def _status_label(r: ComparisonResult) -> str:
         parts.append(f"+{len(r.only_in_maven)} Maven")
     if r.only_in_sbt:
         parts.append(f"+{len(r.only_in_sbt)} SBT")
-    if r.services_only_in_maven or r.services_only_in_sbt:
-        svc_n = len(r.services_only_in_maven) + len(r.services_only_in_sbt)
+    svc_n = len(r.services_only_in_maven) + len(r.services_only_in_sbt)
+    if svc_n:
         parts.append(f"{svc_n} services differ")
+    if r.services_content_differ:
+        parts.append(f"{len(r.services_content_differ)} service contents differ")
+    if r.class_crc_mismatches:
+        parts.append(f"{len(r.class_crc_mismatches)} CRC mismatches")
     return ", ".join(parts) if parts else "differs"
 
 
@@ -1092,12 +1192,12 @@ def format_report(
                 lines.append(
                     f"    Maven: {r.maven_jar.class_count()} classes,"
                     f" {mvn_svc} services, {r.maven_jar.size:,} bytes"
-                    + (f" ({mvn_mr} multi-release classes skipped)" if mvn_mr else "")
+                    + (f" ({mvn_mr} multi-release excluded)" if mvn_mr else "")
                 )
                 lines.append(
                     f"    SBT:   {r.sbt_jar.class_count()} classes,"
                     f" {sbt_svc} services, {r.sbt_jar.size:,} bytes"
-                    + (f" ({sbt_mr} multi-release classes skipped)" if sbt_mr else "")
+                    + (f" ({sbt_mr} multi-release excluded)" if sbt_mr else "")
                 )
                 lines.append(f"    Size:  {_format_size_diff(r.maven_jar.size, r.sbt_jar.size)}")
 
@@ -1121,6 +1221,20 @@ def format_report(
                 for svc in sorted(r.services_only_in_sbt):
                     lines.append(f"      {svc}")
 
+            if r.services_content_differ:
+                lines.append(
+                    f"    Services with different content ({len(r.services_content_differ)}):"
+                )
+                for svc in sorted(r.services_content_differ):
+                    lines.append(f"      {svc}")
+
+            if r.class_crc_mismatches:
+                lines.append(
+                    f"    Classes with different bytecode ({len(r.class_crc_mismatches)}):"
+                )
+                for line in _summarize_classes(r.class_crc_mismatches):
+                    lines.append(f"      {line}")
+
     return "\n".join(lines)
 
 
@@ -1133,6 +1247,7 @@ def compare_two_jars(
     jar1_path: Path,
     jar2_path: Path,
     ignore_shaded: bool = False,
+    check_bytes: bool = False,
 ) -> TwoJarReportDict:
     """Compare two JAR files directly and return a structured report."""
     jar1 = get_jar_contents(jar1_path)
@@ -1148,8 +1263,13 @@ def compare_two_jars(
     only_in_1 = jar1_classes - jar2_classes
     only_in_2 = jar2_classes - jar1_classes
 
-    svc_only_1 = jar1.services - jar2.services
-    svc_only_2 = jar2.services - jar1.services
+    svc_keys_1 = set(jar1.services.keys())
+    svc_keys_2 = set(jar2.services.keys())
+    svc_only_1 = svc_keys_1 - svc_keys_2
+    svc_only_2 = svc_keys_2 - svc_keys_1
+    svc_content_differ = {
+        s for s in svc_keys_1 & svc_keys_2 if jar1.services[s] != jar2.services[s]
+    }
 
     if ignore_shaded:
         svc_only_1 = {s for s in svc_only_1 if not _is_shaded_service(s)}
@@ -1186,6 +1306,16 @@ def compare_two_jars(
         report["services_only_in_jar1"] = sorted(svc_only_1)
     if svc_only_2:
         report["services_only_in_jar2"] = sorted(svc_only_2)
+    if svc_content_differ:
+        report["services_content_differ"] = sorted(svc_content_differ)
+
+    # Compare CRC-32 of classes present in both JARs
+    if check_bytes:
+        shared = jar1_classes & jar2_classes
+        crc_mismatches = {c for c in shared if jar1.class_crcs.get(c) != jar2.class_crcs.get(c)}
+        if crc_mismatches:
+            report["class_crc_mismatches"] = sorted(crc_mismatches)
+            report["class_crc_mismatch_count"] = len(crc_mismatches)
 
     # De-shading analysis: unrelocate classes and find matches across shading prefixes
     if only_in_1 or only_in_2:
@@ -1238,6 +1368,8 @@ def format_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> st
     only2_n = report.get("only_in_jar2_count", 0)
     svc1_n = len(report.get("services_only_in_jar1", []))
     svc2_n = len(report.get("services_only_in_jar2", []))
+    svc_content_n = len(report.get("services_content_differ", []))
+    crc_n = report.get("class_crc_mismatch_count", 0)
     common = j1["class_count"] - only1_n
     deshaded_n = report.get("deshaded_match_count", 0)
     truly1_n = report.get("truly_only_in_jar1_count", 0)
@@ -1257,9 +1389,14 @@ def format_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> st
         parts.append(f"{only2_n} only in JAR 2")
     if svc1_n or svc2_n:
         parts.append(f"{svc1_n + svc2_n} service diffs")
+    if svc_content_n:
+        parts.append(f"{svc_content_n} service contents differ")
+    if crc_n:
+        parts.append(f"{crc_n} CRC mismatches")
     lines.append(f"Summary: {', '.join(parts)}")
 
-    if only1_n == 0 and only2_n == 0 and svc1_n == 0 and svc2_n == 0:
+    has_any_diff = only1_n or only2_n or svc1_n or svc2_n or svc_content_n or crc_n
+    if not has_any_diff:
         lines.append("\n  ✓ JARs have identical class and service contents")
         return "\n".join(lines)
 
@@ -1316,6 +1453,19 @@ def format_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> st
         lines.append(f"\n  Services only in JAR 2 ({svc2_n}):")
         for svc in report["services_only_in_jar2"]:
             lines.append(f"    {svc}")
+
+    if svc_content_n:
+        lines.append(f"\n  Services with different content ({svc_content_n}):")
+        for svc in report["services_content_differ"]:
+            lines.append(f"    {svc}")
+
+    if crc_n:
+        lines.append(f"\n  Classes with different bytecode ({crc_n}):")
+        items = list(_class_package_counts(set(report["class_crc_mismatches"])).items())
+        for pkg, count in items[:MAX_PKG_LINES]:
+            lines.append(f"    {pkg} ({count} classes)")
+        if len(items) > MAX_PKG_LINES:
+            lines.append(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
 
     return "\n".join(lines)
 
@@ -1488,7 +1638,7 @@ def _self_test() -> bool:
         failed += 1
         print(f"  FAIL: _find_module_dirs() returned {len(module_dirs)} dirs, expected >= 20")
     # Spot-check a few known modules
-    rel_paths = {str(d.relative_to(SPARK_HOME)) for d in module_dirs}
+    rel_paths = {_rel_path(d) for d in module_dirs}
     for expected_mod in ("core", "sql/core", "connector/kafka-0-10-sql"):
         if expected_mod in rel_paths:
             passed += 1
@@ -1539,8 +1689,8 @@ def _self_test() -> bool:
     for name in ("core", "connect", "connect-client-jvm"):
         m = maven_shaded.get(name)
         s = sbt_shaded.get(name)
-        m_label = str(m.relative_to(SPARK_HOME)) if m else "(not found)"
-        s_label = str(s.relative_to(SPARK_HOME)) if s else "(not found)"
+        m_label = _rel_path(m) if m else "(not found)"
+        s_label = _rel_path(s) if s else "(not found)"
         print(f"  {name}: maven={m_label}, sbt={s_label}")
 
     print(f"  {passed} passed, {failed} failed")
@@ -1591,6 +1741,16 @@ def main():
         "--matching-only",
         action="store_true",
         help="Only compare JARs that exist in both builds",
+    )
+    parser.add_argument(
+        "--ignore-shaded",
+        action="store_true",
+        help="Exclude shaded classes (org/sparkproject/*) from comparison",
+    )
+    parser.add_argument(
+        "--check-bytes",
+        action="store_true",
+        help="Compare CRC-32 of .class files with matching paths to detect bytecode differences",
     )
     parser.add_argument(
         "--verbose",
@@ -1658,13 +1818,30 @@ def main():
             if not p.exists():
                 print(f"[error] JAR not found: {p}")
                 sys.exit(1)
-        report = compare_two_jars(jar1_path, jar2_path, ignore_shaded=False)
+        report = compare_two_jars(
+            jar1_path,
+            jar2_path,
+            ignore_shaded=args.ignore_shaded,
+            check_bytes=args.check_bytes,
+        )
         if args.json or args.output:
             _output_report(report)
         if not args.json:
             print(format_two_jar_report(report, verbose=args.verbose))
-        has_diff = report.get("only_in_jar1_count", 0) + report.get("only_in_jar2_count", 0)
-        if has_diff > 0:
+        # Exit 1 if there are truly unexplained differences (after de-shading)
+        truly_only = report.get("truly_only_in_jar1_count", 0) + report.get(
+            "truly_only_in_jar2_count", 0
+        )
+        svc_diff = (
+            len(report.get("services_only_in_jar1", []))
+            + len(report.get("services_only_in_jar2", []))
+            + len(report.get("services_content_differ", []))
+        )
+        # Fall back to raw counts when de-shading wasn't performed
+        if not report.get("deshaded_match_count"):
+            truly_only = report.get("only_in_jar1_count", 0) + report.get("only_in_jar2_count", 0)
+        crc_diff = report.get("class_crc_mismatch_count", 0)
+        if truly_only > 0 or svc_diff > 0 or crc_diff > 0:
             sys.exit(1)
         return
 
@@ -1686,7 +1863,13 @@ def main():
     # Level 1 + Level 2 comparison (unless --physical-only)
     if args.physical_only:
         # Physical comparison only (old behavior)
-        results = compare_jars_physical(maven_jars, sbt_jars, matching_only=args.matching_only)
+        results = compare_jars_physical(
+            maven_jars,
+            sbt_jars,
+            matching_only=args.matching_only,
+            ignore_shaded=args.ignore_shaded,
+            check_bytes=args.check_bytes,
+        )
         report = build_report_dict(results)
         if args.json or args.output:
             _output_report(report)
@@ -1698,7 +1881,10 @@ def main():
     else:
         # Two-level comparison (new default)
         results, equivalence, verdict = run_two_level_comparison(
-            maven_jars, sbt_jars, matching_only=args.matching_only
+            maven_jars,
+            sbt_jars,
+            matching_only=args.matching_only,
+            check_bytes=args.check_bytes,
         )
         report = build_two_level_report_dict(results, equivalence, verdict)
         if args.json or args.output:
