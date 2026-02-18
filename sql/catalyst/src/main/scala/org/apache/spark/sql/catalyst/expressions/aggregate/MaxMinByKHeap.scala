@@ -156,7 +156,6 @@ private[catalyst] object MaxMinByKHeap {
 
   /**
    * Get mutable heap binary buffer from buffer for in-place updates.
-   * Copies the binary data if needed (e.g., after spill to UnsafeRow).
    */
   def getMutableHeap(buffer: InternalRow, offset: Int): Array[Byte] = {
     buffer.getBinary(offset)
