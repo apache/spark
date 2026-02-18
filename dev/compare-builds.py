@@ -363,7 +363,7 @@ def build_sbt() -> bool:
     print("=" * 72)
 
     cmd = [str(SPARK_HOME / "build" / "sbt"), "package"]
-    ret, stdout, stderr = run_command(cmd)
+    ret, _, stderr = run_command(cmd)
     if ret != 0:
         print(f"[error] SBT build failed:\n{stderr}")
         return False
@@ -453,6 +453,27 @@ def normalize_jar_name(name: str) -> str:
     return base
 
 
+def _get_pom_namespace(root: ET.Element) -> str:
+    """Extract the XML namespace from a POM root element."""
+    if root.tag.startswith("{"):
+        return root.tag[: root.tag.index("}") + 1]
+    return ""
+
+
+def _get_project_version() -> str:
+    """Read the project version from root pom.xml."""
+    pom_path = SPARK_HOME / "pom.xml"
+    if not pom_path.exists():
+        return "0.0.0-SNAPSHOT"
+    tree = ET.parse(pom_path)
+    root = tree.getroot()
+    ns = _get_pom_namespace(root)
+    version_elem = root.find(f"{ns}version")
+    if version_elem is not None and version_elem.text:
+        return version_elem.text.strip()
+    return "0.0.0-SNAPSHOT"
+
+
 def _find_module_dirs() -> List[Path]:
     """Parse module directories from root pom.xml.
 
@@ -466,10 +487,7 @@ def _find_module_dirs() -> List[Path]:
 
     tree = ET.parse(pom_path)
     root = tree.getroot()
-    # Maven POM uses a namespace; detect it from the root tag
-    ns = ""
-    if root.tag.startswith("{"):
-        ns = root.tag[: root.tag.index("}") + 1]
+    ns = _get_pom_namespace(root)
 
     dirs: List[Path] = []
     for module_elem in root.iter(f"{ns}module"):
@@ -1562,51 +1580,48 @@ def _self_test() -> bool:
 
     print("Testing normalize_jar_name ...")
 
-    # Standard Spark artifacts with Scala suffix
-    check("spark-core_2.13-4.0.0-SNAPSHOT.jar", "spark-core_2.13")
-    check("spark-sql_2.13-4.0.0-SNAPSHOT.jar", "spark-sql_2.13")
-    check("spark-catalyst_2.13-4.0.0-SNAPSHOT.jar", "spark-catalyst_2.13")
-    check("spark-mllib_2.13-4.0.0-SNAPSHOT.jar", "spark-mllib_2.13")
-    check("spark-hive_2.13-4.0.0-SNAPSHOT.jar", "spark-hive_2.13")
+    # Read the current project version from pom.xml so tests stay in sync.
+    # Also test with a synthetic release version to cover both formats.
+    project_version = _get_project_version()
+    test_versions = [project_version, "3.5.1"]
 
-    # Artifacts with digits in the name (the tricky cases)
-    check(
-        "spark-sql-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-sql-kafka-0-10_2.13",
-    )
-    check(
-        "spark-streaming-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-streaming-kafka-0-10_2.13",
-    )
-    check(
-        "spark-token-provider-kafka-0-10_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-token-provider-kafka-0-10_2.13",
-    )
+    # Artifact names to test, grouped by category.
+    # Each entry: (artifact_with_scala_suffix, expected_normalized)
+    scala_213_artifacts = [
+        # Standard modules
+        ("spark-core_2.13", "spark-core_2.13"),
+        ("spark-sql_2.13", "spark-sql_2.13"),
+        ("spark-catalyst_2.13", "spark-catalyst_2.13"),
+        ("spark-mllib_2.13", "spark-mllib_2.13"),
+        ("spark-hive_2.13", "spark-hive_2.13"),
+        # Digits in the name (the tricky cases)
+        ("spark-sql-kafka-0-10_2.13", "spark-sql-kafka-0-10_2.13"),
+        ("spark-streaming-kafka-0-10_2.13", "spark-streaming-kafka-0-10_2.13"),
+        ("spark-token-provider-kafka-0-10_2.13", "spark-token-provider-kafka-0-10_2.13"),
+        # Compound module names
+        ("spark-connect-client-jvm_2.13", "spark-connect-client-jvm_2.13"),
+        ("spark-hive-thriftserver_2.13", "spark-hive-thriftserver_2.13"),
+        ("spark-mllib-local_2.13", "spark-mllib-local_2.13"),
+    ]
 
-    # Compound module names
-    check(
-        "spark-connect-client-jvm_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-connect-client-jvm_2.13",
-    )
-    check(
-        "spark-hive-thriftserver_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-hive-thriftserver_2.13",
-    )
-    check("spark-mllib-local_2.13-4.0.0-SNAPSHOT.jar", "spark-mllib-local_2.13")
-
-    # Release versions (no SNAPSHOT)
-    check("spark-core_2.13-4.0.0.jar", "spark-core_2.13")
-    check("spark-core_2.13-3.5.1.jar", "spark-core_2.13")
-
-    # Scala 2.12
-    check("spark-core_2.12-4.0.0-SNAPSHOT.jar", "spark-core_2.12")
-    check(
-        "spark-sql-kafka-0-10_2.12-3.5.1.jar",
-        "spark-sql-kafka-0-10_2.12",
-    )
+    for artifact, expected in scala_213_artifacts:
+        for v in test_versions:
+            check(f"{artifact}-{v}.jar", expected)
 
     # Scala 3
-    check("spark-core_3-4.0.0-SNAPSHOT.jar", "spark-core_3")
+    for v in test_versions:
+        check(f"spark-core_3-{v}.jar", "spark-core_3")
+
+    # Test JARs with -tests suffix
+    for v in test_versions:
+        check(f"spark-core_2.13-{v}-tests.jar", "spark-core_2.13")
+
+    # Assembly JARs (normally skipped, but normalize should still work)
+    for v in test_versions:
+        check(
+            f"spark-streaming-kafka-0-10-assembly_2.13-{v}.jar",
+            "spark-streaming-kafka-0-10-assembly_2.13",
+        )
 
     # No version at all (just artifact name)
     check("spark-core_2.13.jar", "spark-core_2.13")
@@ -1619,15 +1634,6 @@ def _self_test() -> bool:
     # No version, no Scala suffix
     check("some-lib.jar", "some-lib")
     check("some-lib", "some-lib")
-
-    # Test JARs with -tests suffix
-    check("spark-core_2.13-4.0.0-SNAPSHOT-tests.jar", "spark-core_2.13")
-
-    # Assembly JARs (normally skipped, but normalize should still work)
-    check(
-        "spark-streaming-kafka-0-10-assembly_2.13-4.0.0-SNAPSHOT.jar",
-        "spark-streaming-kafka-0-10-assembly_2.13",
-    )
 
     # _find_module_dirs smoke test
     print("Testing _find_module_dirs ...")
