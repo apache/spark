@@ -86,6 +86,10 @@ abstract class StringRegexExpression extends BinaryExpression
 
   override def expensive: Boolean = hasExpensiveChild || _expensiveRegex
 
+  // Heuristic, not designed to be perfect. Look for things likely to have
+  // back tracking.
+  private val expensiveRegexPattern = Pattern.compile("\+\*\{")
+
   private lazy val _expensiveRegex = {
     // A quick heuristic for expensive a pattern is.
     left match {
@@ -93,7 +97,7 @@ abstract class StringRegexExpression extends BinaryExpression
         // If we have a clear start limited back tracking required.
         if (str.startsWith("^") || str.startsWith("\\b")) {
           false
-        } else if (str.contains("+")) {
+        } else if (p.matcher(str).matches()) {
           // Greedy matching can be tricky.
           true
         } else {
