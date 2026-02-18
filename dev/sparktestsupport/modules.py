@@ -777,6 +777,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.tuning.test_tvs_io_basic",
         "pyspark.ml.tests.tuning.test_tvs_io_nested",
         "pyspark.ml.tests.tuning.test_tvs_io_pipeline",
+        "pyspark.ml.tests.test_dl_util",
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
         "pyspark.ml.torch.tests.test_distributor",
