@@ -285,7 +285,7 @@ object MaxByBuilder extends ExpressionBuilder {
     The maximum value of `k` is 100000.
   """,
   group = "agg_funcs",
-  since = "3.0.0")
+  since = "4.2.0")
 // scalastyle:on line.size.limit
 object MinByBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.DataType
  *
  * All integers are stored in little-endian byte order for direct binary manipulation.
  */
-object MaxMinByKHeap {
+private[catalyst] object MaxMinByKHeap {
 
   def getSize(heap: Array[Byte]): Int =
     ByteBuffer.wrap(heap, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt
