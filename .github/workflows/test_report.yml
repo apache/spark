@@ -26,7 +26,9 @@ on:
 
 jobs:
   test_report:
-    if: "!contains(fromJson('[\"skipped\", \"cancelled\"]'), github.event.workflow_run.conclusion)"
+    if: >
+      github.event.workflow_run.path != '.github/workflows/pages.yml' &&
+      !contains(fromJson('["skipped", "cancelled"]'), github.event.workflow_run.conclusion)
     runs-on: ubuntu-latest
     permissions:
       actions: read
