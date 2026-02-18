@@ -38,6 +38,7 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
+    from_arrow_schema,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
@@ -1256,16 +1257,25 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         import pyarrow as pa
 
         for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
-            yield tuple(
+            left_table = pa.Table.from_batches(left_batches)
+            right_table = pa.Table.from_batches(right_batches)
+            yield (
                 ArrowBatchTransformer.to_pandas(
-                    pa.Table.from_batches(batches),
+                    left_table,
                     timezone=self._timezone,
-                    schema=self._input_type,
+                    schema=from_arrow_schema(left_table.schema),
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
                     df_for_struct=self._df_for_struct,
-                )
-                for batches in (left_batches, right_batches)
+                ),
+                ArrowBatchTransformer.to_pandas(
+                    right_table,
+                    timezone=self._timezone,
+                    schema=from_arrow_schema(right_table.schema),
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    df_for_struct=self._df_for_struct,
+                ),
             )
 
 
