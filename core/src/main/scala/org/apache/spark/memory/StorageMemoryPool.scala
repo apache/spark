@@ -37,11 +37,6 @@ private[memory] class StorageMemoryPool(
     memoryMode: MemoryMode
   ) extends MemoryPool(lock) with Logging {
 
-  private[this] val poolName: String = memoryMode match {
-    case MemoryMode.ON_HEAP => "on-heap storage"
-    case MemoryMode.OFF_HEAP => "off-heap storage"
-  }
-
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
 

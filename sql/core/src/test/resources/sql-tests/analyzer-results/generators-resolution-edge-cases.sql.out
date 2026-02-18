@@ -71,7 +71,7 @@ SELECT explode(collect_list(id)) AS val FROM range(5)
 -- !query analysis
 Project [val#xL]
 +- Generate explode(_gen_input_0#x), false, [val#xL]
-   +- Aggregate [collect_list(id#xL, 0, 0) AS _gen_input_0#x]
+   +- Aggregate [collect_list(id#xL, 0, 0, true) AS _gen_input_0#x]
       +- Range (0, 5, step=1)
 
 
@@ -80,7 +80,7 @@ SELECT explode(collect_list(id)) AS val, count(*) AS cnt FROM range(3)
 -- !query analysis
 Project [val#xL, cnt#xL]
 +- Generate explode(_gen_input_0#x), false, [val#xL]
-   +- Aggregate [collect_list(id#xL, 0, 0) AS _gen_input_0#x, count(1) AS cnt#xL]
+   +- Aggregate [collect_list(id#xL, 0, 0, true) AS _gen_input_0#x, count(1) AS cnt#xL]
       +- Range (0, 3, step=1)
 
 
@@ -204,7 +204,7 @@ GROUP BY ALL
 -- !query analysis
 Project [val#x]
 +- Generate explode(_gen_input_0#x), false, [val#x]
-   +- Aggregate [collect_list(a#x, 0, 0) AS _gen_input_0#x]
+   +- Aggregate [collect_list(a#x, 0, 0, true) AS _gen_input_0#x]
       +- SubqueryAlias t
          +- Project [col1#x AS a#x]
             +- LocalRelation [col1#x]

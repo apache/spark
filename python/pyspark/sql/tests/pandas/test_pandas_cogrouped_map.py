@@ -17,8 +17,8 @@
 
 import unittest
 import logging
-from typing import cast
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -32,14 +32,14 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 from pyspark.errors import IllegalArgumentException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -52,7 +52,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property
@@ -209,7 +209,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=merge_pandas,
             errorClass=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Unexpected: add, more.\n",
+            "do not match specified schema. Unexpected: add, more.",
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -230,7 +230,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=merge_pandas,
             errorClass=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 4 Actual: 6\n",
+            "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
@@ -254,8 +254,9 @@ class CogroupedApplyInPandasTestsMixin:
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        rf"ValueError: Exception thrown when converting pandas.Series \({pandas_type_name}\) "
                         r"with name 'k' to Arrow Array \(double\)."
                     )
                     if safely:
@@ -276,7 +277,7 @@ class CogroupedApplyInPandasTestsMixin:
                 with self.subTest(convert="double to string"):
                     expected = (
                         r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'k' to Arrow Array \(string\).\n"
+                        r"with name 'k' to Arrow Array \(string\)."
                     )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),

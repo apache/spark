@@ -28,7 +28,6 @@ import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
@@ -77,11 +76,7 @@ import org.apache.spark.util.SparkFileUtils
  * `sql/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite
-    extends ConnectFunSuite
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with Logging {
+class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -148,7 +143,7 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = trimJvmOriginFields(f.plan.getRoot)
+    val actual = normalizeProtoForComparison(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -200,7 +195,12 @@ class PlanGenerationTestSuite
     }
   }
 
-  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+  /**
+   * Normalize proto messages for stable comparison:
+   *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
+   *   - Populate default StringType collation when missing (UTF8_BINARY)
+   */
+  private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
       builder
         .clearLine()
@@ -221,6 +221,17 @@ class PlanGenerationTestSuite
     val builder = message.toBuilder
 
     builder match {
+      // For comparison only, we add UTF8_BINARY when StringType collation is missing
+      // to ensure deterministic plan equality across environments.
+      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
+        val sb = dt.getStringBuilder
+        if (sb.getCollation.isEmpty) {
+          val defaultCollationName =
+            CollationFactory
+              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
+              .collationName
+          sb.setCollation(defaultCollationName)
+        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -232,10 +243,10 @@ class PlanGenerationTestSuite
 
     builder.getAllFields.asScala.foreach {
       case (desc, msg: protobuf.Message) =>
-        builder.setField(desc, trimJvmOriginFields(msg))
+        builder.setField(desc, normalizeProtoForComparison(msg))
       case (desc, list: java.util.List[_]) =>
         val newList = list.asScala.map {
-          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case msg: protobuf.Message => normalizeProtoForComparison(msg)
           case other => other // Primitive types
         }
         builder.setField(desc, newList.asJava)
@@ -687,6 +698,14 @@ class PlanGenerationTestSuite
     val builder = new MetadataBuilder
     builder.putString("description", "unique identifier")
     simple.withMetadata("id", builder.build())
+  }
+
+  test("zipWithIndex") {
+    simple.zipWithIndex()
+  }
+
+  test("zipWithIndex custom column") {
+    simple.zipWithIndex("my_index")
   }
 
   test("drop single string") {

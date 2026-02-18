@@ -2253,7 +2253,7 @@ class RandomForestClassifier(
         return self._set(minWeightFractionPerNode=value)
 
 
-class RandomForestClassificationModel(
+class RandomForestClassificationModel(  # type: ignore[misc]
     _TreeEnsembleModel,
     _JavaProbabilisticClassificationModel[Vector],
     _RandomForestClassifierParams,

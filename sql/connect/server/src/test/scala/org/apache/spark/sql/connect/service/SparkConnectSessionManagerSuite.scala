@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
@@ -28,12 +27,12 @@ import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContex
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndAfterEach {
+class SparkConnectSessionManagerSuite extends SharedSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
-    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
 
   test("sessionId needs to be an UUID") {
@@ -179,7 +178,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val sessionManager = new SparkConnectSessionManager()
 
     // Initialize the base session with the test SparkContext
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
 
     // Clear the default and active sessions to simulate the scenario where
     // SparkSession.active or SparkSession.getDefaultSession would fail
@@ -203,13 +202,13 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val sessionManager = new SparkConnectSessionManager()
 
     // Initialize the base session multiple times
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
     val key1 = SessionKey("user1", UUID.randomUUID().toString)
     val sessionHolder1 = sessionManager.getOrCreateIsolatedSession(key1, None)
     val baseSessionUUID1 = sessionHolder1.session.sessionUUID
 
     // Initialize again - should not change the base session
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
     val key2 = SessionKey("user2", UUID.randomUUID().toString)
     val sessionHolder2 = sessionManager.getOrCreateIsolatedSession(key2, None)
 

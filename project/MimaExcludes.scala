@@ -40,13 +40,27 @@ object MimaExcludes {
     // [SPARK-47086][BUILD][CORE][WEBUI] Upgrade Jetty to 12.1.4
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.ProxyRedirectHandler$ResponseWrapper"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.sendRedirect"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this"),
+    // [SPARK-55228][SQL] Implement Dataset.zipWithIndex in Scala API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zipWithIndex")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
   lazy val v41excludes = defaultExcludes ++ Seq(
     // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
+
+    // CharType and VarcharType signature change (added collation parameter)
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.CharType$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.VarcharType$"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),

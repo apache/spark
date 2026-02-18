@@ -17,7 +17,6 @@
 
 import unittest
 import datetime
-from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import (
@@ -30,8 +29,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -41,7 +40,7 @@ from pyspark.testing.sqlutils import (
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTestsMixin:
     def test_pandas_udf_basic(self):
@@ -391,7 +390,7 @@ class PandasUDFTestsMixin:
             # intToDecimalCoercionEnabled is not required for this case
             with self.sql_conf(
                 {
-                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled  # noqa: E501
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled
                 }
             ):
                 result = df.withColumn("decimal_val", high_precision_udf("id")).collect()

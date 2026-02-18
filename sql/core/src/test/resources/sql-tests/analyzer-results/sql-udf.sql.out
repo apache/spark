@@ -1814,52 +1814,22 @@ DropTable true, false
 -- !query
 DROP TABLE IF EXISTS ts
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
-  "sqlState" : "42809",
-  "messageParameters" : {
-    "alternative" : "DROP VIEW",
-    "foundType" : "VIEW",
-    "objectName" : "spark_catalog.default.ts",
-    "operation" : "DROP TABLE",
-    "requiredType" : "EXTERNAL or MANAGED"
-  }
-}
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ts
 
 
 -- !query
 DROP TABLE IF EXISTS tm
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
-  "sqlState" : "42809",
-  "messageParameters" : {
-    "alternative" : "DROP VIEW",
-    "foundType" : "VIEW",
-    "objectName" : "spark_catalog.default.tm",
-    "operation" : "DROP TABLE",
-    "requiredType" : "EXTERNAL or MANAGED"
-  }
-}
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tm
 
 
 -- !query
 DROP TABLE IF EXISTS ta
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_COMMAND_FOR_OBJECT_TYPE",
-  "sqlState" : "42809",
-  "messageParameters" : {
-    "alternative" : "DROP VIEW",
-    "foundType" : "VIEW",
-    "objectName" : "spark_catalog.default.ta",
-    "operation" : "DROP TABLE",
-    "requiredType" : "EXTERNAL or MANAGED"
-  }
-}
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ta
 
 
 -- !query

@@ -23,7 +23,6 @@ import unittest
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import cast
 
 from pyspark import TaskContext
 from pyspark.util import PythonEvalType, is_remote_only
@@ -66,12 +65,14 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
+)
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd
@@ -82,7 +83,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ScalarPandasUDFTestsMixin:
     @property
@@ -1725,7 +1726,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected, df1.collect())
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
         # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional

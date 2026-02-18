@@ -10,6 +10,9 @@ and Structured Streaming for stream processing.
 - Official version: <https://spark.apache.org/>
 - Development version: <https://apache.github.io/spark/>
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Maven Central](https://img.shields.io/maven-central/v/org.apache.spark/spark-core_2.13.svg?filter=!*preview*)](https://search.maven.org/search?q=g:org.apache.spark)
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://adoptium.net/temurin/releases/?version=17)
 [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
 [![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)
@@ -26,6 +29,8 @@ This README file only contains basic setup instructions.
 | Branch     | Status                                                                                                                                                                                                          |
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | master     | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/release.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/release.yml)                                               |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml)                             |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_infra_images_cache.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_infra_images_cache.yml)             |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_java21.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_java21.yml)                                     |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_non_ansi.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_non_ansi.yml)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_uds.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_uds.yml)                                           |
@@ -36,14 +41,14 @@ This README file only contains basic setup instructions.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_maven_java21_arm.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_maven_java21_arm.yml)                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_coverage.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_coverage.yml)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_pypy3.10.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_pypy3.10.yml)                   |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_pypy3.11.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_pypy3.11.yml)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.10.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.10.yml)                           |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11_classic_only.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.11_classic_only.yml) |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11_arm.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.11_arm.yml)                   |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11_macos26.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.11_macos26.yml)           |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.12.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.12.yml)                           |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml)                           |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_pypy3.11.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_pypy3.11.yml)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.12_classic_only.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.12_classic_only.yml) |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.12_arm.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.12_arm.yml)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.12_macos26.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.12_macos26.yml)           |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.12_pandas_3.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.12_pandas_3.yml)         |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.13.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.13.yml)                           |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.13_nogil.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.13_nogil.yml)               |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.14.yml)                           |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.14_nogil.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.14_nogil.yml)               |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_minimum.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_minimum.yml)                     |
@@ -51,7 +56,6 @@ This README file only contains basic setup instructions.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect40.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect40.yml)                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect.yml)                     |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml)                       |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml)                             |
 | branch-4.1 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch41.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch41.yml)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch41_java21.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch41_java21.yml)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch41_non_ansi.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch41_non_ansi.yml)               |

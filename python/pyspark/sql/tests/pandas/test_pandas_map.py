@@ -20,21 +20,22 @@ import tempfile
 import time
 import unittest
 import logging
-from typing import cast
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
 from pyspark.errors import PythonException
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    eventually,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, eventually
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -43,7 +44,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MapInPandasTestsMixin:
     spark: SparkSession
@@ -98,7 +99,17 @@ class MapInPandasTestsMixin:
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                else:
+                    # https://github.com/apache/arrow/issues/49002
+                    # PyArrow has a bug that it will convert pa.array([None], type="str") to
+                    # pd.Series([None], dtype=object) instead of pd.Series([None], dtype=str).
+                    # So for now we only check that dtype is either object or str.
+                    assert [d.name for d in list(pdf.dtypes)] in (
+                        ["int32", "str"],
+                        ["int32", "object"],
+                    )
                 yield pdf
 
         actual = df.mapInPandas(func, df.schema).collect()
@@ -202,7 +213,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id. Unexpected: iid.\n",
+            "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
@@ -224,7 +235,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id2.\n",
+            "specified schema. Missing: id2.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
@@ -245,7 +256,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id2.\n",
+            "specified schema. Missing: id2.",
         ):
             f = self.identity_dataframes_iter("id", "value")
             (df.mapInPandas(f, "id int, id2 long, value int").collect())
@@ -254,7 +265,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF\\] "
             "Number of columns of the returned pandas.DataFrame doesn't match "
-            "specified schema. Expected: 3 Actual: 2\n",
+            "specified schema. Expected: 3 Actual: 2",
         ):
             f = self.identity_dataframes_wo_column_names_iter("id", "value")
             (df.mapInPandas(f, "id int, id2 long, value int").collect())
@@ -289,9 +300,11 @@ class MapInPandasTestsMixin:
                         for pdf in iterator:
                             yield pdf.assign(id="test_string")
 
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
+
                     expected = (
                         r"ValueError: Exception thrown when converting pandas.Series "
-                        r"\(object\) with name 'id' to Arrow Array \(double\)."
+                        rf"\({pandas_type_name}\) with name 'id' to Arrow Array \(double\)."
                     )
                     if safely:
                         expected = expected + (
@@ -300,7 +313,7 @@ class MapInPandasTestsMixin:
                             "can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                    with self.assertRaisesRegex(PythonException, expected):
                         (
                             self.spark.range(10, numPartitions=3)
                             .mapInPandas(func, "id double")
@@ -327,7 +340,7 @@ class MapInPandasTestsMixin:
                             "can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                        with self.assertRaisesRegex(PythonException, expected):
                             df.collect()
                     else:
                         self.assertEqual(
@@ -363,7 +376,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: value.\n",
+            "specified schema. Missing: value.",
         ):
             f = self.dataframes_and_empty_dataframe_iter("id")
             (
@@ -392,7 +405,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id. Unexpected: iid.\n",
+            "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
@@ -473,9 +486,10 @@ class MapInPandasTestsMixin:
                 yield pd.DataFrame({"id": ["x", "y"]})
 
         df = self.spark.range(2).mapInPandas(func, "id int")
+        pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkValueError: Exception thrown when converting pandas.Series \\(object\\) "
+            f"PySparkValueError: Exception thrown when converting pandas.Series \\({pandas_type_name}\\) "
             "with name 'id' to Arrow Array \\(int32\\)\\.",
         ):
             df.collect()

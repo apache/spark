@@ -131,7 +131,20 @@ abstract class EventLogFileWriter(
   }
 
   protected def closeWriter(): Unit = {
+    // 1. Flush first to check the errors
+    writer.foreach(_.flush())
+    if (writer.exists(_.checkError())) {
+      logError("Spark detects errors while flushing event logs.")
+    }
+    hadoopDataStream.foreach(_.hflush())
+
+    // 2. Try to close and check the errors
     writer.foreach(_.close())
+    if (writer.exists(_.checkError())) {
+      logError("Spark detects errors while closing event logs.")
+      // 3. Ensuring the underlying stream is closed at least (best-effort).
+      hadoopDataStream.foreach(_.close())
+    }
   }
 
   protected def renameFile(src: Path, dest: Path, overwrite: Boolean): Unit = {

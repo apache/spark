@@ -116,6 +116,19 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Get the values for multiple keys in a single batch operation.
+   * Default implementation throws UnsupportedOperationException.
+   * Providers that support batch retrieval should override this method.
+   *
+   * @param keys          Array of keys to look up
+   * @param colFamilyName The column family name
+   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
+  }
+
+  /**
    * Check if a key exists in the store, with 100% guarantee of a correct result.
    *
    * Default implementation calls get() and checks if the result is null.
@@ -158,8 +171,29 @@ trait ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
+  /**
+   * Return an iterator containing all the (key, value) pairs which are matched with
+   * the given prefix key.
+   *
+   * It is expected to throw exception if Spark calls this method without proper key encoding spec.
+   * It is also expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
+
+  /**
+   * Return an iterator containing all the key-value pairs in the StateStore.
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def iteratorWithMultiValues(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
   /**
@@ -250,6 +284,22 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @note This operation is NOT recorded in the changelog.
+   * @param beginKey      The start key of the range (inclusive)
+   * @param endKey        The end key of the range (exclusive)
+   * @param colFamilyName The column family name
+   */
+  def deleteRange(
+      beginKey: UnsafeRow,
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("deleteRange is not supported by this StateStore")
+  }
+
+  /**
    * Merges the provided value with existing values of a non-null key. If a existing
    * value does not exist, this operation behaves as [[StateStore.put()]].
    *
@@ -329,6 +379,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
 
+  override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    store.multiGet(keys, colFamilyName)
+  }
+
   override def keyExists(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
@@ -351,6 +405,17 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   }
 
   override def allColumnFamilyNames: Set[String] = store.allColumnFamilyNames
+
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.prefixScanWithMultiValues(prefixKey, colFamilyName)
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.iteratorWithMultiValues(colFamilyName)
+  }
 }
 
 /**
@@ -602,6 +667,36 @@ case class RangeKeyScanStateEncoderSpec(
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
+  }
+}
+
+/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPrefixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPrefixKeyStateEncoderSpec")
+  }
+}
+
+/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
+  extends KeyStateEncoderSpec {
+
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new TimestampAsPostfixKeyStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("TimestampAsPostfixKeyStateEncoderSpec")
   }
 }
 
@@ -1047,7 +1142,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
     this
   }
 }
-
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores

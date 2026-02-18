@@ -16,9 +16,11 @@
 # limitations under the License.
 #
 
+import contextlib
 import copy
 import functools
 import faulthandler
+import gc
 import itertools
 import os
 import platform
@@ -31,7 +33,19 @@ import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    IO,
+    Iterator,
+    List,
+    Optional,
+    TextIO,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
@@ -95,6 +109,8 @@ JVM_INT_MIN: int = -(1 << 31)
 JVM_INT_MAX: int = (1 << 31) - 1
 JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def print_exec(stream: TextIO) -> None:
@@ -453,7 +469,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
                     for tag in tags:
-                        session.addTag(tag)  # type: ignore[union-attr]
+                        session.addTag(tag)
                     return ff(*args, **kwargs)
 
                 return wrapped
@@ -477,7 +493,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            return f(*args, **kwargs)  # type: ignore[misc, operator]
+            return f(*args, **kwargs)
 
         return wrapped
     else:
@@ -566,7 +582,7 @@ class InheritableThread(threading.Thread):
                 assert hasattr(self, "_tags")
                 assert session is not None
                 thread_local = session.client.thread_local
-                thread_local.tags = self._tags  # type: ignore[has-type]
+                thread_local.tags = self._tags
                 return target(*a, **k)
 
             super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
@@ -582,7 +598,7 @@ class InheritableThread(threading.Thread):
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
                     if hasattr(self, "_tags"):
-                        for tag in self._tags:  # type: ignore[has-type]
+                        for tag in self._tags:
                             self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
@@ -649,11 +665,11 @@ class PythonEvalType:
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
     SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
-    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (
         212
     )
     SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
-    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (
         214
     )
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
@@ -857,6 +873,18 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
         )
 
 
+@contextlib.contextmanager
+def disable_gc() -> Generator[None, None, None]:
+    gc_enabled_originally = gc.isenabled()
+    if gc_enabled_originally:
+        gc.disable()
+    try:
+        yield
+    finally:
+        if gc_enabled_originally:
+            gc.enable()
+
+
 _is_remote_only = None
 
 
@@ -934,10 +962,13 @@ class _FaulthandlerHelper:
         self._log_path: Optional[str] = None
         self._log_file: Optional[TextIO] = None
         self._periodic_traceback = False
+        self._reentry_depth = 0
 
     def start(self) -> None:
+        self._reentry_depth += 1
         if self._log_path:
-            raise Exception("Fault handler is already registered. No second registration allowed")
+            # faulthandler is already enabled
+            return
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
@@ -946,6 +977,9 @@ class _FaulthandlerHelper:
             faulthandler.enable(file=self._log_file)
 
     def stop(self) -> None:
+        self._reentry_depth -= 1
+        if self._reentry_depth > 0:
+            return
         if self._log_path:
             faulthandler.disable()
             if self._log_file:
@@ -988,10 +1022,21 @@ class _FaulthandlerHelper:
 
         return wrapper
 
+    @contextmanager
+    def enable_faulthandler(self, start_periodic_traceback: bool = True) -> Iterator[None]:
+        try:
+            self.start()
+            if start_periodic_traceback:
+                self.start_periodic_traceback()
+            yield
+        finally:
+            self.stop()
+
 
 _faulthandler_helper = _FaulthandlerHelper()
 with_faulthandler = _faulthandler_helper.with_faulthandler
 start_faulthandler_periodic_traceback = _faulthandler_helper.start_periodic_traceback
+enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 
 if __name__ == "__main__":

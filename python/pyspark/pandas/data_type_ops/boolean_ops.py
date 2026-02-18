@@ -19,7 +19,7 @@ import numbers
 from typing import Any, Union
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_integer_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, is_integer_dtype
 from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
@@ -336,7 +336,7 @@ class BooleanOps(DataTypeOps):
             return index_ops._with_new_scol(
                 scol,
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type, nullable=nullable  # type: ignore[arg-type]
+                    dtype=dtype, spark_type=spark_type, nullable=nullable
                 ),
             )
         else:

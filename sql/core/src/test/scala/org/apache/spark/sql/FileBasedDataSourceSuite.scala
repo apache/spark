@@ -1273,6 +1273,45 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
+
+  test("Geospatial types are not supported in file data sources other than Parquet") {
+    // All of these file formats do NOT support geospatial types (GEOMETRY and GEOGRAPHY).
+    val unsupportedDataSources = Seq("csv", "json", "orc", "text", "xml")
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        unsupportedDataSources.mkString(",")
+      } else {
+        ""
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          // Temporary directory for writing the test data.
+          val tempDir = new File(dir, "files").getCanonicalPath
+          // Test data: WKB representation of POINT(1 2).
+          val wkb = "0101000000000000000000F03F0000000000000040"
+          // Test GEOMETRY and GEOGRAPHY data types.
+          val geoTestCases = Seq(
+            (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+            (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
+          )
+          unsupportedDataSources.foreach { format =>
+            geoTestCases.foreach { case (expr, expectedType) =>
+              checkError(
+                exception = intercept[AnalysisException] {
+                  sql(s"select $expr as g").write.format(format).mode("overwrite").save(tempDir)
+                },
+                condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                parameters = Map(
+                  "columnName" -> "`g`",
+                  "columnType" -> expectedType,
+                  "format" -> formatMapping(format)))
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 object TestingUDT {

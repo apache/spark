@@ -67,8 +67,8 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
-      case CharType(length) => new CharConverter(length)
-      case VarcharType(length) => new VarcharConverter(length)
+      case c: CharType => new CharConverter(c.length)
+      case v: VarcharType => new VarcharConverter(v.length)
       case _: StringType => StringConverter
       case g: GeographyType =>
         new GeographyConverter(g)
@@ -646,6 +646,8 @@ object CatalystTypeConverters {
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr
+    case g: org.apache.spark.sql.types.Geometry => STUtils.stGeomFromWKB(g.getBytes, g.getSrid)
+    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes)
     case arr: Array[Char] => StringConverter.toCatalyst(arr)
     case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>

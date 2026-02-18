@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 import unittest
-from typing import cast
-
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -80,7 +78,7 @@ class ResourceProfileTests(unittest.TestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_profile_before_sc_for_sql(self):
         rpb = ResourceProfileBuilder()

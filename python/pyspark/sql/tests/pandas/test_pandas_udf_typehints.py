@@ -16,11 +16,11 @@
 #
 import unittest
 from inspect import signature
-from typing import Union, Iterator, Tuple, cast, get_type_hints
+from typing import Union, Iterator, Tuple, get_type_hints
 
 from pyspark.sql.functions import mean, lit
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -39,7 +39,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTypeHintsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):

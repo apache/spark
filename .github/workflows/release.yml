@@ -119,6 +119,13 @@ jobs:
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
+      - name: Use master branch's base Dockerfile for release
+        # The release Docker image should always use master's base Dockerfile which is actively maintained.
+        # Old branch Dockerfiles may have broken dependencies (expired GPG keys, outdated base images, etc.)
+        run: |
+          git fetch origin master --depth=1
+          git checkout origin/master -- dev/create-release/spark-rm/Dockerfile.base
+          echo "Using master branch's Dockerfile.base for building release image"
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then

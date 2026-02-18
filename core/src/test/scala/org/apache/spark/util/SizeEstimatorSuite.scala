@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
@@ -71,7 +71,6 @@ class DummyClass8 extends KnownSizeEstimation {
 
 class SizeEstimatorSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with PrivateMethodTester
   with ResetSystemProperties {
 

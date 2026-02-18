@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -280,6 +281,69 @@ object DataTypeUtils {
         case _ =>
           Seq(fieldPath)
       }
+    }
+  }
+
+  /**
+   * Returns true if the two StringTypes have the same base type, i.e., both are [[CharType]],
+   * both are [[VarcharType]], or both are plain [[StringType]].
+   */
+  def areSameBaseType(s1: StringType, s2: StringType): Boolean = {
+    (s1.constraint, s2.constraint) match {
+      case (NoConstraint, NoConstraint) => true
+      case (FixedLength(_), FixedLength(_)) => true
+      case (MaxLength(_), MaxLength(_)) => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Replace STRING/CHAR/VARCHAR (including nested ones) without explicit collation with the new
+   * type with the given collation.
+   */
+  def replaceDefaultStringCharAndVarcharTypes(
+      dataType: DataType, collation: String): DataType = {
+    // Should replace STRING/CHAR(10)/VARCHAR(10) with the new type.
+    // Should not replace STRING COLLATE UTF8_BINARY/CHAR(10) COLLATE UTF8_BINARY/
+    // VARCHAR(10) COLLATE UTF8_BINARY, as that is explicit collation.
+    dataType.transformRecursively {
+      case currentType: CharType if isDefaultStringCharOrVarcharType(currentType) =>
+        CharType(currentType.length, collation)
+      case currentType: VarcharType if isDefaultStringCharOrVarcharType(currentType) =>
+        VarcharType(currentType.length, collation)
+      case currentType: StringType if isDefaultStringCharOrVarcharType(currentType) =>
+        StringType(collation)
+    }
+  }
+
+  /**
+   * Returns true if the given data type is STRING/CHAR/VARCHAR without explicit collation.
+   * Even `STRING COLLATE UTF8_BINARY` is considered as with explicit collation.
+   */
+  def isDefaultStringCharOrVarcharType(dataType: DataType): Boolean = {
+    dataType match {
+      case charType: CharType => charType.collation.isEmpty
+      case varcharType: VarcharType => varcharType.collation.isEmpty
+      case st: StringType => st.eq(StringType)
+      case _ => false
+    }
+  }
+
+  /**
+   * Recursively replaces all STRING, CHAR and VARCHAR types that do not have an explicit collation
+   * with the same type but with explicit `UTF8_BINARY` collation.
+   *
+   * Used for cases like `SHOW CREATE TABLE`, where we want to show the exact collation of the
+   * columns, because the default collation of the table may change the type of the column.
+   */
+  def replaceNonCollatedTypesWithExplicitUTF8Binary(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case charType: CharType if isDefaultStringCharOrVarcharType(charType) =>
+        CharType(charType.length, CollationFactory.UTF8_BINARY_COLLATION_ID)
+      case varcharType: VarcharType if isDefaultStringCharOrVarcharType(varcharType) =>
+        VarcharType(varcharType.length, CollationFactory.UTF8_BINARY_COLLATION_ID)
+      case stringType: StringType if isDefaultStringCharOrVarcharType(stringType) =>
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
     }
   }
 }
