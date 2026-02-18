@@ -2065,19 +2065,6 @@ object PushDownPredicates extends Rule[LogicalPlan] {
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
-  // Match the column ordering, this is important as we shouldn't change the schema
-  // , even the positional one, during optimization.
-  private def matchColumnOrdering(original: Seq[NamedExpression], updated: Seq[NamedExpression]):
-      Seq[NamedExpression] = {
-    val nameToIndex = original.map(_.name).zipWithIndex.toMap
-    val response = updated.toArray
-    updated.foreach { e =>
-      val idx = nameToIndex(e.name)
-      response(idx) = e
-    }
-    response.toSeq
-  }
-
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // Projections are a special case because the filter _may_ contain references to fields added in
     // the projection that we wish to copy. We shouldn't blindly copy everything
@@ -2151,15 +2138,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val combinedCheapFilter = cheap.reduce(And)
         val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
         val baseChild: LogicalPlan = Filter(resolvedCheapFilter, child = grandChild)
-        // Insert a last projection to match the desired column ordering and
-        // evaluate any stragglers and select the already computed columns.
-        val (unusedAliases, computedAliases) = project.projectList.partition(
-          a => !baseChild.outputSet.contains(a.toAttribute))
-        val topProjection = project.copy(projectList = matchColumnOrdering(
-          fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
-          child = baseChild)
+        // Take our projection and place it on top of the pushed filters.
+        val topProjection = project.copy(child = baseChild)
 
-        // We leave all of the expensive filters alone.
+        // If we pushed all the filters we can return the projection
         val result = if (expensiveWithUsed.isEmpty) {
           topProjection
         } else {
