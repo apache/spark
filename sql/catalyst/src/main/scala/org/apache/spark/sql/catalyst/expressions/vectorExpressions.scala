@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.nio.{ByteBuffer, ByteOrder}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -37,6 +35,7 @@ import org.apache.spark.sql.types.{
   StringType,
   StructType
 }
+import org.apache.spark.unsafe.Platform
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -345,10 +344,10 @@ case class VectorNormalize(vector: Expression, degree: Expression)
 }
 
 // Base trait for vector aggregate functions (vector_avg, vector_sum).
-// Provides a unified aggregate buffer schema: (current: BINARY, count: LONG)
-// - current: BINARY representation of the running vector (sum or average)
+// Provides a unified aggregate buffer schema: (acc: BINARY, count: LONG)
+// - acc: BINARY representation of the running vector (sum or average)
 // - count: number of valid vectors seen so far
-// - dimension is inferred from current.length / 4 (4 bytes per float)
+// - dimension is inferred from acc.length / 4 (4 bytes per float)
 // Subclasses only need to implement the element-wise update and merge logic.
 trait VectorAggregateBase extends ImperativeAggregate
     with UnaryLike[Expression]
@@ -375,9 +374,9 @@ trait VectorAggregateBase extends ImperativeAggregate
     }
   }
 
-  // Aggregate buffer schema: (current: BINARY, count: LONG)
-  private lazy val currentAttr = AttributeReference(
-    "current",
+  // Aggregate buffer schema: (acc: BINARY, count: LONG)
+  private lazy val accAttr = AttributeReference(
+    "acc",
     BinaryType,
     nullable = true
   )()
@@ -385,7 +384,7 @@ trait VectorAggregateBase extends ImperativeAggregate
     AttributeReference("count", LongType, nullable = false)()
 
   override def aggBufferAttributes: Seq[AttributeReference] =
-    Seq(currentAttr, countAttr)
+    Seq(accAttr, countAttr)
 
   override def aggBufferSchema: StructType =
     DataTypeUtils.fromAttributes(aggBufferAttributes)
@@ -394,14 +393,14 @@ trait VectorAggregateBase extends ImperativeAggregate
     aggBufferAttributes.map(_.newInstance())
 
   // Buffer indices
-  protected val currentIndex = 0
+  protected val accIndex = 0
   protected val countIndex = 1
 
   protected lazy val inputContainsNull =
     child.dataType.asInstanceOf[ArrayType].containsNull
 
   override def initialize(buffer: InternalRow): Unit = {
-    buffer.update(mutableAggBufferOffset + currentIndex, null)
+    buffer.update(mutableAggBufferOffset + accIndex, null)
     buffer.setLong(mutableAggBufferOffset + countIndex, 0L)
   }
 
@@ -409,18 +408,18 @@ trait VectorAggregateBase extends ImperativeAggregate
   protected def getDim(bytes: Array[Byte]): Int = bytes.length / 4
 
   // Element-wise update for non-first vectors.
-  // currentBuffer contains the running vector; update it in-place with inputArray.
+  // accBytes contains the running vector; update it in-place with inputArray.
   protected def updateElements(
-      currentBuffer: ByteBuffer,
+      accBytes: Array[Byte],
       inputArray: ArrayData,
       dim: Int,
       newCount: Long): Unit
 
   // Element-wise merge of two non-empty buffers.
-  // currentBuffer contains the left running vector; update it in-place.
+  // accBytes contains the left running vector; update it in-place.
   protected def mergeElements(
-      currentBuffer: ByteBuffer,
-      inputBuffer: ByteBuffer,
+      accBytes: Array[Byte],
+      inputBytes: Array[Byte],
       dim: Int,
       currentCount: Long,
       inputCount: Long,
@@ -447,54 +446,50 @@ trait VectorAggregateBase extends ImperativeAggregate
       }
     }
 
-    val currentOffset = mutableAggBufferOffset + currentIndex
+    val accOffset = mutableAggBufferOffset + accIndex
     val countOffset = mutableAggBufferOffset + countIndex
 
     val currentCount = buffer.getLong(countOffset)
 
     if (currentCount == 0L) {
       // First valid vector - just copy it
-      val byteBuffer =
-        ByteBuffer.allocate(inputLen * 4).order(ByteOrder.LITTLE_ENDIAN)
+      val bytes = new Array[Byte](inputLen * 4)
       var i = 0
       while (i < inputLen) {
-        byteBuffer.putFloat(inputArray.getFloat(i))
+        Platform.putFloat(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4, inputArray.getFloat(i))
         i += 1
       }
-      buffer.update(currentOffset, byteBuffer.array())
+      buffer.update(accOffset, bytes)
       buffer.setLong(countOffset, 1L)
     } else {
-      val currentBytes = buffer.getBinary(currentOffset)
-      val currentDim = getDim(currentBytes)
+      val accBytes = buffer.getBinary(accOffset)
+      val accDim = getDim(accBytes)
 
       // Empty array case - if current is empty and input is empty, keep empty
-      if (currentDim == 0 && inputLen == 0) {
+      if (accDim == 0 && inputLen == 0) {
         buffer.setLong(countOffset, currentCount + 1L)
         return
       }
 
       // Dimension mismatch check
-      if (currentDim != inputLen) {
+      if (accDim != inputLen) {
         throw QueryExecutionErrors.vectorDimensionMismatchError(
           prettyName,
-          currentDim,
+          accDim,
           inputLen
         )
       }
 
       val newCount = currentCount + 1L
-      // reuse the buffer without reallocation
-      val currentBuffer =
-        ByteBuffer.wrap(currentBytes).order(ByteOrder.LITTLE_ENDIAN)
-      updateElements(currentBuffer, inputArray, currentDim, newCount)
+      updateElements(accBytes, inputArray, accDim, newCount)
       buffer.setLong(countOffset, newCount)
     }
   }
 
   override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
-    val currentOffset = mutableAggBufferOffset + currentIndex
+    val accOffset = mutableAggBufferOffset + accIndex
     val countOffset = mutableAggBufferOffset + countIndex
-    val inputCurrentOffset = inputAggBufferOffset + currentIndex
+    val inputAccOffset = inputAggBufferOffset + accIndex
     val inputCountOffset = inputAggBufferOffset + countIndex
 
     val inputCount = inputBuffer.getLong(inputCountOffset)
@@ -502,40 +497,35 @@ trait VectorAggregateBase extends ImperativeAggregate
       return
     }
 
-    val inputCurrentBytes = inputBuffer.getBinary(inputCurrentOffset)
+    val inputAccBytes = inputBuffer.getBinary(inputAccOffset)
     val currentCount = buffer.getLong(countOffset)
 
     if (currentCount == 0L) {
       // Copy input buffer to current buffer
-      buffer.update(currentOffset, inputCurrentBytes.clone())
+      buffer.update(accOffset, inputAccBytes.clone())
       buffer.setLong(countOffset, inputCount)
     } else {
-      val currentBytes = buffer.getBinary(currentOffset)
-      val currentDim = getDim(currentBytes)
-      val inputDim = getDim(inputCurrentBytes)
+      val accBytes = buffer.getBinary(accOffset)
+      val accDim = getDim(accBytes)
+      val inputDim = getDim(inputAccBytes)
 
       // Empty array case
-      if (currentDim == 0 && inputDim == 0) {
+      if (accDim == 0 && inputDim == 0) {
         buffer.setLong(countOffset, currentCount + inputCount)
         return
       }
 
       // Dimension mismatch check
-      if (currentDim != inputDim) {
+      if (accDim != inputDim) {
         throw QueryExecutionErrors.vectorDimensionMismatchError(
           prettyName,
-          currentDim,
+          accDim,
           inputDim
         )
       }
 
       val newCount = currentCount + inputCount
-      // reuse the buffer without reallocation
-      val currentBuf =
-        ByteBuffer.wrap(currentBytes).order(ByteOrder.LITTLE_ENDIAN)
-      val inputBuf =
-        ByteBuffer.wrap(inputCurrentBytes).order(ByteOrder.LITTLE_ENDIAN)
-      mergeElements(currentBuf, inputBuf, currentDim,
+      mergeElements(accBytes, inputAccBytes, accDim,
         currentCount, inputCount, newCount)
       buffer.setLong(countOffset, newCount)
     }
@@ -546,14 +536,12 @@ trait VectorAggregateBase extends ImperativeAggregate
     if (count == 0L) {
       null
     } else {
-      val currentBytes = buffer.getBinary(mutableAggBufferOffset + currentIndex)
-      val dim = getDim(currentBytes)
-      val currentBuffer =
-        ByteBuffer.wrap(currentBytes).order(ByteOrder.LITTLE_ENDIAN)
+      val accBytes = buffer.getBinary(mutableAggBufferOffset + accIndex)
+      val dim = getDim(accBytes)
       val result = new Array[Float](dim)
       var i = 0
       while (i < dim) {
-        result(i) = currentBuffer.getFloat()
+        result(i) = Platform.getFloat(accBytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4)
         i += 1
       }
       ArrayData.toArrayData(result)
@@ -601,26 +589,24 @@ case class VectorAvg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def updateElements(
-      currentBuffer: ByteBuffer,
+      accBytes: Array[Byte],
       inputArray: ArrayData,
       dim: Int,
       newCount: Long): Unit = {
     // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
     val invCount = 1.0f / newCount
     var i = 0
-    var idx = 0
     while (i < dim) {
-      val oldAvg = currentBuffer.getFloat(idx)
-      val newVal = inputArray.getFloat(i)
-      currentBuffer.putFloat(idx, oldAvg + (newVal - oldAvg) * invCount)
+      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+      val oldAvg = Platform.getFloat(accBytes, off)
+      Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
       i += 1
-      idx += 4 // 4 bytes per float
     }
   }
 
   override protected def mergeElements(
-      currentBuffer: ByteBuffer,
-      inputBuffer: ByteBuffer,
+      accBytes: Array[Byte],
+      inputBytes: Array[Byte],
       dim: Int,
       currentCount: Long,
       inputCount: Long,
@@ -630,13 +616,12 @@ case class VectorAvg(
     val leftWeight = currentCount.toFloat / newCount
     val rightWeight = inputCount.toFloat / newCount
     var i = 0
-    var idx = 0
     while (i < dim) {
-      val leftAvg = currentBuffer.getFloat(idx)
-      val rightAvg = inputBuffer.getFloat(idx)
-      currentBuffer.putFloat(idx, leftAvg * leftWeight + rightAvg * rightWeight)
+      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+      val leftAvg = Platform.getFloat(accBytes, off)
+      val rightAvg = Platform.getFloat(inputBytes, off)
+      Platform.putFloat(accBytes, off, leftAvg * leftWeight + rightAvg * rightWeight)
       i += 1
-      idx += 4 // 4 bytes per float
     }
   }
 
@@ -684,34 +669,33 @@ case class VectorSum(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def updateElements(
-      currentBuffer: ByteBuffer,
+      accBytes: Array[Byte],
       inputArray: ArrayData,
       dim: Int,
       newCount: Long): Unit = {
     // Update sum: new_sum = old_sum + new_value
     var i = 0
-    var idx = 0
     while (i < dim) {
-      currentBuffer.putFloat(idx, currentBuffer.getFloat(idx) + inputArray.getFloat(i))
+      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+      Platform.putFloat(accBytes, off, Platform.getFloat(accBytes, off) + inputArray.getFloat(i))
       i += 1
-      idx += 4 // 4 bytes per float
     }
   }
 
   override protected def mergeElements(
-      currentBuffer: ByteBuffer,
-      inputBuffer: ByteBuffer,
+      accBytes: Array[Byte],
+      inputBytes: Array[Byte],
       dim: Int,
       currentCount: Long,
       inputCount: Long,
       newCount: Long): Unit = {
     // Merge sums: combined_sum = left_sum + right_sum
     var i = 0
-    var idx = 0
     while (i < dim) {
-      currentBuffer.putFloat(idx, currentBuffer.getFloat(idx) + inputBuffer.getFloat(idx))
+      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+      Platform.putFloat(accBytes, off,
+        Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
       i += 1
-      idx += 4 // 4 bytes per float
     }
   }
 
