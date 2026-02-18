@@ -4908,49 +4908,49 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         rsd: float = 0.05,
     ) -> "Series":
         """
-                Return number of unique elements in the object.
+        Return number of unique elements in the object.
 
-                Excludes NA values by default.
+        Excludes NA values by default.
 
-                Parameters
-                ----------
-                axis : int, default 0 or 'index'
-                    Can only be set to 0 now.
-                dropna : bool, default True
-                    Don’t include NaN in the count.
-                approx: bool, default False
-                    If False, will use the exact algorithm and return the exact number of unique.
-                    If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
-                    for large amounts of data.
-                    Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
-                rsd: float, default 0.05
-                    Maximum estimation error allowed in the HyperLogLog algorithm.
-                    Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
+        Parameters
+        ----------
+        axis : int, default 0 or 'index'
+            Can only be set to 0 now.
+        dropna : bool, default True
+            Don’t include NaN in the count.
+        approx: bool, default False
+            If False, will use the exact algorithm and return the exact number of unique.
+            If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
+            for large amounts of data.
+            Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
+        rsd: float, default 0.05
+            Maximum estimation error allowed in the HyperLogLog algorithm.
+            Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
 
-                Returns
-                -------
-                The number of unique values per column as a pandas-on-Spark Series.
+        Returns
+        -------
+        The number of unique values per column as a pandas-on-Spark Series.
 
-                Examples
-                --------
-                >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
-                >>> df.nunique()
-                A    3
-                B    1
-                dtype: int64
+        Examples
+        --------
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
+        >>> df.nunique()
+        A    3
+        B    1
+        dtype: int64
 
-                >>> df.nunique(dropna=False)
-                A    3
-                B    2
-                dtype: int64
-        di
-                On big data, we recommend using the approximate algorithm to speed up this function.
-                The result will be very close to the exact unique count.
+        >>> df.nunique(dropna=False)
+        A    3
+        B    2
+        dtype: int64
 
-                >>> df.nunique(approx=True)
-                A    3
-                B    1
-                dtype: int64
+        On big data, we recommend using the approximate algorithm to speed up this function.
+        The result will be very close to the exact unique count.
+
+        >>> df.nunique(approx=True)
+        A    3
+        B    1
+        dtype: int64
         """
         from pyspark.pandas.series import first_series
 
