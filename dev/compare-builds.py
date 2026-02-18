@@ -766,35 +766,36 @@ def build_two_level_report_dict(
     }
 
 
-def print_two_level_report(
+def format_two_level_report(
     results: Dict[str, ComparisonResult],
     equivalence: Dict[str, str],
     verdict: str,
     verbose: bool = False,
-):
-    """Print two-level comparison report."""
+) -> str:
+    """Build a two-level comparison report string."""
+    lines: List[str] = []
     matching = [k for k, v in results.items() if v.is_match]
     differing = [k for k, v in results.items() if not v.is_match]
 
     # Level 1
-    print("\nLevel 1: Physical Comparison")
-    print("═" * 72)
-    print(f"✓ {len(matching)} JARs match exactly")
+    lines.append("\nLevel 1: Physical Comparison")
+    lines.append("═" * 72)
+    lines.append(f"✓ {len(matching)} JARs match exactly")
     if differing:
-        print(f"✗ {len(differing)} JARs differ:")
+        lines.append(f"✗ {len(differing)} JARs differ:")
         for name in sorted(differing)[:10]:  # show first 10
             r = results[name]
             mvn_size = f"{r.maven_jar.size:,}" if r.maven_jar else "-"
             sbt_size = f"{r.sbt_jar.size:,}" if r.sbt_jar else "-"
-            print(f"  • {name}: Maven {mvn_size} bytes, SBT {sbt_size} bytes")
+            lines.append(f"  • {name}: Maven {mvn_size} bytes, SBT {sbt_size} bytes")
         if len(differing) > 10:
-            print(f"  ... and {len(differing) - 10} more")
+            lines.append(f"  ... and {len(differing) - 10} more")
 
     # Level 2 (only if differences)
     if differing:
-        print("\nLevel 2: Equivalence Analysis")
-        print("═" * 72)
-        print(f"Analyzing {len(differing)} physical differences...")
+        lines.append("\nLevel 2: Equivalence Analysis")
+        lines.append("═" * 72)
+        lines.append(f"Analyzing {len(differing)} physical differences...")
 
         shading = [k for k, v in equivalence.items() if v == "equivalent_shading"]
         structure = [k for k, v in equivalence.items() if v == "equivalent_structure"]
@@ -802,15 +803,15 @@ def print_two_level_report(
         unexplained = [k for k, v in equivalence.items() if v == "unexplained"]
 
         if shading:
-            print(f"✓ {len(shading)} explained by shading:")
+            lines.append(f"✓ {len(shading)} explained by shading:")
             for name in sorted(shading)[:5]:
-                print(f"  • {name}: Maven embeds shaded classes (org/sparkproject/*)")
+                lines.append(f"  • {name}: Maven embeds shaded classes (org/sparkproject/*)")
             if len(shading) > 5:
-                print(f"  ... and {len(shading) - 5} more")
+                lines.append(f"  ... and {len(shading) - 5} more")
 
         if structure:
             sbt_assemblies = find_shaded_jars("sbt")
-            print(
+            lines.append(
                 f"✓ {len(structure)} explained by structure (Maven fat JAR vs SBT thin + assembly):"
             )
             for name in sorted(structure):
@@ -818,59 +819,59 @@ def print_two_level_report(
                 mvn_size = f"{r.maven_jar.size:,}" if r.maven_jar else "-"
                 sbt_size = f"{r.sbt_jar.size:,}" if r.sbt_jar else "-"
                 asm_key = _jar_name_to_assembly_key(name)
-                print(f"  • {name}")
-                print(f"    Maven:   {mvn_size} bytes (module + shaded deps)")
-                print(f"    SBT:     {sbt_size} bytes (module only)")
+                lines.append(f"  • {name}")
+                lines.append(f"    Maven:   {mvn_size} bytes (module + shaded deps)")
+                lines.append(f"    SBT:     {sbt_size} bytes (module only)")
                 asm_jar = sbt_assemblies.get(asm_key)
                 if asm_jar and asm_jar.exists():
                     asm_size = asm_jar.stat().st_size
                     asm_path = str(asm_jar.relative_to(SPARK_HOME))
-                    print(f"    SBT asm: {asm_size:,} bytes → {asm_path}")
+                    lines.append(f"    SBT asm: {asm_size:,} bytes → {asm_path}")
                 else:
                     # core has no separate assembly; deps go into uber assembly
                     uber_dir = SPARK_HOME / "assembly" / "target" / "scala-2.13" / "jars"
                     if uber_dir.exists():
                         jar_count = len(list(uber_dir.glob("*.jar")))
-                        print(
+                        lines.append(
                             f"    SBT deps: in uber assembly → assembly/target/scala-2.13/jars/ ({jar_count} JARs)"
                         )
 
         if only_in_build:
-            print(
+            lines.append(
                 f"ℹ {len(only_in_build)} in only one build (build scope, not artifact difference):"
             )
             for name in sorted(only_in_build)[:5]:
-                print(f"  • {name}")
+                lines.append(f"  • {name}")
             if len(only_in_build) > 5:
-                print(f"  ... and {len(only_in_build) - 5} more")
+                lines.append(f"  ... and {len(only_in_build) - 5} more")
 
         if unexplained:
-            print(f"✗ {len(unexplained)} UNEXPLAINED differences:")
+            lines.append(f"✗ {len(unexplained)} UNEXPLAINED differences:")
             for name in sorted(unexplained):
-                print(f"  • {name}")
+                lines.append(f"  • {name}")
 
     # Final verdict
-    print(f"\n{'═' * 72}")
+    lines.append(f"\n{'═' * 72}")
     if verdict == "IDENTICAL":
-        print("✓✓ RESULT: Builds are IDENTICAL")
+        lines.append("✓✓ RESULT: Builds are IDENTICAL")
     elif verdict == "EQUIVALENT":
-        print("✓✓ RESULT: Builds are EQUIVALENT (all differences explained)")
+        lines.append("✓✓ RESULT: Builds are EQUIVALENT (all differences explained)")
     else:
-        print("✗✗ RESULT: Builds DIFFER (unexplained differences found)")
+        lines.append("✗✗ RESULT: Builds DIFFER (unexplained differences found)")
 
     # Verbose details with evidence
     if verbose and differing:
-        print(f"\n{'═' * 72}")
-        print("Detailed Evidence for Equivalence")
-        print("═" * 72)
+        lines.append(f"\n{'═' * 72}")
+        lines.append("Detailed Evidence for Equivalence")
+        lines.append("═" * 72)
         for name in sorted(differing):
             r = results[name]
             cls = equivalence.get(name, "")
-            print(f"\n{name} [{cls}]")
+            lines.append(f"\n{name} [{cls}]")
 
             # Show physical differences
             if r.maven_jar and r.sbt_jar:
-                print(
+                lines.append(
                     f"  Physical: Maven {r.maven_jar.class_count()} classes, "
                     f"SBT {r.sbt_jar.class_count()} classes "
                     f"(Δ {abs(r.maven_jar.class_count() - r.sbt_jar.class_count())})"
@@ -883,31 +884,31 @@ def print_two_level_report(
                 sbt_shaded = sum(1 for c in r.sbt_jar.classes if is_shaded_class(c))
                 maven_nonshaded = r.maven_jar.class_count() - maven_shaded
                 sbt_nonshaded = r.sbt_jar.class_count() - sbt_shaded
-                print("  Evidence: After filtering shaded classes:")
-                print(f"    Maven: {maven_shaded} shaded → {maven_nonshaded} core classes")
-                print(f"    SBT:   {sbt_shaded} shaded → {sbt_nonshaded} core classes")
+                lines.append("  Evidence: After filtering shaded classes:")
+                lines.append(f"    Maven: {maven_shaded} shaded → {maven_nonshaded} core classes")
+                lines.append(f"    SBT:   {sbt_shaded} shaded → {sbt_nonshaded} core classes")
                 if maven_nonshaded == sbt_nonshaded:
-                    print(f"    ✓ Core classes match ({maven_nonshaded} each)")
+                    lines.append(f"    ✓ Core classes match ({maven_nonshaded} each)")
                 if r.only_in_maven and maven_shaded > 0:
-                    print(f"  Maven shaded packages ({len(r.only_in_maven)} classes):")
+                    lines.append(f"  Maven shaded packages ({len(r.only_in_maven)} classes):")
                     for line in _summarize_classes(r.only_in_maven)[:3]:
-                        print(f"    {line}")
+                        lines.append(f"    {line}")
 
             elif cls == "equivalent_structure":
                 # Show that SBT is subset of Maven, and where deps live
                 maven_count = r.maven_jar.class_count()
                 sbt_count = r.sbt_jar.class_count()
-                print("  Evidence: Fat JAR structure difference")
-                print(f"    Maven: {maven_count} classes in module JAR (fat: core + deps)")
-                print(f"    SBT:   {sbt_count} classes in module JAR (thin: core only)")
-                print(f"    ✓ All {sbt_count} SBT module classes found in Maven")
+                lines.append("  Evidence: Fat JAR structure difference")
+                lines.append(f"    Maven: {maven_count} classes in module JAR (fat: core + deps)")
+                lines.append(f"    SBT:   {sbt_count} classes in module JAR (thin: core only)")
+                lines.append(f"    ✓ All {sbt_count} SBT module classes found in Maven")
                 # Show where the SBT deps actually live
                 asm_key = _jar_name_to_assembly_key(name)
                 sbt_asm = find_shaded_jars("sbt").get(asm_key)
                 if sbt_asm and sbt_asm.exists():
                     asm_info = get_jar_contents(sbt_asm)
-                    print(f"  SBT assembly JAR: {str(sbt_asm.relative_to(SPARK_HOME))}")
-                    print(
+                    lines.append(f"  SBT assembly JAR: {str(sbt_asm.relative_to(SPARK_HOME))}")
+                    lines.append(
                         f"    {asm_info.size:,} bytes, {asm_info.class_count()} classes, "
                         f"{len(asm_info.resources)} resources"
                     )
@@ -915,30 +916,32 @@ def print_two_level_report(
                     uber_dir = SPARK_HOME / "assembly" / "target" / "scala-2.13" / "jars"
                     if uber_dir.exists():
                         jar_count = len(list(uber_dir.glob("*.jar")))
-                        print(
+                        lines.append(
                             f"  SBT deps: in uber assembly → assembly/target/scala-2.13/jars/ ({jar_count} JARs)"
                         )
                 if r.only_in_maven:
-                    print(f"  Maven bundled deps ({len(r.only_in_maven)} extra classes):")
+                    lines.append(f"  Maven bundled deps ({len(r.only_in_maven)} extra classes):")
                     for line in _summarize_classes(r.only_in_maven)[:5]:
-                        print(f"    {line}")
+                        lines.append(f"    {line}")
 
             elif cls == "unexplained":
-                print("  Evidence: Real content differences")
+                lines.append("  Evidence: Real content differences")
                 if r.only_in_maven:
-                    print(f"  Classes only in Maven ({len(r.only_in_maven)}):")
+                    lines.append(f"  Classes only in Maven ({len(r.only_in_maven)}):")
                     for line in _summarize_classes(r.only_in_maven)[:5]:
-                        print(f"    {line}")
+                        lines.append(f"    {line}")
                 if r.only_in_sbt:
-                    print(f"  Classes only in SBT ({len(r.only_in_sbt)}):")
+                    lines.append(f"  Classes only in SBT ({len(r.only_in_sbt)}):")
                     for line in _summarize_classes(r.only_in_sbt)[:5]:
-                        print(f"    {line}")
+                        lines.append(f"    {line}")
 
             elif cls == "only_in_build":
                 if not r.maven_jar:
-                    print("  Evidence: Only built by SBT (optional Maven profile)")
+                    lines.append("  Evidence: Only built by SBT (optional Maven profile)")
                 elif not r.sbt_jar:
-                    print("  Evidence: Only built by Maven")
+                    lines.append("  Evidence: Only built by Maven")
+
+    return "\n".join(lines)
 
 
 def _summarize_classes(classes: Set[str]) -> List[str]:
@@ -1018,11 +1021,12 @@ def _status_label(r: ComparisonResult) -> str:
     return ", ".join(parts) if parts else "differs"
 
 
-def print_report(
+def format_report(
     results: Dict[str, ComparisonResult],
     verbose: bool = False,
-):
-    """Print comparison report as a formatted table."""
+) -> str:
+    """Build a formatted table report string for physical comparison."""
+    lines: List[str] = []
     total = len(results)
     matches = sum(1 for r in results.values() if r.is_match)
     content_diffs = sum(1 for r in results.values() if r.has_content_diff)
@@ -1044,19 +1048,19 @@ def print_report(
     col_status = max(len("Status"), max((len(r[3]) for r in rows), default=0))
     line_width = col_module + col_maven + col_sbt + col_status + 9  # separators
 
-    print()
-    print(
+    lines.append("")
+    lines.append(
         f"{'Module':<{col_module}}  {'Maven (bytes)':>{col_maven}}  {'SBT (bytes)':>{col_sbt}}  {'Status':<{col_status}}"
     )
-    print("\u2500" * line_width)
+    lines.append("─" * line_width)
 
     for name, mvn_size, sbt_size, status in rows:
-        marker = "\u2713" if status == "match" else "\u2717"
-        print(
+        marker = "✓" if status == "match" else "✗"
+        lines.append(
             f"{name:<{col_module}}  {mvn_size:>{col_maven}}  {sbt_size:>{col_sbt}}  {marker} {status}"
         )
 
-    print("\u2500" * line_width)
+    lines.append("─" * line_width)
 
     # Summary line
     parts = [f"{matches} match"]
@@ -1066,56 +1070,58 @@ def print_report(
         parts.append(f"{only_maven_n} only in Maven")
     if only_sbt_n:
         parts.append(f"{only_sbt_n} only in SBT")
-    print(f"Summary: {', '.join(parts)} ({total} total)")
+    lines.append(f"Summary: {', '.join(parts)} ({total} total)")
 
     # Verbose: show details for non-matching JARs
     if verbose and (content_diffs or only_maven_n or only_sbt_n):
-        print(f"\n{'=' * line_width}")
-        print("Details")
-        print("=" * line_width)
+        lines.append(f"\n{'=' * line_width}")
+        lines.append("Details")
+        lines.append("=" * line_width)
 
         for name, r in sorted(results.items()):
             if r.is_match:
                 continue
 
-            print(f"\n  {name} [{r.status}]")
+            lines.append(f"\n  {name} [{r.status}]")
 
             if r.maven_jar and r.sbt_jar:
                 mvn_mr = len(r.maven_jar.multi_release_classes)
                 sbt_mr = len(r.sbt_jar.multi_release_classes)
                 mvn_svc = len(r.maven_jar.services)
                 sbt_svc = len(r.sbt_jar.services)
-                print(
+                lines.append(
                     f"    Maven: {r.maven_jar.class_count()} classes,"
                     f" {mvn_svc} services, {r.maven_jar.size:,} bytes"
                     + (f" ({mvn_mr} multi-release classes skipped)" if mvn_mr else "")
                 )
-                print(
+                lines.append(
                     f"    SBT:   {r.sbt_jar.class_count()} classes,"
                     f" {sbt_svc} services, {r.sbt_jar.size:,} bytes"
                     + (f" ({sbt_mr} multi-release classes skipped)" if sbt_mr else "")
                 )
-                print(f"    Size:  {_format_size_diff(r.maven_jar.size, r.sbt_jar.size)}")
+                lines.append(f"    Size:  {_format_size_diff(r.maven_jar.size, r.sbt_jar.size)}")
 
             if r.only_in_maven:
-                print(f"    Classes only in Maven ({len(r.only_in_maven)}):")
+                lines.append(f"    Classes only in Maven ({len(r.only_in_maven)}):")
                 for line in _summarize_classes(r.only_in_maven):
-                    print(f"      {line}")
+                    lines.append(f"      {line}")
 
             if r.only_in_sbt:
-                print(f"    Classes only in SBT ({len(r.only_in_sbt)}):")
+                lines.append(f"    Classes only in SBT ({len(r.only_in_sbt)}):")
                 for line in _summarize_classes(r.only_in_sbt):
-                    print(f"      {line}")
+                    lines.append(f"      {line}")
 
             if r.services_only_in_maven:
-                print(f"    Services only in Maven ({len(r.services_only_in_maven)}):")
+                lines.append(f"    Services only in Maven ({len(r.services_only_in_maven)}):")
                 for svc in sorted(r.services_only_in_maven):
-                    print(f"      {svc}")
+                    lines.append(f"      {svc}")
 
             if r.services_only_in_sbt:
-                print(f"    Services only in SBT ({len(r.services_only_in_sbt)}):")
+                lines.append(f"    Services only in SBT ({len(r.services_only_in_sbt)}):")
                 for svc in sorted(r.services_only_in_sbt):
-                    print(f"      {svc}")
+                    lines.append(f"      {svc}")
+
+    return "\n".join(lines)
 
 
 # ============================================================================
@@ -1205,27 +1211,28 @@ def compare_two_jars(
     return report
 
 
-def print_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> None:
-    """Print a human-readable comparison of two JARs."""
+def format_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> str:
+    """Build a human-readable comparison report string for two JARs."""
+    lines: List[str] = []
     j1 = report["jar1"]
     j2 = report["jar2"]
 
-    print("\nComparing JARs")
-    print("─" * 72)
+    lines.append("\nComparing JARs")
+    lines.append("─" * 72)
     svc1 = f", {j1['services_count']} services" if "services_count" in j1 else ""
     svc2 = f", {j2['services_count']} services" if "services_count" in j2 else ""
-    print(f"  JAR 1: {j1['path']}")
-    print(
+    lines.append(f"  JAR 1: {j1['path']}")
+    lines.append(
         f"         {j1['size']:,} bytes, {j1['class_count']} classes, "
         f"{j1['resource_count']} resources{svc1}"
     )
-    print(f"  JAR 2: {j2['path']}")
-    print(
+    lines.append(f"  JAR 2: {j2['path']}")
+    lines.append(
         f"         {j2['size']:,} bytes, {j2['class_count']} classes, "
         f"{j2['resource_count']} resources{svc2}"
     )
-    print(f"  Size:  {report['size_diff']}")
-    print("─" * 72)
+    lines.append(f"  Size:  {report['size_diff']}")
+    lines.append("─" * 72)
 
     only1_n = report.get("only_in_jar1_count", 0)
     only2_n = report.get("only_in_jar2_count", 0)
@@ -1250,65 +1257,67 @@ def print_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> Non
         parts.append(f"{only2_n} only in JAR 2")
     if svc1_n or svc2_n:
         parts.append(f"{svc1_n + svc2_n} service diffs")
-    print(f"Summary: {', '.join(parts)}")
+    lines.append(f"Summary: {', '.join(parts)}")
 
     if only1_n == 0 and only2_n == 0 and svc1_n == 0 and svc2_n == 0:
-        print("\n  ✓ JARs have identical class and service contents")
-        return
+        lines.append("\n  ✓ JARs have identical class and service contents")
+        return "\n".join(lines)
 
     # De-shading analysis (if applicable)
     if deshaded_n:
-        print("\nDe-shading Analysis")
-        print("─" * 72)
-        print(
+        lines.append("\nDe-shading Analysis")
+        lines.append("─" * 72)
+        lines.append(
             f"  ✓ {deshaded_n} classes are the same original class under different shading prefixes"
         )
 
         if truly1_n:
-            print(f"\n  Classes truly only in JAR 1 ({truly1_n}):")
+            lines.append(f"\n  Classes truly only in JAR 1 ({truly1_n}):")
             items = list(report["truly_only_in_jar1"].items())
             for pkg, count in items[:MAX_PKG_LINES]:
-                print(f"    {pkg} ({count} classes)")
+                lines.append(f"    {pkg} ({count} classes)")
             if len(items) > MAX_PKG_LINES:
-                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+                lines.append(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
 
         if truly2_n:
-            print(f"\n  Classes truly only in JAR 2 ({truly2_n}):")
+            lines.append(f"\n  Classes truly only in JAR 2 ({truly2_n}):")
             items = list(report["truly_only_in_jar2"].items())
             for pkg, count in items[:MAX_PKG_LINES]:
-                print(f"    {pkg} ({count} classes)")
+                lines.append(f"    {pkg} ({count} classes)")
             if len(items) > MAX_PKG_LINES:
-                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+                lines.append(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
 
         if not truly1_n and not truly2_n:
-            print("\n  ✓ All class differences are explained by shading relocation")
+            lines.append("\n  ✓ All class differences are explained by shading relocation")
     else:
         # No de-shading matches — show raw differences
         if only1_n:
-            print(f"\n  Classes only in JAR 1 ({only1_n}):")
+            lines.append(f"\n  Classes only in JAR 1 ({only1_n}):")
             items = list(report["only_in_jar1"].items())
             for pkg, count in items[:MAX_PKG_LINES]:
-                print(f"    {pkg} ({count} classes)")
+                lines.append(f"    {pkg} ({count} classes)")
             if len(items) > MAX_PKG_LINES:
-                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+                lines.append(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
 
         if only2_n:
-            print(f"\n  Classes only in JAR 2 ({only2_n}):")
+            lines.append(f"\n  Classes only in JAR 2 ({only2_n}):")
             items = list(report["only_in_jar2"].items())
             for pkg, count in items[:MAX_PKG_LINES]:
-                print(f"    {pkg} ({count} classes)")
+                lines.append(f"    {pkg} ({count} classes)")
             if len(items) > MAX_PKG_LINES:
-                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+                lines.append(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
 
     if svc1_n:
-        print(f"\n  Services only in JAR 1 ({svc1_n}):")
+        lines.append(f"\n  Services only in JAR 1 ({svc1_n}):")
         for svc in report["services_only_in_jar1"]:
-            print(f"    {svc}")
+            lines.append(f"    {svc}")
 
     if svc2_n:
-        print(f"\n  Services only in JAR 2 ({svc2_n}):")
+        lines.append(f"\n  Services only in JAR 2 ({svc2_n}):")
         for svc in report["services_only_in_jar2"]:
-            print(f"    {svc}")
+            lines.append(f"    {svc}")
+
+    return "\n".join(lines)
 
 
 # Rules to reverse shading relocations back to original package names.
@@ -1653,7 +1662,7 @@ def main():
         if args.json or args.output:
             _output_report(report)
         if not args.json:
-            print_two_jar_report(report, verbose=args.verbose)
+            print(format_two_jar_report(report, verbose=args.verbose))
         has_diff = report.get("only_in_jar1_count", 0) + report.get("only_in_jar2_count", 0)
         if has_diff > 0:
             sys.exit(1)
@@ -1682,7 +1691,7 @@ def main():
         if args.json or args.output:
             _output_report(report)
         if not args.json:
-            print_report(results, args.verbose)
+            print(format_report(results, args.verbose))
         matches = sum(1 for r in results.values() if r.is_match)
         if matches != len(results):
             sys.exit(1)
@@ -1695,7 +1704,7 @@ def main():
         if args.json or args.output:
             _output_report(report)
         if not args.json:
-            print_two_level_report(results, equivalence, verdict, verbose=args.verbose)
+            print(format_two_level_report(results, equivalence, verdict, verbose=args.verbose))
         if verdict == "DIFFER":
             sys.exit(1)
 
