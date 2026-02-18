@@ -26,7 +26,7 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
+from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, Union
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -66,7 +66,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPandasInitStateSerializer,
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
-    ArrowStreamArrowUDFSerializer,
     ArrowStreamAggPandasUDFSerializer,
     ArrowStreamAggArrowUDFSerializer,
     ArrowBatchUDFSerializer,
@@ -289,6 +288,120 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
             },
         )
     return result
+
+
+def verify_iterator_consumed(
+    iterator: Iterator,
+    error_class: str,
+) -> None:
+    """
+    Verify that an iterator has been fully consumed.
+
+    Useful for scalar iterator UDFs to ensure the input was completely processed.
+    Can be reused by different eval types by providing appropriate error class.
+
+    Parameters
+    ----------
+    iterator : Iterator
+        Iterator to verify.
+    error_class : str
+        Error class to raise if iterator not fully consumed.
+
+    Raises
+    ------
+    PySparkRuntimeError
+        If iterator still has unconsumed elements.
+    """
+    try:
+        next(iterator)
+    except StopIteration:
+        pass
+    else:
+        raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+
+
+def verify_row_limit_iter(
+    iterator: Iterator,
+    max_rows: Union[int, Callable[[], int]],
+    error_class: str,
+) -> Iterator:
+    """
+    Verify that total output rows do not exceed a limit (fail-fast).
+
+    Useful for scalar iterator UDFs where output should not exceed input.
+    Can be reused by different eval types by providing appropriate error class.
+
+    Parameters
+    ----------
+    iterator : Iterator
+        Iterator of arrays/batches. Each element must have len().
+    max_rows : int or callable
+        Maximum allowed total rows. Can be a callable that returns the limit
+        (useful when limit is computed during iteration).
+    error_class : str
+        Error class to raise if limit exceeded.
+
+    Yields
+    ------
+    Elements from the iterator.
+
+    Raises
+    ------
+    PySparkRuntimeError
+        If cumulative row count exceeds max_rows.
+    """
+    total_rows = 0
+    for element in iterator:
+        total_rows += len(element)
+        limit = max_rows() if callable(max_rows) else max_rows
+        if total_rows > limit:
+            raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+        yield element
+
+
+def verify_row_count_match_iter(
+    iterator: Iterator,
+    expected_rows: Union[int, Callable[[], int]],
+    error_class: str,
+) -> Iterator:
+    """
+    Verify that final row count matches expected exactly.
+
+    Can be reused by different eval types by providing appropriate error class.
+
+    Parameters
+    ----------
+    iterator : Iterator
+        Iterator of arrays/batches. Each element must have len().
+    expected_rows : int or callable
+        Expected total number of rows. Can be a callable that returns the count
+        (useful when count is computed during iteration).
+    error_class : str
+        Error class to raise if counts don't match.
+
+    Yields
+    ------
+    Elements from the iterator.
+
+    Raises
+    ------
+    PySparkRuntimeError
+        If final row count != expected_rows.
+    """
+    actual_rows = 0
+    for element in iterator:
+        actual_rows += len(element)
+        yield element
+
+    expected = expected_rows() if callable(expected_rows) else expected_rows
+    if actual_rows != expected:
+        raise PySparkRuntimeError(
+            errorClass=error_class,
+            messageParameters={
+                "output_length": str(actual_rows),
+                "input_length": str(expected),
+            },
+        )
 
 
 def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
@@ -1418,7 +1531,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
-        return args_offsets, wrap_arrow_array_iter_udf(func, return_type, runner_conf)
+        return func, args_offsets, return_type
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
@@ -2767,11 +2880,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         elif eval_type in (
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         ):
             ser = ArrowStreamSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
-            # Arrow cast and safe check are always enabled
-            ser = ArrowStreamArrowUDFSerializer(safecheck=True, arrow_cast=True)
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
@@ -2883,10 +2994,80 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    is_scalar_iter = eval_type in (
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-    )
+    if eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
+        import pyarrow as pa
+
+        assert num_udfs == 1, "One SCALAR_ARROW_ITER UDF expected here."
+        udf_func, args_offsets, return_type = udfs[0]
+
+        # Pre-compute combined schema
+        combined_arrow_schema = to_arrow_schema(
+            StructType([StructField("_0", return_type)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            """Apply scalar Arrow iterator UDF"""
+
+            num_input_rows = 0
+
+            def extract_args(batch: pa.RecordBatch):
+                nonlocal num_input_rows
+                args = tuple(batch.column(o) for o in args_offsets)
+                num_input_rows += batch.num_rows
+                return args[0] if len(args) == 1 else args
+
+            # Extract args from input batches (streaming)
+            args_iter = map(extract_args, batches)
+
+            # Call UDF
+            result_iter = udf_func(args_iter)
+
+            # Process and verify results
+            def process_results():
+                for result in result_iter:
+                    # Verify result type
+                    verify_result(pa.Array)(result)
+
+                    # Assemble into RecordBatch
+                    batch = pa.RecordBatch.from_arrays([result], ["_0"])
+
+                    # Enforce schema
+                    batch = ArrowBatchTransformer.enforce_schema(batch, combined_arrow_schema)
+
+                    yield batch
+
+            # Apply row limit check (fail-fast)
+            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., ARROW_UDF_OUTPUT_EXCEEDS_INPUT_ROWS)
+            limited = verify_row_limit_iter(
+                process_results(),
+                lambda: num_input_rows,
+                error_class="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS",
+            )
+
+            # Apply row count match check (final)
+            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_ARROW_UDF)
+            matched = verify_row_count_match_iter(
+                limited,
+                lambda: num_input_rows,
+                error_class="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
+            )
+
+            # Yield batches
+            yield from matched
+
+            # Verify iterator consumed
+            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_ARROW_UDF)
+            verify_iterator_consumed(
+                args_iter,
+                error_class="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+            )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
     is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
     if is_scalar_iter or is_map_pandas_iter:
