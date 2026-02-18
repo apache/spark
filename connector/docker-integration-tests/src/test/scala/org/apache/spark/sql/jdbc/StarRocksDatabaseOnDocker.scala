@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.jdbc
 
-class MySQLDatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:9.6.0")
-  override val env = Map(
-    "MYSQL_ROOT_PASSWORD" -> "rootpass"
-  )
+class StarRocksDatabaseOnDocker extends DatabaseOnDocker {
+  override val imageName =
+    sys.env.getOrElse("STARROCKS_DOCKER_IMAGE_NAME", "starrocks/allin1-ubuntu:4.0.6")
+  override val env = Map.empty[String, String]
   override val usesIpc = false
-  override val jdbcPort: Int = 3306
+  override val jdbcPort: Int = 9030
 
   override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-      s"&useSSL=false&disableMariaDbDriver"
+    s"jdbc:mysql://$ip:$port/mysql?user=root&useSSL=false&disableMariaDbDriver=true" +
+      "&createDatabaseIfNotExist=true"
 }

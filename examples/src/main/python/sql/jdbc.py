@@ -15,22 +15,34 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.indexes.test_indexing_adv import IndexingAdvMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-
-
-class IndexingAdvParityTests(
-    IndexingAdvMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
-):
-    pass
+"""
+A simple example demonstrating Spark SQL JDBC integration.
+Run with:
+  ./bin/spark-submit examples/src/main/python/sql/jdbc.py [jdbc_url]
+"""
+import sys
+from pyspark.sql import SparkSession
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_indexing import *  # noqa: F403
+    if len(sys.argv) < 2:
+        print("Usage: jdbc.py <jdbc_url>", file=sys.stderr)
+        sys.exit(-1)
+    url = sys.argv[1]
 
-    from pyspark.testing import main
+    spark = SparkSession \
+        .builder \
+        .appName("Python Spark SQL JDBC integration example") \
+        .getOrCreate()
 
-    main()
+    # 1. Create a DataFrame
+    df = spark.createDataFrame([(1, "foo"), (2, "bar")], ["id", "name"])
+
+    # 2. Write data to a JDBC source
+    df.write.jdbc(url, "test_table", mode="overwrite", properties={})
+
+    # 3. Read data from a JDBC source
+    jdbcDF = spark.read.jdbc(url, "test_table", properties={})
+    jdbcDF.show()
+
+    spark.stop()

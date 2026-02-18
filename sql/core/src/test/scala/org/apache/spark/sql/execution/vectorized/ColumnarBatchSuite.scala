@@ -2025,4 +2025,39 @@ class ColumnarBatchSuite extends SparkFunSuite {
         }
     }
   }
+
+  testVector("[SPARK-55552] Variant", 3, VariantType) {
+    column =>
+      val valueChild = column.getChild(0)
+      val metadataChild = column.getChild(1)
+
+      column.putNotNull(0)
+      valueChild.appendByteArray(Array[Byte](1, 2, 3), 0, 3)
+      metadataChild.appendByteArray(Array[Byte](10, 11), 0, 2)
+
+      column.putNotNull(1)
+      valueChild.appendByteArray(Array[Byte](4, 5), 0, 2)
+      metadataChild.appendByteArray(Array[Byte](12, 13, 14), 0, 3)
+
+      column.putNull(2)
+      valueChild.appendNull()
+      metadataChild.appendNull()
+
+      val batchRow = new ColumnarBatchRow(Array(column))
+      (0 until 3).foreach { i =>
+        batchRow.rowId = i
+        val batchRowCopy = batchRow.copy()
+        if (i < 2) {
+          assert(!batchRow.isNullAt(0))
+          assert(!batchRowCopy.isNullAt(0))
+          val original = batchRow.getVariant(0)
+          val copied = batchRowCopy.get(0, VariantType).asInstanceOf[VariantVal]
+          assert(java.util.Arrays.equals(original.getValue, copied.getValue))
+          assert(java.util.Arrays.equals(original.getMetadata, copied.getMetadata))
+        } else {
+          assert(batchRow.isNullAt(0))
+          assert(batchRowCopy.isNullAt(0))
+        }
+      }
+  }
 }

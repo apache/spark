@@ -15,20 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.execution.datasources.parquet;
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.STUtils;
 
-object CollationTypeCasts extends TypeCoercionRule {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    // Pre-tag CommonExpressionRefs with the collation context of their definitions
-    // before the bottom-up expression transformation processes inner expressions.
-    super.apply(CollationTypeCoercion.preTagCommonExpressionRefs(plan))
+/**
+ * Interface for converting a WKB byte array into a physical geometry or geography value.
+ */
+interface WKBConverterStrategy {
+  byte[] convert(byte[] wkb, int srid);
+}
+
+/**
+ * Converts the provided WKB data into a geometry object.
+ */
+enum WKBToGeometryConverter implements WKBConverterStrategy {
+  INSTANCE;
+
+  @Override
+  public byte[] convert(byte[] wkb, int srid) {
+    return STUtils.stGeomFromWKB(wkb, srid).getBytes();
   }
+}
 
-  override val transform: PartialFunction[Expression, Expression] = {
-    case e if !e.childrenResolved => e
-    case withChildrenResolved => CollationTypeCoercion(withChildrenResolved)
+/**
+ * Converts the provided WKB data into a geography object.
+ */
+enum WKBToGeographyConverter implements WKBConverterStrategy {
+  INSTANCE;
+
+  @Override
+  public byte[] convert(byte[] wkb, int srid) {
+    return STUtils.stGeogFromWKB(wkb).getBytes();
   }
 }
