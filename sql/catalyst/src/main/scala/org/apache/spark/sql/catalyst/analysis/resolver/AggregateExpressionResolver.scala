@@ -79,8 +79,9 @@ class AggregateExpressionResolver(
    *    `handleOuterAggregateExpression`);
    *  - Validation:
    *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if it contains [[SortOrder]] different
-   *      from its child, unless the mismatch is only due to a [[Cast]] on the child whose inner
-   *      expression is semantically equal to the single order-by column;
+   *      from its child. However, when [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] is
+   *      enabled, a mismatch is tolerated if it is solely due to a [[Cast]] whose source type is
+   *      injective when cast to string (see [[ListAgg.validateDistinctOrderCompatibility]]);
    *   2. Nested aggregate functions are not allowed;
    *   3. Nondeterministic expressions in the subtree of a related aggregate function are not
    *      allowed;

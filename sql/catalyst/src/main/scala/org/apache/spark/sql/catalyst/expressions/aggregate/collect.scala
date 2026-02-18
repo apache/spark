@@ -597,9 +597,11 @@ case class ListAgg(
    * Validates that the ordering expression is compatible with DISTINCT deduplication.
    *
    * When LISTAGG(DISTINCT col) WITHIN GROUP (ORDER BY col) is used on a non-string column,
-   * the child is implicitly casted to string (with UTF8_BINARY collation). The DISTINCT rewrite
-   * uses GROUP BY on both the original and cast columns, so the cast must preserve equality
-   * semantics: values that are GROUP BY-equal must cast to equal strings, and vice versa.
+   * the child is implicitly cast to string (with UTF8_BINARY collation). The DISTINCT rewrite
+   * (see [[RewriteDistinctAggregates]]) uses GROUP BY on both the original and cast columns,
+   * so the cast must preserve equality semantics: values that are GROUP BY-equal must cast to
+   * equal strings, and vice versa. Types like Float/Double violate this because IEEE 754
+   * negative zero (-0.0) and positive zero (0.0) are equal but produce different strings.
    *
    * This method is a no-op when the order expression matches the child (i.e.,
    * [[needSaveOrderValue]] is false). Otherwise, the behavior depends on the
@@ -609,10 +611,6 @@ case class ListAgg(
    *  - If disabled, rejects any mismatch.
    *
    * @throws AnalysisException if the ordering is incompatible with DISTINCT
-   * @see [[RewriteDistinctAggregates]]
-   * @see [[orderMismatchCastSafety]]
-   * @see [[isCastSafeForDistinct]]
-   * @see [[isCastTargetSafeForDistinct]]
    */
   def validateDistinctOrderCompatibility(): Unit = {
     if (needSaveOrderValue) {
@@ -642,21 +640,9 @@ case class ListAgg(
   }
 
   /**
-   * Determines whether the order mismatch between [[child]] and [[orderExpressions]] is due to
-   * a cast, and if so, whether that cast is safe for DISTINCT deduplication.
+   * Classifies the order-expression mismatch as a safe cast, unsafe cast, or not a cast.
    *
-   * When LISTAGG(DISTINCT) is used with a non-string column, a Cast is applied to the
-   * child expression. The DISTINCT rewrite uses GROUP BY on the cast result, which can produce
-   * incorrect deduplication for types where equal values cast to different strings
-   * (e.g., Float/Double where -0.0 and 0.0 are GROUP BY-equal but cast to different strings).
-   *
-   * Safety is determined by both the source type (via [[isCastSafeForDistinct]]) and the target
-   * type's collation (via [[isCastTargetSafeForDistinct]]).
-   *
-   * @return [[CastSafetyResult.SafeCast]] if the mismatch is due to a safe cast,
-   *         [[CastSafetyResult.UnsafeCast]] if the cast is unsafe, carrying the source
-   *         and target types for use in the error message,
-   *         [[CastSafetyResult.NotACast]] if the mismatch is not due to a cast at all
+   * @see [[validateDistinctOrderCompatibility]] for the full invariant this enforces
    */
   private def orderMismatchCastSafety: CastSafetyResult = {
     if (orderExpressions.size != 1) return CastSafetyResult.NotACast
@@ -674,16 +660,9 @@ case class ListAgg(
   }
 
   /**
-   * Checks whether a source type preserves equality semantics after casting to STRING/BINARY.
+   * Returns true if casting `dt` to string is injective for DISTINCT deduplication.
    *
-   * A type is safe if equal values always produce equal string representations and different
-   * string representations always imply different values. Types like Float/Double are unsafe
-   * because IEEE 754 negative zero (-0.0) and positive zero (0.0) are equal but produce
-   * different string representations.
-   *
-   * @param dt the source [[DataType]] before casting
-   * @return true if the cast preserves equality semantics for DISTINCT deduplication
-   * @see [[orderMismatchCastSafety]]
+   * @see [[validateDistinctOrderCompatibility]]
    */
   private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
@@ -704,15 +683,10 @@ case class ListAgg(
   }
 
   /**
-   * Checks whether the cast target type preserves equality semantics for DISTINCT deduplication.
+   * Returns true if the target type's equality semantics are safe for DISTINCT deduplication
+   * (i.e., UTF8_BINARY collation or BinaryType).
    *
-   * A non-binary-equality collation on the target [[StringType]] can cause different source values
-   * to become equal after casting (e.g., binary values 0x414243 ("ABC") and 0x616263 ("abc") are
-   * different, but equal under UTF8_LCASE collation after casting to string).
-   *
-   * @param dt the target [[DataType]] of the cast
-   * @return true if the target type's equality semantics are safe for DISTINCT deduplication
-   * @see [[orderMismatchCastSafety]]
+   * @see [[validateDistinctOrderCompatibility]]
    */
   private def isCastTargetSafeForDistinct(dt: DataType): Boolean = dt match {
     case st: StringType => st.isUTF8BinaryCollation
