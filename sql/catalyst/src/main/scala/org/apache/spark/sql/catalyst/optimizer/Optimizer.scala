@@ -2100,7 +2100,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // If the legacy double evaluation behavior is enabled we just say
         // every filter is "free."
         if (!SQLConf.get.avoidDoubleFilterEval) {
-          (cond, AttributeMap.empty[Alias])
+          val replaced = replaceAlias(cond, aliasMap)
+          (cond, AttributeMap.empty[Alias], replaced)
         } else {
           // Here we get which aliases were used in a given filter so we can see if the filter
           // referenced an expensive alias v.s. just checking if the filter is expensive.
@@ -2111,7 +2112,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // Split the filter's components into cheap and expensive while keeping track of
       // what each references from the projection.
       val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
-        .partition { case (cond, used) =>
+        .partition { case (cond, used, replaced) =>
         if (!SQLConf.get.avoidDoubleFilterEval) {
           // If we are always pushing through short circuit the check.
           true
