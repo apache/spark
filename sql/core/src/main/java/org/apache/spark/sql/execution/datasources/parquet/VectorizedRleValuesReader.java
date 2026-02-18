@@ -765,6 +765,16 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public void readGeometry(int total, WritableColumnVector c, int rowId) {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
+  }
+
+  @Override
+  public void readGeography(int total, WritableColumnVector c, int rowId) {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
+  }
+
+  @Override
   public void readBooleans(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
