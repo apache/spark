@@ -101,6 +101,17 @@ def records_to_arrow_batches(
                         "actual": str(first_element.schema.names),
                     },
                 )
+        # Validate that the Arrow schema types match the expected output schema.
+        # This prevents cryptic errors from Arrow's VectorLoader when the batch
+        # buffer layout doesn't match what the JVM expects (e.g., SPARK-55583).
+        if not pa_schema.equals(first_element.schema):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                messageParameters={
+                    "expected": str(pa_schema),
+                    "actual": str(first_element.schema),
+                },
+            )
 
         yield first_element
         for element in output_iter:
