@@ -41,7 +41,6 @@ from pyspark.sql.conversion import (
 )
 from pyspark.sql.pandas.types import (
     from_arrow_schema,
-    is_variant,
     to_arrow_type,
 )
 from pyspark.sql.types import (
