@@ -724,9 +724,9 @@ case class ListAgg(
    * Result of checking whether a LISTAGG(DISTINCT) order-expression mismatch
    * is caused by a cast and whether that cast is safe for deduplication.
    */
-  sealed trait CastSafetyResult
+  private sealed trait CastSafetyResult
 
-  object CastSafetyResult {
+  private object CastSafetyResult {
     /** The mismatch is not due to a cast at all. */
     case object NotACast extends CastSafetyResult
 
