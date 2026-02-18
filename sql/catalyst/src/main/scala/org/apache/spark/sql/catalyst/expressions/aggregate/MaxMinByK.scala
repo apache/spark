@@ -51,15 +51,9 @@ case class MaxMinByK(
     this(valueExpr, orderingExpr, kExpr, reverse, 0, 0)
 
   final val MAX_K = 100000
-  lazy val k: Int = kExpr match {
-    case Literal(v: Int, IntegerType) if v > 0 && v <= MAX_K => v
-    case Literal(v: Int, IntegerType) =>
-      throw new IllegalArgumentException(
-        s"The third argument of $prettyName must be in range [1, $MAX_K], got: $v")
-    case _ =>
-      throw new IllegalArgumentException(
-        s"The third argument of $prettyName must be a constant integer, got: $kExpr")
-  }
+  // After ImplicitCastInputTypes casts kExpr to IntegerType and
+  // checkInputDataTypes() validates foldability and range, eval() is safe here.
+  lazy val k: Int = kExpr.eval().asInstanceOf[Int]
 
   override def first: Expression = valueExpr
   override def second: Expression = orderingExpr
@@ -108,41 +102,35 @@ case class MaxMinByK(
   override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (!kExpr.foldable) {
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> "k",
-              "inputType" -> kExpr.dataType.catalogString,
-              "inputExpr" -> kExpr.sql
-            )
-          )
-        } else {
-          val orderingCheck =
-            TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
-          if (orderingCheck.isSuccess) {
-            try {
-              val _ = k
-              TypeCheckResult.TypeCheckSuccess
-            } catch {
-              case _: IllegalArgumentException =>
-                DataTypeMismatch(
-                  errorSubClass = "VALUE_OUT_OF_RANGE",
-                  messageParameters = Map(
-                    "exprName" -> toSQLId("k"),
-                    "valueRange" -> s"[1, $MAX_K]",
-                    "currentValue" -> kExpr.sql
-                  )
-                )
-            }
-          } else {
-            orderingCheck
-          }
-        }
-      case failure => failure
+    val parentCheck = super.checkInputDataTypes()
+    if (!parentCheck.isSuccess) return parentCheck
+
+    if (!kExpr.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "k",
+          "inputType" -> kExpr.dataType.catalogString,
+          "inputExpr" -> kExpr.sql
+        )
+      )
     }
+
+    val orderingCheck = TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
+    if (!orderingCheck.isSuccess) return orderingCheck
+
+    if (k < 1 || k > MAX_K) {
+      return DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> toSQLId("k"),
+          "valueRange" -> s"[1, $MAX_K]",
+          "currentValue" -> k.toString
+        )
+      )
+    }
+
+    TypeCheckResult.TypeCheckSuccess
   }
 
   @transient private lazy val ordering: Ordering[Any] =
@@ -259,6 +247,8 @@ case class MaxMinByK(
   note = """
     The function is non-deterministic so the output order can be different for
     those associated the same values of `y`.
+
+    The maximum value of `k` is 100000.
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -291,6 +281,8 @@ object MaxByBuilder extends ExpressionBuilder {
   note = """
     The function is non-deterministic so the output order can be different for
     those associated the same values of `y`.
+
+    The maximum value of `k` is 100000.
   """,
   group = "agg_funcs",
   since = "3.0.0")

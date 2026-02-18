@@ -946,6 +946,8 @@ object functions {
    *   The function is non-deterministic because the order of collected results depends on the
    *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
    *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
    *
    * @group agg_funcs
    * @since 4.2.0
@@ -961,6 +963,8 @@ object functions {
    *   The function is non-deterministic because the order of collected results depends on the
    *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
    *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
    *
    * @group agg_funcs
    * @since 4.2.0
@@ -1029,6 +1033,8 @@ object functions {
    *   The function is non-deterministic because the order of collected results depends on the
    *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
    *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
    *
    * @group agg_funcs
    * @since 4.2.0
@@ -1045,6 +1051,8 @@ object functions {
    *   The function is non-deterministic because the order of collected results depends on the
    *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
    *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
    *
    * @group agg_funcs
    * @since 4.2.0

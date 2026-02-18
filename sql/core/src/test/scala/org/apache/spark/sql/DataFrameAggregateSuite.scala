@@ -1345,6 +1345,25 @@ class DataFrameAggregateSuite extends QueryTest
         error.getMessage.contains("constant integer"))
     }
 
+    // Float k is implicitly cast to integer (truncated) - 2.5 becomes 2
+    checkAnswer(
+      sql(
+        """
+          |SELECT max_by(x, y, 2.5), min_by(x, y, 2.5)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
+      Row(Seq("b", "c"), Seq("a", "c")) :: Nil
+    )
+
+    // Error: string k cannot be cast to integer
+    Seq("max_by", "min_by").foreach { fn =>
+      val error = intercept[Exception] {
+        sql(s"SELECT $fn(x, y, 'two') FROM VALUES (('a', 10)) AS tab(x, y)").collect()
+      }
+      assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
+        error.getMessage.contains("cannot be cast"))
+    }
+
     // Error: k must be positive
     Seq("max_by", "min_by").foreach { fn =>
       val error = intercept[Exception] {
