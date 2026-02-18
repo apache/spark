@@ -65,7 +65,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     }
 
     val jsForScrollingDownToBlockTable =
-      <script>
+      <script nonce={CspNonce.get}>
         {
           Unparsed {
             """

@@ -405,8 +405,10 @@ class SparkContext:
 
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal: Any, frame: Any) -> NoReturn:
-            self.cancelAllJobs()
-            raise KeyboardInterrupt()
+            try:
+                self.cancelAllJobs()
+            finally:
+                raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(
@@ -834,8 +836,8 @@ class SparkContext:
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
-            step = c[1] - c[0] if size > 1 else 1  # type: ignore[index]
-            start0 = c[0]  # type: ignore[index]
+            step = c[1] - c[0] if size > 1 else 1
+            start0 = c[0]
 
             def getStart(split: int) -> int:
                 assert numSlices is not None

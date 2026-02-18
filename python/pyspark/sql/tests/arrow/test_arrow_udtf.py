@@ -22,7 +22,8 @@ from pyspark.errors import PySparkAttributeError
 from pyspark.errors import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.testing import assertDataFrameEqual
 from pyspark.util import is_remote_only
 

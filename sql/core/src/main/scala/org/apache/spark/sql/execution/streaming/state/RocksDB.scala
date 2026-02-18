@@ -127,7 +127,20 @@ class RocksDB(
   rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
   rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
   rocksDbOptions.setAvoidFlushDuringShutdown(true)
-  rocksDbOptions.setMergeOperator(new StringAppendOperator())
+  // Set merge operator based on version for backward compatibility
+  // Version 1: comma delimiter ",", Version 2: empty string ""
+  // NOTE: RocksDB does not document about the behavior of an empty string delimiter,
+  // only the PR description explains this - https://github.com/facebook/rocksdb/pull/8536
+  val mergeDelimiter = conf.mergeOperatorVersion match {
+    case 1 => ","
+    case 2 => ""
+    case v => throw new IllegalArgumentException(
+      s"Invalid merge operator version: $v. Supported versions are 1 and 2")
+  }
+  rocksDbOptions.setMergeOperator(new StringAppendOperator(mergeDelimiter))
+
+  // Store delimiter size for use in encode/decode operations
+  private[state] val delimiterSize = mergeDelimiter.length
 
   if (conf.boundedMemoryUsage) {
     rocksDbOptions.setWriteBufferManager(writeBufferManager)
@@ -1041,7 +1054,7 @@ class RocksDB(
     val (finalKey, value) = getValue(key, cfName)
     if (conf.rowChecksumEnabled && value != null) {
       KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-        readVerifier, finalKey, value)
+        readVerifier, finalKey, value, delimiterSize)
     } else {
       value
     }
@@ -1076,7 +1089,7 @@ class RocksDB(
       valuesList.asScala.iterator.zipWithIndex.map {
         case (value, idx) if value != null =>
           KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-            readVerifier, finalKeys(idx), value)
+            readVerifier, finalKeys(idx), value, delimiterSize)
         case _ => null
       }
     } else {
@@ -1118,7 +1131,7 @@ class RocksDB(
 
     val (finalKey, value) = getValue(key, cfName)
     KeyValueChecksumEncoder.decodeAndVerifyMultiValueRowWithChecksum(
-      readVerifier, finalKey, value)
+      readVerifier, finalKey, value, delimiterSize)
   }
 
   /** Returns a tuple of the final key used to store the value in the db and the value. */
@@ -1234,12 +1247,12 @@ class RocksDB(
     } else {
       values
     }
-    // Delimit each value row bytes with a single byte delimiter, the last
+    // Delimit each value row bytes with delimiter, the last
     // value row won't have a delimiter at the end.
     val delimiterNum = valueWithChecksum.length - 1
     // The bytes in valueWithChecksum already include the bytes length prefix
     val totalSize = valueWithChecksum.map(_.length).sum +
-      delimiterNum // for each delimiter
+      delimiterNum * delimiterSize // for each delimiter
 
     val result = new Array[Byte](totalSize)
     var pos = Platform.BYTE_ARRAY_OFFSET
@@ -1249,12 +1262,14 @@ class RocksDB(
       Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
       pos += rowBytes.length
 
-      // Add the delimiter - we are using "," as the delimiter
-      if (idx < delimiterNum) {
-        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      // Add the delimiter if not the last value and delimiter is not empty
+      if (idx < delimiterNum && delimiterSize > 0) {
+        mergeDelimiter.getBytes.zipWithIndex.foreach { case (b, i) =>
+          result(pos - Platform.BYTE_ARRAY_OFFSET + i) = b
+        }
       }
       // Move the position for delimiter
-      pos += 1
+      pos += delimiterSize
     }
     result
   }
@@ -1474,7 +1489,7 @@ class RocksDB(
 
           val value = if (conf.rowChecksumEnabled) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, iter.key, iter.value)
+              readVerifier, iter.key, iter.value, delimiterSize)
           } else {
             iter.value
           }
@@ -1572,7 +1587,7 @@ class RocksDB(
 
           val value = if (conf.rowChecksumEnabled) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, iter.key, iter.value)
+              readVerifier, iter.key, iter.value, delimiterSize)
           } else {
             iter.value
           }
@@ -2391,6 +2406,7 @@ case class RocksDBConf(
     fileChecksumEnabled: Boolean,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
+    mergeOperatorVersion: Int,
     stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
@@ -2498,6 +2514,17 @@ object RocksDBConf {
   private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
     SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
 
+  // Configuration to set the merge operator version for backward compatibility.
+  // Version 1 (default): Uses comma "," as delimiter for StringAppendOperator
+  // Version 2: Uses empty string "" as delimiter (no delimiter, direct concatenation)
+  //
+  // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION`.
+  // These two places should be updated together.
+  val MERGE_OPERATOR_VERSION_CONF_KEY = "mergeOperatorVersion"
+  private val MERGE_OPERATOR_VERSION_CONF = SQLConfEntry(MERGE_OPERATOR_VERSION_CONF_KEY, "2")
+
+  val MERGE_OPERATOR_VALID_VERSIONS: Seq[Int] = Seq(1, 2)
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2594,6 +2621,7 @@ object RocksDBConf {
       storeConf.checkpointFileChecksumEnabled,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
+      getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),
       storeConf)
   }
 

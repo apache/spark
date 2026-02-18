@@ -19,13 +19,13 @@ import unittest
 from pyspark import TaskContext
 from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
+    ReusedPySparkTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(

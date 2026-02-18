@@ -40,7 +40,7 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override val db = new MariaDBDatabaseOnDocker() {
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=$principal"
+      s"jdbc:mysql://$ip:$port/mysql?user=$principal&permitMysqlScheme"
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,

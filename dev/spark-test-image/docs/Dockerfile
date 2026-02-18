@@ -15,16 +15,16 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
+# Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240911.1
+FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Documentation"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250616
+ENV FULL_REFRESH_DATE=20260208
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -63,9 +63,7 @@ RUN apt-get update && apt-get install -y \
     ruby-dev \
     software-properties-common \
     wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+    zlib1g-dev
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" && \
@@ -83,6 +81,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Setup virtual environment
+ENV VIRTUAL_ENV=/opt/spark-venv
+RUN python3.11 -m venv --without-pip $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
@@ -90,7 +94,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 # See 'docutils<0.18.0' in SPARK-39421
 RUN python3.11 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
   ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.22' pyarrow 'pandas==2.3.3' 'plotly>=4.8' 'docutils<0.18.0' \
-  'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.12.1' \
+  'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.12.1' \
   'pandas-stubs==1.2.0.53' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
   'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5' \
   && python3.11 -m pip cache purge

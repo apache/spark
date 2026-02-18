@@ -43,36 +43,51 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object MemoryStream extends LowPriorityMemoryStreamImplicits {
+object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sparkSession: SparkSession): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
-
-  def apply[A : Encoder](numPartitions: Int)(implicit sparkSession: SparkSession): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, Some(numPartitions))
-}
-
-/**
- * Provides lower-priority implicits for MemoryStream to prevent ambiguity when both
- * SparkSession and SQLContext are in scope. The implicits in the companion object,
- * which use SparkSession, take higher precedence.
- */
-trait LowPriorityMemoryStreamImplicits {
-  this: MemoryStream.type =>
-
-  // Deprecated: Used when an implicit SQLContext is in scope
-  @deprecated("Use MemoryStream.apply with an implicit SparkSession instead of SQLContext", "4.1.0")
-  def apply[A: Encoder]()(implicit sqlContext: SQLContext): MemoryStream[A] =
+  /**
+   * Creates a MemoryStream with an implicit SQLContext (backward compatible).
+   * Usage: `MemoryStream[Int]`
+   */
+  def apply[A: Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
-  @deprecated("Use MemoryStream.apply with an implicit SparkSession instead of SQLContext", "4.1.0")
-  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+  /**
+   * Creates a MemoryStream with specified partitions using implicit SQLContext.
+   * Usage: `MemoryStream[Int](numPartitions)`
+   */
+  def apply[A: Encoder](numPartitions: Int)(
+      implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](
       memoryStreamId.getAndIncrement(),
       sqlContext.sparkSession,
       Some(numPartitions))
+
+  /**
+   * Creates a MemoryStream with explicit SparkSession.
+   * Usage: `MemoryStream[Int](spark)`
+   */
+  def apply[A: Encoder](sparkSession: SparkSession): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
+
+  /**
+   * Creates a MemoryStream with specified partitions using explicit SparkSession.
+   * Usage: `MemoryStream[Int](spark, numPartitions)`
+   */
+  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): MemoryStream[A] =
+    new MemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sparkSession,
+      Some(numPartitions))
+
+  /**
+   * Creates a MemoryStream with explicit encoder and SparkSession.
+   * Usage: `MemoryStream(Encoders.scalaInt, spark)`
+   */
+  def apply[A](encoder: Encoder[A], sparkSession: SparkSession): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)(encoder)
 }
 
 /**

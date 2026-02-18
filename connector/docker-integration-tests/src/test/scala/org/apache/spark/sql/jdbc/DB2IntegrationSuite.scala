@@ -79,7 +79,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Basic test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -91,7 +91,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   test("Numeric types") {
     Seq(true, false).foreach { legacy =>
       withSQLConf(SQLConf.LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED.key -> legacy.toString) {
-        val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
+        val df = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
         val rows = df.collect()
         assert(rows.length == 1)
         val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -131,7 +131,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("Date types") {
     withDefaultTimeZone(UTC) {
-      val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
       val rows = df.collect()
       assert(rows.length == 1)
       val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -146,7 +146,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("String types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -164,20 +164,20 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("Basic write test") {
     // cast decflt column with precision value of 38 to DB2 max decimal precision value of 31.
-    val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
+    val df1 = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
       .selectExpr("small", "med", "big", "deci", "flt", "dbl", "real",
       "cast(decflt as decimal(31, 5)) as decflt")
-    val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-    val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    val df2 = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+    val df3 = spark.read.jdbc(jdbcUrl, "strings", new Properties)
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
     // spark types that does not have exact matching db2 table types.
-    val df4 = sqlContext.createDataFrame(
+    val df4 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row("1".toShort, "20".toByte))),
       new StructType().add("c1", ShortType).add("b", ByteType))
     df4.write.jdbc(jdbcUrl, "otherscopy", new Properties)
-    val rows = sqlContext.read.jdbc(jdbcUrl, "otherscopy", new Properties).collect()
+    val rows = spark.read.jdbc(jdbcUrl, "otherscopy", new Properties).collect()
     assert(rows(0).getShort(0) == 1)
     assert(rows(0).getShort(1) == 20)
   }
@@ -215,20 +215,20 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
     ).map { case (x, y) =>
       Row(Integer.valueOf(x), String.valueOf(y))
     }
-    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     for (_ <- 0 to 2) {
       df.write.mode(SaveMode.Append).jdbc(jdbcUrl, "tblcopy", new Properties)
     }
-    assert(sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).count() === 6)
+    assert(spark.read.jdbc(jdbcUrl, "tblcopy", new Properties).count() === 6)
     df.write.mode(SaveMode.Overwrite).option("truncate", true)
       .jdbc(jdbcUrl, "tblcopy", new Properties)
-    val actual = sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).collect()
+    val actual = spark.read.jdbc(jdbcUrl, "tblcopy", new Properties).collect()
     assert(actual.length === 2)
     assert(actual.toSet === expectedResult)
   }
 
   test("SPARK-42534: DB2 Limit pushdown test") {
-    val actual = sqlContext.read
+    val actual = spark.read
       .format("jdbc")
       .option("url", jdbcUrl)
       .option("dbtable", "tbl")
@@ -238,7 +238,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
       .orderBy("x")
       .collect()
 
-    val expected = sqlContext.read
+    val expected = spark.read
       .format("jdbc")
       .option("url", jdbcUrl)
       .option("query", "SELECT x, y FROM tbl ORDER BY x FETCH FIRST 2 ROWS ONLY")
@@ -249,23 +249,23 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-48269: boolean type") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "booleans", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "booleans", new Properties)
     checkAnswer(df, Row(true))
     Seq(true, false).foreach { legacy =>
       withSQLConf(SQLConf.LEGACY_DB2_BOOLEAN_MAPPING_ENABLED.key -> legacy.toString) {
         val tbl = "booleanscopy" + legacy
         df.write.jdbc(jdbcUrl, tbl, new Properties)
         if (legacy) {
-          checkAnswer(sqlContext.read.jdbc(jdbcUrl, tbl, new Properties), Row("1"))
+          checkAnswer(spark.read.jdbc(jdbcUrl, tbl, new Properties), Row("1"))
         } else {
-          checkAnswer(sqlContext.read.jdbc(jdbcUrl, tbl, new Properties), Row(true))
+          checkAnswer(spark.read.jdbc(jdbcUrl, tbl, new Properties), Row(true))
         }
       }
     }
   }
 
   test("SPARK-48269: GRAPHIC types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "graphics", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "graphics", new Properties)
     checkAnswer(df, Row("a".padTo(16, ' '), "b"))
     // the padding happens in the source not because of reading as char type
     assert(!df.schema.exists {
@@ -273,7 +273,7 @@ class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-48269: binary types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "binarys", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "binarys", new Properties)
     checkAnswer(df, Row(
       "ABC".padTo(10, ' ').getBytes,
       "ABC".getBytes,

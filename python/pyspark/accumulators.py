@@ -27,7 +27,7 @@ from pyspark.serializers import read_int, CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from pyspark._typing import SupportsIAdd  # noqa: F401
+    from pyspark._typing import SupportsIAdd
     import socketserver.BaseRequestHandler  # type: ignore[import-not-found]
 
 
