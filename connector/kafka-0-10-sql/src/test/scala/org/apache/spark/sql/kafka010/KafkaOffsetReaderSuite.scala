@@ -26,7 +26,7 @@ import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, times, verify, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
@@ -300,6 +300,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       val result = reader.fetchPartitionOffsets(
         EarliestOffsetRangeLimit, isStartingOffsets = true)
       assert(result === expectedPartitions.map(tp => tp -> KafkaOffsetRangeLimit.EARLIEST).toMap)
+      verify(mockStrategy, times(3)).assignedTopicPartitions(any())
     } finally {
       reader.close()
     }
@@ -318,6 +319,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
         reader.fetchPartitionOffsets(EarliestOffsetRangeLimit, isStartingOffsets = true)
       }
       assert(ex.getMessage === "Persistent error")
+      verify(mockStrategy, times(3)).assignedTopicPartitions(any())
     } finally {
       reader.close()
     }
