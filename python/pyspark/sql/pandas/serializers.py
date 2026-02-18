@@ -38,6 +38,7 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
 )
 from pyspark.sql.pandas.types import (
+    from_arrow_schema,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
@@ -1205,27 +1206,13 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def load_stream(self, stream):
         """
-        Deserialize Grouped ArrowRecordBatches and yield as Iterator[Iterator[pd.Series]].
-        Each outer iterator element represents a group, containing an iterator of Series lists
-        (one list per batch).
+        Deserialize Grouped ArrowRecordBatches and yield raw Iterator[pa.RecordBatch].
+        Each outer iterator element represents a group.
         """
         for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
-            # Lazily read and convert Arrow batches one at a time from the stream
-            # This avoids loading all batches into memory for the group
-            series_iter = map(
-                lambda batch: ArrowBatchTransformer.to_pandas(
-                    batch,
-                    timezone=self._timezone,
-                    schema=self._input_type,
-                    struct_in_pandas=self._struct_in_pandas,
-                    ndarray_as_list=self._ndarray_as_list,
-                    df_for_struct=self._df_for_struct,
-                ),
-                batches,
-            )
-            yield series_iter
+            yield batches
             # Make sure the batches are fully iterated before getting the next group
-            for _ in series_iter:
+            for _ in batches:
                 pass
 
     def dump_stream(self, iterator, stream):
@@ -1270,16 +1257,25 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         import pyarrow as pa
 
         for left_batches, right_batches in self._load_group_dataframes(stream, num_dfs=2):
-            yield tuple(
+            left_table = pa.Table.from_batches(left_batches)
+            right_table = pa.Table.from_batches(right_batches)
+            yield (
                 ArrowBatchTransformer.to_pandas(
-                    pa.Table.from_batches(batches),
+                    left_table,
                     timezone=self._timezone,
-                    schema=self._input_type,
+                    schema=from_arrow_schema(left_table.schema),
                     struct_in_pandas=self._struct_in_pandas,
                     ndarray_as_list=self._ndarray_as_list,
                     df_for_struct=self._df_for_struct,
-                )
-                for batches in (left_batches, right_batches)
+                ),
+                ArrowBatchTransformer.to_pandas(
+                    right_table,
+                    timezone=self._timezone,
+                    schema=from_arrow_schema(right_table.schema),
+                    struct_in_pandas=self._struct_in_pandas,
+                    ndarray_as_list=self._ndarray_as_list,
+                    df_for_struct=self._df_for_struct,
+                ),
             )
 
 
