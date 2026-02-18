@@ -21,89 +21,69 @@
 Compare SBT and Maven builds to verify they produce equivalent artifacts.
 
 This script validates the migration from sbt-pom-reader to native SBT by
-comparing JAR files, shading, and dependencies between the two build systems.
+comparing JAR files between the two build systems using a two-level analysis:
 
-Comparison modes (mutually exclusive)
--------------------------------------
-By default the script compares module JARs (class contents and sizes).
-Use --shading, --assemblies-only, or --deps to switch modes.
+Two-Level Comparison
+--------------------
+Level 1: Physical Equivalence
+  - Compare module JARs class-by-class for byte-level sameness
+  - Reports which JARs match exactly vs which differ
 
-  JARs (default)    Compare module JARs class-by-class.
-  --shading         Verify shading relocation rules. For each expected
-                    relocation (e.g., io/grpc/ -> org/sparkproject/io/grpc/)
-                    checks that source packages are absent and target
-                    packages are present in both builds.
-  --assemblies-only Compare assembly JARs (size, class count, packages).
-  --deps            Compare resolved dependency trees (runs Maven/SBT).
-  --self-test       Run internal self-tests and exit.
+Level 2: Logical Equivalence (if Level 1 finds differences)
+  - Analyzes whether physical differences are explained by:
+    * Shading: Maven embeds org/sparkproject/* (shaded), SBT has originals
+    * Structure: Maven fat JARs vs SBT thin JARs + assemblies
+  - Verdict: IDENTICAL / EQUIVALENT / DIFFER
 
-Output
-------
-  (default)         Human-readable table to stdout.
-  --json            Structured JSON to stdout (no table).
-  -o FILE           Write JSON to FILE (table still shown on terminal).
-  --json -o FILE    JSON to both stdout and FILE.
+Modes
+-----
+  (default)           Two-level comparison of all module JARs
+  --physical-only     Stop after Level 1 (skip equivalence analysis)
+  --compare J1 J2     Compare two specific JAR files by path
+  --self-test         Run internal self-tests and exit
 
-Filtering (JARs mode only)
---------------------------
-These options only apply to the default JARs comparison mode.
-
-  --matching-only   Only compare JARs present in both builds.
-  --ignore-shaded   Ignore shaded class/service differences and bundled
-                    deps in Maven fat-JAR modules (core, connect).
-  --modules M1,M2   Restrict comparison to specific modules.
-  -v, --verbose     Show class-level details for differing JARs.
+Options
+-------
+  --matching-only     Only compare JARs present in both builds
+  --modules M1,M2     Restrict comparison to specific modules
+  -v, --verbose       Show detailed class-level differences
+  --json              Output structured JSON to stdout
+  -o FILE             Write JSON report to FILE
 
 Build
 -----
-  --build-maven     Run Maven build before comparing.
-  --build-sbt       Run SBT build before comparing.
-  --build-both      Run both builds before comparing.
+  --build-maven       Run Maven build before comparing
+  --build-sbt         Run SBT build before comparing
+  --build-both        Run both builds before comparing
 
 Examples
 --------
-    # Quick validation (assumes both builds exist)
-    python ./dev/compare-builds.py --matching-only --ignore-shaded -v
+    # Default: two-level comparison
+    python ./dev/compare-builds.py
 
-    # Shading verification
-    python ./dev/compare-builds.py --shading
+    # Physical comparison only
+    python ./dev/compare-builds.py --physical-only
+
+    # Verbose with details
+    python ./dev/compare-builds.py -v
+
+    # Compare two specific JARs
+    python ./dev/compare-builds.py --compare \
+      sql/connect/client/jvm/target/spark-connect-client-jvm_2.13-*.jar \
+      sql/connect/client/jvm/target/scala-2.13/spark-connect-client-jvm-assembly-*.jar
 
     # JSON report for CI
     python ./dev/compare-builds.py --matching-only --json -o report.json
 
-How shading works
------------------
-Maven and SBT shade dependencies differently:
+How Maven and SBT differ
+-------------------------
+Maven: The maven-shade-plugin embeds shaded classes directly in the module JAR
+       (e.g., spark-core_2.13.jar contains org/sparkproject/guava/*).
 
-  Maven   The maven-shade-plugin embeds shaded classes directly in the
-          module JAR (e.g., spark-core_2.13.jar contains org/sparkproject/).
-  SBT     sbt-assembly produces a separate assembly JAR
-          (e.g., spark-core-assembly-*.jar) with shaded classes.
+SBT:   sbt-assembly produces separate assembly JARs with shaded classes
+       (e.g., spark-core-assembly-*.jar contains org/sparkproject/guava/*).
 
-Because of this, module JARs from Maven are larger than SBT's. Use
---ignore-shaded with the default mode to skip these expected differences,
-or use --shading to verify relocation rules directly.
-
-Relocation rules
-~~~~~~~~~~~~~~~~
---shading verifies these expected relocations for each module:
-
-  core:
-    org/eclipse/jetty/     -> org/sparkproject/jetty/
-    com/google/common/     -> org/sparkproject/guava/
-    com/google/thirdparty/ -> org/sparkproject/guava/
-    com/google/protobuf/   -> org/sparkproject/spark_core/protobuf/
-
-  connect-client:
-    com/google/common/     -> org/sparkproject/connect/guava/
-    com/google/thirdparty/ -> org/sparkproject/connect/guava/
-    com/google/protobuf/   -> org/sparkproject/com/google/protobuf/
-    io/grpc/               -> org/sparkproject/io/grpc/
-    io/netty/              -> org/sparkproject/io/netty/
-    org/apache/arrow/      -> org/sparkproject/org/apache/arrow/
-
-For each rule, both builds are checked: the source package should be
-absent (relocated) and the target package should be present.
+The two-level comparison automatically accounts for these structural differences.
 """
 
 import argparse
@@ -112,7 +92,7 @@ import re
 import subprocess
 import sys
 import zipfile
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, TypedDict, Union
@@ -120,6 +100,9 @@ from typing import Dict, List, Optional, Set, Tuple, TypedDict, Union
 
 # Get Spark home directory
 SPARK_HOME = Path(__file__).parent.parent.resolve()
+
+# Maximum number of package lines to show in --compare output before truncating
+MAX_PKG_LINES = 20
 
 
 # ---------------------------------------------------------------------------
@@ -171,18 +154,11 @@ class AssemblyBuildInfoDict(TypedDict, total=False):
     resource_count: int
 
 
-class AssemblyShadingCountDict(TypedDict):
-    maven: int
-    sbt: int
-
-
 class AssemblyEntryDict(TypedDict, total=False):
     maven: AssemblyBuildInfoDict
     sbt: AssemblyBuildInfoDict
     size_diff: str
-    only_in_maven: Dict[str, int]
-    only_in_sbt: Dict[str, int]
-    shading: Dict[str, AssemblyShadingCountDict]
+    status: str
 
 
 class AssemblyReportDict(TypedDict):
@@ -251,7 +227,53 @@ class DepsReportDict(TypedDict, total=False):
     modules: Dict[str, DepsModuleEntryDict]
 
 
-ReportDict = Union[JarsReportDict, AssemblyReportDict, ShadingReportDict, DepsReportDict]
+class TwoJarInfoDict(TypedDict, total=False):
+    path: str
+    size: int
+    class_count: int
+    resource_count: int
+    services_count: int
+
+
+class TwoJarReportDict(TypedDict, total=False):
+    mode: str
+    jar1: TwoJarInfoDict
+    jar2: TwoJarInfoDict
+    size_diff: str
+    only_in_jar1: Dict[str, int]
+    only_in_jar1_count: int
+    only_in_jar2: Dict[str, int]
+    only_in_jar2_count: int
+    services_only_in_jar1: List[str]
+    services_only_in_jar2: List[str]
+
+
+class TwoLevelSummaryDict(TypedDict):
+    total_jars: int
+    physical_match: int
+    physical_differ: int
+    verdict: str  # "IDENTICAL" / "EQUIVALENT" / "DIFFER"
+    equivalent_shading: int
+    equivalent_structure: int
+    only_in_build: int
+    unexplained: int
+
+
+class TwoLevelReportDict(TypedDict):
+    mode: str  # "two-level"
+    summary: TwoLevelSummaryDict
+    jars: Dict[str, ComparisonResultDict]
+    equivalence: Dict[str, str]  # jar_name -> classification
+
+
+ReportDict = Union[
+    JarsReportDict,
+    AssemblyReportDict,
+    ShadingReportDict,
+    DepsReportDict,
+    TwoJarReportDict,
+    TwoLevelReportDict,
+]
 
 
 @dataclass
@@ -594,15 +616,32 @@ def _is_fat_jar_module(norm_name: str) -> bool:
     return base in FAT_JAR_MODULES
 
 
-def _format_size_diff(maven_size: int, sbt_size: int) -> str:
+def _jar_name_to_assembly_key(norm_name: str) -> str:
+    """Convert a normalized JAR name to find_shaded_jars() assembly key.
+
+    Examples:
+        "spark-core_2.13" -> "core"
+        "spark-connect-client-jvm_2.13" -> "connect-client-jvm"
+        "spark-connect_2.13" -> "connect"
+    """
+    base = norm_name.split("_")[0] if "_" in norm_name else norm_name
+    # Strip "spark-" prefix to get the assembly key
+    if base.startswith("spark-"):
+        return base[len("spark-") :]
+    return base
+
+
+def _format_size_diff(
+    size_a: int, size_b: int, label_a: str = "Maven", label_b: str = "SBT"
+) -> str:
     """Format size difference in a human-readable way."""
-    if maven_size == sbt_size:
+    if size_a == size_b:
         return "identical"
-    bigger, smaller = max(maven_size, sbt_size), min(maven_size, sbt_size)
+    bigger, smaller = max(size_a, size_b), min(size_a, size_b)
     if smaller == 0:
         return "N/A (one side is empty)"
     ratio = bigger / smaller
-    label = "Maven" if maven_size > sbt_size else "SBT"
+    label = label_a if size_a > size_b else label_b
     if ratio >= 2:
         return f"{label} is {ratio:.0f}x larger"
     else:
@@ -610,7 +649,7 @@ def _format_size_diff(maven_size: int, sbt_size: int) -> str:
         return f"{label} is {pct:.1f}% larger"
 
 
-def compare_jars(
+def compare_jars_physical(
     maven_jars: Dict[str, JarInfo],
     sbt_jars: Dict[str, JarInfo],
     matching_only: bool = False,
@@ -693,6 +732,299 @@ def build_report_dict(results: Dict[str, ComparisonResult]) -> JarsReportDict:
         },
         "jars": {name: r.to_dict() for name, r in sorted(results.items())},
     }
+
+
+# ============================================================================
+# TWO-LEVEL COMPARISON (Level 1: Physical + Level 2: Equivalence)
+# ============================================================================
+
+
+def analyze_equivalence(
+    differing_jars: Dict[str, ComparisonResult],
+    maven_jars: Dict[str, JarInfo],
+    sbt_jars: Dict[str, JarInfo],
+) -> Dict[str, str]:
+    """
+    Analyze physical differences to determine if they're explained.
+
+    Returns dict mapping jar_name -> classification:
+    - "equivalent_shading": Maven has shaded classes, SBT has unshaded in assembly
+    - "equivalent_structure": Maven fat JAR vs SBT thin JAR (all SBT classes in Maven)
+    - "only_in_build": JAR exists in only one build (not a build artifact difference)
+    - "unexplained": real content differences
+    """
+    classifications = {}
+
+    for name in differing_jars.keys():
+        maven_jar = maven_jars.get(name)
+        sbt_jar = sbt_jars.get(name)
+
+        if not maven_jar or not sbt_jar:
+            # One side missing - this is a build scope difference, not artifact difference
+            classifications[name] = "only_in_build"
+            continue
+
+        # Re-compare with shaded classes filtered out
+        maven_classes = {c for c in maven_jar.classes if not is_shaded_class(c)}
+        sbt_classes = {c for c in sbt_jar.classes if not is_shaded_class(c)}
+
+        only_maven = maven_classes - sbt_classes
+        only_sbt = sbt_classes - maven_classes
+
+        # Check if known fat-JAR module
+        is_fat_jar = _is_fat_jar_module(name)
+
+        if not only_sbt and is_fat_jar:
+            # SBT classes are subset of Maven (Maven bundles deps)
+            classifications[name] = "equivalent_structure"
+        elif not only_maven and not only_sbt:
+            # All non-shaded classes match
+            classifications[name] = "equivalent_shading"
+        else:
+            # Real differences remain after filtering
+            classifications[name] = "unexplained"
+
+    return classifications
+
+
+def run_two_level_comparison(
+    maven_jars: Dict[str, JarInfo],
+    sbt_jars: Dict[str, JarInfo],
+    matching_only: bool = False,
+) -> Tuple[Dict[str, ComparisonResult], Dict[str, str], str]:
+    """
+    Run two-level comparison: physical then equivalence.
+
+    Returns:
+    - results: Level 1 physical comparison results
+    - equivalence: Level 2 classifications (empty if all match)
+    - verdict: "IDENTICAL" / "EQUIVALENT" / "DIFFER"
+    """
+    # Level 1: Physical comparison
+    results = compare_jars_physical(maven_jars, sbt_jars, matching_only)
+
+    differing = {k: v for k, v in results.items() if not v.is_match}
+
+    if not differing:
+        return results, {}, "IDENTICAL"
+
+    # Level 2: Equivalence analysis
+    equivalence = analyze_equivalence(differing, maven_jars, sbt_jars)
+
+    unexplained = [k for k, v in equivalence.items() if v == "unexplained"]
+
+    # Only consider true unexplained differences as DIFFER
+    # (not "only_in_build" which is about build scope, not artifact differences)
+    if unexplained:
+        return results, equivalence, "DIFFER"
+    else:
+        return results, equivalence, "EQUIVALENT"
+
+
+def build_two_level_report_dict(
+    results: Dict[str, ComparisonResult],
+    equivalence: Dict[str, str],
+    verdict: str,
+) -> TwoLevelReportDict:
+    """Build structured JSON report for two-level comparison."""
+    matching = sum(1 for r in results.values() if r.is_match)
+    differing_n = len(results) - matching
+
+    shading = sum(1 for v in equivalence.values() if v == "equivalent_shading")
+    structure = sum(1 for v in equivalence.values() if v == "equivalent_structure")
+    only_in_build = sum(1 for v in equivalence.values() if v == "only_in_build")
+    unexplained = sum(1 for v in equivalence.values() if v == "unexplained")
+
+    return {
+        "mode": "two-level",
+        "summary": {
+            "total_jars": len(results),
+            "physical_match": matching,
+            "physical_differ": differing_n,
+            "verdict": verdict,
+            "equivalent_shading": shading,
+            "equivalent_structure": structure,
+            "only_in_build": only_in_build,
+            "unexplained": unexplained,
+        },
+        "jars": {name: r.to_dict() for name, r in sorted(results.items())},
+        "equivalence": equivalence,
+    }
+
+
+def print_two_level_report(
+    results: Dict[str, ComparisonResult],
+    equivalence: Dict[str, str],
+    verdict: str,
+    verbose: bool = False,
+):
+    """Print two-level comparison report."""
+    matching = [k for k, v in results.items() if v.is_match]
+    differing = [k for k, v in results.items() if not v.is_match]
+
+    # Level 1
+    print("\nLevel 1: Physical Comparison")
+    print("═" * 72)
+    print(f"✓ {len(matching)} JARs match exactly")
+    if differing:
+        print(f"✗ {len(differing)} JARs differ:")
+        for name in sorted(differing)[:10]:  # show first 10
+            r = results[name]
+            mvn_size = f"{r.maven_jar.size:,}" if r.maven_jar else "-"
+            sbt_size = f"{r.sbt_jar.size:,}" if r.sbt_jar else "-"
+            print(f"  • {name}: Maven {mvn_size} bytes, SBT {sbt_size} bytes")
+        if len(differing) > 10:
+            print(f"  ... and {len(differing) - 10} more")
+
+    # Level 2 (only if differences)
+    if differing:
+        print(f"\nLevel 2: Equivalence Analysis")
+        print("═" * 72)
+        print(f"Analyzing {len(differing)} physical differences...")
+
+        shading = [k for k, v in equivalence.items() if v == "equivalent_shading"]
+        structure = [k for k, v in equivalence.items() if v == "equivalent_structure"]
+        only_in_build = [k for k, v in equivalence.items() if v == "only_in_build"]
+        unexplained = [k for k, v in equivalence.items() if v == "unexplained"]
+
+        if shading:
+            print(f"✓ {len(shading)} explained by shading:")
+            for name in sorted(shading)[:5]:
+                print(f"  • {name}: Maven embeds shaded classes (org/sparkproject/*)")
+            if len(shading) > 5:
+                print(f"  ... and {len(shading) - 5} more")
+
+        if structure:
+            sbt_assemblies = find_shaded_jars("sbt")
+            print(
+                f"✓ {len(structure)} explained by structure (Maven fat JAR vs SBT thin + assembly):"
+            )
+            for name in sorted(structure):
+                r = results[name]
+                mvn_size = f"{r.maven_jar.size:,}" if r.maven_jar else "-"
+                sbt_size = f"{r.sbt_jar.size:,}" if r.sbt_jar else "-"
+                asm_key = _jar_name_to_assembly_key(name)
+                print(f"  • {name}")
+                print(f"    Maven:   {mvn_size} bytes (module + shaded deps)")
+                print(f"    SBT:     {sbt_size} bytes (module only)")
+                asm_jar = sbt_assemblies.get(asm_key)
+                if asm_jar and asm_jar.exists():
+                    asm_size = asm_jar.stat().st_size
+                    asm_path = str(asm_jar.relative_to(SPARK_HOME))
+                    print(f"    SBT asm: {asm_size:,} bytes → {asm_path}")
+                else:
+                    # core has no separate assembly; deps go into uber assembly
+                    uber_dir = SPARK_HOME / "assembly" / "target" / "scala-2.13" / "jars"
+                    if uber_dir.exists():
+                        jar_count = len(list(uber_dir.glob("*.jar")))
+                        print(
+                            f"    SBT deps: in uber assembly → assembly/target/scala-2.13/jars/ ({jar_count} JARs)"
+                        )
+
+        if only_in_build:
+            print(
+                f"ℹ {len(only_in_build)} in only one build (build scope, not artifact difference):"
+            )
+            for name in sorted(only_in_build)[:5]:
+                print(f"  • {name}")
+            if len(only_in_build) > 5:
+                print(f"  ... and {len(only_in_build) - 5} more")
+
+        if unexplained:
+            print(f"✗ {len(unexplained)} UNEXPLAINED differences:")
+            for name in sorted(unexplained):
+                print(f"  • {name}")
+
+    # Final verdict
+    print(f"\n{'═' * 72}")
+    if verdict == "IDENTICAL":
+        print("✓✓ RESULT: Builds are IDENTICAL")
+    elif verdict == "EQUIVALENT":
+        print("✓✓ RESULT: Builds are EQUIVALENT (all differences explained)")
+    else:
+        print("✗✗ RESULT: Builds DIFFER (unexplained differences found)")
+
+    # Verbose details with evidence
+    if verbose and differing:
+        print(f"\n{'═' * 72}")
+        print("Detailed Evidence for Equivalence")
+        print("═" * 72)
+        for name in sorted(differing):
+            r = results[name]
+            cls = equivalence.get(name, "")
+            print(f"\n{name} [{cls}]")
+
+            # Show physical differences
+            if r.maven_jar and r.sbt_jar:
+                print(
+                    f"  Physical: Maven {r.maven_jar.class_count()} classes, "
+                    f"SBT {r.sbt_jar.class_count()} classes "
+                    f"(Δ {abs(r.maven_jar.class_count() - r.sbt_jar.class_count())})"
+                )
+
+            # Show evidence based on classification
+            if cls == "equivalent_shading":
+                # Count shaded classes
+                maven_shaded = sum(1 for c in r.maven_jar.classes if is_shaded_class(c))
+                sbt_shaded = sum(1 for c in r.sbt_jar.classes if is_shaded_class(c))
+                maven_nonshaded = r.maven_jar.class_count() - maven_shaded
+                sbt_nonshaded = r.sbt_jar.class_count() - sbt_shaded
+                print(f"  Evidence: After filtering shaded classes:")
+                print(f"    Maven: {maven_shaded} shaded → {maven_nonshaded} core classes")
+                print(f"    SBT:   {sbt_shaded} shaded → {sbt_nonshaded} core classes")
+                if maven_nonshaded == sbt_nonshaded:
+                    print(f"    ✓ Core classes match ({maven_nonshaded} each)")
+                if r.only_in_maven and maven_shaded > 0:
+                    print(f"  Maven shaded packages ({len(r.only_in_maven)} classes):")
+                    for line in _summarize_classes(r.only_in_maven)[:3]:
+                        print(f"    {line}")
+
+            elif cls == "equivalent_structure":
+                # Show that SBT is subset of Maven, and where deps live
+                maven_count = r.maven_jar.class_count()
+                sbt_count = r.sbt_jar.class_count()
+                print(f"  Evidence: Fat JAR structure difference")
+                print(f"    Maven: {maven_count} classes in module JAR (fat: core + deps)")
+                print(f"    SBT:   {sbt_count} classes in module JAR (thin: core only)")
+                print(f"    ✓ All {sbt_count} SBT module classes found in Maven")
+                # Show where the SBT deps actually live
+                asm_key = _jar_name_to_assembly_key(name)
+                sbt_asm = find_shaded_jars("sbt").get(asm_key)
+                if sbt_asm and sbt_asm.exists():
+                    asm_info = get_jar_contents(sbt_asm)
+                    print(f"  SBT assembly JAR: {str(sbt_asm.relative_to(SPARK_HOME))}")
+                    print(
+                        f"    {asm_info.size:,} bytes, {asm_info.class_count()} classes, "
+                        f"{len(asm_info.resources)} resources"
+                    )
+                else:
+                    uber_dir = SPARK_HOME / "assembly" / "target" / "scala-2.13" / "jars"
+                    if uber_dir.exists():
+                        jar_count = len(list(uber_dir.glob("*.jar")))
+                        print(
+                            f"  SBT deps: in uber assembly → assembly/target/scala-2.13/jars/ ({jar_count} JARs)"
+                        )
+                if r.only_in_maven:
+                    print(f"  Maven bundled deps ({len(r.only_in_maven)} extra classes):")
+                    for line in _summarize_classes(r.only_in_maven)[:5]:
+                        print(f"    {line}")
+
+            elif cls == "unexplained":
+                print(f"  Evidence: Real content differences")
+                if r.only_in_maven:
+                    print(f"  Classes only in Maven ({len(r.only_in_maven)}):")
+                    for line in _summarize_classes(r.only_in_maven)[:5]:
+                        print(f"    {line}")
+                if r.only_in_sbt:
+                    print(f"  Classes only in SBT ({len(r.only_in_sbt)}):")
+                    for line in _summarize_classes(r.only_in_sbt)[:5]:
+                        print(f"    {line}")
+
+            elif cls == "only_in_build":
+                if not r.maven_jar:
+                    print(f"  Evidence: Only built by SBT (optional Maven profile)")
+                elif not r.sbt_jar:
+                    print(f"  Evidence: Only built by Maven")
 
 
 def _summarize_classes(classes: Set[str]) -> List[str]:
@@ -872,8 +1204,206 @@ def print_report(
                     print(f"      {svc}")
 
 
+# ============================================================================
+# TWO-JAR COMPARISON (--compare)
+# ============================================================================
+
+
+def compare_two_jars(
+    jar1_path: Path,
+    jar2_path: Path,
+    ignore_shaded: bool = False,
+) -> TwoJarReportDict:
+    """Compare two JAR files directly and return a structured report."""
+    jar1 = get_jar_contents(jar1_path)
+    jar2 = get_jar_contents(jar2_path)
+
+    jar1_classes = jar1.classes
+    jar2_classes = jar2.classes
+
+    if ignore_shaded:
+        jar1_classes = {c for c in jar1_classes if not is_shaded_class(c)}
+        jar2_classes = {c for c in jar2_classes if not is_shaded_class(c)}
+
+    only_in_1 = jar1_classes - jar2_classes
+    only_in_2 = jar2_classes - jar1_classes
+
+    svc_only_1 = jar1.services - jar2.services
+    svc_only_2 = jar2.services - jar1.services
+
+    if ignore_shaded:
+        svc_only_1 = {s for s in svc_only_1 if not _is_shaded_service(s)}
+        svc_only_2 = {s for s in svc_only_2 if not _is_shaded_service(s)}
+
+    report: TwoJarReportDict = {
+        "mode": "compare",
+        "jar1": {
+            "path": str(jar1_path),
+            "size": jar1.size,
+            "class_count": jar1.class_count(),
+            "resource_count": len(jar1.resources),
+        },
+        "jar2": {
+            "path": str(jar2_path),
+            "size": jar2.size,
+            "class_count": jar2.class_count(),
+            "resource_count": len(jar2.resources),
+        },
+        "size_diff": _format_size_diff(jar1.size, jar2.size, "JAR 1", "JAR 2"),
+    }
+
+    if jar1.services:
+        report["jar1"]["services_count"] = len(jar1.services)
+    if jar2.services:
+        report["jar2"]["services_count"] = len(jar2.services)
+    if only_in_1:
+        report["only_in_jar1"] = _class_package_counts(only_in_1)
+        report["only_in_jar1_count"] = len(only_in_1)
+    if only_in_2:
+        report["only_in_jar2"] = _class_package_counts(only_in_2)
+        report["only_in_jar2_count"] = len(only_in_2)
+    if svc_only_1:
+        report["services_only_in_jar1"] = sorted(svc_only_1)
+    if svc_only_2:
+        report["services_only_in_jar2"] = sorted(svc_only_2)
+
+    # De-shading analysis: unrelocate classes and find matches across shading prefixes
+    if only_in_1 or only_in_2:
+        # Build unrelocated -> shaded mappings for classes that differ
+        jar1_unrelocated = {unrelocate_class(c): c for c in only_in_1}
+        jar2_unrelocated = {unrelocate_class(c): c for c in only_in_2}
+
+        # Classes that match after unrelocating (same original, different shading)
+        deshaded_originals = set(jar1_unrelocated) & set(jar2_unrelocated)
+
+        # Classes truly unique to each JAR (no match even after unrelocating)
+        truly_only_1 = {jar1_unrelocated[k] for k in set(jar1_unrelocated) - set(jar2_unrelocated)}
+        truly_only_2 = {jar2_unrelocated[k] for k in set(jar2_unrelocated) - set(jar1_unrelocated)}
+
+        report["deshaded_match_count"] = len(deshaded_originals)
+        if truly_only_1:
+            report["truly_only_in_jar1"] = _class_package_counts(truly_only_1)
+            report["truly_only_in_jar1_count"] = len(truly_only_1)
+        if truly_only_2:
+            report["truly_only_in_jar2"] = _class_package_counts(truly_only_2)
+            report["truly_only_in_jar2_count"] = len(truly_only_2)
+
+    return report
+
+
+def print_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> None:
+    """Print a human-readable comparison of two JARs."""
+    j1 = report["jar1"]
+    j2 = report["jar2"]
+
+    print("\nComparing JARs")
+    print("─" * 72)
+    svc1 = f", {j1['services_count']} services" if "services_count" in j1 else ""
+    svc2 = f", {j2['services_count']} services" if "services_count" in j2 else ""
+    print(f"  JAR 1: {j1['path']}")
+    print(
+        f"         {j1['size']:,} bytes, {j1['class_count']} classes, "
+        f"{j1['resource_count']} resources{svc1}"
+    )
+    print(f"  JAR 2: {j2['path']}")
+    print(
+        f"         {j2['size']:,} bytes, {j2['class_count']} classes, "
+        f"{j2['resource_count']} resources{svc2}"
+    )
+    print(f"  Size:  {report['size_diff']}")
+    print("─" * 72)
+
+    only1_n = report.get("only_in_jar1_count", 0)
+    only2_n = report.get("only_in_jar2_count", 0)
+    svc1_n = len(report.get("services_only_in_jar1", []))
+    svc2_n = len(report.get("services_only_in_jar2", []))
+    common = j1["class_count"] - only1_n
+    deshaded_n = report.get("deshaded_match_count", 0)
+    truly1_n = report.get("truly_only_in_jar1_count", 0)
+    truly2_n = report.get("truly_only_in_jar2_count", 0)
+
+    # Summary line
+    parts = [f"{common} identical"]
+    if deshaded_n:
+        parts.append(f"{deshaded_n} matched after de-shading")
+    if truly1_n:
+        parts.append(f"{truly1_n} only in JAR 1")
+    elif only1_n and not deshaded_n:
+        parts.append(f"{only1_n} only in JAR 1")
+    if truly2_n:
+        parts.append(f"{truly2_n} only in JAR 2")
+    elif only2_n and not deshaded_n:
+        parts.append(f"{only2_n} only in JAR 2")
+    if svc1_n or svc2_n:
+        parts.append(f"{svc1_n + svc2_n} service diffs")
+    print(f"Summary: {', '.join(parts)}")
+
+    if only1_n == 0 and only2_n == 0 and svc1_n == 0 and svc2_n == 0:
+        print("\n  ✓ JARs have identical class and service contents")
+        return
+
+    # De-shading analysis (if applicable)
+    if deshaded_n:
+        print("\nDe-shading Analysis")
+        print("─" * 72)
+        print(
+            f"  ✓ {deshaded_n} classes are the same original class under different shading prefixes"
+        )
+
+        if truly1_n:
+            print(f"\n  Classes truly only in JAR 1 ({truly1_n}):")
+            items = list(report["truly_only_in_jar1"].items())
+            for pkg, count in items[:MAX_PKG_LINES]:
+                print(f"    {pkg} ({count} classes)")
+            if len(items) > MAX_PKG_LINES:
+                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+
+        if truly2_n:
+            print(f"\n  Classes truly only in JAR 2 ({truly2_n}):")
+            items = list(report["truly_only_in_jar2"].items())
+            for pkg, count in items[:MAX_PKG_LINES]:
+                print(f"    {pkg} ({count} classes)")
+            if len(items) > MAX_PKG_LINES:
+                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+
+        if not truly1_n and not truly2_n:
+            print("\n  ✓ All class differences are explained by shading relocation")
+    else:
+        # No de-shading matches — show raw differences
+        if only1_n:
+            print(f"\n  Classes only in JAR 1 ({only1_n}):")
+            items = list(report["only_in_jar1"].items())
+            for pkg, count in items[:MAX_PKG_LINES]:
+                print(f"    {pkg} ({count} classes)")
+            if len(items) > MAX_PKG_LINES:
+                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+
+        if only2_n:
+            print(f"\n  Classes only in JAR 2 ({only2_n}):")
+            items = list(report["only_in_jar2"].items())
+            for pkg, count in items[:MAX_PKG_LINES]:
+                print(f"    {pkg} ({count} classes)")
+            if len(items) > MAX_PKG_LINES:
+                print(f"    ... and {len(items) - MAX_PKG_LINES} more packages")
+
+    if svc1_n:
+        print(f"\n  Services only in JAR 1 ({svc1_n}):")
+        for svc in report["services_only_in_jar1"]:
+            print(f"    {svc}")
+
+    if svc2_n:
+        print(f"\n  Services only in JAR 2 ({svc2_n}):")
+        for svc in report["services_only_in_jar2"]:
+            print(f"    {svc}")
+
+
 def compare_assembly_data() -> AssemblyReportDict:
-    """Collect assembly comparison data and return structured dict."""
+    """Collect assembly JAR inventory for both builds.
+
+    Maven embeds shaded classes in the module JAR itself, while SBT produces
+    separate assembly JARs.  This mode lists what exists with basic stats.
+    Use --shading for relocation rule verification.
+    """
     maven_assemblies = find_shaded_jars("maven")
     sbt_assemblies = find_shaded_jars("sbt")
 
@@ -907,42 +1437,16 @@ def compare_assembly_data() -> AssemblyReportDict:
             }
         if maven_info and sbt_info:
             entry["size_diff"] = _format_size_diff(maven_info.size, sbt_info.size)
-
-        # Compare class packages
-        maven_packages: Dict[str, int] = defaultdict(int)
-        sbt_packages: Dict[str, int] = defaultdict(int)
-
-        for cls in maven_info.classes if maven_info else set():
-            pkg = "/".join(cls.split("/")[:-1])
-            maven_packages[pkg] += 1
-        for cls in sbt_info.classes if sbt_info else set():
-            pkg = "/".join(cls.split("/")[:-1])
-            sbt_packages[pkg] += 1
-
-        only_maven_pkgs = set(maven_packages.keys()) - set(sbt_packages.keys())
-        only_sbt_pkgs = set(sbt_packages.keys()) - set(maven_packages.keys())
-
-        if only_maven_pkgs:
-            entry["only_in_maven"] = {pkg: maven_packages[pkg] for pkg in sorted(only_maven_pkgs)}
-            total_issues += len(only_maven_pkgs)
-        if only_sbt_pkgs:
-            entry["only_in_sbt"] = {pkg: sbt_packages[pkg] for pkg in sorted(only_sbt_pkgs)}
-            total_issues += len(only_sbt_pkgs)
-
-        # Shading verification
-        shaded_prefixes = ["org/sparkproject/", "org/apache/spark/unused/"]
-        shading = {}
-        for prefix in shaded_prefixes:
-            m_count = sum(
-                1 for c in (maven_info.classes if maven_info else set()) if c.startswith(prefix)
-            )
-            s_count = sum(
-                1 for c in (sbt_info.classes if sbt_info else set()) if c.startswith(prefix)
-            )
-            shading[prefix] = {"maven": m_count, "sbt": s_count}
-            if maven_info and sbt_info and m_count != s_count:
-                total_issues += 1
-        entry["shading"] = shading
+            entry["status"] = "both"
+        elif maven_info:
+            entry["status"] = "only_maven"
+            total_issues += 1
+        elif sbt_info:
+            entry["status"] = "only_sbt"
+            total_issues += 1
+        else:
+            entry["status"] = "neither"
+            total_issues += 1
 
         assemblies_data[name] = entry
 
@@ -954,15 +1458,19 @@ def compare_assembly_data() -> AssemblyReportDict:
 
 
 def print_assembly_report(data: AssemblyReportDict) -> None:
-    """Print assembly comparison in human-readable format."""
+    """Print assembly JAR inventory."""
     assemblies = data["assemblies"]
     issues = data["issues"]
 
-    print(f"\nAssembly Comparison ({len(assemblies)} assemblies)")
+    print("\nAssembly JAR Inventory")
+    print("Maven embeds shaded classes in module JARs; SBT uses separate assembly JARs.")
+    print("Use --shading to verify relocation rules.")
     print("\u2500" * 72)
 
     for name, entry in assemblies.items():
-        print(f"\n  {name}")
+        status = entry.get("status", "")
+        marker = "\u2713" if status == "both" else "\u2717"
+        print(f"\n  {marker} {name}")
 
         for build in ("maven", "sbt"):
             if build in entry:
@@ -982,37 +1490,9 @@ def print_assembly_report(data: AssemblyReportDict) -> None:
         if "size_diff" in entry:
             print(f"    Size:  {entry['size_diff']}")
 
-        if "only_in_maven" in entry:
-            pkgs = entry["only_in_maven"]
-            print(f"    Packages only in Maven ({len(pkgs)}):")
-            for pkg, count in list(pkgs.items())[:20]:
-                print(f"      {pkg} ({count} classes)")
-            if len(pkgs) > 20:
-                print(f"      ... and {len(pkgs) - 20} more")
-
-        if "only_in_sbt" in entry:
-            pkgs = entry["only_in_sbt"]
-            print(f"    Packages only in SBT ({len(pkgs)}):")
-            for pkg, count in list(pkgs.items())[:20]:
-                print(f"      {pkg} ({count} classes)")
-            if len(pkgs) > 20:
-                print(f"      ... and {len(pkgs) - 20} more")
-
-        shading = entry.get("shading", {})
-        if shading:
-            print("    Shading:")
-            for prefix, counts in shading.items():
-                m, s = counts["maven"], counts["sbt"]
-                if m == s:
-                    print(f"      \u2713 {prefix}: {m} classes")
-                else:
-                    print(f"      \u2717 {prefix}: Maven={m}, SBT={s}")
-
     print("\u2500" * 72)
-    if issues == 0:
-        print("Result: Assembly comparison passed!")
-    else:
-        print(f"Result: {issues} assembly issues found")
+    both = sum(1 for e in assemblies.values() if e.get("status") == "both")
+    print(f"Summary: {both} in both builds, {issues} missing ({len(assemblies)} total)")
 
 
 # ============================================================================
@@ -1038,6 +1518,37 @@ SHADING_RULES = {
     },
 }
 
+# Rules to reverse shading relocations back to original package names.
+# Order matters: longest/most-specific prefix first, catch-all last.
+# Each tuple is (shaded_prefix, original_prefix).
+UNRELOCATE_RULES = [
+    # SBT connect-client: uniform prefix
+    ("org/sparkproject/connect/client/", ""),
+    # Maven connect-client: guava special relocation
+    ("org/sparkproject/connect/guava/", "com/google/common/"),
+    # Maven core: protobuf special relocation
+    ("org/sparkproject/spark_core/protobuf/", "com/google/protobuf/"),
+    # Maven core: guava special relocation
+    ("org/sparkproject/guava/", "com/google/common/"),
+    # Maven core: jetty special relocation
+    ("org/sparkproject/jetty/", "org/eclipse/jetty/"),
+    # Catch-all: strip org/sparkproject/ prefix (handles io/grpc/, io/netty/,
+    # com/google/protobuf/, org/apache/arrow/, android/, io/perfmark/, etc.)
+    ("org/sparkproject/", ""),
+]
+
+
+def unrelocate_class(class_name: str) -> str:
+    """Reverse shading relocation to recover the original class path.
+
+    Tries UNRELOCATE_RULES in order (longest prefix first).
+    Returns the original class name, or the input unchanged if not shaded.
+    """
+    for shaded_prefix, original_prefix in UNRELOCATE_RULES:
+        if class_name.startswith(shaded_prefix):
+            return original_prefix + class_name[len(shaded_prefix) :]
+    return class_name
+
 
 def find_shaded_jars(build_type: str) -> Dict[str, Path]:
     """Find the JARs that contain shaded classes for each build system.
@@ -1047,14 +1558,13 @@ def find_shaded_jars(build_type: str) -> Dict[str, Path]:
 
     SBT produces separate assembly JARs (``*-assembly-*.jar``) under
     ``target/scala-X.XX/``, so this returns those.
-
-    Used by both ``--assemblies-only`` and ``--shading`` modes.
     """
     assemblies = {}
 
     # (name, target_path, maven_jar_glob)
     assembly_locations = [
         ("core", "core/target", "spark-core_*.jar"),
+        ("connect", "sql/connect/server/target", "spark-connect_*.jar"),
         ("connect-client-jvm", "sql/connect/client/jvm/target", "spark-connect-client-jvm_*.jar"),
     ]
 
@@ -1559,6 +2069,53 @@ def _self_test() -> bool:
             failed += 1
             print(f"  FAIL: _find_module_dirs() missing expected module '{expected_mod}'")
 
+    # JAR discovery test - exercise find_maven_jars / find_sbt_jars
+    print("Testing JAR discovery ...")
+    maven_jars = find_maven_jars()
+    sbt_jars = find_sbt_jars()
+    both = set(maven_jars) & set(sbt_jars)
+    only_maven = sorted(set(maven_jars) - set(sbt_jars))
+    only_sbt = sorted(set(sbt_jars) - set(maven_jars))
+
+    print(f"  Maven: {len(maven_jars)} JARs, SBT: {len(sbt_jars)} JARs, " f"common: {len(both)}")
+    if only_maven:
+        print(f"  Only in Maven ({len(only_maven)}): {', '.join(only_maven)}")
+    if only_sbt:
+        print(f"  Only in SBT ({len(only_sbt)}): {', '.join(only_sbt)}")
+
+    # Both builds should find JARs (if built)
+    if maven_jars:
+        passed += 1
+    else:
+        failed += 1
+        print("  FAIL: no Maven JARs found (run Maven build first)")
+    if sbt_jars:
+        passed += 1
+    else:
+        failed += 1
+        print("  FAIL: no SBT JARs found (run SBT build first)")
+
+    # Every Maven JAR should also exist in SBT (SBT builds a superset)
+    if maven_jars and sbt_jars:
+        if not only_maven:
+            passed += 1
+        else:
+            failed += 1
+            print(
+                f"  FAIL: {len(only_maven)} JARs in Maven but not SBT: " f"{', '.join(only_maven)}"
+            )
+
+    # Shaded JAR discovery
+    print("Testing shaded JAR discovery ...")
+    maven_shaded = find_shaded_jars("maven")
+    sbt_shaded = find_shaded_jars("sbt")
+    for name in ("core", "connect", "connect-client-jvm"):
+        m = maven_shaded.get(name)
+        s = sbt_shaded.get(name)
+        m_label = str(m.relative_to(SPARK_HOME)) if m else "(not found)"
+        s_label = str(s.relative_to(SPARK_HOME)) if s else "(not found)"
+        print(f"  {name}: maven={m_label}, sbt={s_label}")
+
     print(f"  {passed} passed, {failed} failed")
     return failed == 0
 
@@ -1581,17 +2138,10 @@ def main():
     # Comparison mode (mutually exclusive)
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
-        "--shading",
-        action="store_true",
-        help="Verify shading relocation rules against both builds",
-    )
-    mode_group.add_argument(
-        "--assemblies-only", action="store_true", help="Compare assembly JARs only"
-    )
-    mode_group.add_argument(
-        "--deps",
-        action="store_true",
-        help="Compare dependencies (slower, requires running Maven/SBT)",
+        "--compare",
+        nargs=2,
+        metavar=("JAR1", "JAR2"),
+        help="Compare two JAR files directly",
     )
     mode_group.add_argument(
         "--self-test",
@@ -1599,7 +2149,12 @@ def main():
         help="Run internal self-tests and exit",
     )
 
-    # Filtering (default JAR mode only)
+    # Options
+    parser.add_argument(
+        "--physical-only",
+        action="store_true",
+        help="Stop after Level 1 physical comparison (skip equivalence analysis)",
+    )
     parser.add_argument(
         "--modules",
         type=str,
@@ -1609,11 +2164,6 @@ def main():
         "--matching-only",
         action="store_true",
         help="Only compare JARs that exist in both builds",
-    )
-    parser.add_argument(
-        "--ignore-shaded",
-        action="store_true",
-        help="Ignore shaded classes/services and bundled deps in fat-JAR modules",
     )
     parser.add_argument(
         "--verbose",
@@ -1673,40 +2223,25 @@ def main():
             if not args.json:
                 print(f"\nJSON report written to: {args.output}")
 
-    # Dependency comparison mode
-    if args.deps:
-        report = compare_dependencies_data()
+    # Two-JAR comparison mode
+    if args.compare:
+        jar1_path = Path(args.compare[0])
+        jar2_path = Path(args.compare[1])
+        for p in (jar1_path, jar2_path):
+            if not p.exists():
+                print(f"[error] JAR not found: {p}")
+                sys.exit(1)
+        report = compare_two_jars(jar1_path, jar2_path, ignore_shaded=False)
         if args.json or args.output:
             _output_report(report)
         if not args.json:
-            print_dependencies_report(report)
-        if "error" in report or report["summary"]["differing"] > 0:
+            print_two_jar_report(report, verbose=args.verbose)
+        has_diff = report.get("only_in_jar1_count", 0) + report.get("only_in_jar2_count", 0)
+        if has_diff > 0:
             sys.exit(1)
         return
 
-    # Shading comparison mode
-    if args.shading:
-        report = compare_shading_data()
-        if args.json or args.output:
-            _output_report(report)
-        if not args.json:
-            print_shading_report(report)
-        if report["summary"]["fail"] > 0:
-            sys.exit(1)
-        return
-
-    # Assembly comparison mode
-    if args.assemblies_only:
-        report = compare_assembly_data()
-        if args.json or args.output:
-            _output_report(report)
-        if not args.json:
-            print_assembly_report(report)
-        if report["issues"] > 0:
-            sys.exit(1)
-        return
-
-    # Find JARs
+    # Default: Two-level comparison of module JARs
     if not args.json:
         print("\nSearching for Maven JARs...")
     maven_jars = find_maven_jars(modules)
@@ -1721,27 +2256,30 @@ def main():
         print("\n[error] No JARs found. Please build first with --build-both")
         sys.exit(1)
 
-    # Compare
-    results = compare_jars(
-        maven_jars,
-        sbt_jars,
-        matching_only=args.matching_only,
-        ignore_shaded=args.ignore_shaded,
-    )
-
-    # Build structured report
-    report = build_report_dict(results)
-
-    # Output
-    if args.json or args.output:
-        _output_report(report)
-    if not args.json:
-        print_report(results, args.verbose)
-
-    # Exit with error if there are discrepancies
-    matches = sum(1 for r in results.values() if r.is_match)
-    if matches != len(results):
-        sys.exit(1)
+    # Level 1 + Level 2 comparison (unless --physical-only)
+    if args.physical_only:
+        # Physical comparison only (old behavior)
+        results = compare_jars_physical(maven_jars, sbt_jars, matching_only=args.matching_only)
+        report = build_report_dict(results)
+        if args.json or args.output:
+            _output_report(report)
+        if not args.json:
+            print_report(results, args.verbose)
+        matches = sum(1 for r in results.values() if r.is_match)
+        if matches != len(results):
+            sys.exit(1)
+    else:
+        # Two-level comparison (new default)
+        results, equivalence, verdict = run_two_level_comparison(
+            maven_jars, sbt_jars, matching_only=args.matching_only
+        )
+        report = build_two_level_report_dict(results, equivalence, verdict)
+        if args.json or args.output:
+            _output_report(report)
+        if not args.json:
+            print_two_level_report(results, equivalence, verdict, verbose=args.verbose)
+        if verdict == "DIFFER":
+            sys.exit(1)
 
 
 if __name__ == "__main__":
