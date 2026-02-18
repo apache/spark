@@ -5142,10 +5142,9 @@ object functions {
   def ltrim(e: Column): Column = Column.fn("ltrim", e)
 
   /**
-   * Returns a string with human readable summary information about the KLL bigint sketch.
-   *
-   * @group misc_funcs
-   * @since 4.1.0
+   * Trim the specified character string from left end for the specified string column.
+   * @group string_funcs
+   * @since 2.3.0
    */
   def ltrim(e: Column, trimString: String): Column = ltrim(e, lit(trimString))
 
