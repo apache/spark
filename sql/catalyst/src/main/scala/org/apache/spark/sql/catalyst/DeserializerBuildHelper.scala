@@ -494,7 +494,8 @@ object DeserializerBuildHelper {
         Literal.create(provider(), ObjectType(classOf[Codec[_, _]])),
         "decode",
         dataTypeForClass(tag.runtimeClass),
-        createDeserializer(encoder, path, walkedTypePath, isTopLevel) :: Nil)
+        createDeserializer(encoder, path, walkedTypePath, isTopLevel) :: Nil,
+        propagateNull = !encoder.nullable)
   }
 
   private def deserializeArray(
