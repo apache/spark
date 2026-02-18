@@ -146,87 +146,6 @@ class JarsReportDict(TypedDict):
     jars: Dict[str, ComparisonResultDict]
 
 
-class AssemblyBuildInfoDict(TypedDict, total=False):
-    jar_type: str
-    path: str
-    size: int
-    class_count: int
-    resource_count: int
-
-
-class AssemblyEntryDict(TypedDict, total=False):
-    maven: AssemblyBuildInfoDict
-    sbt: AssemblyBuildInfoDict
-    size_diff: str
-    status: str
-
-
-class AssemblyReportDict(TypedDict):
-    mode: str
-    assemblies: Dict[str, AssemblyEntryDict]
-    issues: int
-
-
-class ShadingJarInfoDict(TypedDict):
-    jar_type: str
-    path: str
-
-
-class ShadingBuildStatusDict(TypedDict, total=False):
-    status: str
-    source_classes: int
-    target_classes: int
-
-
-class ShadingRuleDict(TypedDict, total=False):
-    source: str
-    target: str
-    maven: ShadingBuildStatusDict
-    sbt: ShadingBuildStatusDict
-    result: str
-
-
-class ShadingModuleDict(TypedDict, total=False):
-    maven: ShadingJarInfoDict
-    sbt: ShadingJarInfoDict
-    rules: List[ShadingRuleDict]
-
-
-ShadingSummaryDict = TypedDict(
-    "ShadingSummaryDict",
-    {"modules": int, "total_rules": int, "pass": int, "fail": int, "warn": int},
-)
-
-
-class ShadingReportDict(TypedDict):
-    mode: str
-    summary: ShadingSummaryDict
-    modules: Dict[str, ShadingModuleDict]
-
-
-class DepsSummaryDict(TypedDict, total=False):
-    total: int
-    matching: int
-    differing: int
-    only_in_maven_modules: List[str]
-    only_in_sbt_modules: List[str]
-
-
-class DepsModuleEntryDict(TypedDict, total=False):
-    status: str
-    maven_count: int
-    sbt_count: int
-    only_in_maven: List[str]
-    only_in_sbt: List[str]
-
-
-class DepsReportDict(TypedDict, total=False):
-    mode: str
-    error: str
-    summary: DepsSummaryDict
-    modules: Dict[str, DepsModuleEntryDict]
-
-
 class TwoJarInfoDict(TypedDict, total=False):
     path: str
     size: int
@@ -268,9 +187,6 @@ class TwoLevelReportDict(TypedDict):
 
 ReportDict = Union[
     JarsReportDict,
-    AssemblyReportDict,
-    ShadingReportDict,
-    DepsReportDict,
     TwoJarReportDict,
     TwoLevelReportDict,
 ]
@@ -443,7 +359,7 @@ def should_skip_jar(name: str) -> bool:
     # Skip Maven's pre-shaded "original-" JARs
     if name.startswith("original-"):
         return True
-    # Skip assembly JARs (use --assemblies-only for those)
+    # Skip assembly JARs (handled separately in Level 2 analysis)
     if "-assembly" in name or name.endswith("-assembly.jar"):
         return True
     return False
@@ -604,7 +520,7 @@ def _is_shaded_service(service_path: str) -> bool:
 
 # Modules where Maven's shade plugin bundles dependency classes into the
 # module JAR, making it a "fat JAR".  SBT keeps these as thin module JARs
-# with separate assembly JARs.  When --ignore-shaded is active, extra
+# with separate assembly JARs.  In Level 2 equivalence analysis, extra
 # Maven-only classes in these modules are expected (bundled deps) provided
 # that SBT's own classes are all present in Maven.
 FAT_JAR_MODULES = {"spark-core", "spark-connect-client-jvm", "spark-connect"}
@@ -878,7 +794,7 @@ def print_two_level_report(
 
     # Level 2 (only if differences)
     if differing:
-        print(f"\nLevel 2: Equivalence Analysis")
+        print("\nLevel 2: Equivalence Analysis")
         print("═" * 72)
         print(f"Analyzing {len(differing)} physical differences...")
 
@@ -969,7 +885,7 @@ def print_two_level_report(
                 sbt_shaded = sum(1 for c in r.sbt_jar.classes if is_shaded_class(c))
                 maven_nonshaded = r.maven_jar.class_count() - maven_shaded
                 sbt_nonshaded = r.sbt_jar.class_count() - sbt_shaded
-                print(f"  Evidence: After filtering shaded classes:")
+                print("  Evidence: After filtering shaded classes:")
                 print(f"    Maven: {maven_shaded} shaded → {maven_nonshaded} core classes")
                 print(f"    SBT:   {sbt_shaded} shaded → {sbt_nonshaded} core classes")
                 if maven_nonshaded == sbt_nonshaded:
@@ -983,7 +899,7 @@ def print_two_level_report(
                 # Show that SBT is subset of Maven, and where deps live
                 maven_count = r.maven_jar.class_count()
                 sbt_count = r.sbt_jar.class_count()
-                print(f"  Evidence: Fat JAR structure difference")
+                print("  Evidence: Fat JAR structure difference")
                 print(f"    Maven: {maven_count} classes in module JAR (fat: core + deps)")
                 print(f"    SBT:   {sbt_count} classes in module JAR (thin: core only)")
                 print(f"    ✓ All {sbt_count} SBT module classes found in Maven")
@@ -1010,7 +926,7 @@ def print_two_level_report(
                         print(f"    {line}")
 
             elif cls == "unexplained":
-                print(f"  Evidence: Real content differences")
+                print("  Evidence: Real content differences")
                 if r.only_in_maven:
                     print(f"  Classes only in Maven ({len(r.only_in_maven)}):")
                     for line in _summarize_classes(r.only_in_maven)[:5]:
@@ -1022,9 +938,9 @@ def print_two_level_report(
 
             elif cls == "only_in_build":
                 if not r.maven_jar:
-                    print(f"  Evidence: Only built by SBT (optional Maven profile)")
+                    print("  Evidence: Only built by SBT (optional Maven profile)")
                 elif not r.sbt_jar:
-                    print(f"  Evidence: Only built by Maven")
+                    print("  Evidence: Only built by Maven")
 
 
 def _summarize_classes(classes: Set[str]) -> List[str]:
@@ -1397,127 +1313,6 @@ def print_two_jar_report(report: TwoJarReportDict, verbose: bool = False) -> Non
             print(f"    {svc}")
 
 
-def compare_assembly_data() -> AssemblyReportDict:
-    """Collect assembly JAR inventory for both builds.
-
-    Maven embeds shaded classes in the module JAR itself, while SBT produces
-    separate assembly JARs.  This mode lists what exists with basic stats.
-    Use --shading for relocation rule verification.
-    """
-    maven_assemblies = find_shaded_jars("maven")
-    sbt_assemblies = find_shaded_jars("sbt")
-
-    all_names = set(maven_assemblies.keys()) | set(sbt_assemblies.keys())
-    assemblies_data: Dict[str, AssemblyEntryDict] = {}
-    total_issues = 0
-
-    for name in sorted(all_names):
-        maven_jar = maven_assemblies.get(name)
-        sbt_jar = sbt_assemblies.get(name)
-        entry: AssemblyEntryDict = {}
-
-        maven_info = get_jar_contents(maven_jar) if maven_jar else None
-        sbt_info = get_jar_contents(sbt_jar) if sbt_jar else None
-
-        if maven_info:
-            entry["maven"] = {
-                "jar_type": "module",
-                "path": str(maven_jar.relative_to(SPARK_HOME)),
-                "size": maven_info.size,
-                "class_count": maven_info.class_count(),
-                "resource_count": len(maven_info.resources),
-            }
-        if sbt_info:
-            entry["sbt"] = {
-                "jar_type": "assembly",
-                "path": str(sbt_jar.relative_to(SPARK_HOME)),
-                "size": sbt_info.size,
-                "class_count": sbt_info.class_count(),
-                "resource_count": len(sbt_info.resources),
-            }
-        if maven_info and sbt_info:
-            entry["size_diff"] = _format_size_diff(maven_info.size, sbt_info.size)
-            entry["status"] = "both"
-        elif maven_info:
-            entry["status"] = "only_maven"
-            total_issues += 1
-        elif sbt_info:
-            entry["status"] = "only_sbt"
-            total_issues += 1
-        else:
-            entry["status"] = "neither"
-            total_issues += 1
-
-        assemblies_data[name] = entry
-
-    return {
-        "mode": "assemblies",
-        "assemblies": assemblies_data,
-        "issues": total_issues,
-    }
-
-
-def print_assembly_report(data: AssemblyReportDict) -> None:
-    """Print assembly JAR inventory."""
-    assemblies = data["assemblies"]
-    issues = data["issues"]
-
-    print("\nAssembly JAR Inventory")
-    print("Maven embeds shaded classes in module JARs; SBT uses separate assembly JARs.")
-    print("Use --shading to verify relocation rules.")
-    print("\u2500" * 72)
-
-    for name, entry in assemblies.items():
-        status = entry.get("status", "")
-        marker = "\u2713" if status == "both" else "\u2717"
-        print(f"\n  {marker} {name}")
-
-        for build in ("maven", "sbt"):
-            if build in entry:
-                info = entry[build]
-                jar_type = info.get("jar_type", "")
-                suffix = f" ({jar_type} JAR)" if jar_type else ""
-                label = "Maven" if build == "maven" else "SBT  "
-                print(
-                    f"    {label}{suffix}: {info['path']}"
-                    f" ({info['size']:,} bytes, {info['class_count']} classes,"
-                    f" {info['resource_count']} resources)"
-                )
-            else:
-                label = "Maven" if build == "maven" else "SBT  "
-                print(f"    {label}: (not built)")
-
-        if "size_diff" in entry:
-            print(f"    Size:  {entry['size_diff']}")
-
-    print("\u2500" * 72)
-    both = sum(1 for e in assemblies.values() if e.get("status") == "both")
-    print(f"Summary: {both} in both builds, {issues} missing ({len(assemblies)} total)")
-
-
-# ============================================================================
-# SHADING COMPARISON
-# ============================================================================
-
-# Expected shading relocations for different assembly types
-SHADING_RULES = {
-    "core": {
-        # Original package -> Shaded package
-        "org/eclipse/jetty/": "org/sparkproject/jetty/",
-        "com/google/common/": "org/sparkproject/guava/",
-        "com/google/thirdparty/": "org/sparkproject/guava/",
-        "com/google/protobuf/": "org/sparkproject/spark_core/protobuf/",
-    },
-    "connect-client": {
-        "com/google/common/": "org/sparkproject/connect/guava/",
-        "com/google/thirdparty/": "org/sparkproject/connect/guava/",
-        "com/google/protobuf/": "org/sparkproject/com/google/protobuf/",
-        "io/grpc/": "org/sparkproject/io/grpc/",
-        "io/netty/": "org/sparkproject/io/netty/",
-        "org/apache/arrow/": "org/sparkproject/org/apache/arrow/",
-    },
-}
-
 # Rules to reverse shading relocations back to original package names.
 # Order matters: longest/most-specific prefix first, catch-all last.
 # Each tuple is (shaded_prefix, original_prefix).
@@ -1591,381 +1386,6 @@ def find_shaded_jars(build_type: str) -> Dict[str, Path]:
                         break
 
     return assemblies
-
-
-def _count_classes_under(jar_path: Path, prefix: str) -> int:
-    """Count .class files under a package prefix inside a JAR."""
-    count = 0
-    with zipfile.ZipFile(jar_path, "r") as zf:
-        for name in zf.namelist():
-            if name.endswith(".class") and name.startswith(prefix):
-                count += 1
-    return count
-
-
-def compare_shading_data() -> ShadingReportDict:
-    """Collect rule-driven shading comparison data.
-
-    For each module in SHADING_RULES, checks every relocation rule against
-    both the Maven and SBT JARs:
-      - source package should be absent (relocated)
-      - target package should be present
-      - class counts should match between builds
-    """
-    maven_jars = find_shaded_jars("maven")
-    sbt_jars = find_shaded_jars("sbt")
-
-    # Map SHADING_RULES keys to find_shaded_jars keys
-    # SHADING_RULES uses short names ("core", "connect-client")
-    # find_shaded_jars uses full names ("core", "connect-client-jvm")
-    rule_to_jar_key = {
-        "core": "core",
-        "connect-client": "connect-client-jvm",
-    }
-
-    modules_data: Dict[str, ShadingModuleDict] = {}
-    total_rules = 0
-    rules_pass = 0
-    rules_fail = 0
-    rules_warn = 0
-
-    for module, rules in SHADING_RULES.items():
-        jar_key = rule_to_jar_key.get(module, module)
-        maven_jar = maven_jars.get(jar_key)
-        sbt_jar = sbt_jars.get(jar_key)
-
-        module_entry: ShadingModuleDict = {}
-        if maven_jar:
-            module_entry["maven"] = {
-                "jar_type": "module",
-                "path": str(maven_jar.relative_to(SPARK_HOME)),
-            }
-        if sbt_jar:
-            module_entry["sbt"] = {
-                "jar_type": "assembly",
-                "path": str(sbt_jar.relative_to(SPARK_HOME)),
-            }
-
-        rules_data: List[ShadingRuleDict] = []
-        for source, target in rules.items():
-            total_rules += 1
-            rule_entry: ShadingRuleDict = {"source": source, "target": target}
-
-            # Check each build
-            for build, jar_path in [("maven", maven_jar), ("sbt", sbt_jar)]:
-                if jar_path is None:
-                    rule_entry[build] = {"status": "not_built"}
-                    continue
-
-                source_count = _count_classes_under(jar_path, source)
-                target_count = _count_classes_under(jar_path, target)
-
-                if source_count > 0:
-                    rule_entry[build] = {
-                        "status": "unshaded",
-                        "source_classes": source_count,
-                        "target_classes": target_count,
-                    }
-                elif target_count > 0:
-                    rule_entry[build] = {
-                        "status": "relocated",
-                        "target_classes": target_count,
-                    }
-                else:
-                    rule_entry[build] = {"status": "absent"}
-
-            # Determine overall rule status
-            m_status = rule_entry.get("maven", {}).get("status")
-            s_status = rule_entry.get("sbt", {}).get("status")
-
-            if m_status == "unshaded" or s_status == "unshaded":
-                rule_entry["result"] = "FAIL"
-                rules_fail += 1
-            elif m_status == "relocated" and s_status == "relocated":
-                m_count = rule_entry["maven"]["target_classes"]
-                s_count = rule_entry["sbt"]["target_classes"]
-                if m_count == s_count:
-                    rule_entry["result"] = "PASS"
-                    rules_pass += 1
-                else:
-                    rule_entry["result"] = "WARN"
-                    rules_warn += 1
-            elif m_status == "not_built" or s_status == "not_built":
-                # Can only verify the side that exists
-                existing = m_status if m_status != "not_built" else s_status
-                if existing == "relocated":
-                    rule_entry["result"] = "PASS"
-                    rules_pass += 1
-                elif existing == "unshaded":
-                    rule_entry["result"] = "FAIL"
-                    rules_fail += 1
-                else:
-                    rule_entry["result"] = "WARN"
-                    rules_warn += 1
-            else:
-                rule_entry["result"] = "WARN"
-                rules_warn += 1
-
-            rules_data.append(rule_entry)
-
-        module_entry["rules"] = rules_data
-        modules_data[module] = module_entry
-
-    return {
-        "mode": "shading",
-        "summary": {
-            "modules": len(modules_data),
-            "total_rules": total_rules,
-            "pass": rules_pass,
-            "fail": rules_fail,
-            "warn": rules_warn,
-        },
-        "modules": modules_data,
-    }
-
-
-def print_shading_report(data: ShadingReportDict) -> None:
-    """Print rule-driven shading report."""
-    modules = data["modules"]
-    summary = data["summary"]
-
-    print("\nShading Verification")
-    print("Maven embeds shaded classes in module JARs; SBT uses separate assembly JARs.")
-    print("Sizes are not comparable. This report verifies relocation rules only.")
-    print("\u2500" * 72)
-
-    for module, entry in modules.items():
-        rules = entry["rules"]
-        print(f"\n  {module} ({len(rules)} rules)")
-
-        if "maven" in entry:
-            print(f"    Maven: {entry['maven']['path']} ({entry['maven']['jar_type']} JAR)")
-        else:
-            print("    Maven: (not built)")
-        if "sbt" in entry:
-            print(f"    SBT:   {entry['sbt']['path']} ({entry['sbt']['jar_type']} JAR)")
-        else:
-            print("    SBT:   (not built)")
-
-        for rule in rules:
-            source = rule["source"]
-            target = rule["target"]
-            result = rule["result"]
-            marker = "\u2713" if result == "PASS" else ("\u2717" if result == "FAIL" else "~")
-
-            print(f"\n    {marker} {source} \u2192 {target}")
-
-            for build in ("maven", "sbt"):
-                info = rule.get(build, {})
-                status = info.get("status", "not_built")
-                label = "Maven" if build == "maven" else "SBT  "
-
-                if status == "not_built":
-                    print(f"      {label}: (not built)")
-                elif status == "relocated":
-                    count = info["target_classes"]
-                    print(f"      {label}: relocated ({count} classes)")
-                elif status == "unshaded":
-                    src_count = info["source_classes"]
-                    tgt_count = info.get("target_classes", 0)
-                    print(
-                        f"      {label}: UNSHADED ({src_count} source classes remain"
-                        + (f", {tgt_count} relocated)" if tgt_count else ")")
-                    )
-                elif status == "absent":
-                    print(f"      {label}: absent (no source or target classes)")
-
-            # Show count mismatch if both relocated
-            m_info = rule.get("maven", {})
-            s_info = rule.get("sbt", {})
-            if (
-                m_info.get("status") == "relocated"
-                and s_info.get("status") == "relocated"
-                and m_info["target_classes"] != s_info["target_classes"]
-            ):
-                diff = s_info["target_classes"] - m_info["target_classes"]
-                sign = "+" if diff > 0 else ""
-                print(f"      (SBT has {sign}{diff} classes vs Maven)")
-
-    print("\u2500" * 72)
-    total = summary["total_rules"]
-    p, f, w = summary["pass"], summary["fail"], summary["warn"]
-    parts = [f"{total} rules checked"]
-    if p:
-        parts.append(f"{p} pass")
-    if f:
-        parts.append(f"{f} fail")
-    if w:
-        parts.append(f"{w} warn")
-    print(f"Summary: {', '.join(parts)}")
-    if f > 0:
-        print("FAIL: unshaded classes found that should have been relocated")
-    elif w > 0:
-        print("WARN: all relocations applied, but class counts differ between builds")
-    else:
-        print("PASS: all relocation rules verified")
-
-
-def get_maven_dependencies() -> Dict[str, Set[str]]:
-    """Get dependencies for each module from Maven."""
-    deps = {}
-    cmd = [
-        str(SPARK_HOME / "build" / "mvn"),
-        "dependency:list",
-        "-DoutputAbsoluteArtifactFilename=false",
-        "-DincludeScope=compile",
-    ]
-    ret, stdout, stderr = run_command(cmd)
-    if ret != 0:
-        print(f"[warn] Failed to get Maven dependencies: {stderr}")
-        return deps
-
-    current_module = None
-    for line in stdout.split("\n"):
-        # Look for module headers
-        if line.startswith("[INFO] --- maven-dependency-plugin"):
-            # Extract module from path
-            match = re.search(r"@ (\S+) ---", line)
-            if match:
-                current_module = match.group(1)
-                deps[current_module] = set()
-        elif current_module and ":" in line and line.strip().startswith("[INFO]"):
-            # Parse dependency line
-            parts = line.strip().split()
-            if len(parts) >= 2:
-                dep = parts[1]  # groupId:artifactId:type:version:scope
-                if ":" in dep:
-                    deps[current_module].add(dep)
-
-    return deps
-
-
-def get_sbt_dependencies() -> Dict[str, Set[str]]:
-    """Get dependencies for each module from SBT."""
-    deps = {}
-    # Use SBT's dependencyList task
-    cmd = [str(SPARK_HOME / "build" / "sbt"), "dependencyList"]
-    ret, stdout, stderr = run_command(cmd)
-    if ret != 0:
-        print(f"[warn] Failed to get SBT dependencies: {stderr}")
-        return deps
-
-    current_module = None
-    for line in stdout.split("\n"):
-        # Look for project headers in SBT output
-        if line.startswith("[info] ") and "/" in line and "dependencyList" not in line:
-            module_match = re.search(r"\[info\] (\S+) /", line)
-            if module_match:
-                current_module = module_match.group(1)
-                deps[current_module] = set()
-        elif current_module and line.strip() and not line.startswith("["):
-            # SBT dependency format: groupId:artifactId:version
-            dep = line.strip()
-            if ":" in dep and not dep.startswith("#"):
-                deps[current_module].add(dep)
-
-    return deps
-
-
-def compare_dependencies_data() -> DepsReportDict:
-    """Collect dependency comparison data and return structured dict."""
-    print("\nFetching Maven dependencies...")
-    maven_deps = get_maven_dependencies()
-    print(f"Found {len(maven_deps)} Maven modules with dependencies")
-
-    print("\nFetching SBT dependencies...")
-    sbt_deps = get_sbt_dependencies()
-    print(f"Found {len(sbt_deps)} SBT modules with dependencies")
-
-    if not maven_deps or not sbt_deps:
-        return {
-            "mode": "deps",
-            "error": "Could not compare dependencies - missing data from one build",
-            "summary": {"total": 0, "matching": 0, "differing": 0},
-            "modules": {},
-        }
-
-    common_modules = set(maven_deps.keys()) & set(sbt_deps.keys())
-    only_maven_modules = set(maven_deps.keys()) - set(sbt_deps.keys())
-    only_sbt_modules = set(sbt_deps.keys()) - set(maven_deps.keys())
-
-    modules_data: Dict[str, DepsModuleEntryDict] = {}
-    differing = 0
-
-    for module in sorted(common_modules):
-        maven_set = maven_deps[module]
-        sbt_set = sbt_deps[module]
-        only_maven = maven_set - sbt_set
-        only_sbt = sbt_set - maven_set
-
-        entry: DepsModuleEntryDict = {
-            "status": "match" if not (only_maven or only_sbt) else "differs",
-            "maven_count": len(maven_set),
-            "sbt_count": len(sbt_set),
-        }
-        if only_maven:
-            entry["only_in_maven"] = sorted(only_maven)
-        if only_sbt:
-            entry["only_in_sbt"] = sorted(only_sbt)
-        if only_maven or only_sbt:
-            differing += 1
-
-        modules_data[module] = entry
-
-    return {
-        "mode": "deps",
-        "summary": {
-            "total": len(common_modules),
-            "matching": len(common_modules) - differing,
-            "differing": differing,
-            "only_in_maven_modules": sorted(only_maven_modules),
-            "only_in_sbt_modules": sorted(only_sbt_modules),
-        },
-        "modules": modules_data,
-    }
-
-
-def print_dependencies_report(data: DepsReportDict) -> None:
-    """Print dependency comparison in human-readable format."""
-    if "error" in data:
-        print(f"\n[warn] {data['error']}")
-        return
-
-    summary = data["summary"]
-    modules = data["modules"]
-
-    print(f"\nDependency Comparison ({summary['total']} common modules)")
-    print("\u2500" * 72)
-
-    for module, entry in modules.items():
-        if entry["status"] == "match":
-            continue
-        print(f"\n  {module}:")
-        if "only_in_maven" in entry:
-            deps = entry["only_in_maven"]
-            print(f"    Only in Maven ({len(deps)}):")
-            for dep in deps[:5]:
-                print(f"      - {dep}")
-            if len(deps) > 5:
-                print(f"      ... and {len(deps) - 5} more")
-        if "only_in_sbt" in entry:
-            deps = entry["only_in_sbt"]
-            print(f"    Only in SBT ({len(deps)}):")
-            for dep in deps[:5]:
-                print(f"      - {dep}")
-            if len(deps) > 5:
-                print(f"      ... and {len(deps) - 5} more")
-
-    if summary["only_in_maven_modules"]:
-        print(f"\n  Modules only in Maven: {', '.join(summary['only_in_maven_modules'])}")
-    if summary["only_in_sbt_modules"]:
-        print(f"\n  Modules only in SBT: {', '.join(summary['only_in_sbt_modules'])}")
-
-    print("\u2500" * 72)
-    if summary["differing"] == 0:
-        print(f"Result: All {summary['matching']} common modules have matching dependencies!")
-    else:
-        print(f"Result: {summary['differing']} modules have dependency differences")
 
 
 def _self_test() -> bool:
