@@ -246,7 +246,11 @@ class DataFrameObservationTestsMixin:
             F.sum("id").alias("sum_id"),
             F.raise_error(F.lit("test error")).alias("raise_error"),
         )
-        observed_df.collect()
+        actual = observed_df.collect()
+        self.assertEqual(
+            [row.asDict() for row in actual],
+            [{"id": i} for i in range(10)],
+        )
 
         with self.assertRaises(PySparkException) as cm:
             _ = observation.get

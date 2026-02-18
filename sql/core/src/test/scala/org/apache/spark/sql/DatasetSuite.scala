@@ -1167,7 +1167,8 @@ class DatasetSuite extends QueryTest
       raise_error(lit("test error")).as("raise_error")
     )
 
-    observed_df.collect()
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
 
     val exception = intercept[SparkRuntimeException] {
       observation.get
