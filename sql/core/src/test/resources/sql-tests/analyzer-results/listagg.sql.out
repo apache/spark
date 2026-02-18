@@ -408,14 +408,6 @@ Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 
 
 
 -- !query
-SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (INTERVAL '1' HOUR), (INTERVAL '2' HOUR), (INTERVAL '1' HOUR) AS t(col)
--- !query analysis
-Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT col, ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]
-+- SubqueryAlias t
-   +- LocalRelation [col#x]
-
-
--- !query
 SELECT listagg(DISTINCT cast(col as string), ',') WITHIN GROUP (ORDER BY col) FROM VALUES (10), (1), (2), (20), (2) AS t(col)
 -- !query analysis
 Aggregate [listagg(distinct cast(col#x as string), ,, col#x ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(col AS STRING), ,) WITHIN GROUP (ORDER BY col ASC NULLS FIRST)#x]

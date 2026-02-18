@@ -97,8 +97,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case _ => None
     }
 
-
-
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
@@ -451,16 +449,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-            if agg.isDistinct && listAgg.needSaveOrderValue =>
-              listAgg.orderMismatchCastSafety match {
-                case Some(scala.util.Right(_)) => // safe cast, allow
-                case Some(scala.util.Left((inputType, castType))) =>
-                  throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-                    listAgg.prettyName, inputType, castType)
-                case None =>
-                  throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-                    listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
-              }
+            if agg.isDistinct => listAgg.validateDistinctOrderCompatibility()
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)

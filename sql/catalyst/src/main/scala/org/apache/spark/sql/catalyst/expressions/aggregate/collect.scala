@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtil
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -593,6 +594,54 @@ case class ListAgg(
   }
 
   /**
+   * Validates that the ordering expression is compatible with DISTINCT deduplication.
+   *
+   * When LISTAGG(DISTINCT col) WITHIN GROUP (ORDER BY col) is used on a non-string column,
+   * the child is implicitly casted to string (with UTF8_BINARY collation). The DISTINCT rewrite
+   * uses GROUP BY on both the original and cast columns, so the cast must preserve equality
+   * semantics: values that are GROUP BY-equal must cast to equal strings, and vice versa.
+   *
+   * This method is a no-op when the order expression matches the child (i.e.,
+   * [[needSaveOrderValue]] is false). Otherwise, the behavior depends on the
+   * [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] config:
+   *  - If enabled, delegates to [[orderMismatchCastSafety]] to determine whether the
+   *    mismatch is due to a safe cast, an unsafe cast, or not a cast at all.
+   *  - If disabled, rejects any mismatch.
+   *
+   * @throws AnalysisException if the ordering is incompatible with DISTINCT
+   * @see [[RewriteDistinctAggregates]]
+   * @see [[orderMismatchCastSafety]]
+   * @see [[isCastSafeForDistinct]]
+   * @see [[isCastTargetSafeForDistinct]]
+   */
+  def validateDistinctOrderCompatibility(): Unit = {
+    if (needSaveOrderValue) {
+      if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
+        orderMismatchCastSafety match {
+          case CastSafetyResult.SafeCast => // safe cast, allow
+          case CastSafetyResult.UnsafeCast(inputType, castType) =>
+            throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
+          case CastSafetyResult.NotACast =>
+            throwFunctionAndOrderExpressionMismatchError()
+        }
+      } else {
+        throwFunctionAndOrderExpressionMismatchError()
+      }
+    }
+  }
+
+  private def throwFunctionAndOrderExpressionMismatchError() = {
+    throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+      prettyName, child, orderExpressions)
+  }
+
+  private def throwFunctionAndOrderExpressionUnsafeCastError(
+      inputType: DataType, castType: DataType) = {
+    throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
+      prettyName, inputType, castType)
+  }
+
+  /**
    * Determines whether the order mismatch between [[child]] and [[orderExpressions]] is due to
    * a cast, and if so, whether that cast is safe for DISTINCT deduplication.
    *
@@ -604,22 +653,23 @@ case class ListAgg(
    * Safety is determined by both the source type (via [[isCastSafeForDistinct]]) and the target
    * type's collation (via [[isCastTargetSafeForDistinct]]).
    *
-   * @return `Some(Right(()))` if the mismatch is due to a safe cast,
-   *         `Some(Left((inputType, castType)))` if the cast is unsafe, carrying the source and
-   *         target types for use in the error message,
-   *         `None` if the mismatch is not due to a cast at all
+   * @return [[CastSafetyResult.SafeCast]] if the mismatch is due to a safe cast,
+   *         [[CastSafetyResult.UnsafeCast]] if the cast is unsafe, carrying the source
+   *         and target types for use in the error message,
+   *         [[CastSafetyResult.NotACast]] if the mismatch is not due to a cast at all
    */
-  def orderMismatchCastSafety: Option[Either[(DataType, DataType), Unit]] = {
-    if (orderExpressions.size != 1) return None
+  def orderMismatchCastSafety: CastSafetyResult = {
+    if (orderExpressions.size != 1) return CastSafetyResult.NotACast
     child match {
       case Cast(castChild, castType, _, _)
         if orderExpressions.head.child.semanticEquals(castChild) =>
-          if (isCastSafeForDistinct(castChild.dataType) && isCastTargetSafeForDistinct(castType)) {
-            Some(Right(()))
+          if (isCastSafeForDistinct(castChild.dataType) &&
+              isCastTargetSafeForDistinct(castType)) {
+            CastSafetyResult.SafeCast
           } else {
-            Some(Left((castChild.dataType, castType)))
+            CastSafetyResult.UnsafeCast(castChild.dataType, castType)
           }
-      case _ => None
+      case _ => CastSafetyResult.NotACast
     }
   }
 
@@ -638,15 +688,18 @@ case class ListAgg(
   private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
     case _: DecimalType => true
-    case _: DateType | TimestampType | TimestampNTZType => true
+    case _: DateType | TimestampNTZType => true
     case _: TimeType => true
     case _: CalendarIntervalType => true
     case _: YearMonthIntervalType => true
     case _: DayTimeIntervalType => true
     case BooleanType => true
     case BinaryType => true
-    case st: StringType if st.supportsBinaryEquality => true
+    case st: StringType if st.isUTF8BinaryCollation => true
     case _: DoubleType | FloatType => false
+    // During DST fall-back, two distinct UTC epochs can format to the same local time string
+    // because the default format omits the timezone offset. TimestampNTZType is safe (uses UTC).
+    case _: TimestampType => false
     case _ => false
   }
 
@@ -662,7 +715,7 @@ case class ListAgg(
    * @see [[orderMismatchCastSafety]]
    */
   private def isCastTargetSafeForDistinct(dt: DataType): Boolean = dt match {
-    case st: StringType => st.supportsBinaryEquality
+    case st: StringType => st.isUTF8BinaryCollation
     case BinaryType => true
     case _ => false
   }
@@ -681,4 +734,23 @@ case class ListAgg(
       case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
     }
   }
+}
+
+/**
+ * Result of checking whether a LISTAGG(DISTINCT) order-expression mismatch
+ * is caused by a cast and whether that cast is safe for deduplication.
+ */
+sealed trait CastSafetyResult
+
+object CastSafetyResult {
+  /** The mismatch is not due to a cast at all. */
+  case object NotACast extends CastSafetyResult
+
+  /** The mismatch is due to a cast that is safe for DISTINCT. */
+  case object SafeCast extends CastSafetyResult
+
+  /** The mismatch is due to a cast that is unsafe for DISTINCT. */
+  case class UnsafeCast(
+      inputType: DataType,
+      castType: DataType) extends CastSafetyResult
 }

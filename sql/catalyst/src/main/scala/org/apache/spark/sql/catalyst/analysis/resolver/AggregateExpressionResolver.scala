@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, Su
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.DataType
 
 /**
  * Resolver for [[AggregateExpressions]] that can come from either [[FunctionResolver]] or
@@ -118,14 +117,7 @@ class AggregateExpressionResolver(
   private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-          if agg.isDistinct && listAgg.needSaveOrderValue =>
-            listAgg.orderMismatchCastSafety match {
-              case Some(Right(_)) => // safe cast, allow
-              case Some(Left((inputType, castType))) =>
-                throwFunctionAndOrderExpressionUnsafeCastError(listAgg, inputType, castType)
-              case None =>
-                throwFunctionAndOrderExpressionMismatchError(listAgg)
-            }
+          if agg.isDistinct => listAgg.validateDistinctOrderCompatibility()
       case _ =>
         if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
           throwNestedAggregateFunction(aggregateExpression)
@@ -218,17 +210,6 @@ class AggregateExpressionResolver(
         )
         OuterReference(outerAggregateExpressionAlias.toAttribute)
     }
-  }
-
-  private def throwFunctionAndOrderExpressionMismatchError(listAgg: ListAgg) = {
-    throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-      listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
-  }
-
-  private def throwFunctionAndOrderExpressionUnsafeCastError(
-      listAgg: ListAgg, inputType: DataType, castType: DataType) = {
-    throw QueryCompilationErrors.functionAndOrderExpressionUnsafeCastError(
-      listAgg.prettyName, inputType, castType)
   }
 
   private def throwNestedAggregateFunction(aggregateExpression: AggregateExpression): Nothing = {
