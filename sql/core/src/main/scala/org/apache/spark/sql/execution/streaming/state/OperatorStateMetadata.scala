@@ -322,7 +322,7 @@ class OperatorStateMetadataV2Reader(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
     batchId: Long,
-    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader {
+    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader with Logging {
 
   // Check that the requested batchId is available in the checkpoint directory
   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
@@ -334,8 +334,10 @@ class OperatorStateMetadataV2Reader(
   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
 
-  if (createMetadataDir) {
+  if (createMetadataDir && !fm.exists(metadataDirPath.getParent)) {
     fm.mkdirs(metadataDirPath.getParent)
+  } else if (!createMetadataDir) {
+    logInfo(log"Skipping metadata directory creation (createMetadataDir=false)")
   }
 
   override def version: Int = 2
@@ -357,6 +359,7 @@ class OperatorStateMetadataV2Reader(
 
   // List the available batches in the operator metadata directory
   private def listOperatorMetadataBatches(): Array[Long] = {
+    // If parent doesn't exist, return empty array rather than throwing an exception
     if (!fm.exists(metadataDirPath.getParent) || !fm.exists(metadataDirPath)) {
       return Array.empty
     }

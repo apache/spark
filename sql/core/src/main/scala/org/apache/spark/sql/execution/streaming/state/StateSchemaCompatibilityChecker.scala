@@ -99,6 +99,8 @@ class StateSchemaCompatibilityChecker(
 
   if (createSchemaDir && !fm.exists(schemaFileLocation.getParent)) {
     fm.mkdirs(schemaFileLocation.getParent)
+  } else if (!createSchemaDir) {
+    logInfo(log"Skipping schema directory creation (createSchemaDir=false)")
   }
 
   private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())

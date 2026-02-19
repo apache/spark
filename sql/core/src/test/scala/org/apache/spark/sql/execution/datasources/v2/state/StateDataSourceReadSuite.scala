@@ -1508,9 +1508,9 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
  * directories when reading state for all stateful operators.
  *
  * The reader does not create metadata directories (no mkdirs on the schema metadata path).
- * This is important for
- * Unity Catalog environments where creating directories requires WRITE FILES permission,
- * but reading state should only require READ FILES permission (ES-1722614).
+ * This is important for Unity Catalog environments where creating directories requires
+ * WRITE FILES permission, but reading state should only require READ FILES permission
+ * (ES-1722614).
  *
  * Each test runs one batch of a stateful query to create the checkpoint structure
  * (offsets, commits, metadata), then deletes the state directory and attempts to read.
