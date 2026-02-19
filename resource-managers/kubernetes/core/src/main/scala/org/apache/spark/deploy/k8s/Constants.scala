@@ -112,6 +112,7 @@ object Constants {
   val OWNER_REFERENCE_ANNOTATION = "spark.owner-reference"
   val OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE = "driver"
   val OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE = "executor"
+  val COOLDOWN_PERIOD_ANNOTATION = "spark.cooldown-period"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

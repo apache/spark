@@ -944,6 +944,103 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(resourceList, times(1)).delete()
   }
 
+  test("SPARK-52505: executor feature steps service cooldown period") {
+    val executorMetadata = mock[ObjectMeta]
+    when(executorMetadata.getName).thenReturn("executor-name")
+    when(executorMetadata.getUid).thenReturn("executor-uid")
+
+    val executorPod = mock[Pod]
+    when(podResource.create()).thenReturn(executorPod)
+    when(executorPod.getMetadata).thenReturn(executorMetadata)
+    when(executorPod.getApiVersion).thenReturn("executor-version")
+    when(executorPod.getKind).thenReturn("executor-kind")
+
+    val service = new ServiceBuilder()
+      .withNewMetadata()
+      .withName("service")
+      .withAnnotations(
+        Map(COOLDOWN_PERIOD_ANNOTATION -> "2").asJava
+      )
+      .endMetadata()
+      .build()
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      // have the feature step define a kubernetes service (resource)
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithId(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(service))
+      })
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Scale up to one executor
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
+      Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+    verify(podResource).create()
+
+    // service should have been registered with cooldown period
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+
+    // make pods allocator see an empty snapshot
+    waitForExecutorPodsClock.setTime(startTime + 10)
+    snapshotsStore.removeDeletedExecutors()
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+
+    // the executor is coming up
+    waitForExecutorPodsClock.setTime(startTime + 20)
+    snapshotsStore.updatePod(pendingExecutor(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+
+    // ... and running
+    waitForExecutorPodsClock.setTime(startTime + 30)
+    snapshotsStore.updatePod(runningExecutor(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+
+    // the executor gets unscheduled
+    waitForExecutorPodsClock.setTime(startTime + 40)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
+      Map(defaultProfile -> 0))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+
+    // the executor disappears, does not trigger anything
+    waitForExecutorPodsClock.setTime(startTime + 50)
+    snapshotsStore.updatePod(deletedExecutor(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
+
+    // the executor disappears, this triggers scheduling service for deletion
+    waitForExecutorPodsClock.setTime(startTime + 60)
+    snapshotsStore.removeDeletedExecutors()
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
+    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
+
+    // one second passes by, cooldown period is two seconds
+    waitForExecutorPodsClock.setTime(startTime + 61)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
+    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
+    verify(resourceList, never()).delete()
+
+    // two seconds passed by, service is being deleted
+    waitForExecutorPodsClock.setTime(startTime + 62)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
+    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
+    verify(resourceList, times(1)).delete()
+  }
+
   test("SPARK-33262: pod allocator does not stall with pending pods") {
     when(podsWithNamespace
       .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
