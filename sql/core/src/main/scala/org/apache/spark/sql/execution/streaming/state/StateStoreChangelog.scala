@@ -662,7 +662,7 @@ abstract class StateStoreChangeDataReader(
     compressionCodec: CompressionCodec,
     storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
-  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow)] with Logging {
+  extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)

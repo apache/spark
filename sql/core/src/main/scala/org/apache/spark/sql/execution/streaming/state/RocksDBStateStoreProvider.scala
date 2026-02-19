@@ -1408,7 +1408,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
-  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow) = {
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1489,14 +1489,14 @@ class RocksDBStateStoreChangeDataReader(
         currRecord._3
       }
       val endKeyRow = currEncoder._1.decodeKey(endKeyBytes)
-      (currRecord._1, beginKeyRow, null, currentChangelogVersion - 1, endKeyRow)
+      (currRecord._1, beginKeyRow, null, endKeyRow, currentChangelogVersion - 1)
     } else {
       val keyRow = currEncoder._1.decodeKey(currRecord._2)
       if (currRecord._3 == null) {
-        (currRecord._1, keyRow, null, currentChangelogVersion - 1, null)
+        (currRecord._1, keyRow, null, null, currentChangelogVersion - 1)
       } else {
         val valueRow = currEncoder._2.decodeValue(currRecord._3)
-        (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1, null)
+        (currRecord._1, keyRow, valueRow, null, currentChangelogVersion - 1)
       }
     }
   }

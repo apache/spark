@@ -453,7 +453,7 @@ class StateStoreChangeDataPartitionReader(
     stateSchemaProviderOpt, joinColFamilyOpt) {
 
   private lazy val changeDataReader:
-    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long, UnsafeRow)] = {
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, UnsafeRow, Long)] = {
     if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
       throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
         provider.getClass.toString)
@@ -486,8 +486,8 @@ class StateStoreChangeDataPartitionReader(
       changeDataReader.iterator.map { entry =>
         val groupingKey = entry._2.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
         val userMapKey = entry._2.get(1, userKeySchema).asInstanceOf[UnsafeRow]
-        createFlattenedRowForMapState(entry._4, entry._1,
-          groupingKey, userMapKey, entry._3, entry._5, partition.partition)
+        createFlattenedRowForMapState(entry._5, entry._1,
+          groupingKey, userMapKey, entry._3, entry._4, partition.partition)
       }
     } else {
       changeDataReader.iterator.map(unifyStateChangeDataRow)
@@ -500,13 +500,13 @@ class StateStoreChangeDataPartitionReader(
   }
 
   private def unifyStateChangeDataRow(
-      row: (RecordType, UnsafeRow, UnsafeRow, Long, UnsafeRow)): InternalRow = {
+      row: (RecordType, UnsafeRow, UnsafeRow, UnsafeRow, Long)): InternalRow = {
     val result = new GenericInternalRow(6)
-    result.update(0, row._4)
+    result.update(0, row._5)
     result.update(1, UTF8String.fromString(getRecordTypeAsString(row._1)))
     result.update(2, row._2)
     result.update(3, row._3)
-    result.update(4, row._5)
+    result.update(4, row._4)
     result.update(5, partition.partition)
     result
   }

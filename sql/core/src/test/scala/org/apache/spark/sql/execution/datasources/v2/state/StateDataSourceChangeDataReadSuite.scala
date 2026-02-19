@@ -211,13 +211,13 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .getStateStoreChangeDataReader(1, 4, None, versionToCkptId.getOrElse(4, None))
 
       assert(reader.next() ===
-        (RecordType.PUT_RECORD, dataToKeyRow("a", 1), dataToValueRow(1), 0L, null))
+        (RecordType.PUT_RECORD, dataToKeyRow("a", 1), dataToValueRow(1), null, 0L))
       assert(reader.next() ===
-        (RecordType.PUT_RECORD, dataToKeyRow("b", 2), dataToValueRow(2), 1L, null))
+        (RecordType.PUT_RECORD, dataToKeyRow("b", 2), dataToValueRow(2), null, 1L))
       assert(reader.next() ===
-        (RecordType.DELETE_RECORD, dataToKeyRow("a", 1), null, 2L, null))
+        (RecordType.DELETE_RECORD, dataToKeyRow("a", 1), null, null, 2L))
       assert(reader.next() ===
-        (RecordType.DELETE_RECORD, dataToKeyRow("b", 2), null, 3L, null))
+        (RecordType.DELETE_RECORD, dataToKeyRow("b", 2), null, null, 3L))
     }
   }
 

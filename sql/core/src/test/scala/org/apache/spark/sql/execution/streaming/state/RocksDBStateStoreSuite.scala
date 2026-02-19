@@ -2615,8 +2615,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(record._1 === RecordType.DELETE_RANGE_RECORD)
         assert(record._2 === dataToKeyRowWithRangeScan(2L, ""))
         assert(record._3 === null)
-        assert(record._4 === 1L)
-        assert(record._5 === dataToKeyRowWithRangeScan(4L, ""))
+        assert(record._4 === dataToKeyRowWithRangeScan(4L, ""))
+        assert(record._5 === 1L)
         assert(!reader.hasNext)
         reader.closeIfNeeded()
       }
