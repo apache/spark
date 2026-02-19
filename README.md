@@ -10,6 +10,9 @@ and Structured Streaming for stream processing.
 - Official version: <https://spark.apache.org/>
 - Development version: <https://apache.github.io/spark/>
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Maven Central](https://img.shields.io/maven-central/v/org.apache.spark/spark-core_2.13.svg?filter=!*preview*)](https://search.maven.org/search?q=g:org.apache.spark)
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://adoptium.net/temurin/releases/?version=17)
 [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
 [![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)

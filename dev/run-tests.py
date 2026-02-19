@@ -27,6 +27,7 @@ import subprocess
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 from sparktestsupport.utils import (
+    determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
     identify_changed_files_from_git_commits,
@@ -545,6 +546,14 @@ def main():
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
                 )
+
+            dangling_python_tests = determine_dangling_python_tests(changed_files)
+            if dangling_python_tests:
+                print(
+                    f"[error] Found the following dangling Python tests {', '.join(dangling_python_tests)}"
+                )
+                print("[error] Please add the tests to the appropriate module.")
+                sys.exit(1)
 
             modules_to_test = determine_modules_to_test(
                 determine_modules_for_files(changed_files), deduplicated=False

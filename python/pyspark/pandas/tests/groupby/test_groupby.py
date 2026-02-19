@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.groupby import is_multi_agg_with_relabel, SeriesGroupBy
+from pyspark.pandas.groupby import is_multi_agg_with_relabel
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
