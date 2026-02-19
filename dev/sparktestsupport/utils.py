@@ -166,7 +166,7 @@ def determine_dangling_python_tests(changed_files):
     """
     dangling_tests = set()
     for filename in changed_files:
-        if modules.root.missing_potential_python_test(filename):
+        if os.path.exists(filename) and modules.root.missing_potential_python_test(filename):
             dangling_tests.add(filename)
     return dangling_tests
 

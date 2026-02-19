@@ -47,8 +47,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import PySparkValueError, PySparkAssertionError
 from pyspark.errors.exceptions.base import IllegalArgumentException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
