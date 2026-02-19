@@ -1501,3 +1501,77 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 }
+
+/**
+ * Test suite that verifies the state data source reader does not create empty state
+ * directories when reading state for all stateful operators.
+ */
+class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
+
+  /**
+   * Asserts that the cause chain of the given exception contains
+   * an instance of the expected type.
+   */
+  private def assertCauseChainContains(
+      e: Throwable,
+      expectedType: Class[_ <: Throwable]): Unit = {
+    var current: Throwable = e
+    while (current != null) {
+      if (expectedType.isInstance(current)) return
+      current = current.getCause
+    }
+    fail(
+      s"Expected ${expectedType.getSimpleName} in cause chain, " +
+        s"but got: ${e.getClass.getSimpleName}: ${e.getMessage}")
+  }
+
+  test("deleted offsets directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val offsetsDir = new File(tempDir, "offsets")
+      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+      Utils.deleteRecursively(offsetsDir)
+      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+      val e1 = intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+      assertCauseChainContains(e1,
+        classOf[StateDataSourceOffsetLogUnavailable])
+
+      assert(!offsetsDir.exists(),
+        "State data source reader should not recreate the deleted offsets directory")
+    }
+  }
+
+  test("deleted commits directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val commitsDir = new File(tempDir, "commits")
+      assert(commitsDir.exists(), "Commits directory should exist after running the query")
+      Utils.deleteRecursively(commitsDir)
+      assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+      val e2 = intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+      assertCauseChainContains(e2,
+        classOf[StataDataSourceCommittedBatchUnavailable])
+
+      assert(!commitsDir.exists(),
+        "State data source reader should not recreate the deleted commits directory")
+    }
+  }
+}
