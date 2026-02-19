@@ -17,7 +17,6 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
-import java.util.function.UnaryOperator
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -25,6 +24,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ExecutorFailureTracker
@@ -63,6 +63,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   private val inactivatedPods = mutable.HashSet.empty[Long]
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
+  private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
   private val sparkContainerName = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME)
     .getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME)
@@ -231,7 +233,11 @@ private[spark] class ExecutorPodsLifecycleManager(
           .pods()
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-          .edit(executorInactivationFn)
+          .patch(PATCH_CONTEXT, new PodBuilder()
+            .editOrNewMetadata()
+              .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
+            .endMetadata()
+            .build())
 
         inactivatedPods += execId
       }
@@ -321,10 +327,4 @@ private object ExecutorPodsLifecycleManager {
     }
     s"${code}${humanStr}"
   }
-
-  def executorInactivationFn: UnaryOperator[Pod] = (p: Pod) => new PodBuilder(p)
-    .editOrNewMetadata()
-    .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
-    .endMetadata()
-    .build()
 }
