@@ -58,7 +58,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
     val poolsDescription = if (parent.isFairScheduler) {
         <span class="collapse-aggregated-poolTable collapse-table"
-            onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
+            data-collapse-name="collapse-aggregated-poolTable"
+            data-collapse-table="aggregated-poolTable">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Fair Scheduler Pools ({pools.size})</a>
@@ -146,8 +147,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val classSuffix = s"${statusName(status).capitalize}Stages"
     <span id={statusName(status)}
           class={s"collapse-aggregated-all$classSuffix collapse-table"}
-          onClick={s"collapseTable('collapse-aggregated-all$classSuffix'," +
-            s" 'aggregated-all$classSuffix')"}>
+          data-collapse-name={s"collapse-aggregated-all$classSuffix"}
+          data-collapse-table={s"aggregated-all$classSuffix"}>
       <h4>
         <span class="collapse-table-arrow arrow-open"></span>
         <a>{headerDescription(status)} Stages ({summaryContent(appSummary, status, size)})</a>

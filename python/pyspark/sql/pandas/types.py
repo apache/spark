@@ -317,6 +317,7 @@ def is_geometry(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geometry" in field.metadata
             and field.metadata[b"geometry"] == b"true"
         )
@@ -333,6 +334,7 @@ def is_geography(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geography" in field.metadata
             and field.metadata[b"geography"] == b"true"
         )

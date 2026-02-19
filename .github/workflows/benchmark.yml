@@ -78,12 +78,12 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         # In order to get diff files
         with:
           fetch-depth: 0
       - name: Cache SBT and Maven
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/apache-maven-*
@@ -93,7 +93,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
           key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -101,7 +101,7 @@ jobs:
             benchmark-coursier-${{ inputs.jdk }}
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ./tpcds-sf-1
@@ -109,7 +109,7 @@ jobs:
           key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
       - name: Checkout tpcds-kit repository
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: databricks/tpcds-kit
           ref: 1b7fb7529edae091684201fab142d956d6afd881
@@ -119,7 +119,7 @@ jobs:
         run: cd tpcds-kit/tools && make OS=LINUX
       - name: Install Java ${{ inputs.jdk }}
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: ${{ inputs.jdk }}
@@ -151,12 +151,12 @@ jobs:
       SPARK_TPCDS_DATA_TEXT: ${{ github.workspace }}/tpcds-sf-1-text
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       # In order to get diff files
       with:
         fetch-depth: 0
     - name: Cache SBT and Maven
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           build/apache-maven-*
@@ -166,21 +166,21 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           benchmark-coursier-${{ inputs.jdk }}
     - name: Install Java ${{ inputs.jdk }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
       if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
       id: cache-tpcds-sf-1
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ./tpcds-sf-1
@@ -224,7 +224,7 @@ jobs:
         echo "Error: Failed to push after 5 attempts."
         exit 1
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
         path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar

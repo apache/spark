@@ -57,6 +57,7 @@ Some known version-dependent behaviors:
 
 import inspect
 import os
+import platform
 import unittest
 from decimal import Decimal
 from typing import Callable, List, Optional
@@ -65,13 +66,17 @@ from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
+    have_numpy,
     pyarrow_requirement_message,
     pandas_requirement_message,
+    numpy_requirement_message,
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
 
 if have_pyarrow:
     import pyarrow as pa
+if have_numpy:
+    import numpy as np
 
 
 # ============================================================
@@ -215,8 +220,11 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
 
 
 @unittest.skipIf(
-    not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,
+    not have_pyarrow
+    or not have_pandas
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
 )
 class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
     """
@@ -462,20 +470,17 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         source_arrays = dict(cases)
         return source_names, source_arrays
 
-    # ----- version overrides -----
+    # ----- overrides -----
 
     @classmethod
-    def _version_overrides_safe(cls):
+    def _overrides_safe(cls):
         """
-        Build overrides for known PyArrow version-dependent behaviors (safe=True mode).
+        Build overrides for known version/platform-dependent behaviors (safe=True mode).
 
         PyArrow < 21: str(scalar) for float16 uses numpy's formatting
-        (via np.float16), which varies across numpy versions:
-          - numpy >= 2.4: scientific notation (e.g. "3.277e+04")
-          - numpy <  2.4: decimal (e.g. "32770.0")
+        (via np.float16), which may vary across numpy versions.
         The golden file uses PyArrow >= 21 output (Python float).
-        We compute the expected values dynamically to handle all
-        numpy versions.
+        We compute the expected values dynamically to handle this difference.
         """
         overrides = {}
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
@@ -497,15 +502,19 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
         return overrides
 
     @classmethod
-    def _version_overrides_unsafe(cls):
+    def _overrides_unsafe(cls):
         """
-        Build overrides for known PyArrow version-dependent behaviors (safe=False mode).
+        Build overrides for known PyArrow version/platform-dependent behaviors (safe=False).
 
         PyArrow < 21: str(scalar) for float16 uses numpy's formatting
-        (via np.float16), which varies across numpy versions.
-        Same dynamic computation approach as safe=True mode.
-        Additional overrides may be needed for different PyArrow versions
-        as safe=False behavior varies across versions.
+        (via np.float16). Same dynamic computation approach as safe=True mode.
+
+        ARM (aarch64/arm64): Unsafe float-to-integer casts produce different results
+        than x86 due to IEEE 754 implementation-defined behavior:
+        - ARM FCVT instructions saturate on overflow (inf→MAX, -inf→MIN, nan→0)
+        - x86 SSE/AVX returns "integer indefinite" values
+        - Negative float → unsigned int: ARM saturates to 0, x86 may wrap
+        The golden files are generated on x86; ARM values are hardcoded below.
         """
         overrides = {}
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
@@ -524,7 +533,60 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                     ("float64:fractional", F16): frac,
                 }
             )
-        # Additional overrides will be discovered during cross-version testing
+
+        if platform.machine() in ("aarch64", "arm64"):
+            overrides.update(
+                {
+                    # float16:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    # -1.5 saturates to 0 on ARM, wraps on x86
+                    ("float16:standard", "uint8"): "[0, 1, 0, None]@uint8",
+                    ("float16:standard", "uint16"): "[0, 1, 0, None]@uint16",
+                    ("float16:standard", "uint32"): "[0, 1, 0, None]@uint32",
+                    ("float16:standard", "uint64"): "[0, 1, 0, None]@uint64",
+                    # float16:special [inf, nan, None] → integer types
+                    ("float16:special", "int8"): "[-1, 0, None]@int8",
+                    ("float16:special", "int16"): "[-1, 0, None]@int16",
+                    ("float16:special", "int32"): "[2147483647, 0, None]@int32",
+                    ("float16:special", "int64"): "[9223372036854775807, 0, None]@int64",
+                    ("float16:special", "uint8"): "[255, 0, None]@uint8",
+                    ("float16:special", "uint16"): "[65535, 0, None]@uint16",
+                    ("float16:special", "uint32"): "[4294967295, 0, None]@uint32",
+                    ("float16:special", "uint64"): "[18446744073709551615, 0, None]@uint64",
+                    # float32:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    ("float32:standard", "uint8"): "[0, 1, 0, None]@uint8",
+                    ("float32:standard", "uint32"): "[0, 1, 0, None]@uint32",
+                    ("float32:standard", "uint64"): "[0, 1, 0, None]@uint64",
+                    # float32:special [inf, -inf, nan, None] → integer types
+                    ("float32:special", "int8"): "[-1, 0, 0, None]@int8",
+                    ("float32:special", "int16"): "[-1, 0, 0, None]@int16",
+                    ("float32:special", "int32"): "[2147483647, -2147483648, 0, None]@int32",
+                    (
+                        "float32:special",
+                        "int64",
+                    ): "[9223372036854775807, -9223372036854775808, 0, None]@int64",
+                    ("float32:special", "uint8"): "[255, 0, 0, None]@uint8",
+                    ("float32:special", "uint16"): "[65535, 0, 0, None]@uint16",
+                    ("float32:special", "uint32"): "[4294967295, 0, 0, None]@uint32",
+                    ("float32:special", "uint64"): "[18446744073709551615, 0, 0, None]@uint64",
+                    # float64:standard [0.0, 1.5, -1.5, None] → unsigned int types
+                    ("float64:standard", "uint8"): "[0, 1, 0, None]@uint8",
+                    ("float64:standard", "uint16"): "[0, 1, 0, None]@uint16",
+                    ("float64:standard", "uint64"): "[0, 1, 0, None]@uint64",
+                    # float64:special [inf, -inf, nan, None] → integer types
+                    ("float64:special", "int8"): "[-1, 0, 0, None]@int8",
+                    ("float64:special", "int16"): "[-1, 0, 0, None]@int16",
+                    ("float64:special", "int32"): "[-1, 0, 0, None]@int32",
+                    (
+                        "float64:special",
+                        "int64",
+                    ): "[9223372036854775807, -9223372036854775808, 0, None]@int64",
+                    ("float64:special", "uint8"): "[255, 0, 0, None]@uint8",
+                    ("float64:special", "uint16"): "[65535, 0, 0, None]@uint16",
+                    ("float64:special", "uint32"): "[4294967295, 0, 0, None]@uint32",
+                    ("float64:special", "uint64"): "[18446744073709551615, 0, 0, None]@uint64",
+                }
+            )
+
         return overrides
 
     # ----- test methods -----
@@ -543,7 +605,7 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                 source_arrays[src], target_lookup[tgt], safe=True
             ),
             golden_file_prefix="golden_pyarrow_scalar_cast_safe",
-            overrides=self._version_overrides_safe(),
+            overrides=self._overrides_safe(),
         )
 
     def test_scalar_cast_matrix_unsafe(self):
@@ -560,7 +622,7 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
                 source_arrays[src], target_lookup[tgt], safe=False
             ),
             golden_file_prefix="golden_pyarrow_scalar_cast_unsafe",
-            overrides=self._version_overrides_unsafe(),
+            overrides=self._overrides_unsafe(),
         )
 
 
@@ -570,8 +632,11 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
 
 
 @unittest.skipIf(
-    not have_pyarrow or not have_pandas,
-    pyarrow_requirement_message or pandas_requirement_message,
+    not have_pyarrow
+    or not have_pandas
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
 )
 class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
     """
@@ -664,10 +729,10 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
         source_arrays = dict(cases)
         return source_names, source_arrays
 
-    # ----- version overrides -----
+    # ----- overrides -----
 
     @staticmethod
-    def _version_overrides_safe():
+    def _overrides_safe():
         """
         Build overrides for known PyArrow version-dependent behaviors (safe=True mode).
 
@@ -692,7 +757,7 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
         return overrides
 
     @staticmethod
-    def _version_overrides_unsafe():
+    def _overrides_unsafe():
         """
         Build overrides for known PyArrow version-dependent behaviors (safe=False mode).
 
@@ -732,7 +797,7 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
                 source_arrays[src], target_lookup[tgt], safe=True
             ),
             golden_file_prefix="golden_pyarrow_nested_cast_safe",
-            overrides=self._version_overrides_safe(),
+            overrides=self._overrides_safe(),
         )
 
     def test_nested_cast_matrix_unsafe(self):
@@ -749,7 +814,7 @@ class PyArrowNestedTypeCastTests(_PyArrowCastTestBase):
                 source_arrays[src], target_lookup[tgt], safe=False
             ),
             golden_file_prefix="golden_pyarrow_nested_cast_unsafe",
-            overrides=self._version_overrides_unsafe(),
+            overrides=self._overrides_unsafe(),
         )
 
 

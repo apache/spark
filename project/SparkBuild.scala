@@ -31,6 +31,7 @@ import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
+import com.github.sbt.junit.jupiter.sbt.JupiterPlugin.autoImport._
 import com.here.bom.Bom
 import com.simplytyped.Antlr4Plugin._
 import sbtpomreader.{PomBuild, SbtPomKeys}
@@ -1907,25 +1908,25 @@ object TestSettings {
       sys.props.get("test.default.exclude.tags").map(tags => tags.split(",").toSeq)
         .map(tags => tags.filter(!_.trim.isEmpty)).getOrElse(defaultExcludedTags)
         .flatMap(tag => Seq("-l", tag)): _*),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit,
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework,
       sys.props.get("test.exclude.tags").map { tags =>
-        Seq("--exclude-categories=" + tags)
+        Seq("--exclude-tag=" + tags)
       }.getOrElse(Nil): _*),
     // Include tags defined in a system property
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest,
       sys.props.get("test.include.tags").map { tags =>
         tags.split(",").flatMap { tag => Seq("-n", tag) }.toSeq
       }.getOrElse(Nil): _*),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit,
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework,
       sys.props.get("test.include.tags").map { tags =>
-        Seq("--include-categories=" + tags)
+        Seq("--include-tags=" + tags)
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     (Test / testOptions) += Tests.Argument("-oDF"),
     // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
     // longer than two minutes.
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
-    (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    (Test / testOptions) += Tests.Argument(jupiterTestFramework, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.17.0" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project

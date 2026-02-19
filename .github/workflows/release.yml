@@ -115,7 +115,7 @@ jobs:
       )
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
@@ -283,13 +283,13 @@ jobs:
           fi
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-logs
           path: logs.zip
       - name: Upload output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-output
           path: output.zip

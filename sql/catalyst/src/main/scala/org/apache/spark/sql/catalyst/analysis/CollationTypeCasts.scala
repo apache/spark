@@ -18,8 +18,15 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object CollationTypeCasts extends TypeCoercionRule {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    // Pre-tag CommonExpressionRefs with the collation context of their definitions
+    // before the bottom-up expression transformation processes inner expressions.
+    super.apply(CollationTypeCoercion.preTagCommonExpressionRefs(plan))
+  }
+
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
     case withChildrenResolved => CollationTypeCoercion(withChildrenResolved)
