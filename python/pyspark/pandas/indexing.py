@@ -27,6 +27,7 @@ import pandas as pd
 from pandas.api.types import is_list_like
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.sql.utils import is_remote
@@ -720,7 +721,13 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
             missing_keys: List[Name] = []
-            _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
+            (
+                selected_column_labels,
+                data_spark_columns,
+                _,
+                _,
+                _,
+            ) = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
                 cond = F.lit(True)
@@ -737,6 +744,30 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
+                if (
+                    # Only apply this behavior for pandas 3+, where CoW semantics changed.
+                    LooseVersion(pd.__version__) >= "3.0.0"
+                    # Only for multi-column assignment (single-column assignment is unaffected).
+                    and len(selected_column_labels) > 1
+                    # Column selector must be list-like (e.g. ["shield", "max_speed"]), not scalar label access.
+                    and is_list_like(cols_sel)
+                    # Excludes string/bytes (single label), tuple (e.g. MultiIndex label),
+                    # and slice selectors; keeps this narrowly on explicit column lists.
+                    and not isinstance(cols_sel, (str, bytes, tuple, slice))
+                    # Only trigger when cached/anchored Series exist on the frame,
+                    # matching the problematic case where views were materialized before assignment.
+                    and hasattr(self._psdf_or_psser, "_psseries")
+                ):
+                    selected_column_labels_set = set(selected_column_labels)
+                    selected_labels_in_internal_order = [
+                        label
+                        for label in self._internal.column_labels
+                        if label in selected_column_labels_set
+                    ]
+                    if selected_column_labels != selected_labels_in_internal_order:
+                        # If requested columns are in different order than the DataFrame’s internal order,
+                        # it returns early (no-op), matching pandas 3 behavior for that edge case.
+                        return
                 value = F.lit(value)
 
             new_data_spark_columns = []
