@@ -3958,9 +3958,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(
-                    PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"
-                ):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
     def test_decimal_round(self):
