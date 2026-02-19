@@ -3494,7 +3494,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield 1,
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=True)]),
@@ -3521,7 +3521,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield "1",
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", [Row(x=True)]),
@@ -3550,7 +3550,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield "hello",
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3579,7 +3579,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield [0, 1.1, 2],
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3958,7 +3958,9 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
+                with self.assertRaisesRegex(
+                    PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"
+                ):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
     def test_decimal_round(self):
