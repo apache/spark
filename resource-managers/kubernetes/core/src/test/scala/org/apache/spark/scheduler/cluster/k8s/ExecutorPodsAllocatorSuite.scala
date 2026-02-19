@@ -822,7 +822,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // service is considered for creation
     // resources should have been created
     verify(kubernetesClient, times(1)).resourceList(meq(service))
-    verify(resourceList).serverSideApply()
+    verify(resourceList, times(1)).serverSideApply()
   }
 
   test("SPARK-55587: executor feature steps resources ownership") {
@@ -906,16 +906,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-55587: executor feature steps resources deleted on failure") {
-    val executorMetadata = mock[ObjectMeta]
-    when(executorMetadata.getName).thenReturn("executor-name")
-    when(executorMetadata.getUid).thenReturn("executor-uid")
-
-    val executorPod = mock[Pod]
-    when(podResource.create()).thenReturn(executorPod)
-    when(executorPod.getMetadata).thenReturn(executorMetadata)
-    when(executorPod.getApiVersion).thenReturn("executor-version")
-    when(executorPod.getKind).thenReturn("executor-kind")
-
     val service = new ServiceBuilder()
       .withNewMetadata()
       .withName("service")
@@ -951,7 +941,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
 
     // resources should have been deleted on failure
-    verify(resourceList).delete()
+    verify(resourceList, times(1)).delete()
   }
 
   test("SPARK-33262: pod allocator does not stall with pending pods") {
