@@ -466,6 +466,8 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD_KEY =
+    "spark.kubernetes.executor.service.coolDownPeriod"
   val KUBERNETES_EXECUTOR_SERVICE_ENABLED =
     ConfigBuilder("spark.kubernetes.executor.service.enabled")
       .doc("If true, a Kubernetes service is created for the executor. " +
@@ -473,12 +475,25 @@ private[spark] object Config extends Logging {
         "executor fails after a 'connection timeout', which is set via NETWORK_TIMEOUT and " +
         "defaults to 2 minutes. Connecting to the executor via a Kubernetes service instantly " +
         "fails with 'connection refused' error. " +
-        "The executor kubernetes service is owned by the driver pod and will survive until " +
-        "the driver pod is deleted. This kubernetes service provides access to the executor's " +
+        "For this to work, the executor kubernetes service outlives its executor pod by at least " +
+        KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD_KEY + " seconds. " +
+        "This kubernetes service provides access to the executor's " +
         "block manager, so BLOCK_MANAGER_PORT has to be given a value greater than zero.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD =
+    ConfigBuilder(KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD_KEY)
+      .doc(s"The number of seconds the executor kubernetes service enabled via " +
+        KUBERNETES_EXECUTOR_SERVICE_ENABLED.key + " lives beyond the lifetime of the " +
+        "corresponding executor pod. The service has to live longer than the executor, " +
+        "because connecting to a non-existing kubernetes service fails after a 'connection " +
+        "timeout', which defeats its very purpose. " +
+        s"See ${KUBERNETES_EXECUTOR_SERVICE_ENABLED.key} for more information.")
+      .version("4.2.0")
+      .intConf
+      .createWithDefault(300)
 
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
     ConfigBuilder("spark.kubernetes.executor.decommissionLabel")

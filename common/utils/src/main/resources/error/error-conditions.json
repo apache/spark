@@ -1693,6 +1693,12 @@
     ],
     "sqlState" : "42702"
   },
+  "EXECUTOR_KUBERNETES_SERVICE_COOL_DOWN_PERIOD_INVALID" : {
+    "message" : [
+      "The executor Kubernetes service cool down period of <period> seconds configured via <key> must not be negative."
+    ],
+    "sqlState" : "42000"
+  },
   "EXECUTOR_KUBERNETES_SERVICE_REQUIRES_BLOCK_MANAGER_PORT" : {
     "message" : [
       "Enabling the executor Kubernetes service requires <blockManagerPortConfigKey> to be set to a positive number, for instance <defaultShuffleServicePort>."

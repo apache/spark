@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD
 import org.apache.spark.internal.config.BLOCK_MANAGER_PORT
 
 
@@ -45,7 +46,21 @@ class ExecutorServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
   test("default configuration") {
     val (sparkPod, resources) = evaluateStep()
     assertSparkPod(sparkPod)
-    assertResources(resources)
+    assertResources(resources, expectedOwner = "driver", expectedCooldownPeriod = 300)
+  }
+
+  test("custom configuration") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD, 123)
+    val (sparkPod, resources) = evaluateStep()
+    assertSparkPod(sparkPod)
+    assertResources(resources, expectedOwner = "driver", expectedCooldownPeriod = 123)
+  }
+
+  test("no cooldown period") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD, 0)
+    val (sparkPod, resources) = evaluateStep()
+    assertSparkPod(sparkPod)
+    assertResources(resources, expectedOwner = "executor", expectedCooldownPeriod = 0)
   }
 
   private def assertSparkPod(sparkPod: SparkPod): Unit = {
@@ -53,17 +68,24 @@ class ExecutorServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
     assert(env.get("EXECUTOR_SERVICE_NAME") === Some("svc-appId-exec-1"))
   }
 
-  private def assertResources(resources: Seq[HasMetadata]): Unit = {
+  private def assertResources(
+      resources: Seq[HasMetadata],
+      expectedOwner: String,
+      expectedCooldownPeriod: Int): Unit = {
     assert(resources.size === 1)
     assert(resources.head.getKind === "Service")
-    assertService(resources.head.asInstanceOf[Service])
+    assertService(resources.head.asInstanceOf[Service], expectedOwner, expectedCooldownPeriod)
   }
 
-  private def assertService(service: Service): Unit = {
+  private def assertService(
+      service: Service,
+      expectedOwner: String,
+      expectedCooldownPeriod: Int): Unit = {
     assert(service.getKind === "Service")
     assert(service.getMetadata.getName === "svc-appId-exec-1")
     assert(service.getMetadata.getAnnotations.asScala === Map(
-      "spark.owner-reference" -> "driver"
+      "spark.owner-reference" -> expectedOwner,
+      "spark.cooldown-period" -> expectedCooldownPeriod.toString
     ))
     assert(service.getSpec.getSelector.asScala ===
       Map("spark-exec-id" -> "1", "spark-app-selector" -> "appId"))
