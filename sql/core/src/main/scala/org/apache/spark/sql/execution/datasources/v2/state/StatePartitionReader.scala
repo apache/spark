@@ -487,7 +487,7 @@ class StateStoreChangeDataPartitionReader(
         val groupingKey = entry._2.get(0, groupingKeySchema).asInstanceOf[UnsafeRow]
         val userMapKey = entry._2.get(1, userKeySchema).asInstanceOf[UnsafeRow]
         createFlattenedRowForMapState(entry._4, entry._1,
-          groupingKey, userMapKey, entry._3, partition.partition)
+          groupingKey, userMapKey, entry._3, entry._5, partition.partition)
       }
     } else {
       changeDataReader.iterator.map(unifyStateChangeDataRow)
@@ -517,14 +517,16 @@ class StateStoreChangeDataPartitionReader(
       groupingKey: UnsafeRow,
       userKey: UnsafeRow,
       userValue: UnsafeRow,
+      endKey: UnsafeRow,
       partition: Int): InternalRow = {
-    val result = new GenericInternalRow(6)
+    val result = new GenericInternalRow(7)
     result.update(0, batchId)
     result.update(1, UTF8String.fromString(getRecordTypeAsString(recordType)))
     result.update(2, groupingKey)
     result.update(3, userKey)
     result.update(4, userValue)
-    result.update(5, partition)
+    result.update(5, endKey)
+    result.update(6, partition)
     result
   }
 }

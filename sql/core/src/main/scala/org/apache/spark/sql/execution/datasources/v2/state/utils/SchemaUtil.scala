@@ -303,7 +303,8 @@ object SchemaUtil {
 
         case MapState =>
           if (sourceOptions.readChangeFeed) {
-            Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value", "partition_id")
+            Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value",
+              "end_key", "partition_id")
           } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "user_map_key", "user_map_value", "partition_id")
           } else {
@@ -393,6 +394,7 @@ object SchemaUtil {
             .add("key", groupingKeySchema)
             .add("user_map_key", userKeySchema)
             .add("user_map_value", stateStoreColFamilySchema.valueSchema)
+            .add("end_key", groupingKeySchema)
             .add("partition_id", IntegerType)
         } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()

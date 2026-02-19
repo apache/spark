@@ -985,13 +985,8 @@ class RocksDB(
             case RecordType.DELETE_RANGE_RECORD =>
               // For deleteRange, 'key' is beginKey and 'value' is endKey
               verifyChangelogRecord(kvVerifier, key, Some(value))
-              val endKey = if (conf.rowChecksumEnabled) {
-                KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-                  kvVerifier, key, value, delimiterSize)
-              } else {
-                value
-              }
-              deleteRange(key, endKey, includesPrefix = useColumnFamilies)
+              deleteRange(key, value, includesPrefix = useColumnFamilies,
+                includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -1459,8 +1454,16 @@ class RocksDB(
       beginKey: Array[Byte],
       endKey: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
+
+    val originalEndKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, beginKey, endKey, delimiterSize)
+    } else {
+      endKey
+    }
 
     val beginKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(beginKey, cfName)
@@ -1469,9 +1472,9 @@ class RocksDB(
     }
 
     val endKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
-      encodeStateRowWithPrefix(endKey, cfName)
+      encodeStateRowWithPrefix(originalEndKey, cfName)
     } else {
-      endKey
+      originalEndKey
     }
 
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
