@@ -331,6 +331,7 @@ private[connect] class ExecuteHolder(
       sparkSessionTags = sparkSessionTags,
       reattachable = reattachable,
       status = eventsManager.status,
+      terminationReason = eventsManager.terminationReason,
       creationTimeNs = creationTimeNs,
       lastAttachedRpcTimeNs = lastAttachedRpcTimeNs,
       closedTimeNs = closedTimeNs)
@@ -406,6 +407,7 @@ case class ExecuteInfo(
     sparkSessionTags: Set[String],
     reattachable: Boolean,
     status: ExecuteStatus,
+    terminationReason: Option[TerminationReason],
     creationTimeNs: Long,
     lastAttachedRpcTimeNs: Option[Long],
     closedTimeNs: Option[Long]) {
