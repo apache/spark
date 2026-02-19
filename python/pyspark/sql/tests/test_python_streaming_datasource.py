@@ -34,6 +34,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.errors import PySparkException
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -250,6 +251,61 @@ class BasePythonStreamingDataSourceTestsMixin:
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
+
+    def test_simple_stream_reader_offset_did_not_advance_raises(self):
+        """Returning end == start with non-empty data raises
+        SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class BuggySimpleStreamReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                # Bug: return same offset as end despite returning data
+                start_idx = start["offset"]
+                it = iter([(i,) for i in range(start_idx, start_idx + 3)])
+                return (it, start)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        reader = BuggySimpleStreamReader()
+        wrapper = _SimpleStreamReaderWrapper(reader)
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset()
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
+    def test_simple_stream_reader_empty_iterator_start_equals_end_allowed(self):
+        """read() with end == start and empty iterator: no exception, no cache entry."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class EmptyBatchReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                # Valid: same offset as end but empty iterator (no data)
+                return (iter([]), start)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        reader = EmptyBatchReader()
+        wrapper = _SimpleStreamReaderWrapper(reader)
+        end = wrapper.latestOffset()
+        start = {"offset": 0}
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
 
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")

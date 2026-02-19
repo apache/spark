@@ -28,7 +28,7 @@ from pyspark.sql.datasource import (
     SimpleDataSourceStreamReader,
 )
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors import PySparkException, PySparkNotImplementedError
 
 
 def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
@@ -88,12 +88,36 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
+    def add_result_to_cache(self, start: dict, end: dict, it: Iterator[Tuple]) -> None:
+        """
+        Validates that read() did not return a non-empty batch with end equal to start,
+        which would cause the same batch to be processed repeatedly. When end != start,
+        appends the result to the cache; when end == start with empty iterator, does not
+        cache (avoids unbounded cache growth).
+        """
+        start_str = json.dumps(start)
+        end_str = json.dumps(end)
+        if end_str != start_str:
+            self.cache.append(PrefetchedCacheEntry(start, end, it))
+            return
+        try:
+            next(it)
+        except StopIteration:
+            return
+        raise PySparkException(
+            errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            messageParameters={
+                "start_offset": start_str,
+                "end_offset": end_str,
+            },
+        )
+
     def latestOffset(self) -> dict:
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
         (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
+        self.add_result_to_cache(self.current_offset, end, iter)
         self.current_offset = end
         return end
 
