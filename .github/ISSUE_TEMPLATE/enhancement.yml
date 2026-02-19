@@ -1,0 +1,58 @@
+name: Enhancement
+description: Submit a feature request or improvement proposal for spark
+labels: ["Type: Enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: "Enhancement description:"
+      description: >
+        Describe the enhancement you would like to see in Spark in detail. What is the use case?
+        How would it benefit the community? What could be the potential risks?
+      validations:
+        required: true
+  - type: dropdown
+    attributes:
+      label: "Select the relevant components"
+      multiple: true
+      options:
+        - "Block Manager"
+        - "Build"
+        - "Connect"
+        - "Connect Contrib"
+        - "Declarative Pipelines"
+        - "Deploy"
+        - "Documentation"
+        - "DStreams"
+        - "EC2"
+        - "Examples"
+        - "Graph"
+        - "GraphX"
+        - "Input/Output"
+        - "Java API"
+        - "Kubernetes"
+        - "Mesos"
+        - "ML"
+        - "MLlib"
+        - "Optimizer"
+        - "Pandas API on Spark"
+        - "Project Infra"
+        - "Protobuf"
+        - "PS"
+        - "PySpark"
+        - "R"
+        - "Scheduler"
+        - "Security"
+        - "Shuffle"
+        - "Spark Core"
+        - "Spark Docker"
+        - "Spark Shell"
+        - "Spark Submit"
+        - "SparkR"
+        - "SQL"
+        - "SS"
+        - "Structured Streaming"
+        - "Tests"
+        - "UI"
+        - "Web UI"
+        - "Windows"
+        - "YARN"

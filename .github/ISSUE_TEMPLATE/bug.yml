@@ -1,0 +1,68 @@
+name: Bug Report
+description: Submit a bug report for spark
+labels: ["Type: Bug"]
+body:
+  - type: textarea
+    attributes:
+      label: "Bug description:"
+      description: >
+        Give a clear description of the bug. Provide some example code, the expected behavior and
+        the actual behavior (full error message if applicable). Give as much information about the
+        environment as possible (OS, Python version, Java version, Spark version, etc.).
+      validations:
+        required: true
+  - type: dropdown
+    attributes:
+      label: "Spark version"
+      multiple: true
+      options:
+        - "master"
+        - "4.1"
+        - "4.0"
+        - "3.5"
+  - type: dropdown
+    attributes:
+      label: "Select the relevant components"
+      multiple: true
+      options:
+        - "Block Manager"
+        - "Build"
+        - "Connect"
+        - "Connect Contrib"
+        - "Declarative Pipelines"
+        - "Deploy"
+        - "Documentation"
+        - "DStreams"
+        - "EC2"
+        - "Examples"
+        - "Graph"
+        - "GraphX"
+        - "Input/Output"
+        - "Java API"
+        - "Kubernetes"
+        - "Mesos"
+        - "ML"
+        - "MLlib"
+        - "Optimizer"
+        - "Pandas API on Spark"
+        - "Project Infra"
+        - "Protobuf"
+        - "PS"
+        - "PySpark"
+        - "R"
+        - "Scheduler"
+        - "Security"
+        - "Shuffle"
+        - "Spark Core"
+        - "Spark Docker"
+        - "Spark Shell"
+        - "Spark Submit"
+        - "SparkR"
+        - "SQL"
+        - "SS"
+        - "Structured Streaming"
+        - "Tests"
+        - "UI"
+        - "Web UI"
+        - "Windows"
+        - "YARN"
