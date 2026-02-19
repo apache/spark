@@ -1507,8 +1507,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
  * Test suite that verifies the state data source reader does not create empty state
  * directories when reading state for all stateful operators.
  *
- * When `spark.sql.streaming.stateStore.createMetadataDirOnRead` is false (the default),
- * the reader should not call mkdirs on the schema metadata path. This is important for
+ * The reader does not create metadata directories (no mkdirs on the schema metadata path).
+ * This is important for
  * Unity Catalog environments where creating directories requires WRITE FILES permission,
  * but reading state should only require READ FILES permission (ES-1722614).
  *
@@ -1667,35 +1667,4 @@ class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
     )
   }
 
-  test("createMetadataDirOnRead=true recreates deleted state directory") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ.key -> "true") {
-      withTempDir { tempDir =>
-        val checkpointPath = tempDir.getAbsolutePath
-        runLargeDataStreamingAggregationQuery(checkpointPath)
-
-        val stateDir = new File(tempDir, "state")
-        assert(stateDir.exists(), "State directory should exist after running the query")
-        Utils.deleteRecursively(stateDir)
-        assert(!stateDir.exists(), "State directory should be deleted")
-
-        // With createMetadataDirOnRead=true, the reader will attempt to create
-        // the _metadata directory, which recreates part of the state directory tree
-        val e5 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, checkpointPath)
-            .load()
-            .collect()
-        }
-        assertCauseChainContains(e5,
-          classOf[StateDataSourceReadStateSchemaFailure])
-
-        // The state directory should be recreated (at least partially) because
-        // createMetadataDirOnRead=true causes mkdirs on the schema metadata path
-        assert(stateDir.exists(),
-          "With createMetadataDirOnRead=true, state directory should be recreated")
-      }
-    }
-  }
 }
