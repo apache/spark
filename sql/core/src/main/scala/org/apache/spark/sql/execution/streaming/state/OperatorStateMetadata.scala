@@ -337,7 +337,8 @@ class OperatorStateMetadataV2Reader(
   if (createMetadataDir && !fm.exists(metadataDirPath.getParent)) {
     fm.mkdirs(metadataDirPath.getParent)
   } else if (!createMetadataDir) {
-    logInfo(log"Skipping metadata directory creation (createMetadataDir=false)")
+    logInfo(log"Skipping metadata directory creation (createMetadataDir=false) " +
+      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, baseCheckpointDir.toString)}")
   }
 
   override def version: Int = 2
