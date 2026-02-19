@@ -861,6 +861,12 @@ class SparkConversionMixin:
                         ser.dt.to_pytimedelta(), index=ser.index, dtype="object", name=ser.name
                     )
 
+        # Handle the 0-column case separately to preserve row count
+        if len(pdf.columns) == 0:
+            from pyspark.sql import Row
+
+            return [Row()] * len(pdf)
+
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
             [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
@@ -998,16 +1004,26 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create Arrow batches directly using the standalone function
-        arrow_batches = [
-            create_arrow_batch_from_pandas(
-                [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)],
-                timezone=timezone,
-                safecheck=safecheck,
-                prefers_large_types=prefers_large_var_types,
-            )
-            for pdf_slice in pdf_slices
-        ]
+        # Handle the 0-column case separately to preserve row count
+        if len(pdf.columns) == 0:
+            # Use struct array to preserve row count for 0-column DataFrames
+            arrow_batches = [
+                pa.RecordBatch.from_struct_array(
+                    pa.array([{}] * len(pdf_slice), type=pa.struct([]))
+                )
+                for pdf_slice in pdf_slices
+            ]
+        else:
+            # Create Arrow batches directly using the standalone function
+            arrow_batches = [
+                create_arrow_batch_from_pandas(
+                    [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)],
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    prefers_large_types=prefers_large_var_types,
+                )
+                for pdf_slice in pdf_slices
+            ]
 
         jsparkSession = self._jsparkSession
 
@@ -1074,14 +1090,16 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(
-                schema,
-                error_on_duplicated_field_names_in_struct=True,
-                timezone="UTC",
-                prefers_large_types=prefers_large_var_types,
+        # Skip cast for 0-column tables as it loses row count
+        if len(schema.fields) > 0:
+            table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
+                to_arrow_schema(
+                    schema,
+                    error_on_duplicated_field_names_in_struct=True,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
+                )
             )
-        )
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = arrow_batch_size
