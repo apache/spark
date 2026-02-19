@@ -22,18 +22,16 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, ServiceBu
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.Constants.{OWNER_REFERENCE_ANNOTATION, OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE}
+import org.apache.spark.deploy.k8s.Constants.{OWNER_REFERENCE_ANNOTATION, OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE, SPARK_APP_ID_LABEL, SPARK_EXECUTOR_ID_LABEL}
 import org.apache.spark.internal.config.{BLOCK_MANAGER_PORT, SHUFFLE_SERVICE_PORT}
 
 class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends KubernetesFeatureConfigStep {
-  private val spark_app_selector_label = "spark-app-selector"
-  private val spark_exec_id_label = "spark-exec-id"
-  private val service_selector_labels = Set(spark_app_selector_label, spark_exec_id_label)
+  private val service_selector_labels = Set(SPARK_APP_ID_LABEL, SPARK_EXECUTOR_ID_LABEL)
   private lazy val selector = conf.labels
     .filter { case (key, _) => service_selector_labels.contains(key) }
 
-  private lazy val sparkAppSelector = getLabel(spark_app_selector_label)
-  private lazy val sparkExecId = getLabel(spark_exec_id_label)
+  private lazy val sparkAppSelector = getLabel(SPARK_APP_ID_LABEL)
+  private lazy val sparkExecId = getLabel(SPARK_EXECUTOR_ID_LABEL)
   // name length is 8 + 38 + 6 + 10 = 62
   // which fits in KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH = 63
   private lazy val serviceName = s"svc-$sparkAppSelector-exec-$sparkExecId"
