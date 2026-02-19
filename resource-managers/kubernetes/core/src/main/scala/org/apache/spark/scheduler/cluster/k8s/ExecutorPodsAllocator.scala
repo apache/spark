@@ -503,6 +503,14 @@ class ExecutorPodsAllocator(
           logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
         } catch {
           case NonFatal(e) =>
+            // Register failure with global tracker if lifecycle manager is available
+            val failureCount = totalFailedPodCreations.incrementAndGet()
+            if (executorPodsLifecycleManager != null) {
+              executorPodsLifecycleManager.registerPodCreationFailure()
+            }
+            logError(log"Failed to add owner reference or create PVC for executor pod " +
+              log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
+              log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
             kubernetesClient.pods()
               .inNamespace(namespace)
               .resource(createdExecutorPod)

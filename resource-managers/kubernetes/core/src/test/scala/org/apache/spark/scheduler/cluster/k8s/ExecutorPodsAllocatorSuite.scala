@@ -1063,7 +1063,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         k8sConf.resourceProfileId.toInt), Seq.empty)
   }
 
-test("Pod creation failures are tracked by ExecutorFailureTracker") {
+  test("SPARK-55075: Pod creation failures are tracked by ExecutorFailureTracker") {
     // Make all pod creation attempts fail
     when(podResource.create()).thenThrow(new KubernetesClientException("Simulated pod" +
       " creation failure"))

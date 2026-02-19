@@ -65,7 +65,7 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     validConfigs.foreach { c =>
       val manager = new KubernetesClusterManager()
       sparkConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, c)
-      manager.makeExecutorPodsAllocator(sc, kubernetesClient, null, null)
+      manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
       sparkConf.remove(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
     }
   }
@@ -96,7 +96,7 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf.set("spark.shuffle.service.enabled", "true")
 
     val e = intercept[SparkException] {
-      manager.makeExecutorPodsAllocator(sc, kubernetesClient, null, null)
+      manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
     }
     assert(e.getMessage.contains(KUBERNETES_EXECUTOR_POD_DELETION_COST.key))
   }
@@ -108,7 +108,7 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf.set(KUBERNETES_EXECUTOR_POD_DELETION_COST, 1)
     sparkConf.set("spark.shuffle.service.enabled", "true")
 
-    manager.makeExecutorPodsAllocator(sc, kubernetesClient, null, null)
+    manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
   }
 
   private def resetDynamicAllocatorConfig(): Unit = {

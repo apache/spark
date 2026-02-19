@@ -135,7 +135,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       snapshotsStore)
 
     val executorPodsAllocator = makeExecutorPodsAllocator(
-      sc, kubernetesClient, snapshotsStore, executorPodsLifecycleManager)
+      sc, kubernetesClient, snapshotsStore, Some(executorPodsLifecycleManager))
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
@@ -163,7 +163,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore,
-      lifecycleManager: ExecutorPodsLifecycleManager) = {
+      lifecycleManager: Option[ExecutorPodsLifecycleManager] = None) = {
     val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
     if (allocator == "deployment" && Utils.isDynamicAllocationEnabled(sc.conf) &&
       sc.conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).isEmpty) {
@@ -198,15 +198,17 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     // Try to set the lifecycle manager using reflection for backward compatibility
     // with custom allocators that may not have this method
-    try {
-      val setLifecycleManagerMethod = cls.getMethod(
-        "setExecutorPodsLifecycleManager",
-        classOf[ExecutorPodsLifecycleManager])
-      setLifecycleManagerMethod.invoke(allocatorInstance, lifecycleManager)
-    } catch {
-      case _: NoSuchMethodException =>
-        logInfo("Allocator does not support setExecutorPodsLifecycleManager method. " +
-          "Pod creation failures will not be tracked.")
+    lifecycleManager.foreach { manager =>
+      try {
+        val setLifecycleManagerMethod = cls.getMethod(
+          "setExecutorPodsLifecycleManager",
+          classOf[ExecutorPodsLifecycleManager])
+        setLifecycleManagerMethod.invoke(allocatorInstance, manager)
+      } catch {
+        case _: NoSuchMethodException =>
+          logInfo("Allocator does not support setExecutorPodsLifecycleManager method. " +
+            "Pod creation failures will not be tracked.")
+      }
     }
 
     allocatorInstance
