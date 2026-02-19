@@ -660,7 +660,7 @@ case class ListAgg(
   }
 
   /**
-   * Returns true if casting `dt` to string is injective for DISTINCT deduplication.
+   * Returns true if casting `dt` to string/binary is injective for DISTINCT deduplication.
    *
    * @see [[validateDistinctOrderCompatibility]]
    */
@@ -674,7 +674,7 @@ case class ListAgg(
     case _: DayTimeIntervalType => true
     case BooleanType => true
     case BinaryType => true
-    case st: StringType if st.isUTF8BinaryCollation => true
+    case st: StringType => st.isUTF8BinaryCollation
     case _: DoubleType | FloatType => false
     // During DST fall-back, two distinct UTC epochs can format to the same local time string
     // because the default format omits the timezone offset. TimestampNTZType is safe (uses UTC).

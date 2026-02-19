@@ -158,25 +158,25 @@ bbaa
 
 
 -- !query
-WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
+WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(hex(col), hex(X'DEAD')), regexp_count(hex(col), hex(X'BEEF')) FROM t
 -- !query schema
-struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
+struct<len(col):int,regexp_count(hex(col), hex(X'DEAD')):int,regexp_count(hex(col), hex(X'BEEF')):int>
 -- !query output
 4	1	1
 
 
 -- !query
-WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
+WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(hex(col), hex(X'DEAD')), regexp_count(hex(col), hex(X'BEEF')) FROM t
 -- !query schema
-struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
+struct<len(col):int,regexp_count(hex(col), hex(X'DEAD')):int,regexp_count(hex(col), hex(X'BEEF')):int>
 -- !query output
 4	1	1
 
 
 -- !query
-WITH t(col) AS (SELECT listagg(col1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'42'), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
+WITH t(col) AS (SELECT listagg(col1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(hex(col), hex(X'42')), regexp_count(hex(col), hex(X'DEAD')), regexp_count(hex(col), hex(X'BEEF')) FROM t
 -- !query schema
-struct<len(col):int,regexp_count(col, X'42'):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
+struct<len(col):int,regexp_count(hex(col), hex(X'42')):int,regexp_count(hex(col), hex(X'DEAD')):int,regexp_count(hex(col), hex(X'BEEF')):int>
 -- !query output
 5	1	1	1
 
@@ -303,19 +303,19 @@ struct<grp:int,listagg(DISTINCT col, NULL) WITHIN GROUP (ORDER BY col ASC NULLS 
 
 
 -- !query
-WITH t(col) AS (SELECT listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'DEAD'), (X'BEEF'), (X'DEAD'), (X'CAFE'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF'), regexp_count(col, X'CAFE') FROM t
+WITH t(col) AS (SELECT listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'DEAD'), (X'BEEF'), (X'DEAD'), (X'CAFE'))) SELECT len(col), regexp_count(hex(col), hex(X'DEAD')), regexp_count(hex(col), hex(X'BEEF')), regexp_count(hex(col), hex(X'CAFE')) FROM t
 -- !query schema
-struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int,regexp_count(col, X'CAFE'):int>
+struct<len(col):int,regexp_count(hex(col), hex(X'DEAD')):int,regexp_count(hex(col), hex(X'BEEF')):int,regexp_count(hex(col), hex(X'CAFE')):int>
 -- !query output
-8	1	2	2
+8	1	1	1
 
 
 -- !query
-WITH t(col) AS (SELECT listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'BB'), (X'AA'), (NULL), (X'BB'))) SELECT len(col), regexp_count(col, X'AA'), regexp_count(col, X'BB') FROM t
+WITH t(col) AS (SELECT listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'BB'), (X'AA'), (NULL), (X'BB'))) SELECT len(col), regexp_count(hex(col), hex(X'AA')), regexp_count(hex(col), hex(X'BB')) FROM t
 -- !query schema
-struct<len(col):int,regexp_count(col, X'AA'):int,regexp_count(col, X'BB'):int>
+struct<len(col):int,regexp_count(hex(col), hex(X'AA')):int,regexp_count(hex(col), hex(X'BB')):int>
 -- !query output
-3	2	2
+3	1	1
 
 
 -- !query

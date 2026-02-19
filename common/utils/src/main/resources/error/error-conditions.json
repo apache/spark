@@ -4292,7 +4292,7 @@
       },
       "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
         "message" : [
-          "The function <funcName> with DISTINCT requires a cast from <inputType> to <castType>, but this cast may not preserve equality semantics for the input type (e.g., floating-point -0.0 and 0.0 are treated as equal during GROUP BY but cast to different strings, leading to incorrect deduplication)."
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {

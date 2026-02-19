@@ -6909,8 +6909,9 @@ object SQLConf {
     buildConf("spark.sql.listagg.allowDistinctCastWithOrder.enabled")
       .internal()
       .doc("When true, LISTAGG(DISTINCT expr) WITHIN GROUP (ORDER BY expr) is allowed on " +
-        "non-string expr whose cast to string is injective. When false, DISTINCT requires " +
-        "expr and ORDER BY to reference the same expression with no cast.")
+        "non-string expr when the implicit cast to string preserves equality (e.g., integer, " +
+        "decimal, date). When false, the function argument and ORDER BY expression must have " +
+        "the exact same type, which requires explicit casts.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
