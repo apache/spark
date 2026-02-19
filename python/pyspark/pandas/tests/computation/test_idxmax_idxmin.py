@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
