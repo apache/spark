@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -74,11 +74,10 @@ case class BroadcastHashJoinExec private(
       case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         val expandedPartitioning = expandOutputPartitioning(streamedPlan.outputPartitioning)
         expandedPartitioning match {
-          case Nil =>
-            // This could only happen if `streamedPlan.outputPartitioning` was an empty
-            // `PartitioningCollection`, but in that case `UnknownPartitioning` is always a valid
-            // alternative.
-            UnknownPartitioning(streamedPlan.outputPartitioning.numPartitions)
+          // We don't need to handle the empty case, since it could only occur if
+          // `streamedPlan.outputPartitioning` were an empty `PartitioningCollection`, but its
+          // constructor prevents that.
+
           case p :: Nil => p
           case ps => PartitioningCollection(ps)
         }
