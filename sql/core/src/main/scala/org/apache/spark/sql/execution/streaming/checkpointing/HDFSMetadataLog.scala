@@ -54,10 +54,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
     readOnly: Boolean = false)
   extends MetadataLog[T] with Logging {
 
-  // When readOnly is true, only skip creating dir if streamingCheckpointCreateDirOnRead is false
-  private val effectiveReadOnly =
-    readOnly && !sparkSession.sessionState.conf.streamingCheckpointCreateDirOnRead
-
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   /** Needed to serialize type T into JSON when using Jackson */
@@ -73,9 +69,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
   protected val fileManager =
     CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
 
-  // If this is not a readOnly log or the createDirOnRead conf is true, and the metadata path does
-  // not exist, create the directory
-  if (!effectiveReadOnly && !fileManager.exists(metadataPath)) {
+  // When readOnly is false and the metadata path does not exist, create the directory
+  if (!readOnly && !fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
 

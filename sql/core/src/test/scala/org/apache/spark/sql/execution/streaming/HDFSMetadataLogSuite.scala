@@ -229,43 +229,13 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     }
   }
 
-  test("HDFSMetadataLog: readOnly=false creates directory even with createDirOnRead=false") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "false") {
-      withTempDir { temp =>
-        val dir = new File(temp, "nonexistent")
-        assert(!dir.exists())
-        new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
-        assert(dir.exists(),
-          "HDFSMetadataLog should create directory when readOnly=false regardless of conf")
-      }
-    }
-  }
-
-  test("HDFSMetadataLog: readOnly=true with createDirOnRead=true creates directory") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "true") {
-      withTempDir { temp =>
-        val dir = new File(temp, "nonexistent")
-        assert(!dir.exists())
-        new HDFSMetadataLog[String](spark, dir.getAbsolutePath, readOnly = true)
-        assert(dir.exists(),
-          "HDFSMetadataLog should create directory when readOnly=true and createDirOnRead=true")
-      }
-    }
-  }
-
-  test("HDFSMetadataLog: readOnly=true with createDirOnRead=false does not create directory") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "false") {
-      withTempDir { temp =>
-        val dir = new File(temp, "nonexistent")
-        assert(!dir.exists())
-        new HDFSMetadataLog[String](spark, dir.getAbsolutePath, readOnly = true)
-        assert(!dir.exists(),
-          "HDFSMetadataLog should not create directory when readOnly=true " +
-            "and createDirOnRead=false")
-      }
+  test("HDFSMetadataLog: readOnly=true does not create directory") {
+    withTempDir { temp =>
+      val dir = new File(temp, "nonexistent")
+      assert(!dir.exists())
+      new HDFSMetadataLog[String](spark, dir.getAbsolutePath, readOnly = true)
+      assert(!dir.exists(),
+        "HDFSMetadataLog should not create directory when readOnly=true")
     }
   }
 }
