@@ -97,7 +97,7 @@ class StateSchemaCompatibilityChecker(
 
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
 
-  if (createSchemaDir) {
+  if (createSchemaDir && !fm.exists(schemaFileLocation.getParent)) {
     fm.mkdirs(schemaFileLocation.getParent)
   }
 
