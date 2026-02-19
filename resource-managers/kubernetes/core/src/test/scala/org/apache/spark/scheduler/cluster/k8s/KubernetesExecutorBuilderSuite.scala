@@ -86,7 +86,7 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
 
   test("SPARK-52505: check executor kubernetes spec with service enabled") {
     val sparkConf = baseConf.clone
-      .set(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE, true)
+      .set(Config.KUBERNETES_EXECUTOR_SERVICE_ENABLED, true)
       .set(BLOCK_MANAGER_PORT, 1234)
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
     val secMgr = new SecurityManager(sparkConf)
@@ -111,7 +111,7 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
   }
 
   test("SPARK-52505: check executor kubernetes service requires block manager port") {
-    val sparkConf = baseConf.clone.set(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE, true)
+    val sparkConf = baseConf.clone.set(Config.KUBERNETES_EXECUTOR_SERVICE_ENABLED, true)
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
     val secMgr = new SecurityManager(sparkConf)
     val client = mock(classOf[KubernetesClient])

@@ -466,8 +466,8 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
-  val KUBERNETES_EXECUTOR_ENABLE_SERVICE =
-    ConfigBuilder("spark.kubernetes.executor.enableService")
+  val KUBERNETES_EXECUTOR_SERVICE_ENABLED =
+    ConfigBuilder("spark.kubernetes.executor.service.enabled")
       .doc("If true, a Kubernetes service is created for the executor. " +
         "An executor is usually connected to via the pod IP. Connecting to a decommissioned" +
         "executor fails after a 'connection timeout', which is set via NETWORK_TIMEOUT and " +

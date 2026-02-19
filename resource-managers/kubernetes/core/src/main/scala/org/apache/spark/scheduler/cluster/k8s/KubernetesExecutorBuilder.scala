@@ -66,7 +66,7 @@ private[spark] class KubernetesExecutorBuilder {
       }
 
     val optionalFeatures = Seq(
-      Some(conf.get(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE))
+      Some(conf.get(Config.KUBERNETES_EXECUTOR_SERVICE_ENABLED))
         .filter(enabled => enabled)
         .map(_ => new ExecutorServiceFeatureStep(conf))
     ).flatten
