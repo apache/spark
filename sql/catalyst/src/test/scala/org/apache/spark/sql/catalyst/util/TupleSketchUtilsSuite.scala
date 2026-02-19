@@ -95,7 +95,7 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("heapifyDoubleSketch: throws exception for invalid bytes") {
-    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    val invalidBytes = Array[Byte](50, 60, 70, 80, 90)
     checkError(
       exception = intercept[SparkRuntimeException] {
         TupleSketchUtils.heapifyDoubleSketch(invalidBytes, "test_function")
@@ -127,7 +127,7 @@ class TupleSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("heapifyIntegerSketch: throws exception for invalid bytes") {
-    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    val invalidBytes = Array[Byte](50, 60, 70, 80, 90)
     checkError(
       exception = intercept[SparkRuntimeException] {
         TupleSketchUtils.heapifyIntegerSketch(invalidBytes, "test_function")

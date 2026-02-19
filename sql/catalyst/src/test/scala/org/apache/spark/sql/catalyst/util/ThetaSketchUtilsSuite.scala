@@ -103,7 +103,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("wrapCompactSketch: throws exception for invalid bytes") {
-    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    val invalidBytes = Array[Byte](50, 60, 70, 80, 90)
     checkError(
       exception = intercept[SparkRuntimeException] {
         ThetaSketchUtils.wrapCompactSketch(invalidBytes, "test_function")
