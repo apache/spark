@@ -142,11 +142,11 @@ object RowSetUtils {
           val value = if (row.isNullAt(ordinal)) {
             ""
           } else {
-            // Geospatial types implement nested quoting in `toHiveString` (wrapping EWKT in double
-            // quotes when nested = true), intended for values inside containers like arrays, maps,
-            // or structs. However, in this Thrift Server code path, `nested` is always set to true
-            // because values are serialized into Hive string columns. We override to false here for
-            // singular geospatial types to avoid spurious quotes around standalone EWKT values.
+            // In this code path, `nested` was historically set to true for all types by default,
+            // but ideally it should be false in general. This was never a problem because other
+            // types that reach this branch do not use the `nested` flag in `toHiveString`. Now,
+            // Geospatial types use it for wrapping EWKT in quotes when nested = true, so we need
+            // to set `nested` here to false to avoid spurious quotes for standalone geo values.
             val nested = typ match {
               case _: GeometryType | _: GeographyType => false
               case _ => true
