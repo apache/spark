@@ -4028,24 +4028,29 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
  * (e.g. "alias.column"), but rejected when they resolve to a nested struct field extraction.
  */
 object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(EVENT_TIME_WATERMARK)) {
-    case etw: EventTimeWatermark =>
-      etw.eventTime match {
-        case u: UnresolvedAttribute if u.nameParts.length > 1 =>
-          // Try to resolve the multi-part name against the child output.
-          // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
-          // while a nested struct field (e.g. "struct_col.field") resolves to an
-          // Alias(ExtractValue(...)) which is not an Attribute.
-          etw.child.resolve(u.nameParts, conf.resolver) match {
-            case Some(_: Attribute) => etw
-            case _ =>
-              etw.failAnalysis(
-                errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
-                messageParameters = Map("eventExpr" -> u.sql))
-          }
-        case _ => etw
-      }
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
+      return plan
+    }
+    plan.resolveOperatorsWithPruning(
+      _.containsPattern(EVENT_TIME_WATERMARK)) {
+      case etw: EventTimeWatermark =>
+        etw.eventTime match {
+          case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+            // Try to resolve the multi-part name against the child output.
+            // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+            // while a nested struct field (e.g. "struct_col.field") resolves to an
+            // Alias(ExtractValue(...)) which is not an Attribute.
+            etw.child.resolve(u.nameParts, conf.resolver) match {
+              case Some(_: Attribute) => etw
+              case _ =>
+                etw.failAnalysis(
+                  errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                  messageParameters = Map("eventExpr" -> u.sql))
+            }
+          case _ => etw
+        }
+    }
   }
 }
 
