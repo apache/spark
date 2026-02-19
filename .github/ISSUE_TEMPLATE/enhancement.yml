@@ -1,12 +1,12 @@
-name: Enhancement
-description: Submit a feature request or improvement proposal for spark
-labels: ["Type: Enhancement"]
+name: Improvement
+description: Submit an improvement proposal for spark
+labels: ["Type: Improvement"]
 body:
   - type: textarea
     attributes:
-      label: "Enhancement description:"
+      label: "Improvement description:"
       description: >
-        Describe the enhancement you would like to see in Spark in detail. What is the use case?
+        Describe the improvement you would like to see in Spark in detail. What is the use case?
         How would it benefit the community? What could be the potential risks?
       validations:
         required: true
