@@ -36,7 +36,7 @@ jobs:
       contents: read
     steps:
     - name: Download test results to report
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         run-id: ${{ github.event.workflow_run.id }}
