@@ -3684,7 +3684,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
