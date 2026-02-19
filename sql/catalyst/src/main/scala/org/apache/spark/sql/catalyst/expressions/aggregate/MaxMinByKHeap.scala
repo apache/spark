@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.nio.{ByteBuffer, ByteOrder}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.unsafe.Platform
 
 /**
  * Helper for MaxMinByK aggregate providing heap operations.
@@ -30,21 +29,21 @@ import org.apache.spark.sql.types.DataType
  * Binary heap layout: [size (4 bytes), idx0 (4 bytes), idx1 (4 bytes), ..., idx(k-1) (4 bytes)]
  * Total size: (k + 1) * 4 bytes
  *
- * All integers are stored in little-endian byte order for direct binary manipulation.
+ * All integers are stored in native byte order via Platform (Unsafe) for direct access.
  */
 private[catalyst] object MaxMinByKHeap {
 
   def getSize(heap: Array[Byte]): Int =
-    ByteBuffer.wrap(heap, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt
+    Platform.getInt(heap, Platform.BYTE_ARRAY_OFFSET)
 
   def setSize(heap: Array[Byte], size: Int): Unit =
-    ByteBuffer.wrap(heap, 0, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(size)
+    Platform.putInt(heap, Platform.BYTE_ARRAY_OFFSET, size)
 
   def getIdx(heap: Array[Byte], pos: Int): Int =
-    ByteBuffer.wrap(heap, (pos + 1) * 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt
+    Platform.getInt(heap, Platform.BYTE_ARRAY_OFFSET + (pos + 1).toLong * 4)
 
   def setIdx(heap: Array[Byte], pos: Int, idx: Int): Unit =
-    ByteBuffer.wrap(heap, (pos + 1) * 4, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(idx)
+    Platform.putInt(heap, Platform.BYTE_ARRAY_OFFSET + (pos + 1).toLong * 4, idx)
 
   def swap(heap: Array[Byte], i: Int, j: Int): Unit = {
     val tmp = getIdx(heap, i)
