@@ -1182,24 +1182,24 @@ class DataFrameAggregateSuite extends QueryTest
       Row(Seq("c", "a"), Seq("a", "c")) :: Nil
     )
 
-    // All NULL orderings yields empty array
+    // All NULL orderings yields null
     checkAnswer(
       sql(
         """
           |SELECT max_by(x, y, 2), min_by(x, y, 2)
           |FROM VALUES (('a', null)), (('b', null)) AS tab(x, y)
         """.stripMargin),
-      Row(Seq(), Seq()) :: Nil
+      Row(null, null) :: Nil
     )
 
-    // Empty input yields empty array
+    // Empty input yields null
     checkAnswer(
       sql(
         """
           |SELECT max_by(x, y, 2), min_by(x, y, 2)
           |FROM VALUES (('a', 10)) AS tab(x, y) WHERE false
         """.stripMargin),
-      Row(Seq(), Seq()) :: Nil
+      Row(null, null) :: Nil
     )
 
     // Integer values, integer ordering
@@ -1323,15 +1323,16 @@ class DataFrameAggregateSuite extends QueryTest
 
     // GROUP BY
     checkAnswer(
-      sql("""
-        SELECT course, max_by(year, earnings, 2), min_by(year, earnings, 2)
-        FROM VALUES
-          (('Java', 2012, 20000)), (('Java', 2013, 30000)),
-          (('dotNET', 2012, 15000)), (('dotNET', 2013, 48000))
-        AS tab(course, year, earnings)
-        GROUP BY course
-        ORDER BY course
-      """),
+      sql(
+        """
+          |SELECT course, max_by(year, earnings, 2), min_by(year, earnings, 2)
+          |FROM VALUES
+          |  (('Java', 2012, 20000)), (('Java', 2013, 30000)),
+          |  (('dotNET', 2012, 15000)), (('dotNET', 2013, 48000))
+          |AS tab(course, year, earnings)
+          |GROUP BY course
+          |ORDER BY course
+        """.stripMargin),
       Row("Java", Seq(2013, 2012), Seq(2012, 2013)) ::
         Row("dotNET", Seq(2013, 2012), Seq(2012, 2013)) :: Nil
     )
@@ -1399,8 +1400,11 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Large k
     checkAnswer(
-      sql("""SELECT max_by(x, y, 100000), min_by(x, y, 100000)
-             FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"""),
+      sql(
+        """
+          |SELECT max_by(x, y, 100000), min_by(x, y, 100000)
+          |FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)
+        """.stripMargin),
       Row(Seq("b", "c", "a"), Seq("a", "c", "b")) :: Nil
     )
   }

@@ -32,6 +32,7 @@ import org.apache.spark.sql.types._
  * Returns top/bottom K values ordered by orderingExpr.
  * Uses a heap (min-heap for max_by, max-heap for min_by) to efficiently maintain K elements.
  * This is the internal implementation used by max_by(x, y, k) and min_by(x, y, k).
+ * Returns NULL if there are no non-NULL ordering values or the input is empty.
  */
 case class MaxMinByK(
     valueExpr: Expression,
@@ -61,8 +62,7 @@ case class MaxMinByK(
 
   override def prettyName: String = if (reverse) "min_by" else "max_by"
 
-  // The default aggregation result is an empty array, which is not nullable.
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def dataType: DataType = ArrayType(valueExpr.dataType, containsNull = true)
 
@@ -99,7 +99,7 @@ case class MaxMinByK(
     aggBufferAttributes.map(_.newInstance())
 
   override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
-  override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
+  override def defaultResult: Option[Literal] = Option(Literal.create(null, dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val parentCheck = super.checkInputDataTypes()
@@ -203,6 +203,8 @@ case class MaxMinByK(
     val heap = MaxMinByKHeap.getMutableHeap(buffer, offset + HEAP_OFFSET)
     val heapSize = MaxMinByKHeap.getSize(heap)
 
+    if (heapSize == 0) return null
+
     val elements = new Array[(Any, Any)](heapSize)
     for (i <- 0 until heapSize) {
       elements(i) = (InternalRow.copyValue(valuesArr(i)), orderingsArr(i))
@@ -236,6 +238,7 @@ case class MaxMinByK(
     _FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
     maximum values of `y`, sorted in descending order by `y`.
+    Returns NULL if there are no non-NULL ordering values.
   """,
   examples = """
     Examples:
@@ -270,6 +273,7 @@ object MaxByBuilder extends ExpressionBuilder {
     _FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.
     _FUNC_(x, y, k) - Returns an array of the `k` values of `x` associated with the
     minimum values of `y`, sorted in ascending order by `y`.
+    Returns NULL if there are no non-NULL ordering values.
   """,
   examples = """
     Examples:

@@ -941,6 +941,7 @@ object functions {
    * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
    *
    * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
    *
    * @note
    *   The function is non-deterministic because the order of collected results depends on the
@@ -958,6 +959,7 @@ object functions {
    * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
    *
    * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
    *
    * @note
    *   The function is non-deterministic because the order of collected results depends on the
@@ -1028,6 +1030,7 @@ object functions {
    * `ord`.
    *
    * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
    *
    * @note
    *   The function is non-deterministic because the order of collected results depends on the
@@ -1046,6 +1049,7 @@ object functions {
    * `ord`.
    *
    * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
    *
    * @note
    *   The function is non-deterministic because the order of collected results depends on the
