@@ -1,0 +1,637 @@
+diff --git a/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala b/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
+index f1719954766..a9b7f728736 100644
+--- a/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
++++ b/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
+@@ -2584,6 +2584,16 @@ object SQLConf {
+       .createWithDefault(
+         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
+ 
++  val STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ =
++    buildConf("spark.sql.streaming.checkpoint.stateCreateMetadataDirOnRead")
++      .internal()
++      .doc(
++        "When true, the state data source reader will create metadata directories if they " +
++          "don't exist. When false, the reader will only read from existing directories.")
++      .version("4.2.0")
++      .booleanConf
++      .createWithDefault(false)
++
+   val NUM_STATE_STORE_MAINTENANCE_THREADS =
+     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
+       .internal()
+@@ -7088,6 +7098,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
+ 
+   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
+ 
++  def stateStoreCreateMetadataDirOnRead: Boolean =
++    getConf(STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ)
++
+   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
+ 
+   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSource.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSource.scala
+index 9ccbb9a649f..4e6062b628d 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSource.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSource.scala
+@@ -178,7 +178,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
+   private def buildSqlConfForBatch(
+       checkpointLocation: String,
+       batchId: Long): SQLConf = {
+-    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
++    val offsetLog = new StreamingQueryCheckpointMetadata(
++      session, checkpointLocation).offsetLog
+     offsetLog.get(batchId) match {
+       case Some(value) =>
+         val metadata = value.metadataOpt.getOrElse(
+@@ -378,8 +379,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
+         val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
+           partitionId, sourceOptions.storeName)
+         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
++        val createSchemaDir = session.sessionState.conf.stateStoreCreateMetadataDirOnRead
+         val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+-          oldSchemaFilePaths = oldSchemaFilePaths)
++          oldSchemaFilePaths = oldSchemaFilePaths, createSchemaDir = createSchemaDir)
+         val stateSchema = manager.readSchemaFile()
+ 
+         if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+@@ -764,7 +766,8 @@ object StateSourceOptions extends DataSourceOptions with Logging{
+   }
+ 
+   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
+-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
++    val commitLog = new StreamingQueryCheckpointMetadata(
++      session, checkpointLocation).commitLog
+     commitLog.getLatest() match {
+       case Some((lastId, _)) => lastId
+       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+@@ -776,7 +779,8 @@ object StateSourceOptions extends DataSourceOptions with Logging{
+     batchId: Long,
+     operatorId: Long,
+     checkpointLocation: String): Option[Array[Array[String]]] = {
+-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
++    val commitLog = new StreamingQueryCheckpointMetadata(
++      session, checkpointLocation).commitLog
+     val commitMetadata = commitLog.get(batchId) match {
+       case Some(commitMetadata) => commitMetadata
+       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StreamStreamJoinStateHelper.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StreamStreamJoinStateHelper.scala
+index 5cb38022159..5b76a73de35 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StreamStreamJoinStateHelper.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/StreamStreamJoinStateHelper.scala
+@@ -79,6 +79,8 @@ object StreamStreamJoinStateHelper {
+     // KeyToNumValuesType, KeyWithIndexToValueType
+     val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
+ 
++    val createSchemaDir = session.sessionState.conf.stateStoreCreateMetadataDirOnRead
++
+     val (keySchema, valueSchema) =
+       if (!usesVirtualColumnFamilies(
+         newHadoopConf, stateCheckpointLocation, operatorId)) {
+@@ -94,12 +96,13 @@ object StreamStreamJoinStateHelper {
+ 
+         // read the key schema from the keyToNumValues store for the join keys
+         val manager = new StateSchemaCompatibilityChecker(
+-          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths)
++          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths,
++          createSchemaDir = createSchemaDir)
+         val kSchema = manager.readSchemaFile().head.keySchema
+ 
+         // read the value schema from the keyWithIndexToValue store for the values
+         val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
+-          newHadoopConf, oldSchemaFilePaths)
++          newHadoopConf, oldSchemaFilePaths, createSchemaDir = createSchemaDir)
+         val vSchema = manager2.readSchemaFile().head.valueSchema
+ 
+         (kSchema, vSchema)
+@@ -109,7 +112,7 @@ object StreamStreamJoinStateHelper {
+         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+ 
+         val manager = new StateSchemaCompatibilityChecker(
+-          providerId, newHadoopConf, oldSchemaFilePaths)
++          providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = createSchemaDir)
+         val kSchema = manager.readSchemaFile().find { schema =>
+           schema.colFamilyName == storeNames(0)
+         }.map(_.keySchema).get
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/metadata/StateMetadataSource.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/metadata/StateMetadataSource.scala
+index 31e6ac30a59..cd49021e417 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/metadata/StateMetadataSource.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/state/metadata/StateMetadataSource.scala
+@@ -16,6 +16,7 @@
+  */
+ package org.apache.spark.sql.execution.datasources.v2.state.metadata
+ 
++import java.io.FileNotFoundException
+ import java.util
+ 
+ import scala.jdk.CollectionConverters._
+@@ -221,8 +222,11 @@ class StateMetadataPartitionReader(
+         } else {
+           1
+         }
++        val createMetadataDir = SparkSession.getActiveSession
++          .map(_.sessionState.conf.stateStoreCreateMetadataDirOnRead).getOrElse(false)
+         OperatorStateMetadataReader.createReader(
+-          operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId).read() match {
++          operatorIdPath, hadoopConf, operatorStateMetadataVersion, batchId,
++          createMetadataDir = createMetadataDir).read() match {
+           case Some(metadata) => metadata
+           case None => throw StateDataSourceErrors.failedToReadOperatorMetadata(checkpointLocation,
+             batchId)
+@@ -231,7 +235,7 @@ class StateMetadataPartitionReader(
+     } catch {
+       // if the operator metadata is not present, catch the exception
+       // and return an empty array
+-      case ex: Exception =>
++      case ex: FileNotFoundException =>
+         logWarning(log"Failed to find operator metadata for " +
+           log"path=${MDC(LogKeys.CHECKPOINT_LOCATION, checkpointLocation)} " +
+           log"with exception=${MDC(LogKeys.EXCEPTION, ex)}")
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/OffsetSeqLog.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/OffsetSeqLog.scala
+index 8af138e330c..6365164e8f5 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/OffsetSeqLog.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/OffsetSeqLog.scala
+@@ -51,7 +51,9 @@ import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
+  *   1:{3}     // sourceId:offset
+  *   ...
+  */
+-class OffsetSeqLog(sparkSession: SparkSession, path: String)
++class OffsetSeqLog(
++    sparkSession: SparkSession,
++    path: String)
+   extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
+ 
+   override protected def deserialize(in: InputStream): OffsetSeqBase = {
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamingQueryCheckpointMetadata.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamingQueryCheckpointMetadata.scala
+index 4e02f323b89..afb21c32f21 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamingQueryCheckpointMetadata.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamingQueryCheckpointMetadata.scala
+@@ -30,7 +30,9 @@ import org.apache.spark.sql.internal.SQLConf
+  * @param sparkSession Spark session
+  * @param resolvedCheckpointRoot The resolved checkpoint root path
+  */
+-class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheckpointRoot: String) {
++class StreamingQueryCheckpointMetadata(
++    sparkSession: SparkSession,
++    resolvedCheckpointRoot: String) {
+ 
+   /**
+    * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
+@@ -39,7 +41,8 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
+    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
+    */
+   lazy val offsetLog =
+-    new OffsetSeqLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS))
++    new OffsetSeqLog(sparkSession,
++      checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS))
+ 
+   /**
+    * A log that records the batch ids that have completed. This is used to check if a batch was
+@@ -47,7 +50,8 @@ class StreamingQueryCheckpointMetadata(sparkSession: SparkSession, resolvedCheck
+    * This is used (for instance) during restart, to help identify which batch to run next.
+    */
+   lazy val commitLog =
+-    new CommitLog(sparkSession, checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS))
++    new CommitLog(sparkSession,
++      checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS))
+ 
+   /** Metadata associated with the whole query */
+   final lazy val streamMetadata: StreamMetadata = {
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/OperatorStateMetadata.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/OperatorStateMetadata.scala
+index 6b2295da03b..a25516aa739 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/OperatorStateMetadata.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/OperatorStateMetadata.scala
+@@ -183,13 +183,15 @@ object OperatorStateMetadataUtils extends Logging {
+   }
+ 
+   def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
+-    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
++    val offsetLog = new StreamingQueryCheckpointMetadata(
++      session, checkpointLocation).offsetLog
+     offsetLog.getLatest().map(_._1).getOrElse(throw
+       StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
+   }
+ 
+   def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
+-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
++    val commitLog = new StreamingQueryCheckpointMetadata(
++      session, checkpointLocation).commitLog
+     commitLog.getLatest().map(_._1)
+   }
+ }
+@@ -199,12 +201,14 @@ object OperatorStateMetadataReader {
+       stateCheckpointPath: Path,
+       hadoopConf: Configuration,
+       version: Int,
+-      batchId: Long): OperatorStateMetadataReader = {
++      batchId: Long,
++      createMetadataDir: Boolean = true): OperatorStateMetadataReader = {
+     version match {
+       case 1 =>
+         new OperatorStateMetadataV1Reader(stateCheckpointPath, hadoopConf)
+       case 2 =>
+-        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId)
++        new OperatorStateMetadataV2Reader(stateCheckpointPath, hadoopConf, batchId,
++          createMetadataDir)
+       case _ =>
+         throw new IllegalArgumentException(s"Failed to create reader for operator metadata " +
+           s"with version=$version")
+@@ -319,7 +323,8 @@ class OperatorStateMetadataV2Writer(
+ class OperatorStateMetadataV2Reader(
+     stateCheckpointPath: Path,
+     hadoopConf: Configuration,
+-    batchId: Long) extends OperatorStateMetadataReader {
++    batchId: Long,
++    createMetadataDir: Boolean = true) extends OperatorStateMetadataReader {
+ 
+   // Check that the requested batchId is available in the checkpoint directory
+   val baseCheckpointDir = stateCheckpointPath.getParent.getParent
+@@ -331,7 +336,9 @@ class OperatorStateMetadataV2Reader(
+   private val metadataDirPath = OperatorStateMetadataV2.metadataDirPath(stateCheckpointPath)
+   private lazy val fm = CheckpointFileManager.create(metadataDirPath, hadoopConf)
+ 
+-  fm.mkdirs(metadataDirPath.getParent)
++  if (createMetadataDir) {
++    fm.mkdirs(metadataDirPath.getParent)
++  }
+ 
+   override def version: Int = 2
+ 
+@@ -352,7 +359,7 @@ class OperatorStateMetadataV2Reader(
+ 
+   // List the available batches in the operator metadata directory
+   private def listOperatorMetadataBatches(): Array[Long] = {
+-    if (!fm.exists(metadataDirPath)) {
++    if (!fm.exists(metadataDirPath.getParent) || !fm.exists(metadataDirPath)) {
+       return Array.empty
+     }
+ 
+diff --git a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/StateSchemaCompatibilityChecker.scala b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/StateSchemaCompatibilityChecker.scala
+index ca18ce9067b..de4f5191467 100644
+--- a/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/StateSchemaCompatibilityChecker.scala
++++ b/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/StateSchemaCompatibilityChecker.scala
+@@ -81,7 +81,8 @@ class StateSchemaCompatibilityChecker(
+     providerId: StateStoreProviderId,
+     hadoopConf: Configuration,
+     oldSchemaFilePaths: List[Path] = List.empty,
+-    newSchemaFilePath: Option[Path] = None) extends Logging {
++    newSchemaFilePath: Option[Path] = None,
++    createSchemaDir: Boolean = true) extends Logging {
+ 
+   // For OperatorStateMetadataV1: Only one schema file present per operator
+   // per query
+@@ -96,7 +97,9 @@ class StateSchemaCompatibilityChecker(
+ 
+   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
+ 
+-  fm.mkdirs(schemaFileLocation.getParent)
++  if (createSchemaDir) {
++    fm.mkdirs(schemaFileLocation.getParent)
++  }
+ 
+   private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
+ 
+@@ -112,7 +115,7 @@ class StateSchemaCompatibilityChecker(
+   def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
+     val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
+     stateSchemaFilePaths.flatMap { schemaFile =>
+-        if (fm.exists(schemaFile)) {
++        if (fm.exists(schemaFile.getParent) && fm.exists(schemaFile)) {
+           val inStream = fm.open(schemaFile)
+           StateSchemaCompatibilityChecker.readSchemaFile(inStream)
+         } else {
+@@ -163,7 +166,7 @@ class StateSchemaCompatibilityChecker(
+    *         otherwise
+    */
+   private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
+-    if (fm.exists(schemaFileLocation)) {
++    if (fm.exists(schemaFileLocation.getParent) && fm.exists(schemaFileLocation)) {
+       readSchemaFile()
+     } else {
+       List.empty
+diff --git a/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceReadSuite.scala b/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceReadSuite.scala
+index 526d39478b9..490f29ea98d 100644
+--- a/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceReadSuite.scala
++++ b/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceReadSuite.scala
+@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.col
+ import org.apache.spark.sql.internal.SQLConf
+ import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
+ import org.apache.spark.sql.types.{IntegerType, StructType}
++import org.apache.spark.util.Utils
+ 
+ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
+   import testImplicits._
+@@ -1501,3 +1502,250 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
+     }
+   }
+ }
++
++/**
++ * Test suite that verifies the state data source reader does not create empty state
++ * directories when reading state for all stateful operators.
++ *
++ * When `spark.sql.streaming.stateStore.createMetadataDirOnRead` is false (the default),
++ * the reader should not call mkdirs on the schema metadata path. This is important for
++ * Unity Catalog environments where creating directories requires WRITE FILES permission,
++ * but reading state should only require READ FILES permission (ES-1722614).
++ *
++ * Each test runs one batch of a stateful query to create the checkpoint structure
++ * (offsets, commits, metadata), then deletes the state directory and attempts to read.
++ * The read is expected to fail (no state data), but crucially should NOT recreate the
++ * deleted state directory.
++ */
++class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
++
++  /**
++   * Asserts that the cause chain of the given exception contains
++   * an instance of the expected type.
++   */
++  private def assertCauseChainContains(
++      e: Throwable,
++      expectedType: Class[_ <: Throwable]): Unit = {
++    var current: Throwable = e
++    while (current != null) {
++      if (expectedType.isInstance(current)) return
++      current = current.getCause
++    }
++    fail(
++      s"Expected ${expectedType.getSimpleName} in cause chain, " +
++        s"but got: ${e.getClass.getSimpleName}: ${e.getMessage}")
++  }
++
++  /**
++   * Runs a stateful query to create the checkpoint structure, deletes the state directory,
++   * then attempts to read via the state data source and verifies that the state directory
++   * is not recreated.
++   *
++   * @param runQuery function that runs one batch of a stateful query given a checkpoint path
++   * @param readState function that attempts to read state given a checkpoint path
++   * @param expectedCause the exception type expected in the cause chain
++   */
++  private def assertStateDirectoryNotRecreatedOnRead(
++      runQuery: String => Unit,
++      readState: String => Unit,
++      expectedCause: Class[_ <: Throwable] =
++        classOf[StateDataSourceReadStateSchemaFailure]): Unit = {
++    withTempDir { tempDir =>
++      val checkpointPath = tempDir.getAbsolutePath
++
++      // Step 1: Run the stateful query to create the full checkpoint structure
++      runQuery(checkpointPath)
++
++      // Step 2: Delete the state directory
++      val stateDir = new File(tempDir, "state")
++      assert(stateDir.exists(), "State directory should exist after running the query")
++      Utils.deleteRecursively(stateDir)
++      assert(!stateDir.exists(), "State directory should be deleted")
++
++      // Step 3: Attempt to read state - expected to fail since state is deleted
++      val e = intercept[Exception] {
++        readState(checkpointPath)
++      }
++      assertCauseChainContains(e, expectedCause)
++
++      // Step 4: Verify the state directory was NOT recreated by the reader
++      assert(!stateDir.exists(),
++        "State data source reader should not recreate the deleted state directory")
++    }
++  }
++
++  test("streaming aggregation: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runLargeDataStreamingAggregationQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++    )
++  }
++
++  test("drop duplicates: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runDropDuplicatesQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++    )
++  }
++
++  test("flatMapGroupsWithState: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runFlatMapGroupsWithStateQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++    )
++  }
++
++  test("stream-stream join: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runStreamStreamJoinQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .option(StateSourceOptions.JOIN_SIDE, "left")
++          .load()
++          .collect()
++      }
++    )
++  }
++
++  test("transformWithState: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runTransformWithStateQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
++          .load()
++          .collect()
++      },
++      expectedCause = classOf[IllegalArgumentException]
++    )
++  }
++
++  test("session window aggregation: no empty state dir created on read") {
++    assertStateDirectoryNotRecreatedOnRead(
++      runQuery = checkpointPath => {
++        runSessionWindowAggregationQuery(checkpointPath)
++      },
++      readState = checkpointPath => {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++    )
++  }
++
++  test("deleted offsets directory is not recreated on read") {
++    withTempDir { tempDir =>
++      val checkpointPath = tempDir.getAbsolutePath
++      runLargeDataStreamingAggregationQuery(checkpointPath)
++
++      val offsetsDir = new File(tempDir, "offsets")
++      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
++      Utils.deleteRecursively(offsetsDir)
++      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
++
++      val e1 = intercept[Exception] {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++      assertCauseChainContains(e1,
++        classOf[StateDataSourceOffsetLogUnavailable])
++
++      assert(!offsetsDir.exists(),
++        "State data source reader should not recreate the deleted offsets directory")
++    }
++  }
++
++  test("deleted commits directory is not recreated on read") {
++    withTempDir { tempDir =>
++      val checkpointPath = tempDir.getAbsolutePath
++      runLargeDataStreamingAggregationQuery(checkpointPath)
++
++      val commitsDir = new File(tempDir, "commits")
++      assert(commitsDir.exists(), "Commits directory should exist after running the query")
++      Utils.deleteRecursively(commitsDir)
++      assert(!commitsDir.exists(), "Commits directory should be deleted")
++
++      val e2 = intercept[Exception] {
++        spark.read
++          .format("statestore")
++          .option(StateSourceOptions.PATH, checkpointPath)
++          .load()
++          .collect()
++      }
++      assertCauseChainContains(e2,
++        classOf[StataDataSourceCommittedBatchUnavailable])
++
++      assert(!commitsDir.exists(),
++        "State data source reader should not recreate the deleted commits directory")
++    }
++  }
++
++  test("createMetadataDirOnRead=true recreates deleted state directory") {
++    withSQLConf(
++      SQLConf.STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ.key -> "true") {
++      withTempDir { tempDir =>
++        val checkpointPath = tempDir.getAbsolutePath
++        runLargeDataStreamingAggregationQuery(checkpointPath)
++
++        val stateDir = new File(tempDir, "state")
++        assert(stateDir.exists(), "State directory should exist after running the query")
++        Utils.deleteRecursively(stateDir)
++        assert(!stateDir.exists(), "State directory should be deleted")
++
++        // With createMetadataDirOnRead=true, the reader will attempt to create
++        // the _metadata directory, which recreates part of the state directory tree
++        val e5 = intercept[Exception] {
++          spark.read
++            .format("statestore")
++            .option(StateSourceOptions.PATH, checkpointPath)
++            .load()
++            .collect()
++        }
++        assertCauseChainContains(e5,
++          classOf[StateDataSourceReadStateSchemaFailure])
++
++        // The state directory should be recreated (at least partially) because
++        // createMetadataDirOnRead=true causes mkdirs on the schema metadata path
++        assert(stateDir.exists(),
++          "With createMetadataDirOnRead=true, state directory should be recreated")
++      }
++    }
++  }
++}
+diff --git a/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceTestBase.scala b/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceTestBase.scala
+index 98ecdde2e57..aed484470e4 100644
+--- a/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceTestBase.scala
++++ b/sql/core/src/test/scala/org/apache/spark/sql/execution/datasources/v2/state/StateDataSourceTestBase.scala
+@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
+ import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+ import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
+ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
++import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore}
+ import org.apache.spark.sql.functions._
+ import org.apache.spark.sql.internal.SQLConf
+ import org.apache.spark.sql.streaming._
+@@ -445,6 +445,31 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
+     )
+   }
+ 
++  /**
++   * Runs one batch of a transformWithState query (using RunningCountStatefulProcessor)
++   * to create checkpoint structure with state. Uses RocksDBStateStoreProvider.
++   */
++  protected def runTransformWithStateQuery(checkpointRoot: String): Unit = {
++    withSQLConf(
++      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
++      SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
++    ) {
++      val inputData = MemoryStream[String]
++      val result = inputData.toDS()
++        .groupByKey(x => x)
++        .transformWithState(new org.apache.spark.sql.streaming.RunningCountStatefulProcessor(),
++          TimeMode.None(),
++          OutputMode.Update())
++
++      testStream(result, OutputMode.Update())(
++        StartStream(checkpointLocation = checkpointRoot),
++        AddData(inputData, "a"),
++        CheckNewAnswer(("a", "1")),
++        StopStream
++      )
++    }
++  }
++
+   /**
+    * Helper function to create a query that combines deduplication and aggregation.
+    * This creates a more complex query with multiple stateful operators:
+diff --git a/sql/core/src/test/scala/org/apache/spark/sql/execution/streaming/HDFSMetadataLogSuite.scala b/sql/core/src/test/scala/org/apache/spark/sql/execution/streaming/HDFSMetadataLogSuite.scala
+index d6702c1e4ea..24a3c5b94e7 100644
+--- a/sql/core/src/test/scala/org/apache/spark/sql/execution/streaming/HDFSMetadataLogSuite.scala
++++ b/sql/core/src/test/scala/org/apache/spark/sql/execution/streaming/HDFSMetadataLogSuite.scala
+@@ -218,4 +218,14 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
+     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
+     intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
+   }
++
++  test("HDFSMetadataLog creates directory when path does not exist") {
++    withTempDir { temp =>
++      val dir = new File(temp, "nonexistent")
++      assert(!dir.exists())
++      new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
++      assert(dir.exists(),
++        "HDFSMetadataLog should create directory when path does not exist")
++    }
++  }
+ }

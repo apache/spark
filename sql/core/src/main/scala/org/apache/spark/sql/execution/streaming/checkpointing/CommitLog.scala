@@ -46,11 +46,8 @@ import org.apache.spark.sql.internal.SQLConf
  * line 1: version
  * line 2: metadata (optional json string)
  */
-class CommitLog(
-    sparkSession: SparkSession,
-    path: String,
-    readOnly: Boolean = false)
-  extends HDFSMetadataLog[CommitMetadata](sparkSession, path, readOnly) {
+class CommitLog(sparkSession: SparkSession, path: String)
+  extends HDFSMetadataLog[CommitMetadata](sparkSession, path) {
 
   import CommitLog._
 

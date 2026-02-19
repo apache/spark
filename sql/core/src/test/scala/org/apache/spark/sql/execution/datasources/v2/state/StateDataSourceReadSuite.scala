@@ -1717,62 +1717,6 @@ class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
     }
   }
 
-  test("checkpointCreateDirOnRead=true recreates deleted offsets directory") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "true") {
-      withTempDir { tempDir =>
-        val checkpointPath = tempDir.getAbsolutePath
-        runLargeDataStreamingAggregationQuery(checkpointPath)
-
-        val offsetsDir = new File(tempDir, "offsets")
-        assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
-        Utils.deleteRecursively(offsetsDir)
-        assert(!offsetsDir.exists(), "Offsets directory should be deleted")
-
-        val e3 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, checkpointPath)
-            .load()
-            .collect()
-        }
-        assertCauseChainContains(e3,
-          classOf[StateDataSourceOffsetLogUnavailable])
-
-        assert(offsetsDir.exists(),
-          "With checkpointCreateDirOnRead=true, offsets directory should be recreated")
-      }
-    }
-  }
-
-  test("checkpointCreateDirOnRead=true recreates deleted commits directory") {
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_CREATE_DIR_ON_READ.key -> "true") {
-      withTempDir { tempDir =>
-        val checkpointPath = tempDir.getAbsolutePath
-        runLargeDataStreamingAggregationQuery(checkpointPath)
-
-        val commitsDir = new File(tempDir, "commits")
-        assert(commitsDir.exists(), "Commits directory should exist after running the query")
-        Utils.deleteRecursively(commitsDir)
-        assert(!commitsDir.exists(), "Commits directory should be deleted")
-
-        val e4 = intercept[Exception] {
-          spark.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, checkpointPath)
-            .load()
-            .collect()
-        }
-        assertCauseChainContains(e4,
-          classOf[StataDataSourceCommittedBatchUnavailable])
-
-        assert(commitsDir.exists(),
-          "With checkpointCreateDirOnRead=true, commits directory should be recreated")
-      }
-    }
-  }
-
   test("createMetadataDirOnRead=true recreates deleted state directory") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_STATE_CREATE_METADATA_DIR_ON_READ.key -> "true") {
