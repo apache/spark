@@ -18,11 +18,13 @@
 package org.apache.spark.sql.connect.service
 
 import scala.jdk.CollectionConverters._
+import scala.jdk.OptionConverters._
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 
 
 class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetStatusResponse])
@@ -43,18 +45,23 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
       .setSessionId(request.getSessionId)
       .setServerSideSessionId(sessionHolder.serverSessionId)
 
+    val responseExtensions =
+      processRequestExtensionsViaPlugins(sessionHolder, request.getExtensionsList)
+    responseExtensions.foreach(responseBuilder.addExtensions)
+
     if (request.hasOperationStatus) {
       val operationStatusRequest = request.getOperationStatus
       val requestedOperationIds = operationStatusRequest.getOperationIdsList.asScala.distinct.toSeq
+      val operationExtensions = operationStatusRequest.getExtensionsList
 
       val operationStatuses = if (requestedOperationIds.isEmpty) {
         // If no specific operation IDs are requested,
-        //return status of all known operations in session
-        getAllOperationStatuses(sessionHolder)
+        // return status of all known operations in session
+        getAllOperationStatuses(sessionHolder, operationExtensions)
       } else {
         // Return status only for the requested operation IDs
         requestedOperationIds.map { operationId =>
-          getOperationStatus(sessionHolder, operationId)
+          getOperationStatus(sessionHolder, operationId, operationExtensions)
         }
       }
 
@@ -68,7 +75,9 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
 
   private def getOperationStatus(
       sessionHolder: SessionHolder,
-      operationId: String): proto.GetStatusResponse.OperationStatus = {
+      operationId: String,
+      operationExtensions: java.util.List[com.google.protobuf.Any])
+      : proto.GetStatusResponse.OperationStatus = {
     val executeKey = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
 
     // First look up operation in active list, then in inactive. This ordering handles the case
@@ -93,18 +102,23 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
         proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
       )
 
-    buildOperationStatus(operationId, state)
+    val responseExtensions =
+      processOperationExtensionsViaPlugins(sessionHolder, operationExtensions, operationId)
+
+    buildOperationStatus(operationId, state, responseExtensions)
   }
 
 
   private def getAllOperationStatuses(
-      sessionHolder: SessionHolder): Seq[proto.GetStatusResponse.OperationStatus] = {
+      sessionHolder: SessionHolder,
+      operationExtensions: java.util.List[com.google.protobuf.Any])
+      : Seq[proto.GetStatusResponse.OperationStatus] = {
     val allOperationIds =
       (sessionHolder.listActiveOperationIds() ++
         sessionHolder.listInactiveOperations().map(_.operationId)).distinct
 
     allOperationIds.map { operationId =>
-      getOperationStatus(sessionHolder, operationId)
+      getOperationStatus(sessionHolder, operationId, operationExtensions)
     }
   }
 
@@ -129,8 +143,8 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
           // from a single thread at a time, so there are no concurrent changes and
           // terminationReason should always be set before reaching Closed.
           logError(
-            s"Operation $operationId is Closed but terminationReason is not set. " +
-              s"status=$status")
+            log"Operation ${MDC(LogKeys.OPERATION_ID, operationId)} is Closed but " +
+              log"terminationReason is not set. status=${MDC(LogKeys.STATUS, status)}")
         }
         mapTerminationReasonToState(terminationReason)
     }
@@ -153,12 +167,56 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
 
   private def buildOperationStatus(
       operationId: String,
-      state: proto.GetStatusResponse.OperationStatus.OperationState)
+      state: proto.GetStatusResponse.OperationStatus.OperationState,
+      extensions: Seq[com.google.protobuf.Any] = Seq.empty)
       : proto.GetStatusResponse.OperationStatus = {
-    proto.GetStatusResponse.OperationStatus
+    val builder = proto.GetStatusResponse.OperationStatus
       .newBuilder()
       .setOperationId(operationId)
       .setState(state)
-      .build()
+    extensions.foreach(builder.addExtensions)
+    builder.build()
+  }
+
+  private def processRequestExtensionsViaPlugins(
+      sessionHolder: SessionHolder,
+      requestExtensions: java.util.List[com.google.protobuf.Any]): Seq[com.google.protobuf.Any] = {
+    SparkConnectPluginRegistry.getStatusRegistry.flatMap { plugin =>
+      try {
+        plugin.processRequestExtensions(sessionHolder, requestExtensions).toScala match {
+          case Some(extensions) => extensions.asScala.toSeq
+          case None => Seq.empty
+        }
+      } catch {
+        case e: Throwable =>
+          logWarning(
+            log"Plugin ${MDC(LogKeys.CLASS_NAME, plugin.getClass.getName)} failed to process " +
+              log"request extensions",
+            e)
+          Seq.empty
+      }
+    }
+  }
+
+  private def processOperationExtensionsViaPlugins(
+      sessionHolder: SessionHolder,
+      operationExtensions: java.util.List[com.google.protobuf.Any],
+      operationId: String): Seq[com.google.protobuf.Any] = {
+    SparkConnectPluginRegistry.getStatusRegistry.flatMap { plugin =>
+      try {
+        plugin.processOperationExtensions(
+          operationId, sessionHolder, operationExtensions).toScala match {
+          case Some(extensions) => extensions.asScala.toSeq
+          case None => Seq.empty
+        }
+      } catch {
+        case e: Throwable =>
+          logWarning(
+            log"Plugin ${MDC(LogKeys.CLASS_NAME, plugin.getClass.getName)} failed to process " +
+              log"operation extensions for operation ${MDC(LogKeys.OPERATION_ID, operationId)}",
+            e)
+          Seq.empty
+      }
+    }
   }
 }
