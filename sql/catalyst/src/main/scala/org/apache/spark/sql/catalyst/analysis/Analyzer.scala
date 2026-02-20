@@ -450,6 +450,7 @@ class Analyzer(
       DeduplicateRelations ::
       ResolveCollationName ::
       ResolveMergeIntoSchemaEvolution ::
+      ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -4016,6 +4017,40 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       other.transformExpressionsDownWithPruning(_.containsAnyPattern(ALIAS, MULTI_ALIAS)) {
         case Alias(child, _) => child
       }
+  }
+}
+
+/**
+ * Validates that the event time column in EventTimeWatermark is a top-level column reference
+ * (e.g. a single name), not a nested field (e.g. "struct_col.field").
+ *
+ * Multi-part names are allowed when they resolve to a top-level attribute via a table alias
+ * (e.g. "alias.column"), but rejected when they resolve to a nested struct field extraction.
+ */
+object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
+      return plan
+    }
+    plan.resolveOperatorsWithPruning(
+      _.containsPattern(EVENT_TIME_WATERMARK)) {
+      case etw: EventTimeWatermark =>
+        etw.eventTime match {
+          case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+            // Try to resolve the multi-part name against the child output.
+            // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+            // while a nested struct field (e.g. "struct_col.field") resolves to an
+            // Alias(ExtractValue(...)) which is not an Attribute.
+            etw.child.resolve(u.nameParts, conf.resolver) match {
+              case Some(_: Attribute) => etw
+              case _ =>
+                etw.failAnalysis(
+                  errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                  messageParameters = Map("eventExpr" -> u.sql))
+            }
+          case _ => etw
+        }
+    }
   }
 }
 
