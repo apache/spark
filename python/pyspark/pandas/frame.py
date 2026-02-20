@@ -9878,9 +9878,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 .select("column_name", "value", F.col("count").alias("freq"))
                 .collect()
             )
-            top_freq_dict = {row.column_name: (row.value, row.freq) for row in top_values}
-            tops = [str(top_freq_dict[col_name][0]) for col_name in column_names]
-            freqs = [str(top_freq_dict[col_name][1]) for col_name in column_names]
+            top_freq_dict = {row.column_name: (str(row.value), str(row.freq)) for row in top_values}
+            tops, freqs = map(list, zip(*(top_freq_dict[col_name] for col_name in column_names)))
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
