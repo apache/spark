@@ -2093,65 +2093,62 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       // All of the aliases in the projection
       val aliasMap = getAliasMap(project)
-      // Break up the filter into its respective components by &&s.
-      val splitCondition = splitConjunctivePredicates(condition)
-      // Find the different aliases each component of the filter uses.
-      val usedAliasesForCondition = splitCondition.map { cond =>
-        // If the legacy double evaluation behavior is enabled we just say
-        // every filter is "free."
-        if (!SQLConf.get.avoidDoubleFilterEval) {
-          val replaced = replaceAlias(cond, aliasMap)
-          (cond, AttributeMap.empty[Alias], replaced)
-        } else {
+      if (!SQLConf.get.avoidDoubleFilterEval) {
+        // If the user is ok with double evaluation of projections short circuit
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      } else {
+        // Break up the filter into its respective components by &&s.
+        val splitCondition = splitConjunctivePredicates(condition)
+        // Find the different aliases each component of the filter uses.
+        val usedAliasesForCondition = splitCondition.map { cond =>
           // Here we get which aliases were used in a given filter so we can see if the filter
           // referenced an expensive alias v.s. just checking if the filter is expensive.
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
           (cond, usedAliases, replaced)
         }
-      }
-      // Split the filter's components into cheap and expensive while keeping track of
-      // what each references from the projection.
-      val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
-        .partition { case (cond, used, replaced) =>
-        if (!SQLConf.get.avoidDoubleFilterEval) {
-          // If we are always pushing through short circuit the check.
-          true
+        // Split the filter's components into cheap and expensive while keeping track of
+        // what each references from the projection.
+        val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
+          .partition { case (cond, used, replaced) =>
+            if (!SQLConf.get.avoidDoubleFilterEval) {
+              // If we are always pushing through short circuit the check.
+              true
+            } else {
+              // Didn't use anything? We're good
+              if (used.isEmpty) {
+                true
+              } else if (!used.exists(_._2.child.expensive)) {
+                // If it's cheap we can push it because it might eliminate more data quickly and
+                // it may also be something which could be evaluated at the storage layer.
+                // We may wish to improve this heuristic in the future.
+                true
+              } else {
+                false
+              }
+            }
+          }
+        // Short circuit if we do not have any cheap filters return the original filter as is.
+        if (cheapWithUsed.isEmpty) {
+          f
         } else {
-          // Didn't use anything? We're good
-          if (used.isEmpty) {
-            true
-          } else if (!used.exists(_._2.child.expensive)) {
-            // If it's cheap we can push it because it might eliminate more data quickly and
-            // it may also be something which could be evaluated at the storage layer.
-            // We may wish to improve this heuristic in the future.
-            true
+          val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
+          // Make a base instance which has all of the cheap filters pushed down.
+          // For all filter which do not reference any expensive aliases then
+          // just push the filter while resolving the non-expensive aliases.
+          val combinedCheapFilter = cheap.reduce(And)
+          val baseChild = Filter(combinedCheapFilter, child = grandChild)
+          // Take our projection and place it on top of the pushed filters.
+          val topProjection = project.copy(child = baseChild)
+
+          // If we pushed all the filters we can return the projection
+          if (expensiveWithUsed.isEmpty) {
+            topProjection
           } else {
-            false
+            // Finally add any filters which could not be pushed
+            val remainingConditions = expensiveWithUsed.map(_._1)
+            Filter(remainingConditions.reduce(And), topProjection)
           }
         }
-      }
-      // Short circuit if we do not have any cheap filters return the original filter as is.
-      if (cheapWithUsed.isEmpty) {
-        f
-      } else {
-        val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
-        // Make a base instance which has all of the cheap filters pushed down.
-        // For all filter which do not reference any expensive aliases then
-        // just push the filter while resolving the non-expensive aliases.
-        val combinedCheapFilter = cheap.reduce(And)
-        val baseChild: LogicalPlan = Filter(combinedCheapFilter, child = grandChild)
-        // Take our projection and place it on top of the pushed filters.
-        val topProjection = project.copy(child = baseChild)
-
-        // If we pushed all the filters we can return the projection
-        val result = if (expensiveWithUsed.isEmpty) {
-          topProjection
-        } else {
-          // Finally add any filters which could not be pushed
-          val remainingConditions = expensiveWithUsed.map(_._1).toSeq
-          Filter(remainingConditions.reduce(And), topProjection)
-        }
-        result
       }
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.

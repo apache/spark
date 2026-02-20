@@ -82,7 +82,9 @@ trait AliasHelper {
         newElem match {
           case None => a
           case Some(b) =>
-            replaced += (a, b)
+            if (!replaced.contains(a)) {
+              replaced += (a, b)
+            }
             b
         }
     })
