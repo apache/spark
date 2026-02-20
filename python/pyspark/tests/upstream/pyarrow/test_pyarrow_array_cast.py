@@ -28,8 +28,8 @@ Each mode generates separate golden files to capture their different behaviors.
 
 Each cell in the golden file uses the value@type format:
 
-- Success: [0, 1, null]@int16 — element values via scalar.as_py() and Arrow type after cast
-- Failure: ERR@ArrowNotImplementedError — the exception class name
+- Success: [0, 1, null]@int16 - element values via scalar.as_py() and Arrow type after cast
+- Failure: ERR@ArrowNotImplementedError - the exception class name
 
 ## Regenerating Golden Files
 
@@ -511,9 +511,9 @@ class PyArrowScalarTypeCastTests(_PyArrowCastTestBase):
 
         ARM (aarch64/arm64): Unsafe float-to-integer casts produce different results
         than x86 due to IEEE 754 implementation-defined behavior:
-        - ARM FCVT instructions saturate on overflow (inf→MAX, -inf→MIN, nan→0)
+        - ARM FCVT instructions saturate on overflow (inf->MAX, -inf->MIN, nan->0)
         - x86 SSE/AVX returns "integer indefinite" values
-        - Negative float → unsigned int: ARM saturates to 0, x86 may wrap
+        - Negative float -> unsigned int: ARM saturates to 0, x86 may wrap
         The golden files are generated on x86; ARM values are hardcoded below.
         """
         overrides = {}

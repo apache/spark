@@ -262,7 +262,7 @@ class PandasToArrowConversion:
             # TODO(SPARK-55502): Unify UDTF and regular UDF conversion paths to
             #   eliminate the is_udtf flag.
             Regular UDFs only catch ArrowInvalid to preserve legacy behavior where
-            e.g. string→decimal must raise an error. (default False)
+            e.g. string->decimal must raise an error. (default False)
 
         Returns
         -------
@@ -304,7 +304,7 @@ class PandasToArrowConversion:
             """Convert a single column (Series or DataFrame) to an Arrow Array.
 
             Uses field.name for error messages instead of series.name to avoid
-            copying the Series via rename() — a ~20% overhead on the hot path.
+            copying the Series via rename() - a ~20% overhead on the hot path.
             """
             if isinstance(col, pd.DataFrame):
                 assert isinstance(field.dataType, StructType)

@@ -170,7 +170,7 @@ if TYPE_CHECKING:
 # Two patterns basically seek the footer string from Pandas'
 REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) columns\]$")
 REPR_HTML_PATTERN = re.compile(
-    r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
+    r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"  # noqa: RUF001
 )
 
 
@@ -2591,10 +2591,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for the column names.
         index : bool, default True
             Write row names (index).
-        na_rep : str, default ‘NaN’
+        na_rep : str, default 'NaN'
             Missing data representation.
         formatters : list of functions or dict of {str: function}, optional
-            Formatter functions to apply to columns’ elements by position or name. The result of
+            Formatter functions to apply to columns' elements by position or name. The result of
             each function must be a Unicode string. List must be of length equal to the number of
             columns.
         float_format : str, optional
@@ -2607,9 +2607,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bold_rows : bool, default False
             Make the row labels bold in the output.
         column_format : str, optional
-            The columns format as specified in LaTeX table format e.g. ‘rcl’ for 3 columns. By
-            default, ‘l’ will be used for all columns except columns of numbers, which default
-            to ‘r’.
+            The columns format as specified in LaTeX table format e.g. 'rcl' for 3 columns. By
+            default, 'l' will be used for all columns except columns of numbers, which default
+            to 'r'.
         longtable : bool, optional
             By default the value will be read from the pandas config module. Use a longtable
             environment instead of tabular. Requires adding a usepackage{longtable} to your LaTeX
@@ -2618,14 +2618,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             By default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
-            A string representing the encoding to use in the output file, defaults to ‘ascii’ on
-            Python 2 and ‘utf-8’ on Python 3.
-        decimal : str, default ‘.’
-            Character recognized as decimal separator, e.g. ‘,’ in Europe.
+            A string representing the encoding to use in the output file, defaults to 'ascii' on
+            Python 2 and 'utf-8' on Python 3.
+        decimal : str, default '.'
+            Character recognized as decimal separator, e.g. ',' in Europe.
         multicolumn : bool, default True
             Use multicolumn to enhance MultiIndex columns. The default will be read from the config
             module.
-        multicolumn_format : str, default ‘l’
+        multicolumn_format : str, default 'l'
             The alignment for multicolumns, similar to column_format The default will be read from
             the config module.
         multirow : bool, default False
@@ -4917,7 +4917,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis : int, default 0 or 'index'
             Can only be set to 0 now.
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
@@ -7441,7 +7441,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             If a string is given, must be the name of a level If list-like, elements must
             be names or positional indexes of levels.
 
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
+        axis: {0 or 'index', 1 or 'columns'}, default 0
 
         Returns
         -------
@@ -7793,7 +7793,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -7901,7 +7901,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         kind : str, default None
             pandas-on-Spark does not allow specifying the sorting algorithm now,
             default None
-        na_position : {‘first’, ‘last’}, default ‘last’
+        na_position : {'first', 'last'}, default 'last'
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
@@ -8943,12 +8943,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         how: {'left', 'right', 'outer', 'inner'}, default 'left'
             How to handle the operation of the two objects.
 
-            * left: use `left` frame’s index (or column if on is specified).
-            * right: use `right`’s index.
-            * outer: form union of `left` frame’s index (or column if on is specified) with
-              right’s index, and sort it. lexicographically.
-            * inner: form intersection of `left` frame’s index (or column if on is specified)
-              with `right`’s index, preserving the order of the `left`’s one.
+            * left: use `left` frame's index (or column if on is specified).
+            * right: use `right`'s index.
+            * outer: form union of `left` frame's index (or column if on is specified) with
+              right's index, and sort it. lexicographically.
+            * inner: form intersection of `left` frame's index (or column if on is specified)
+              with `right`'s index, preserving the order of the `left`'s one.
         lsuffix : str, default ''
             Suffix to use from left frame's overlapping columns.
         rsuffix : str, default ''
@@ -9014,8 +9014,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         K3   A3  None
 
         Another option to join using the key columns is to use the on parameter. DataFrame.join
-        always uses right’s index but we can use any column in df. This method does not preserve
-        the original DataFrame’s index in the result unlike pandas.
+        always uses right's index but we can use any column in df. This method does not preserve
+        the original DataFrame's index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
         >>> join_psdf.index
@@ -9818,9 +9818,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         For numeric data, the result's index will include ``count``,
         ``mean``, ``std``, ``min``, ``25%``, ``50%``, ``75%``, ``max``.
 
-        For object data (e.g. strings or timestamps), the result’s index will include
+        For object data (e.g. strings or timestamps), the result's index will include
         ``count``, ``unique``, ``top``, and ``freq``.
-        The ``top`` is the most common value. The ``freq`` is the most common value’s frequency.
+        The ``top`` is the most common value. The ``freq`` is the most common value's frequency.
         Timestamps also include the ``first`` and ``last`` items.
 
         Examples
@@ -10213,12 +10213,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         labels: array-like, optional
-            New labels / index to conform the axis specified by ‘axis’ to.
+            New labels / index to conform the axis specified by 'axis' to.
         index, columns: array-like, optional
             New labels / index to conform to, should be specified using keywords.
             Preferably an Index object to avoid duplicating data
         axis: int or str, optional
-            Axis to target. Can be either the axis name (‘index’, ‘columns’) or
+            Axis to target. Can be either the axis name ('index', 'columns') or
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
@@ -10614,7 +10614,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             are not set as `id_vars`.
         var_name : scalar, default 'variable'
             Name to use for the 'variable' column. If None it uses `frame.columns.name` or
-            ‘variable’.
+            'variable'.
         value_name : scalar, default 'value'
             Name to use for the 'value' column.
 
@@ -11791,12 +11791,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Alter axes labels.
         Function / dict values must be unique (1-to-1). Labels not contained in a dict / Series
-        will be left as-is. Extra labels listed don’t throw an error.
+        will be left as-is. Extra labels listed don't throw an error.
 
         Parameters
         ----------
         mapper : dict-like or function
-            Dict-like or functions transformations to apply to that axis’ values.
+            Dict-like or functions transformations to apply to that axis' values.
             Use either `mapper` and `axis` to specify the axis to target with `mapper`, or `index`
             and `columns`.
         index : dict-like or function

@@ -278,9 +278,9 @@ def read_csv(
     ----------
     path : str or list
         Path(s) of the CSV file(s) to be read.
-    sep : str, default ‘,’
+    sep : str, default ','
         Delimiter to use. Non empty string.
-    header : int, default ‘infer’
+    header : int, default 'infer'
         Whether to use the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
         the behavior is identical to `header=0` and column names are inferred from
@@ -302,7 +302,7 @@ def read_csv(
         If callable, the callable function will be evaluated against the column names,
         returning names where the callable function evaluates to `True`.
     dtype : Type name or dict of column -> type, default None
-        Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} Use str or object
+        Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32} Use str or object
         together with suitable na_values settings to preserve and not interpret dtype.
     nrows : int, default None
         Number of rows to read from the CSV file.
@@ -2101,7 +2101,7 @@ def timedelta_range(
     TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
 
     The freq parameter specifies the frequency of the TimedeltaIndex.
-    Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
+    Only fixed frequencies can be passed, non-fixed frequencies such as 'M' (month end) will raise.
 
     >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
