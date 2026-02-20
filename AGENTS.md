@@ -1,6 +1,6 @@
 # Apache Spark
 
-This file provides context and guidelines for AI coding assistants working with the Apache Spark codebase.
+This file provides context and guidelines for AI agents working with the Apache Spark codebase.
 
 ## Build
 
