@@ -18,8 +18,9 @@ package org.apache.spark.sql.connect
 
 import java.util.UUID
 
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 
 object SparkConnectTestUtils {
 
@@ -32,5 +33,33 @@ object SparkConnectTestUtils {
         session = session)
     SparkConnectService.sessionManager.putSessionForTesting(ret)
     ret
+  }
+
+  /** Creates a dummy execute holder for use in tests. */
+  def createDummyExecuteHolder(
+      sessionHolder: SessionHolder,
+      command: proto.Command
+  ): ExecuteHolder = {
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(
+        proto.Plan
+          .newBuilder()
+          .setCommand(command)
+          .build()
+      )
+      .setSessionId(sessionHolder.sessionId)
+      .setUserContext(
+        proto.UserContext
+          .newBuilder()
+          .setUserId(sessionHolder.userId)
+          .build()
+      )
+      .build()
+    val executeHolder =
+      SparkConnectService.executionManager.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }

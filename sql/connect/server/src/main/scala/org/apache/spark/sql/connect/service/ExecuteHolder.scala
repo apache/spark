@@ -308,6 +308,8 @@ private[connect] class ExecuteHolder(
       responseObserver.removeAll()
       // Post "closed" to UI.
       eventsManager.postClosed()
+      // Update the termination info in the session holder after closure.
+      sessionHolder.closeOperation(this)
     }
   }
 
@@ -342,6 +344,16 @@ private[connect] class ExecuteHolder(
 
   /** Get the operation ID. */
   def operationId: String = key.operationId
+
+  def getTerminationInfo: TerminationInfo = {
+    TerminationInfo(
+      userId = sessionHolder.userId,
+      sessionId = sessionHolder.sessionId,
+      operationId = executeKey.operationId,
+      status = eventsManager.status,
+      terminationReason = eventsManager.terminationReason
+    )
+  }
 }
 
 private object ExecuteHolder {
@@ -414,3 +426,11 @@ case class ExecuteInfo(
 
   def key: ExecuteKey = ExecuteKey(userId, sessionId, operationId)
 }
+
+/** Minimal termination status information for inactive operations. */
+case class TerminationInfo(
+    userId: String,
+    sessionId: String,
+    operationId: String,
+    status: ExecuteStatus,
+    terminationReason: Option[TerminationReason])
