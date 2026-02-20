@@ -1383,7 +1383,7 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("max_by", "min_by").foreach { fn =>
         val mapError = intercept[AnalysisException] {
           sql(s"SELECT $fn(x, y, 2) FROM tempView").collect()
-        }
+        } 
         assert(mapError.getMessage.contains("INVALID_ORDERING_TYPE") ||
           mapError.getMessage.contains("not orderable"))
       }
