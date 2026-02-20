@@ -295,7 +295,10 @@ class PandasToArrowConversionTests(unittest.TestCase):
         with self.assertRaises((PySparkValueError, PySparkTypeError)) as ctx:
             PandasToArrowConversion.convert(data, schema)
         # Error message should reference the schema field name, not the positional index
-        self.assertIn("age", str(ctx.exception))
+        error_msg = str(ctx.exception)
+        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
+        self.assertIn("with name 'age'", error_msg)
+        self.assertIn("to Arrow Array", error_msg)
 
     def test_convert_broad_exception_handling(self):
         """Test unified conversion uses broad exception handling for better type coercion."""
@@ -307,7 +310,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # ValueError path (string -> double)
         with self.assertRaises(PySparkValueError) as ctx:
             PandasToArrowConversion.convert(data, schema)
-        self.assertIn("val", str(ctx.exception))
+        error_msg = str(ctx.exception)
+        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
+        self.assertIn("with name 'val'", error_msg)
+        self.assertIn("to Arrow Array", error_msg)
+        self.assertIn("double", error_msg)
 
         # TypeError path (int -> struct): ArrowTypeError inherits from TypeError.
         # ignore_unexpected_complex_type_values=True lets the bad value pass through
@@ -322,7 +329,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
                 struct_schema,
                 ignore_unexpected_complex_type_values=True,
             )
-        self.assertIn("x", str(ctx.exception))
+        error_msg = str(ctx.exception)
+        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
+        self.assertIn("with name 'x'", error_msg)
+        self.assertIn("to Arrow Array", error_msg)
+        self.assertIn("struct<a: int32>", error_msg)
 
     def test_convert_prefers_large_types(self):
         """Test prefers_large_types produces large Arrow types."""
