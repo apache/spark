@@ -441,3 +441,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
                 self.artifact_manager.add_artifacts(
                     os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
                 )
+
+if __name__ == "__main__":
+    from pyspark.testing import main
+
+    main()
