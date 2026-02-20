@@ -265,6 +265,16 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putShortsFromInts(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+    for (int i = 0; i < count; ++i, srcOffset += 4) {
+      int v = Platform.getInt(src, srcOffset);
+      if (bigEndianPlatform) v = Integer.reverseBytes(v);
+      shortData[rowId + i] = (short) v;
+    }
+  }
+
+  @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
       return shortData[rowId];

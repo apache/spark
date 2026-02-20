@@ -268,6 +268,17 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putShortsFromInts(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+    long dstOffset = data + rowId * 2L;
+    for (int i = 0; i < count; ++i, srcOffset += 4, dstOffset += 2) {
+      int v = Platform.getInt(src, srcOffset);
+      if (bigEndianPlatform) v = Integer.reverseBytes(v);
+      Platform.putShort(null, dstOffset, (short) v);
+    }
+  }
+
+  @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
       return Platform.getShort(null, data + 2L * rowId);
