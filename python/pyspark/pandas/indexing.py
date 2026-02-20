@@ -587,6 +587,16 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         from pyspark.pandas.series import Series, first_series
 
         if self._is_series:
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas 3 CoW: mutating a Series view should not mutate the parent DataFrame.
+                self._psdf_or_psser._update_anchor(
+                    DataFrame(
+                        self._psdf_or_psser._psdf._internal.select_column(
+                            self._psdf_or_psser._column_label
+                        )
+                    )
+                )
+
             if (
                 isinstance(key, Series)
                 and (isinstance(self, iLocIndexer) or not same_anchor(key, self._psdf_or_psser))
@@ -811,7 +821,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_columns(
                 new_data_spark_columns, column_labels=column_labels, data_fields=new_fields
             )
-            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(
+                internal,
+                check_same_anchor=False,
+                anchor_force_disconnect=LooseVersion(pd.__version__) >= "3.0.0",
+            )
 
 
 class LocIndexer(LocIndexerLike):
