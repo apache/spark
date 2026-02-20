@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow,
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -430,6 +430,10 @@ abstract class InMemoryBaseTable(
       }
       new BufferedRowsReaderFactory(metadataColumns.toSeq, nonMetadataColumns, tableSchema)
     }
+
+    override def supportedCustomMetrics(): Array[CustomMetric] = {
+      Array(new RowsReadCustomMetric)
+    }
   }
 
   case class InMemoryBatchScan(
@@ -662,10 +666,13 @@ private class BufferedRowsReader(
   }
 
   private var index: Int = -1
+  private var rowsRead: Long = 0
 
   override def next(): Boolean = {
     index += 1
-    index < partition.rows.length
+    val hasNext = index < partition.rows.length
+    if (hasNext) rowsRead += 1
+    hasNext
   }
 
   override def get(): InternalRow = {
@@ -700,6 +707,22 @@ private class BufferedRowsReader(
       case dt =>
         row.get(index, dt)
     }
+  }
+
+  override def initMetricsValues(metrics: Array[CustomTaskMetric]): Unit = {
+    metrics.foreach { m =>
+      m.name match {
+        case "rows_read" => rowsRead = m.value()
+      }
+    }
+  }
+
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val metric = new CustomTaskMetric {
+      override def name(): String = "rows_read"
+      override def value(): Long = rowsRead
+    }
+    Array(metric)
   }
 }
 
@@ -743,4 +766,9 @@ class InMemorySimpleCustomMetric extends CustomMetric {
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
     s"in-memory rows: ${taskMetrics.sum}"
   }
+}
+
+class RowsReadCustomMetric extends CustomSumMetric {
+  override def name(): String = "rows_read"
+  override def description(): String = "number of rows read"
 }
