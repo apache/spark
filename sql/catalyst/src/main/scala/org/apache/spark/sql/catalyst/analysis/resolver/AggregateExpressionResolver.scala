@@ -81,7 +81,7 @@ class AggregateExpressionResolver(
    *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if it contains [[SortOrder]] different
    *      from its child. However, when [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] is
    *      enabled, a mismatch is tolerated if it is solely due to a [[Cast]] whose source type is
-   *      injective when cast to string (see [[ListAgg.validateDistinctOrderCompatibility]]);
+   *      injective when cast to string (see [[ListAgg.hasDistinctOrderIncompatibility]]);
    *   2. Nested aggregate functions are not allowed;
    *   3. Nondeterministic expressions in the subtree of a related aggregate function are not
    *      allowed;
@@ -116,21 +116,24 @@ class AggregateExpressionResolver(
   }
 
   private def validateResolvedAggregateExpression(
-      aggregateExpression: AggregateExpression): Unit = {
+    aggregateExpression: AggregateExpression): Unit = {
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-          if agg.isDistinct => listAgg.validateDistinctOrderCompatibility()
+          if agg.isDistinct && listAgg.hasDistinctOrderIncompatibility =>
+        listAgg.throwDistinctOrderError()
       case _ =>
-    }
+        if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
+          throwNestedAggregateFunction(aggregateExpression)
+        }
 
-    if (expressionResolutionContextStack.peek().hasAggregateExpressions) {
-      throwNestedAggregateFunction(aggregateExpression)
-    }
-
-    aggregateExpression.aggregateFunction.children.foreach { child =>
-      if (!child.deterministic) {
-        throwAggregateFunctionWithNondeterministicExpression(aggregateExpression, child)
-      }
+        aggregateExpression.aggregateFunction.children.foreach { child =>
+          if (!child.deterministic) {
+            throwAggregateFunctionWithNondeterministicExpression(
+              aggregateExpression,
+              child
+            )
+          }
+        }
     }
   }
 

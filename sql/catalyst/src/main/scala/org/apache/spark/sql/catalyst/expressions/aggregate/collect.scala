@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Growable}
 import scala.util.{Left, Right}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -594,7 +595,7 @@ case class ListAgg(
   }
 
   /**
-   * Validates that the ordering expression is compatible with DISTINCT deduplication.
+   * Returns true if the ordering expression is incompatible with DISTINCT deduplication.
    *
    * When LISTAGG(DISTINCT col) WITHIN GROUP (ORDER BY col) is used on a non-string column,
    * the child is implicitly cast to string (with UTF8_BINARY collation). The DISTINCT rewrite
@@ -603,28 +604,42 @@ case class ListAgg(
    * equal strings, and vice versa. Types like Float/Double violate this because IEEE 754
    * negative zero (-0.0) and positive zero (0.0) are equal but produce different strings.
    *
-   * This method is a no-op when the order expression matches the child (i.e.,
-   * [[needSaveOrderValue]] is false). Otherwise, the behavior depends on the
+   * Returns false when the order expression matches the child (i.e., [[needSaveOrderValue]]
+   * is false). Otherwise, the behavior depends on the
    * [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] config:
    *  - If enabled, delegates to [[orderMismatchCastSafety]] to determine whether the
    *    mismatch is due to a safe cast, an unsafe cast, or not a cast at all.
-   *  - If disabled, rejects any mismatch.
+   *  - If disabled, any mismatch is considered incompatible.
    *
-   * @throws AnalysisException if the ordering is incompatible with DISTINCT
+   * @return true if an incompatibility exists, false if the ordering is safe
+   * @see [[throwDistinctOrderError]] to throw the appropriate error when this returns true
    */
-  def validateDistinctOrderCompatibility(): Unit = {
-    if (needSaveOrderValue) {
+  def hasDistinctOrderIncompatibility: Boolean = {
+    needSaveOrderValue && {
       if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
         orderMismatchCastSafety match {
-          case CastSafetyResult.SafeCast => // safe cast, allow
-          case CastSafetyResult.UnsafeCast(inputType, castType) =>
-            throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
-          case CastSafetyResult.NotACast =>
-            throwFunctionAndOrderExpressionMismatchError()
+          case CastSafetyResult.SafeCast => false
+          case _ => true
         }
       } else {
-        throwFunctionAndOrderExpressionMismatchError()
+        true
       }
+    }
+  }
+
+  def throwDistinctOrderError(): Nothing = {
+    if (SQLConf.get.listaggAllowDistinctCastWithOrder) {
+      orderMismatchCastSafety match {
+        case CastSafetyResult.UnsafeCast(inputType, castType) =>
+          throwFunctionAndOrderExpressionUnsafeCastError(inputType, castType)
+        case CastSafetyResult.NotACast =>
+          throwFunctionAndOrderExpressionMismatchError()
+        case CastSafetyResult.SafeCast =>
+          throw SparkException.internalError(
+            "ListAgg.throwDistinctOrderError should not be called when the cast is safe")
+      }
+    } else {
+      throwFunctionAndOrderExpressionMismatchError()
     }
   }
 
@@ -642,7 +657,7 @@ case class ListAgg(
   /**
    * Classifies the order-expression mismatch as a safe cast, unsafe cast, or not a cast.
    *
-   * @see [[validateDistinctOrderCompatibility]] for the full invariant this enforces
+   * @see [[hasDistinctOrderIncompatibility]] for the full invariant this enforces
    */
   private def orderMismatchCastSafety: CastSafetyResult = {
     if (orderExpressions.size != 1) return CastSafetyResult.NotACast
@@ -662,7 +677,7 @@ case class ListAgg(
   /**
    * Returns true if casting `dt` to string/binary is injective for DISTINCT deduplication.
    *
-   * @see [[validateDistinctOrderCompatibility]]
+   * @see [[hasDistinctOrderIncompatibility]]
    */
   private def isCastSafeForDistinct(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
@@ -686,7 +701,7 @@ case class ListAgg(
    * Returns true if the target type's equality semantics are safe for DISTINCT deduplication
    * (i.e., UTF8_BINARY collation or BinaryType).
    *
-   * @see [[validateDistinctOrderCompatibility]]
+   * @see [[hasDistinctOrderIncompatibility]]
    */
   private def isCastTargetSafeForDistinct(dt: DataType): Boolean = dt match {
     case st: StringType => st.isUTF8BinaryCollation
