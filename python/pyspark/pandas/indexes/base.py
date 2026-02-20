@@ -41,10 +41,11 @@ from pandas.api.types import (
     is_object_dtype,
 )
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.column import Column
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -547,7 +548,7 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined]
+            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined, arg-type]
         )
         if copy:
             result = result.copy()
@@ -2370,16 +2371,21 @@ class Index(IndexOpsMixin):
         Returns False for string type.
 
         >>> psidx = ps.Index(["A", "B", "C", "D"])
-        >>> psidx.holds_integer()
+        >>> psidx.holds_integer()  # doctest: +SKIP
         False
 
         Returns False for float type.
 
         >>> psidx = ps.Index([1.1, 2.2, 3.3, 4.4])
-        >>> psidx.holds_integer()
+        >>> psidx.holds_integer()  # doctest: +SKIP
         False
         """
-        return isinstance(self.spark.data_type, IntegralType)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return isinstance(self.spark.data_type, IntegralType)
+        else:
+            raise AttributeError(
+                "The `holds_integer` method is not supported in pandas 3.0.0 and later. "
+            )
 
     def intersection(self, other: Union[DataFrame, Series, "Index", List]) -> "Index":
         """

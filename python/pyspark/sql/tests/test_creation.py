@@ -36,8 +36,8 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

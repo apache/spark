@@ -298,16 +298,14 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     extraOptions: CaseInsensitiveStringMap,
     sourceIdentifyingName: StreamingSourceIdentifyingName
   ): StreamingRelation = {
-    // Set the source identifying name on the CatalogTable so it propagates to StreamingRelation
-    val tableWithSourceName = table.copy(
-      streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, tableWithSourceName)
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
       SparkSession.active,
-      className = tableWithSourceName.provider.get,
-      userSpecifiedSchema = Some(tableWithSourceName.schema),
+      className = table.provider.get,
+      userSpecifiedSchema = Some(table.schema),
       options = dsOptions,
-      catalogTable = Some(tableWithSourceName))
+      catalogTable = Some(table),
+      userSpecifiedStreamingSourceName = Some(sourceIdentifyingName))
     StreamingRelation(dataSource)
   }
 
@@ -344,29 +342,23 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // to preserve the source identifying name. With resolveOperators (bottom-up), the child
     // is processed first but doesn't match the case above due to the !isStreaming guard,
     // so the NamedStreamingRelation case here can match.
-    // We set the sourceIdentifyingName on the CatalogTable so it propagates to StreamingRelation.
+    // We pass the sourceIdentifyingName directly to getStreamingRelation.
     case NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
-      val tableWithSourceName = u.tableMeta.copy(
-        streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-      resolveUnresolvedCatalogRelation(u.copy(tableMeta = tableWithSourceName))
+      getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
 
     // Handle NamedStreamingRelation wrapping SubqueryAlias(UnresolvedCatalogRelation)
     // - this happens when resolving streaming tables from catalogs where the table lookup
     // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
     case NamedStreamingRelation(
         SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
-      val tableWithSourceName = u.tableMeta.copy(
-        streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-      val resolved = resolveUnresolvedCatalogRelation(u.copy(tableMeta = tableWithSourceName))
+      val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
       SubqueryAlias(alias, resolved)
 
     // Fallback for streaming UnresolvedCatalogRelation that is NOT wrapped in
     // NamedStreamingRelation (e.g., from .readStream.table() API path).
-    // The sourceIdentifyingName defaults to Unassigned via
-    // tableMeta.streamingSourceIdentifyingName.getOrElse(Unassigned)
-    // in resolveUnresolvedCatalogRelation.
+    // The sourceIdentifyingName defaults to Unassigned.
     case u: UnresolvedCatalogRelation if u.isStreaming =>
-      resolveUnresolvedCatalogRelation(u)
+      getStreamingRelation(u.tableMeta, u.options, Unassigned)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _,
@@ -392,11 +384,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       case UnresolvedCatalogRelation(tableMeta, _, false) =>
         DDLUtils.readHiveTable(tableMeta)
 
-      // For streaming, the sourceIdentifyingName is read from
-      // tableMeta.streamingSourceIdentifyingName which was set by the caller.
+      // For streaming, the sourceIdentifyingName defaults to Unassigned.
+      // Callers that have a specific sourceIdentifyingName should call
+      // getStreamingRelation directly instead of this method.
       case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-        val sourceIdentifyingName = tableMeta.streamingSourceIdentifyingName.getOrElse(Unassigned)
-        getStreamingRelation(tableMeta, extraOptions, sourceIdentifyingName)
+        getStreamingRelation(tableMeta, extraOptions, Unassigned)
     }
   }
 }

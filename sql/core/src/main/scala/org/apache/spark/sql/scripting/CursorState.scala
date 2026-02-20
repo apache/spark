@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+
 /**
  * Sealed trait representing the lifecycle state of a cursor.
  * State transitions:
@@ -32,25 +35,29 @@ sealed trait CursorState
 case object CursorDeclared extends CursorState
 
 /**
- * Cursor has been opened and query has been parsed/analyzed.
- * For parameterized cursors, the query here has parameters substituted.
+ * Cursor has been opened and result iterator has been created.
  *
- * @param analyzedQuery The analyzed logical plan with parameters bound
+ * CRITICAL: The iterator is created at OPEN time (not first FETCH) to ensure snapshot
+ * semantics. When executeToIterator() is called, Spark performs file discovery and
+ * captures Delta snapshots. This is the ONLY way to lock in the data snapshot at OPEN time.
+ *
+ * The iterator is lazy/incremental - it doesn't materialize all results, but it does
+ * lock in which files/versions will be read.
+ *
+ * @param resultIterator Iterator created at OPEN time (snapshot captured)
+ * @param outputSchema The output attributes (needed for type checking in FETCH)
  */
 case class CursorOpened(
-    analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan) extends CursorState
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
- * Cursor is being fetched from - result iterator is active.
- * Uses executeToIterator() to avoid loading all data into memory at once.
- * Uses InternalRow format to avoid unnecessary conversions.
- *
- * @param analyzedQuery The analyzed logical plan
- * @param resultIterator Iterator over InternalRow results
+ * Cursor is being fetched from - same as CursorOpened but marks that fetching has begun.
+ * We keep this separate state for consistency and potential future use.
  */
 case class CursorFetching(
-    analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
-    resultIterator: Iterator[org.apache.spark.sql.catalyst.InternalRow]) extends CursorState
+    resultIterator: Iterator[InternalRow],
+    outputSchema: Seq[Attribute]) extends CursorState
 
 /**
  * Cursor has been closed and resources released.

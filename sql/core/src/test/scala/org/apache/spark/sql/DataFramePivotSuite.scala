@@ -372,4 +372,29 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
 
     assert(e.getMessage.contains("pivot is not supported on a streaming DataFrames/Datasets"))
   }
+
+  test("SPARK-55483: pivot with null non-atomic pivot column should not throw NPE") {
+    // When the pivot column is a non-atomic type (struct, array), PivotFirst uses a TreeMap
+    // whose comparison-based lookup throws NPE on null keys. Null pivot column values should
+    // be silently ignored since they can never match any declared pivot value.
+    withTempView("struct_pivot_data") {
+      sql(
+        """CREATE OR REPLACE TEMP VIEW struct_pivot_data AS
+          |SELECT * FROM VALUES
+          |  (named_struct('x', 1, 'y', 2), 100),
+          |  (named_struct('x', 3, 'y', 4), 200),
+          |  (CAST(NULL AS STRUCT<x: INT, y: INT>), 300),
+          |  (named_struct('x', 1, 'y', 2), 400)
+          |AS t(key, amount)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM struct_pivot_data
+            |PIVOT (SUM(amount) FOR key IN (
+            |  named_struct('x', 1, 'y', 2) AS k12,
+            |  named_struct('x', 3, 'y', 4) AS k34
+            |))""".stripMargin),
+        Row(500, 200))
+    }
+  }
 }
