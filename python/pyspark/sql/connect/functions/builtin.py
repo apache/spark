@@ -1236,7 +1236,9 @@ def max(col: "ColumnOrName") -> Column:
 max.__doc__ = pysparkfuncs.max.__doc__
 
 
-def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("max_by", col, ord, lit(k))
     return _invoke_function_over_columns("max_by", col, ord)
 
 
@@ -1264,7 +1266,9 @@ def min(col: "ColumnOrName") -> Column:
 min.__doc__ = pysparkfuncs.min.__doc__
 
 
-def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("min_by", col, ord, lit(k))
     return _invoke_function_over_columns("min_by", col, ord)
 
 

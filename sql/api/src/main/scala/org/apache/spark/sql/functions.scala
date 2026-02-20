@@ -939,6 +939,42 @@ object functions {
   def max_by(e: Column, ord: Column): Column = Column.fn("max_by", e, ord)
 
   /**
+   * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
+   *
+   * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def max_by(e: Column, ord: Column, k: Int): Column = Column.fn("max_by", e, ord, lit(k))
+
+  /**
+   * Aggregate function: returns an array of values associated with the top `k` values of `ord`.
+   *
+   * The result array contains values in descending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def max_by(e: Column, ord: Column, k: Column): Column = Column.fn("max_by", e, ord, k)
+
+  /**
    * Aggregate function: returns the average of the values in a group. Alias for avg.
    *
    * @group agg_funcs
@@ -989,6 +1025,44 @@ object functions {
    * @since 3.3.0
    */
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
+
+  /**
+   * Aggregate function: returns an array of values associated with the bottom `k` values of
+   * `ord`.
+   *
+   * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def min_by(e: Column, ord: Column, k: Int): Column = Column.fn("min_by", e, ord, lit(k))
+
+  /**
+   * Aggregate function: returns an array of values associated with the bottom `k` values of
+   * `ord`.
+   *
+   * The result array contains values in ascending order by their associated ordering values.
+   * Returns null if there are no non-null ordering values.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
+   *   ordering expression.
+   * @note
+   *   The maximum value of `k` is 100000.
+   *
+   * @group agg_funcs
+   * @since 4.2.0
+   */
+  def min_by(e: Column, ord: Column, k: Column): Column = Column.fn("min_by", e, ord, k)
 
   /**
    * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
