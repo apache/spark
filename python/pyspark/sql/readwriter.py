@@ -468,7 +468,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -838,7 +838,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -965,7 +965,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 

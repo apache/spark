@@ -819,6 +819,9 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[Measure]("measure"),
+
+    // datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
     expression[ThetaSketchEstimate]("theta_sketch_estimate"),
@@ -838,7 +841,6 @@ object FunctionRegistry {
     expression[TupleSketchThetaInteger]("tuple_sketch_theta_integer"),
     expressionBuilder("tuple_union_double", TupleUnionDoubleExpressionBuilder),
     expressionBuilder("tuple_union_integer", TupleUnionIntegerExpressionBuilder),
-    expression[Measure]("measure"),
     expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
     expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
     expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),

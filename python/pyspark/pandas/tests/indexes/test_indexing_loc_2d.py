@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
+from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 

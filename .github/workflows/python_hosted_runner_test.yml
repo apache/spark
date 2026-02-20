@@ -63,6 +63,7 @@ jobs:
     # timeout-minutes: 150
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -103,7 +104,7 @@ jobs:
       BRANCH: ${{ inputs.branch }}
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -120,7 +121,7 @@ jobs:
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/apache-maven-*
@@ -132,19 +133,19 @@ jobs:
       - name: Cache Coursier local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
           key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
             pyspark-coursier-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python ${{matrix.python}}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{matrix.python}}
           architecture: ${{ inputs.arch }}
@@ -166,20 +167,10 @@ jobs:
             echo "Python Packaging Tests Enabled!"
           fi
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
-      - name: Upload test results to Codecov
-        env: ${{ fromJSON(inputs.envs) }}
-        if: (!cancelled()) && github.repository == 'apache/spark'
-        uses: codecov/codecov-action@v5
-        with:
-          report_type: 'test_results'
-          files: '**/target/test-reports/*.xml'
-          flags: ${{ env.PYTHON_TO_TEST }}-${{ inputs.branch }}-${{ inputs.os }}
-          name: PySpark-Test-Results
-          token: ${{ secrets.codecov_token }}
       - name: Upload test results to report
         env: ${{ fromJSON(inputs.envs) }}
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: |
@@ -188,7 +179,7 @@ jobs:
       - name: Upload unit tests log files
         env: ${{ fromJSON(inputs.envs) }}
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-tests-log-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: "**/target/unit-tests.log"

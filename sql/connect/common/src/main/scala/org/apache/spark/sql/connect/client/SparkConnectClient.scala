@@ -1094,7 +1094,23 @@ object SparkConnectClient {
    */
   private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
       extends ClientInterceptor {
-    metadata.foreach { case (key, value) => assert(key != null && value != null) }
+
+    // Sealed trait for pre-processed metadata entries
+    private sealed trait MetadataEntry
+    private case class AsciiEntry(key: Metadata.Key[String], value: String) extends MetadataEntry
+    private case class BinaryEntry(key: Metadata.Key[Array[Byte]], value: Array[Byte])
+        extends MetadataEntry
+
+    // Pre-process metadata at construction time
+    private val entries: Seq[MetadataEntry] = metadata.map { case (key, value) =>
+      assert(key != null && value != null)
+      if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
+        BinaryEntry(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
+      } else {
+        AsciiEntry(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+      }
+    }.toSeq
 
     override def interceptCall[ReqT, RespT](
         method: MethodDescriptor[ReqT, RespT],
@@ -1105,14 +1121,9 @@ object SparkConnectClient {
         override def start(
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
-          metadata.foreach { case (key, value) =>
-            if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-              // Expects a base64-encoded value string.
-              val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
-              headers.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
-            } else {
-              headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
-            }
+          entries.foreach {
+            case AsciiEntry(key, value) => headers.put(key, value)
+            case BinaryEntry(key, value) => headers.put(key, value)
           }
           super.start(responseListener, headers)
         }

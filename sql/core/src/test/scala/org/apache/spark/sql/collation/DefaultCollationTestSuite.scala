@@ -509,6 +509,33 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  testDataType("ctas with nullif and window function") { dataType =>
+    withTable(testTable1, testTable2) {
+      sql(
+        s"""CREATE TABLE $testTable1 (
+           |  c1 $dataType,
+           |  c2 $dataType
+           |)""".stripMargin)
+
+      sql(s"INSERT INTO $testTable1 VALUES ('livestream', 'A')")
+
+      sql(
+        s"""CREATE TABLE $testTable2
+           |DEFAULT COLLATION UTF8_LCASE
+           |AS
+           |SELECT
+           |  NULLIF(c1, 'LIVESTREAM') AS result,
+           |  ROW_NUMBER() OVER (PARTITION BY c2 ORDER BY c1) AS rownum
+           |FROM $testTable1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $testTable2"),
+        Row("livestream", 1)
+      )
+    }
+  }
+
   testDataType("add column") { dataType =>
     withTable(testTable1) {
       sql(s"CREATE TABLE $testTable1 (c1 $dataType COLLATE UTF8_LCASE)")

@@ -567,7 +567,62 @@ abstract class UnionBase extends LogicalPlan {
 }
 
 /**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
+  /**
+   * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
+   */
+  def unapply(plan: LogicalPlan): Option[UnionBase] = plan match {
+    case u: Union => Some(u)
+    case u: SequentialStreamingUnion => Some(u)
+    case _ => None
+  }
+
+  /**
+   * Returns true if both unions are the same concrete type.
+   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
+   */
+  def isSameType(u1: UnionBase, u2: UnionBase): Boolean = (u1, u2) match {
+    case (_: Union, _: Union) => true
+    case (_: SequentialStreamingUnion, _: SequentialStreamingUnion) => true
+    case _ => false
+  }
+
+  /**
+   * Extracts byName flag from Union or SequentialStreamingUnion.
+   */
+  def byName(u: UnionBase): Boolean = u match {
+    case union: Union => union.byName
+    case ssu: SequentialStreamingUnion => ssu.byName
+  }
+
+  /**
+   * Extracts allowMissingCol flag from Union or SequentialStreamingUnion.
+   */
+  def allowMissingCol(u: UnionBase): Boolean = u match {
+    case union: Union => union.allowMissingCol
+    case ssu: SequentialStreamingUnion => ssu.allowMissingCol
+  }
+
+  /**
+   * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
+   */
+  def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
+    case union: Union => union.copy(children = newChildren)
+    case ssu: SequentialStreamingUnion => ssu.copy(children = newChildren)
+  }
+}
+
+/**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
+ * and their order does not affect the result. This allows Union-specific optimizations to
+ * reorder children (e.g., for performance), unlike SequentialStreamingUnion where order matters.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,

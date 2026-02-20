@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySpa
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -105,6 +106,7 @@ class TransformWithStateInPySparkPythonRunner(
       true
     } else {
       pandasWriter.finalizeCurrentArrowBatch()
+      super[PythonArrowInput].close()
       false
     }
     val deltaData = dataOut.size() - startData
@@ -200,6 +202,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       if (pandasWriter.getTotalNumRowsForBatch > 0) {
         pandasWriter.finalizeCurrentArrowBatch()
       }
+      super[PythonArrowInput].close()
       false
     }
 
@@ -231,6 +234,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   with BasicPythonArrowOutput
   with TransformWithStateInPySparkPythonRunnerUtils
   with Logging {
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
@@ -249,7 +253,6 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
         (if (isUnixDomainSock) stateServerSocketPath else stateServerSocketPort.toString)
     )
 
-  override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
   override def compute(

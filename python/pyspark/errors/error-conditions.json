@@ -1185,6 +1185,11 @@
       "SparkContext or SparkSession should be created first."
     ]
   },
+  "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
+    "message": [
+      "SimpleDataSourceStreamReader.read() returned a non-empty batch but the end offset: <end_offset> did not advance past the start offset: <start_offset>. The end offset must represent the position after the last record returned."
+    ]
+  },
   "SLICE_WITH_STEP": {
     "message": [
       "Slice with step is not supported."

@@ -31,7 +31,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1159,7 +1159,7 @@ class DatasetSuite extends QueryTest
     assert(namedObservation2.get === expected2)
   }
 
-  test("SPARK-55150: observation errors are threw in Obseravtion.get in classic mode") {
+  test("SPARK-55150: observation errors are thrown in Observation.get in classic mode") {
     val observation = Observation("test_observation")
     val observed_df = spark.range(10).observe(
       observation,
@@ -1167,13 +1167,14 @@ class DatasetSuite extends QueryTest
       raise_error(lit("test error")).as("raise_error")
     )
 
-    observed_df.collect()
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
 
-    val exception = intercept[SparkException] {
+    val exception = intercept[SparkRuntimeException] {
       observation.get
     }
 
-    assert(exception.getCause.getMessage.contains("test error"))
+    assert(exception.getMessage.contains("test error"))
   }
 
   test("sample with replacement") {
@@ -2996,6 +2997,48 @@ class DatasetSuite extends QueryTest
 
     val metrics = observation.get
     assert(metrics.isEmpty)
+  }
+
+  test("zipWithIndex should append consecutive 0-based indices") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5)).toDS().repartition(3)
+    val result = ds.zipWithIndex()
+
+    // Index column should be the last column
+    assert(result.columns === Array("_1", "_2", "index"))
+    assert(result.schema.last.dataType === LongType)
+
+    // Indices should be consecutive 0-based
+    val indices = result.collect().map(_.getLong(2)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex with custom column name") {
+    val ds = Seq(1, 2, 3, 4, 5).toDS()
+    val result = ds.zipWithIndex("row_num")
+
+    assert(result.columns === Array("value", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
   }
 }
 

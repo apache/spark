@@ -264,7 +264,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
       .get()
   }
 
@@ -1948,7 +1948,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
       .get
   }
 
@@ -3230,7 +3230,7 @@ class SparkConnectPlanner(
       .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_ == true)
-      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension(extension.getTypeUrl))
     executeHolder.eventsManager.postFinished()
   }
 

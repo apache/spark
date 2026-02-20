@@ -1542,12 +1542,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
-  def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
+  def requiresSinglePartNamespaceError(identifier: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
       messageParameters = Map(
         "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
-        "namespace" -> toSQLId(namespace)))
+        "identifier" -> toSQLId(identifier)))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -4537,6 +4537,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def unsupportedTimeTypeError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_TIME_TYPE",
+      messageParameters = Map.empty)
+  }
+
+  def nestedSequentialStreamingUnionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "NESTED_SEQUENTIAL_STREAMING_UNION",
+      messageParameters = Map(
+        "hint" -> "Use chained followedBy calls instead: df1.followedBy(df2).followedBy(df3)"))
+  }
+
+  def notStreamingDatasetError(operator: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_STREAMING_DATASET",
+      messageParameters = Map("operator" -> operator))
+  }
+
+  def statefulChildrenNotSupportedInSequentialStreamingUnionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION",
       messageParameters = Map.empty)
   }
 }

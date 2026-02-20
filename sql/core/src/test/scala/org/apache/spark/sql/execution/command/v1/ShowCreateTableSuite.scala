@@ -93,7 +93,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY) USING json" +
         s" CLUSTERED BY (a) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -108,7 +108,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY) USING json" +
         s" CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -124,8 +124,8 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
-        s" PARTITIONED BY (c) CLUSTERED BY (a) INTO 2 BUCKETS"
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY," +
+        s" c DECIMAL(2,1)) USING json PARTITIONED BY (c) CLUSTERED BY (a) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
   }
@@ -140,8 +140,9 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
-        s" PARTITIONED BY (c) CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY," +
+        s" c DECIMAL(2,1)) USING json PARTITIONED BY (c) CLUSTERED BY (a) SORTED BY (b)" +
+        s" INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
   }
@@ -186,7 +187,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"CREATE TABLE $fullName (",
         "a BIGINT,",
         "b BIGINT DEFAULT 42,",
-        "c STRING DEFAULT 'abc, \"def\"' COMMENT 'comment')",
+        "c STRING COLLATE UTF8_BINARY DEFAULT 'abc, \"def\"' COMMENT 'comment')",
         "USING parquet",
         "COMMENT 'This is a comment'"
       ))

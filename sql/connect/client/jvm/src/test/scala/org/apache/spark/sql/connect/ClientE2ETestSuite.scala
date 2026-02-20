@@ -31,7 +31,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.ConfigBuilder
@@ -770,6 +770,42 @@ class ClientE2ETestSuite
 
   test("Dataset count") {
     assert(spark.range(10).count() === 10)
+  }
+
+  test("Dataset zipWithIndex") {
+    val df = spark.range(5).repartition(3)
+    val result = df.zipWithIndex()
+    assert(result.columns === Array("id", "index"))
+    assert(result.schema.last.dataType === LongType)
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("Dataset zipWithIndex with custom column name") {
+    val result = spark.range(3).zipWithIndex("row_num")
+    assert(result.columns === Array("id", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === Array(0L, 1L, 2L))
+  }
+
+  test("Dataset zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("Dataset zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
   }
 
   test("Dataset collect tuple") {
@@ -1616,7 +1652,7 @@ class ClientE2ETestSuite
       assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
 
-  test("SPARK-55150: observation errors leads to empty result in connect mode") {
+  test("SPARK-55150: observation errors are propagated to client in connect mode") {
     val observation = Observation("test_observation")
     val observed_df = spark
       .range(10)
@@ -1625,9 +1661,14 @@ class ClientE2ETestSuite
         sum("id").as("sum_id"),
         raise_error(lit("test error")).as("raise_error"))
 
-    observed_df.collect()
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
 
-    assert(observation.get.isEmpty)
+    val exception = intercept[SparkRuntimeException] {
+      observation.get
+    }
+
+    assert(exception.getMessage.contains("test error"))
   }
 
   test("SPARK-48852: trim function on a string column returns correct results") {
