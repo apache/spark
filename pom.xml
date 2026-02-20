@@ -380,17 +380,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>jitpack.io</id>
-      <name>JitPack</name>
-      <url>https://jitpack.io</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -930,9 +919,9 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
-        <artifactId>roaringbitmap</artifactId>
-        <version>1.6.0</version>
+        <groupId>org.roaringbitmap</groupId>
+        <artifactId>RoaringBitmap</artifactId>
+        <version>1.6.10</version>
       </dependency>
       <!-- Netty Begin -->
       <dependency>
