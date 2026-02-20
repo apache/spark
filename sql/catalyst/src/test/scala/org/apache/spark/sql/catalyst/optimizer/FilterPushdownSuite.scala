@@ -204,39 +204,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-47672: Ensure filter pushdown without alias reference does not move a projection.") {
-    val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
-      .where($"a" > 5)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-
-    val correctAnswer = testStringRelation
-      .where($"a" > 5)
-      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-
-  test("SPARK-47672: Inexpensive filter pushdown should not move projections") {
-    val originalQuery = testStringRelation
-      .select($"a" as "c", $"b" + $"a")
-      .where($"c" > 5)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-
-    val correctAnswer = testStringRelation
-      .where($"a" > 5)
-      .select($"a" as "c", $"b" + $"a")
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
+  // Case 3: Filter references expensive to compute references.
   test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f")
@@ -285,6 +253,26 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
       .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Combined case 1, 2, and 3 filter pushdown
+  test("SPARK-47672: Case 1, 2, and 3 make sure we leave up and push down correctly.") {
+    val originalQuery = testStringRelation
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .where($"sum" > 10 && $"diff" < 5 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Both sum and diff are inexpensive (arithmetic), so both pushed
+    // rlike magic is expensive so not pushed.
+    val correctAnswer = testStringRelation
+      .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .where($"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
