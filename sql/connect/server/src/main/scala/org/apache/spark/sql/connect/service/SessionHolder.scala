@@ -230,6 +230,18 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
+   * Returns all active operation IDs for this session.
+   *
+   * @return
+   *   Sequence of operation IDs that are currently active.
+   */
+  private[service] def listActiveOperationIds(): Seq[String] = {
+    activeOperationIds.synchronized {
+      activeOperationIds.toSeq
+    }
+  }
+
+  /**
    * Close an operation in this session by storing its TerminationInfo and removing from active
    * set.
    */

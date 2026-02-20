@@ -483,6 +483,42 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assert(sessionHolder.listInactiveOperations().isEmpty)
   }
 
+  test("listActiveOperationIds returns all active operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val command = proto.Command.newBuilder().build()
+    val executeHolder1 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder3 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    val activeOps = sessionHolder.listActiveOperationIds()
+    assert(activeOps.size == 3)
+    val activeOpIds = activeOps.toSet
+    assert(activeOpIds.contains(executeHolder1.operationId))
+    assert(activeOpIds.contains(executeHolder2.operationId))
+    assert(activeOpIds.contains(executeHolder3.operationId))
+  }
+
+  test("listActiveOperationIds returns empty for new session") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    assert(sessionHolder.listActiveOperationIds().isEmpty)
+  }
+
+  test("listActiveOperationIds excludes closed operations") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val command = proto.Command.newBuilder().build()
+    val executeHolder1 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+
+    sessionHolder.closeOperation(executeHolder1)
+
+    val activeOps = sessionHolder.listActiveOperationIds()
+    assert(activeOps.size == 1)
+    assert(activeOps.contains(executeHolder2.operationId))
+    assert(!activeOps.contains(executeHolder1.operationId))
+  }
+
   test("Pipeline execution cache") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val graphId = "test_graph"
