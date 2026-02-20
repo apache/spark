@@ -3352,7 +3352,7 @@
         <version>2.9.1</version>
         <executions>
           <execution>
-            <phase>package</phase>
+            <phase>none</phase>
             <goals>
               <goal>makeBom</goal>
             </goals>
