@@ -1,4 +1,4 @@
-# Apache Spark - AI Assistant Context
+# Apache Spark
 
 This file provides context and guidelines for AI coding assistants working with the Apache Spark codebase.
 
