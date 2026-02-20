@@ -38,6 +38,9 @@ object SchemaConverters extends Logging {
   /**
    * Converts an Protobuf schema to a corresponding Spark SQL schema.
    *
+   * fullNamesToExtensions is a map from full message names to the field descriptors of their
+   * extensions. It is non-empty when proto2 extension support is enabled.
+   *
    * @since 3.4.0
    */
   private[protobuf] def toSqlType(

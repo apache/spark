@@ -251,7 +251,8 @@ object OffsetSeqMetadata extends Logging {
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true",
     STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "unsaferow",
     STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false",
-    STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1"
+    STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1",
+    PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key -> "false"
   )
 
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
