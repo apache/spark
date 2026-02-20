@@ -430,10 +430,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert not copy
             assert fastpath is no_default
 
-            if LooseVersion(pd.__version__) < "3.0.0":
-                self._anchor = data
-            else:
-                self._anchor = DataFrame(data)
+            self._anchor = data
             self._col_label = index
 
         elif isinstance(data, Series):
