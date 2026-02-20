@@ -271,21 +271,23 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
     num_rows : int
         Expected number of rows (must match input batch size).
     """
-    if not hasattr(result, "__len__"):
+    try:
+        result_length = len(result)
+    except TypeError:
         raise PySparkTypeError(
             errorClass="UDF_RETURN_TYPE",
             messageParameters={
-                "expected": "pyarrow.Array",
+                "expected": "array-like object",
                 "actual": type(result).__name__,
             },
         )
-    if len(result) != num_rows:
+    if result_length != num_rows:
         raise PySparkRuntimeError(
             errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
             messageParameters={
                 "udf_type": "arrow_udf",
                 "expected": str(num_rows),
-                "actual": str(len(result)),
+                "actual": str(result_length),
             },
         )
     return result
@@ -1422,7 +1424,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return func
+        return func, None, None, None
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
@@ -2830,7 +2832,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         import pyarrow as pa
 
         assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
-        udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0]
+        udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0][0]
 
         def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             """Apply mapInArrow UDF"""
