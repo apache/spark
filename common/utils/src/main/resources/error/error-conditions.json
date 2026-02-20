@@ -1675,6 +1675,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "The event time column <eventExpr> must be a top-level column in the schema."
+    ],
+    "sqlState" : "42K09"
+  },
   "EXCEED_LIMIT_LENGTH" : {
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
@@ -5366,7 +5372,7 @@
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+      "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
   },
