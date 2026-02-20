@@ -48,7 +48,10 @@ import org.apache.spark.util.Utils
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
+class HDFSMetadataLog[T <: AnyRef : ClassTag](
+    sparkSession: SparkSession,
+    path: String,
+    readOnly: Boolean = false)
   extends MetadataLog[T] with Logging {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
@@ -66,7 +69,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   protected val fileManager =
     CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
 
-  if (!fileManager.exists(metadataPath)) {
+  // When readOnly is false and the metadata path does not exist, create the directory
+  if (!readOnly && !fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
 
@@ -327,6 +331,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
+    if (!fileManager.exists(metadataPath)) {
+      return Array.empty
+    }
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
       // Batches must be files
       .filter(f => f.isFile)
@@ -351,6 +358,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * @return array of batches ids
    */
   def listBatchesOnDisk: Array[Long] = {
+    if (!fileManager.exists(metadataPath)) {
+      return Array.empty
+    }
     fileManager.list(metadataPath, batchFilesFilter)
       .map(f => pathToBatchId(f.getPath)).sorted
   }

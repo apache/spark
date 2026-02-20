@@ -150,7 +150,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       batchId: Long): Option[Int] = {
     if (storeMetadata.nonEmpty &&
       storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
-      new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
+      new StreamingQueryCheckpointMetadata(session, checkpointLocation, readOnly = true).offsetLog
         .get(batchId)
         .flatMap(_.metadataOpt)
         .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
@@ -178,7 +178,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   private def buildSqlConfForBatch(
       checkpointLocation: String,
       batchId: Long): SQLConf = {
-    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
+    val offsetLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadataOpt.getOrElse(
@@ -764,7 +765,8 @@ object StateSourceOptions extends DataSourceOptions with Logging{
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).commitLog
     commitLog.getLatest() match {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
@@ -776,7 +778,8 @@ object StateSourceOptions extends DataSourceOptions with Logging{
     batchId: Long,
     operatorId: Long,
     checkpointLocation: String): Option[Array[Array[String]]] = {
-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).commitLog
     val commitMetadata = commitLog.get(batchId) match {
       case Some(commitMetadata) => commitMetadata
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
