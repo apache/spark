@@ -4292,7 +4292,7 @@
       },
       "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
         "message" : [
-          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to the function argument and ORDER BY expression."
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {

@@ -115,8 +115,7 @@ class AggregateExpressionResolver(
     }
   }
 
-  private def validateResolvedAggregateExpression(
-    aggregateExpression: AggregateExpression): Unit = {
+  private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
           if agg.isDistinct && listAgg.hasDistinctOrderIncompatibility =>
@@ -135,7 +134,6 @@ class AggregateExpressionResolver(
           }
         }
     }
-  }
 
   /**
    * If the [[AggregateExpression]] has outer references in its subtree, we need to handle it in a
