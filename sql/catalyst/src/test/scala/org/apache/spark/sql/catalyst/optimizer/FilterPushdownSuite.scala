@@ -225,7 +225,7 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-47672: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation
       .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d")
-      .where($"c" > 5 && $"d" < 10)
+      .where($"a" > 5 && $"b" < 10)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
