@@ -61,41 +61,56 @@ case class GroupPartitionsExec(
       case p: Partitioning with Expression =>
         p.transform {
           case k: KeyedPartitioning =>
-            val projectedExpressions = projectExpressions(k.expressions)
-            val projectedDataTypes = projectedExpressions.map(_.dataType)
-            k.copy(expressions = projectedExpressions,
+            val (projectedExpressions, projectedDataTypes) = projectExpressions(k.expressions)
+            val projectedOriginalKeys = joinKeyPositions.fold(k.originalPartitionKeys)(
+              KeyedPartitioning.projectKeys(k.originalPartitionKeys, _, projectedDataTypes))
+            k.copy(
+              expressions = projectedExpressions,
               partitionKeys = groupedPartitions.map(_._1),
-              originalPartitionKeys = projectKeys(k.originalPartitionKeys, projectedDataTypes))
+              originalPartitionKeys = projectedOriginalKeys)
         }.asInstanceOf[Partitioning]
       case o => o
     }
   }
 
-  private def projectExpressions(expressions: Seq[Expression]) = {
-    joinKeyPositions match {
-      case Some(projectionPositions) =>
-        projectionPositions.map(expressions)
-      case _ => expressions
-    }
+  private def projectExpressions(expressions: Seq[Expression]): (Seq[Expression], Seq[DataType]) = {
+    val projectedExpressions = joinKeyPositions.fold(expressions)(_.map(expressions))
+    val projectedDataTypes = projectedExpressions.map(_.dataType)
+
+    (projectedExpressions, projectedDataTypes)
   }
 
-  private def projectKeys(keys: Seq[InternalRow], dataTypes: Seq[DataType]) = {
-    joinKeyPositions match {
-      case Some(projectionPositions) =>
-        keys.map(KeyedPartitioning.projectKey(_, projectionPositions, dataTypes))
-      case _ => keys
+  /**
+   * Distributes partitions based on `commonPartitionKeys` and clustering mode.
+   */
+  private def distributeByCommonKeys(
+      keyWrapperMap: Map[InternalRowComparableWrapper, Seq[Int]],
+      comparableWrapperFactory: InternalRow => InternalRowComparableWrapper
+  ): Seq[(InternalRow, Seq[Int])] = {
+    commonPartitionKeys.get.flatMap { case (key, numSplits) =>
+      val splits = keyWrapperMap.getOrElse(comparableWrapperFactory(key), Seq.empty)
+      if (applyPartialClustering && !replicatePartitions) {
+        // Distribute splits across expected partitions, padding with empty sequences
+        val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
+        paddedSplits.map((key, _))
+      } else {
+        // Replicate all splits to each expected partition
+        Seq.fill(numSplits)((key, splits))
+      }
     }
   }
 
   /**
-   * Extracts the first KeyedPartitioning from the child's output partitioning.
-   * The child must have a KeyedPartitioning in its partitioning scheme.
+   * Groups and sorts partitions by their keys in ascending order.
    */
-  lazy val firstKeyedPartitioning = {
-    child.outputPartitioning.asInstanceOf[Partitioning with Expression].collectFirst {
-      case k: KeyedPartitioning => k
-    }.getOrElse(
-      throw new SparkException("GroupPartitionsExec requires a child with KeyedPartitioning"))
+  private def groupAndSortByKeys(
+      keyWrapperMap: Map[InternalRowComparableWrapper, Seq[Int]],
+      dataTypes: Seq[DataType]
+  ): Seq[(InternalRow, Seq[Int])] = {
+    val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+    keyWrapperMap.toSeq
+      .map { case (keyWrapper, indices) => (keyWrapper.row, indices) }
+      .sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
   }
 
   /**
@@ -109,54 +124,46 @@ case class GroupPartitionsExec(
    * how input partitions should be grouped together.
    */
   lazy val groupedPartitions: Seq[(InternalRow, Seq[Int])] = {
-    // Also sort the input partitions according to their partition key order. This ensures
-    // a canonical order from both sides of a bucketed join, for example.
+    // Extract the KeyedPartitioning from child's output partitioning
+    val keyedPartitioning = child.outputPartitioning
+      .asInstanceOf[Partitioning with Expression]
+      .collectFirst { case k: KeyedPartitioning => k }
+      .getOrElse(
+        throw new SparkException("GroupPartitionsExec requires a child with KeyedPartitioning"))
 
-    val (projectedDataTypes, projectedKeys) =
-      joinKeyPositions match {
-        case Some(projectionPositions) =>
-          val projectedDataTypes =
-            projectExpressions(firstKeyedPartitioning.expressions).map(_.dataType)
-          val projectedKeys = firstKeyedPartitioning.partitionKeys
-            .map(KeyedPartitioning.projectKey(_, projectionPositions, projectedDataTypes))
-          (projectedDataTypes, projectedKeys)
+    // Project partition keys if join key positions are specified
+    val (projectedDataTypes, projectedKeys) = joinKeyPositions match {
+      case Some(positions) =>
+        val (projectedExpressions, projectedDataTypes) =
+          projectExpressions(keyedPartitioning.expressions)
+        val projectedKeys = KeyedPartitioning.projectKeys(
+          keyedPartitioning.partitionKeys, positions, projectedDataTypes)
+        (projectedDataTypes, projectedKeys)
 
-        case _ =>
-          val dataTypes = firstKeyedPartitioning.expressions.map(_.dataType)
-          (dataTypes, firstKeyedPartitioning.partitionKeys)
-      }
-
-    val reducedKeys = reducers match {
-      case Some(reducers) =>
-        projectedKeys.map(KeyedPartitioning.reduceKey(_, reducers, projectedDataTypes))
-      case _ => projectedKeys
+      case None =>
+        val dataTypes = keyedPartitioning.expressions.map(_.dataType)
+        (dataTypes, keyedPartitioning.partitionKeys)
     }
 
-    val internalRowComparableWrapperFactory =
+    // Reduce keys if reducers are specified
+    val reducedKeys = reducers match {
+      case Some(reducers) =>
+        KeyedPartitioning.reduceKeys(projectedKeys, reducers, projectedDataTypes)
+      case None => projectedKeys
+    }
+
+    // Create map from partition keys to their indices
+    val comparableWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
 
-    val map = reducedKeys.zipWithIndex.groupMap {
-      case (key, _) => internalRowComparableWrapperFactory(key)
+    val keyWrapperToPartitionIndices = reducedKeys.zipWithIndex.groupMap {
+      case (key, _) => comparableWrapperFactory(key)
     }(_._2)
 
-    // When partially clustered, the input partitions are not grouped by partition
-    // values. Here we'll need to check `commonPartitionKeys` and decide how to group
-    // and replicate splits within a partition.
     if (commonPartitionKeys.isDefined) {
-      commonPartitionKeys.get.flatMap { case (key, numSplits) =>
-        val splits = map.getOrElse(internalRowComparableWrapperFactory(key), Seq.empty)
-        if (applyPartialClustering && !replicatePartitions) {
-          val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
-          paddedSplits.map((key, _))
-        } else {
-          Seq.fill(numSplits)((key, splits))
-        }
-      }
+      distributeByCommonKeys(keyWrapperToPartitionIndices, comparableWrapperFactory)
     } else {
-      val rowOrdering = RowOrdering.createNaturalAscendingOrdering(projectedDataTypes)
-      map.toSeq
-        .map { case (keyWrapper, v) => (keyWrapper.row, v) }
-        .sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+      groupAndSortByKeys(keyWrapperToPartitionIndices, projectedDataTypes)
     }
   }
 

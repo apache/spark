@@ -548,6 +548,16 @@ object KeyedPartitioning {
     new GenericInternalRow(projectedKey)
   }
 
+  /**
+   * Projects a sequence of partition keys by selecting only the specified positions.
+   */
+  def projectKeys(
+      keys: Seq[InternalRow],
+      positions: Seq[Int],
+      dataTypes: Seq[DataType]): Seq[InternalRow] = {
+    keys.map(projectKey(_, positions, dataTypes))
+  }
+
   def reduceKey(
       key: InternalRow,
       reducers: Seq[Option[Reducer[_, _]]],
@@ -558,6 +568,16 @@ object KeyedPartitioning {
       case (v, _) => v
     }.toArray
     new GenericInternalRow(reducedKey)
+  }
+
+  /**
+   * Reduces a sequence of partition keys by applying reducers to each position.
+   */
+  def reduceKeys(
+      keys: Seq[InternalRow],
+      reducers: Seq[Option[Reducer[_, _]]],
+      dataTypes: Seq[DataType]): Seq[InternalRow] = {
+    keys.map(reduceKey(_, reducers, dataTypes))
   }
 }
 

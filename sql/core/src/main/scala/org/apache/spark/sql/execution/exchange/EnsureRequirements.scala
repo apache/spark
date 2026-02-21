@@ -499,15 +499,15 @@ case class EnsureRequirements(
       // just push the common set of partition values: `[0, 1, 2, 3]` down to the two data
       // sources.
       if (isCompatible) {
-        val leftPartValues = leftSpec.partitioning.partitionKeys
-        val rightPartValues = rightSpec.partitioning.partitionKeys
+        val leftPartKeys = leftSpec.partitioning.partitionKeys
+        val rightPartKeys = rightSpec.partitioning.partitionKeys
 
-        val numLeftPartValues = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartValues.size)
-        val numRightPartValues = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartValues.size)
+        val numLeftPartKeys = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartKeys.size)
+        val numRightPartKeys = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartKeys.size)
         logInfo(
           log"""
-              |Left side # of partitions: $numLeftPartValues
-              |Right side # of partitions: $numRightPartValues
+              |Left side # of partitions: $numLeftPartKeys
+              |Right side # of partitions: $numRightPartKeys
               |""".stripMargin)
 
         // As partition keys are compatible, we can pick either left or right as partition
@@ -517,20 +517,20 @@ case class EnsureRequirements(
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
         val leftReducers = leftSpec.reducers(rightSpec)
-        val leftParts = reducePartValues(leftSpec.partitioning.partitionKeys,
+        val leftParts = reducePartitionKeys(leftSpec.partitioning.partitionKeys,
           partitionExprs,
           leftReducers)
         val rightReducers = rightSpec.reducers(leftSpec)
-        val rightParts = reducePartValues(rightSpec.partitioning.partitionKeys,
+        val rightParts = reducePartitionKeys(rightSpec.partitioning.partitionKeys,
           partitionExprs,
           rightReducers)
 
         // merge values on both sides
-        var mergedPartValues = mergePartitions(leftParts, rightParts, partitionExprs, joinType)
+        var mergedPartitionKeys = mergePartitions(leftParts, rightParts, partitionExprs, joinType)
             .map(v => (v, 1))
 
         logInfo(log"After merging, there are " +
-          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.size)} partitions")
+          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartitionKeys.size)} partitions")
 
         var replicateLeftSide = false
         var replicateRightSide = false
@@ -588,7 +588,7 @@ case class EnsureRequirements(
               // to apply the grouping & replication of partitions
               logInfo("Using number of partitions to determine which side of join " +
                   "to fully cluster partition values")
-              leftPartValues.size < rightPartValues.size
+              leftPartKeys.size < rightPartKeys.size
             }
 
             replicateRightSide = !replicateLeftSide
@@ -616,24 +616,24 @@ case class EnsureRequirements(
 
               val numExpectedPartitions = originalPartitionKeys
                 .groupBy(internalRowComparableWrapperFactory)
-                .transform((_, v) => v.size)
+                .view.mapValues(_.size)
 
-              mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
-                (partVal, numExpectedPartitions.getOrElse(
-                  internalRowComparableWrapperFactory(partVal), numParts))
+              mergedPartitionKeys = mergedPartitionKeys.map { case (key, numParts) =>
+                (key, numExpectedPartitions.getOrElse(
+                  internalRowComparableWrapperFactory(key), numParts))
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +
-                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.map(_._2).sum)} partitions.")
+                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartitionKeys.map(_._2).sum)} partitions.")
               applyPartialClustering = true
             }
           }
         }
 
         // Now we need to push-down the common partition information to the scan in each child
-        newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, mergedPartValues,
+        newLeft = applyGroupPartitions(left, leftSpec.joinKeyPositions, mergedPartitionKeys,
           leftReducers, applyPartialClustering, replicateLeftSide)
-        newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, mergedPartValues,
+        newRight = applyGroupPartitions(right, rightSpec.joinKeyPositions, mergedPartitionKeys,
           rightReducers, applyPartialClustering, replicateRightSide)
       }
     }
@@ -683,7 +683,7 @@ case class EnsureRequirements(
   private def applyGroupPartitions(
       plan: SparkPlan,
       joinKeyPositions: Option[Seq[Int]],
-      mergedPartValues: Seq[(InternalRow, Int)],
+      mergedPartitionKeys: Seq[(InternalRow, Int)],
       reducers: Option[Seq[Option[Reducer[_, _]]]],
       applyPartialClustering: Boolean,
       replicatePartitions: Boolean): SparkPlan = {
@@ -691,12 +691,12 @@ case class EnsureRequirements(
       case g: GroupPartitionsExec =>
         g.copy(
           joinKeyPositions = joinKeyPositions,
-          commonPartitionKeys = Some(mergedPartValues),
+          commonPartitionKeys = Some(mergedPartitionKeys),
           reducers = reducers,
           applyPartialClustering = applyPartialClustering,
           replicatePartitions = replicatePartitions)
       case _ =>
-        GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartValues), reducers,
+        GroupPartitionsExec(plan, joinKeyPositions, Some(mergedPartitionKeys), reducers,
           applyPartialClustering, replicatePartitions)
     }
   }
@@ -711,21 +711,18 @@ case class EnsureRequirements(
     }
   }
 
-  private def reducePartValues(
-      partValues: Seq[InternalRow],
+  private def reducePartitionKeys(
+      partitionKeys: Seq[InternalRow],
       expressions: Seq[Expression],
       reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
       case Some(reducers) =>
-        val partitionDataTypes = expressions.map(_.dataType)
+        val dataTypes = expressions.map(_.dataType)
         val internalRowComparableWrapperFactory =
-          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
-            partitionDataTypes)
-        partValues.map { row =>
-          KeyGroupedShuffleSpec.reducePartitionKey(
-            row, reducers, partitionDataTypes, internalRowComparableWrapperFactory)
-        }.distinct.map(_.row)
-      case _ => partValues
+          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+        KeyedPartitioning.reduceKeys(partitionKeys, reducers, dataTypes)
+          .distinctBy(internalRowComparableWrapperFactory)
+      case _ => partitionKeys
     }
   }
 
