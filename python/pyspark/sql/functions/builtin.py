@@ -1329,16 +1329,22 @@ def min(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
     """
-    Returns the value from the `col` parameter that is associated with the maximum value
+    Returns the value(s) from the `col` parameter that are associated with the maximum value(s)
     from the `ord` parameter. This function is often used to find the `col` parameter value
     corresponding to the maximum `ord` parameter value within each group when used with groupBy().
+
+    When `k` is specified, returns an array of up to `k` values associated with the top `k`
+    maximum values from `ord`.
 
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added optional `k` parameter to return top-k values.
 
     Notes
     -----
@@ -1353,12 +1359,16 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be maximized. This could be the column instance
         or the column name as string.
+    k : int, optional
+        If specified, returns an array of up to `k` values associated with the top `k`
+        maximum ordering values, sorted in descending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         A column object representing the value from `col` that is associated with
-        the maximum value from `ord`.
+        the maximum value from `ord`. If `k` is specified, returns an array of values.
 
     Examples
     --------
@@ -1410,21 +1420,42 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Consult|                      Henry|
     |   Finance|                     George|
     +----------+---------------------------+
+
+    Example 4: Using `max_by` with `k` to get top-k values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
+    ...     schema=("x", "y"))
+    >>> df.select(sf.max_by("x", "y", 2)).show()
+    +---------------+
+    |max_by(x, y, 2)|
+    +---------------+
+    |         [b, d]|
+    +---------------+
     """
+    if k is not None:
+        return _invoke_function_over_columns("max_by", col, ord, lit(k))
     return _invoke_function_over_columns("max_by", col, ord)
 
 
 @_try_remote_functions
-def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
     """
-    Returns the value from the `col` parameter that is associated with the minimum value
+    Returns the value(s) from the `col` parameter that are associated with the minimum value(s)
     from the `ord` parameter. This function is often used to find the `col` parameter value
     corresponding to the minimum `ord` parameter value within each group when used with groupBy().
+
+    When `k` is specified, returns an array of up to `k` values associated with the bottom `k`
+    minimum values from `ord`.
 
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added optional `k` parameter to return bottom-k values.
 
     Notes
     -----
@@ -1439,12 +1470,16 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be minimized. This could be the column instance
         or the column name as string.
+    k : int, optional
+        If specified, returns an array of up to `k` values associated with the bottom `k`
+        minimum ordering values, sorted in ascending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         Column object that represents the value from `col` associated with
-        the minimum value from `ord`.
+        the minimum value from `ord`. If `k` is specified, returns an array of values.
 
     Examples
     --------
@@ -1496,7 +1531,22 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Consult|                        Eva|
     |   Finance|                      Frank|
     +----------+---------------------------+
+
+    Example 4: Using `min_by` with `k` to get bottom-k values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
+    ...     schema=("x", "y"))
+    >>> df.select(sf.min_by("x", "y", 2)).show()
+    +---------------+
+    |min_by(x, y, 2)|
+    +---------------+
+    |         [a, c]|
+    +---------------+
     """
+    if k is not None:
+        return _invoke_function_over_columns("min_by", col, ord, lit(k))
     return _invoke_function_over_columns("min_by", col, ord)
 
 

@@ -3654,6 +3654,48 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
 
+    def test_max_by_min_by_with_k(self):
+        """Test max_by and min_by aggregate functions with k parameter"""
+        df = self.spark.createDataFrame(
+            [("a", 10), ("b", 50), ("c", 20), ("d", 40), ("e", 30)],
+            schema=("x", "y"),
+        )
+
+        # Test max_by with k
+        result = df.select(F.max_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["b", "d", "e"])
+
+        # Test min_by with k
+        result = df.select(F.min_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["a", "c", "e"])
+
+        # Test k = 1
+        result = df.select(F.max_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["b"])
+
+        result = df.select(F.min_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["a"])
+
+        # Test k larger than row count
+        result = df.select(F.max_by("x", "y", 10)).collect()[0][0]
+        self.assertEqual(sorted(result), ["a", "b", "c", "d", "e"])
+
+        # Test with groupBy
+        df2 = self.spark.createDataFrame(
+            [
+                ("Eng", "Alice", 120000),
+                ("Eng", "Bob", 95000),
+                ("Eng", "Carol", 110000),
+                ("Sales", "Dave", 80000),
+                ("Sales", "Eve", 75000),
+                ("Sales", "Frank", 85000),
+            ],
+            schema=("dept", "emp", "salary"),
+        )
+        result = df2.groupBy("dept").agg(F.max_by("emp", "salary", 2)).orderBy("dept").collect()
+        self.assertEqual(result[0][1], ["Alice", "Carol"])  # Eng
+        self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass

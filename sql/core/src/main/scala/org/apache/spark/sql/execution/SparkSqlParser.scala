@@ -698,12 +698,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        val tableIdentifier = ident.asTableIdentifier
-        if (tableIdentifier.database.isDefined) {
+        if (ident.length > 1) {
           // Temporary view names should NOT contain database prefix like "database.table"
           throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
+            .notAllowedToAddDBPrefixForTempViewError(ident, ctx)
         }
+        val tableIdentifier = TableIdentifier(ident.head)
 
         CreateViewCommand(
           tableIdentifier,
