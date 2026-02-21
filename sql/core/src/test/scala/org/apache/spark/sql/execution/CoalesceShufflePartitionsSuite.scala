@@ -380,7 +380,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   test("SPARK-55461 adaptive query execution works correctly with broadcast hash join and union") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       import spark.implicits._
-      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
       val df00 = spark.range(0, 1000, 2)
@@ -398,7 +397,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
       val unionDF = df00.join(df01, Array("key1", "value1"), "left_outer")
         .union(df10.join(df11, Array("key2", "value2"), "left_outer"))
       // Adding equi-join to trigger BHJ
-      df20.join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
+      df20.hint("broadcast").join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
         .write
         .format("noop")
         .mode("overwrite")
@@ -411,7 +410,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     "nested union and non-skewed smj") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       import spark.implicits._
-      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
       val df00 = spark.range(0, 1000, 2)
@@ -425,7 +423,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
 
       val unionDF = df00.join(df01, Array("key1", "value1"), "left_outer")
         .union(df10.groupBy("key2").count())
-      val result = df20.join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
+      val result = df20.hint("broadcast")
+        .join(unionDF, $"key1" === $"key2" && $"value1" === $"value2")
         .count()
       assert(result == 5, s"Query result should be 5 (expected) but $result (actual)")
     }

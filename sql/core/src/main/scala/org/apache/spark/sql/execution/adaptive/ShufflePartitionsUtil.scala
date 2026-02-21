@@ -103,7 +103,7 @@ object ShufflePartitionsUtil extends Logging {
     }
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
-    val newPartitionSpecs = coalescePartitionsGetSpecs(
+    val newPartitionSpecs = coalescePartitionsAndGetSpecs(
       0, numPartitions, validMetrics, targetSize, minPartitionSize)
     if (newPartitionSpecs.length < numPartitions) {
       attachDataSize(mapOutputStatistics, newPartitionSpecs)
@@ -160,7 +160,7 @@ object ShufflePartitionsUtil extends Logging {
         val repeatValue = partitionIndices(i)
         // coalesce any partitions before partition(i - 1) and after the end of latest skew section.
         if (i - 1 > start) {
-          val partitionSpecs = coalescePartitionsGetSpecs(
+          val partitionSpecs = coalescePartitionsAndGetSpecs(
             partitionIndices(start),
             repeatValue,
             validMetrics,
@@ -191,7 +191,7 @@ object ShufflePartitionsUtil extends Logging {
     }
     // coalesce any partitions after the end of last skew section.
     if (numPartitions > start) {
-      val partitionSpecs = coalescePartitionsGetSpecs(
+      val partitionSpecs = coalescePartitionsAndGetSpecs(
         partitionIndices(start),
         partitionIndices.last + 1,
         validMetrics,
@@ -241,7 +241,7 @@ object ShufflePartitionsUtil extends Logging {
    *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
    *          CoalescedPartitionSpec(3, 5).
    */
-  private def coalescePartitionsGetSpecs(
+  private def coalescePartitionsAndGetSpecs(
       start: Int,
       end: Int,
       mapOutputStatistics: Seq[MapOutputStatistics],
