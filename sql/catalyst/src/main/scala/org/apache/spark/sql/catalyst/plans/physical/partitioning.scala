@@ -424,33 +424,25 @@ case class KeyedPartitioning(
   }
 
   def toGrouped: KeyedPartitioning = {
-    val groupedPartitions = partitionKeys
-      .map(comparableWrapperFactory)
-      .distinct
-      .map(_.row)
-      .sorted(rowOrdering)
+    val distinctSortedPartitionKeys =
+      partitionKeys.distinctBy(comparableWrapperFactory).sorted(rowOrdering)
 
-    KeyedPartitioning(expressions, groupedPartitions, originalPartitionKeys)
+    KeyedPartitioning(expressions, distinctSortedPartitionKeys, originalPartitionKeys)
   }
 
-  def projectAndGroup(positions: Seq[Int]): KeyedPartitioning = {
+  /**
+   * Projects this partitioning's expressions by selecting only the specified positions.
+   * Returns both the projected expressions and their data types.
+   */
+  def projectKeys(positions: Seq[Int]):
+      (Seq[Expression], Seq[DataType], Seq[InternalRow], Seq[InternalRow]) = {
     val projectedExpressions = positions.map(expressions)
     val projectedDataTypes = projectedExpressions.map(_.dataType)
-    val projectedPartitionKeys = partitionKeys.map(
-      KeyedPartitioning.projectKey(_, positions, projectedDataTypes)
-    )
-    val projectedOriginalPartitionKeys = originalPartitionKeys.map(
-      KeyedPartitioning.projectKey(_, positions, projectedDataTypes)
-    )
-    val internalRowComparableWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-    val distinctPartitionKeys = projectedPartitionKeys
-      .map(internalRowComparableWrapperFactory)
-      .distinct
-      .map(_.row)
+    val projectedKeys = KeyedPartitioning.projectKeys(partitionKeys, positions, projectedDataTypes)
+    val projectedOriginalKeys =
+      KeyedPartitioning.projectKeys(originalPartitionKeys, positions, projectedDataTypes)
 
-    copy(expressions = projectedExpressions, partitionKeys = distinctPartitionKeys,
-      originalPartitionKeys = projectedOriginalPartitionKeys)
+    (projectedExpressions, projectedDataTypes, projectedKeys, projectedOriginalKeys)
   }
 
   override def satisfies0(required: Distribution): Boolean = {
@@ -491,7 +483,13 @@ case class KeyedPartitioning(
       // `KeyedPartitioning` here that is grouped on the join keys instead, and use that as
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
-      val projectedPartitioning = projectAndGroup(joinKeyPositions)
+      val (projectedExpressions, projectedDataTypes, projectedKeys, projectedOriginalKeys) =
+        projectKeys(joinKeyPositions)
+      val projectedComparableWrapperFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
+      val distinctPartitionKeys = projectedKeys.distinctBy(projectedComparableWrapperFactory)
+      val projectedPartitioning = copy(expressions = projectedExpressions,
+        partitionKeys = distinctPartitionKeys, originalPartitionKeys = projectedOriginalKeys)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
@@ -1051,22 +1049,6 @@ case class KeyGroupedShuffleSpec(
     }
     KeyedPartitioning(newExpressions, partitioning.partitionKeys,
       partitioning.originalPartitionKeys)
-  }
-}
-
-object KeyGroupedShuffleSpec {
-  def reducePartitionKey(
-      row: InternalRow,
-      reducers: Seq[Option[Reducer[_, _]]],
-      dataTypes: Seq[DataType],
-      internalRowComparableWrapperFactory: InternalRow => InternalRowComparableWrapper
-  ): InternalRowComparableWrapper = {
-    val partitionKeys = row.toSeq(dataTypes)
-    val reducedRow = partitionKeys.zip(reducers).map{
-      case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
-      case (v, _) => v
-    }.toArray
-    internalRowComparableWrapperFactory(new GenericInternalRow(reducedRow))
   }
 }
 

@@ -61,9 +61,7 @@ case class GroupPartitionsExec(
       case p: Partitioning with Expression =>
         p.transform {
           case k: KeyedPartitioning =>
-            val (projectedExpressions, projectedDataTypes) = projectExpressions(k.expressions)
-            val projectedOriginalKeys = joinKeyPositions.fold(k.originalPartitionKeys)(
-              KeyedPartitioning.projectKeys(k.originalPartitionKeys, _, projectedDataTypes))
+            val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
             k.copy(
               expressions = projectedExpressions,
               partitionKeys = groupedPartitions.map(_._1),
@@ -71,13 +69,6 @@ case class GroupPartitionsExec(
         }.asInstanceOf[Partitioning]
       case o => o
     }
-  }
-
-  private def projectExpressions(expressions: Seq[Expression]): (Seq[Expression], Seq[DataType]) = {
-    val projectedExpressions = joinKeyPositions.fold(expressions)(_.map(expressions))
-    val projectedDataTypes = projectedExpressions.map(_.dataType)
-
-    (projectedExpressions, projectedDataTypes)
   }
 
   /**
@@ -123,7 +114,7 @@ case class GroupPartitionsExec(
    * Returns a sequence of (partitionKey, inputPartitionIndices) pairs representing
    * how input partitions should be grouped together.
    */
-  lazy val groupedPartitions: Seq[(InternalRow, Seq[Int])] = {
+  lazy val (groupedPartitions, projectedOriginalKeys) = {
     // Extract the KeyedPartitioning from child's output partitioning
     val keyedPartitioning = child.outputPartitioning
       .asInstanceOf[Partitioning with Expression]
@@ -132,18 +123,16 @@ case class GroupPartitionsExec(
         throw new SparkException("GroupPartitionsExec requires a child with KeyedPartitioning"))
 
     // Project partition keys if join key positions are specified
-    val (projectedDataTypes, projectedKeys) = joinKeyPositions match {
-      case Some(positions) =>
-        val (projectedExpressions, projectedDataTypes) =
-          projectExpressions(keyedPartitioning.expressions)
-        val projectedKeys = KeyedPartitioning.projectKeys(
-          keyedPartitioning.partitionKeys, positions, projectedDataTypes)
-        (projectedDataTypes, projectedKeys)
-
-      case None =>
-        val dataTypes = keyedPartitioning.expressions.map(_.dataType)
-        (dataTypes, keyedPartitioning.partitionKeys)
-    }
+    val (projectedDataTypes, projectedKeys, projectedOriginalKeys) =
+      joinKeyPositions match {
+        case Some(positions) =>
+          val (_, projectedDataTypes, projectedKeys, projectedOriginalKeys) =
+            keyedPartitioning.projectKeys(positions)
+          (projectedDataTypes, projectedKeys, projectedOriginalKeys)
+        case None =>
+          val dataTypes = keyedPartitioning.expressions.map(_.dataType)
+          (dataTypes, keyedPartitioning.partitionKeys, keyedPartitioning.originalPartitionKeys)
+      }
 
     // Reduce keys if reducers are specified
     val reducedKeys = reducers match {
@@ -160,11 +149,13 @@ case class GroupPartitionsExec(
       case (key, _) => comparableWrapperFactory(key)
     }(_._2)
 
-    if (commonPartitionKeys.isDefined) {
+    val groupedPartitions = if (commonPartitionKeys.isDefined) {
       distributeByCommonKeys(keyWrapperToPartitionIndices, comparableWrapperFactory)
     } else {
       groupAndSortByKeys(keyWrapperToPartitionIndices, projectedDataTypes)
     }
+
+    (groupedPartitions, projectedOriginalKeys)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
