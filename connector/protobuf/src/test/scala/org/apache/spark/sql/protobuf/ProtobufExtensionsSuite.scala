@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.protobuf
 
-import com.google.protobuf.DynamicMessage
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet
+import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
