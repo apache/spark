@@ -86,4 +86,28 @@ class DataSourceV2SQLSessionCatalogSuite
       sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),
       Row(5, 5))
   }
+
+  test("SPARK-55024: metadata tables like Iceberg work with multi-part identifiers") {
+    // This test simulates Iceberg's metadata table pattern where you can query
+    // db.table.snapshots to get table snapshot/commit information.
+    // The identifier for "default.table.snapshots" is:
+    //   namespace = ["default", "table"], name = "snapshots"
+    val t1 = "metadata_test_tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'first')")
+      sql(s"INSERT INTO $t1 VALUES (2, 'second')")
+      sql(s"INSERT INTO $t1 VALUES (3, 'third')")
+
+      // Query the metadata table using multi-part identifier
+      val snapshots = sql(s"SELECT * FROM default.$t1.snapshots")
+
+      // Should have 3 commits (one per INSERT)
+      assert(snapshots.count() == 3, "Should have 3 snapshots from 3 inserts")
+      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
+        s"Expected schema [committed_at, snapshot_id], got: ${snapshots.schema.fieldNames.toSeq}")
+      val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
+      assert(snapshotIds.forall(_ > 0), "All snapshot IDs should be positive timestamps")
+    }
+  }
 }

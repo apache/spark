@@ -108,6 +108,19 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
   }
 
   override def loadTable(ident: Identifier): Table = {
+    // Check for metadata table pattern: namespace = [db, tableName], name = "snapshots"
+    // This simulates how Iceberg handles metadata tables like db.table.snapshots
+    if (ident.name() == "snapshots" && ident.namespace().length >= 1) {
+      val parentTableName = ident.namespace().last
+      val parentNamespace = ident.namespace().dropRight(1)
+      val parentIdent = Identifier.of(
+        if (parentNamespace.isEmpty) Array("default") else parentNamespace,
+        parentTableName)
+
+      val parentTable = super.loadTable(parentIdent).asInstanceOf[InMemoryTable]
+      return new InMemorySnapshotsTable(parentTable)
+    }
+
     val identToUse = Option(InMemoryTableSessionCatalog.customIdentifierResolution)
       .map(_(ident))
       .getOrElse(ident)
