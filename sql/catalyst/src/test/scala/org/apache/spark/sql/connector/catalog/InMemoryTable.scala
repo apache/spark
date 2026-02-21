@@ -266,7 +266,7 @@ object InMemoryTable {
 
 /**
  * A metadata table that returns snapshot (commit) information for a parent table.
- * Simulates data source metadata tables like Iceberg's db.table.snapshots.
+ * Simulates data source tables with multi-part identifiers, ex Iceberg's db.table.snapshots.
  */
 class InMemorySnapshotsTable(parentTable: InMemoryTable) extends Table with SupportsRead {
   override def name(): String = parentTable.name + ".snapshots"

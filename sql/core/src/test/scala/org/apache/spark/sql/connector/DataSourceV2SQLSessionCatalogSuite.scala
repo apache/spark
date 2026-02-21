@@ -87,27 +87,33 @@ class DataSourceV2SQLSessionCatalogSuite
       Row(5, 5))
   }
 
-  test("SPARK-55024: metadata tables like Iceberg work with multi-part identifiers") {
-    // This test simulates Iceberg's metadata table pattern where you can query
-    // db.table.snapshots to get table snapshot/commit information.
-    // The identifier for "default.table.snapshots" is:
-    //   namespace = ["default", "table"], name = "snapshots"
+  test("SPARK-55024: data source tables with multi-part identifiers") {
+    // This test querying data source tables with multi part identifiers,
+    // with the example of Iceberg's metadata table, eg db.table.snapshots
     val t1 = "metadata_test_tbl"
+
+    def verify(snapshots: DataFrame, queryDesc: String): Unit = {
+      assert(snapshots.count() == 3,
+        s"$queryDesc: expected 3 snapshots")
+      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
+        s"$queryDesc: expected schema [committed_at, snapshot_id], " +
+          s"got: ${snapshots.schema.fieldNames.toSeq}")
+      val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
+      assert(snapshotIds.forall(_ > 0),
+        s"$queryDesc: all snapshot IDs should be positive, got: ${snapshotIds.toSeq}")
+    }
+
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       sql(s"INSERT INTO $t1 VALUES (1, 'first')")
       sql(s"INSERT INTO $t1 VALUES (2, 'second')")
       sql(s"INSERT INTO $t1 VALUES (3, 'third')")
 
-      // Query the metadata table using multi-part identifier
-      val snapshots = sql(s"SELECT * FROM default.$t1.snapshots")
-
-      // Should have 3 commits (one per INSERT)
-      assert(snapshots.count() == 3, "Should have 3 snapshots from 3 inserts")
-      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
-        s"Expected schema [committed_at, snapshot_id], got: ${snapshots.schema.fieldNames.toSeq}")
-      val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
-      assert(snapshotIds.forall(_ > 0), "All snapshot IDs should be positive timestamps")
+      verify(sql(s"SELECT * FROM $t1.snapshots"), "table.snapshots")
+      verify(sql(s"SELECT * FROM default.$t1.snapshots"), "default.table.snapshots")
+      verify(
+        sql(s"SELECT * FROM spark_catalog.default.$t1.snapshots"),
+        "spark_catalog.default.table.snapshots")
     }
   }
 }
