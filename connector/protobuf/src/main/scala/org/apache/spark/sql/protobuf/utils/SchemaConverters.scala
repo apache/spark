@@ -67,6 +67,8 @@ object SchemaConverters extends Logging {
   // existingRecordNames: Map[String, Int] used to track the depth of recursive fields and to
   // ensure that the conversion of the protobuf message to a Spark SQL StructType object does not
   // exceed the maximum recursive depth specified by the recursiveFieldMaxDepth option.
+  // fullNamesToExtensions: a map from Protobuf message full names to the field descriptors of
+  // their extensions used to add extension fields to the generated StructField.
   // A return of None implies the field has reached the maximum allowed recursive depth and
   // should be dropped.
   private def structFieldFor(
