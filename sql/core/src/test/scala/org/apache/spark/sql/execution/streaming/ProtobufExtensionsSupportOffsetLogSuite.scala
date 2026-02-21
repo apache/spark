@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
 
-  test("Protobuf extensions support disabled by default for new queries") {
+  test("protobuf extensions support disabled by default for new queries") {
     val offsetSeqMetadata =
       OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
     assert(
@@ -35,7 +35,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
         Some(false.toString))
   }
 
-  test("Protobuf extensions support enabled when session sets it to true") {
+  test("protobuf extensions support enabled when session sets it to true") {
     val protobufExtConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key
     withSQLConf(protobufExtConf -> true.toString) {
       val offsetSeqMetadata =
@@ -45,7 +45,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
   }
 
   test(
-    "Protobuf extensions support uses default false for old checkpoint when enabled in session") {
+    "protobuf extensions support uses default false for old checkpoint when enabled in session") {
     val protobufExtConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key
     withSQLConf(protobufExtConf -> true.toString) {
       val existingChkpt = "offset-log-version-2.1.0"
@@ -61,7 +61,7 @@ class ProtobufExtensionsSupportOffsetLogSuite extends SharedSparkSession {
   }
 
   test(
-    "Protobuf extensions support uses default false for old checkpoint when unset in session") {
+    "protobuf extensions support uses default false for old checkpoint when unset in session") {
     val existingChkpt = "offset-log-version-2.1.0"
     val (_, offsetSeq) = readFromResource(existingChkpt)
     val offsetSeqMetadata = offsetSeq.metadataOpt.get
