@@ -1244,4 +1244,19 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
     assert(metrics("number of rows read") == "3")
   }
+
+  test("SPARK-55619: Custom metrics of coalesced partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2021-01-01' as timestamp))")
+
+    val metrics = runAndFetchMetrics {
+      val df = sql(s"SELECT * FROM testcat.ns.$items").coalesce(1)
+      df.collect()
+    }
+    assert(metrics("number of rows read") == "2")
+  }
 }
