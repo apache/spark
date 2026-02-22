@@ -231,6 +231,8 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
     class FakeStreamReader(DataSourceStreamReader):
         def __init__(self, schema, options):
             self.current = 0
+            self.schema = schema
+            self.options = options
 
         def initialOffset(self) -> dict:
             """
@@ -266,8 +268,14 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
             data source.
             """
             start, end = partition.start, partition.end
+            from faker import Faker
+            fake = Faker()
             for i in range(start, end):
-                yield (i, str(i))
+                row = []
+                for field in self.schema.fields:
+                    value = getattr(fake, field.name)()
+                    row.append(value)
+                yield tuple(row)
 
 Alternative: Implement a Simple Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
