@@ -789,7 +789,10 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManager.get(key)
     }
 
-    // FIXME: doc!
+    /**
+     * Remove the old state key-value pairs from this joiner's state manager based on the state
+     * watermark predicate, and return the number of removed rows.
+     */
     def removeOldState(): Long = {
       stateWatermarkPredicate match {
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark)) =>

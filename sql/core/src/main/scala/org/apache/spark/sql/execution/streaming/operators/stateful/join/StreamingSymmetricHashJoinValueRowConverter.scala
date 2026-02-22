@@ -47,6 +47,12 @@ trait StreamingSymmetricHashJoinValueRowConverter {
   def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
 }
 
+/**
+ * V1 implementation of the converter, which simply stores the actual value in state store and
+ * treats the match status as false. Note that only state format version 1 uses this converter,
+ * and this is only for backward compatibility. There is known correctness issue for outer join
+ * with this converter - see SPARK-26154 for more details.
+ */
 class StreamingSymmetricHashJoinValueRowConverterFormatV1(
     inputValueAttributes: Seq[Attribute]) extends StreamingSymmetricHashJoinValueRowConverter {
   override val valueAttributes: Seq[Attribute] = inputValueAttributes
@@ -58,6 +64,11 @@ class StreamingSymmetricHashJoinValueRowConverterFormatV1(
   override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = value
 }
 
+/**
+ * V2 implementation of the converter, which adds an extra boolean field to store the match status
+ * in state store. This is the default implementation for state format version 2 and above, which
+ * fixes the correctness issue for outer join in V1 implementation.
+ */
 class StreamingSymmetricHashJoinValueRowConverterFormatV2(
     inputValueAttributes: Seq[Attribute]) extends StreamingSymmetricHashJoinValueRowConverter {
   private val valueWithMatchedExprs = inputValueAttributes :+ Literal(true)
@@ -89,6 +100,10 @@ class StreamingSymmetricHashJoinValueRowConverterFormatV2(
   }
 }
 
+/**
+ * The entry point to create the converter for value row in state store. The converter is created
+ * based on the state format version.
+ */
 object StreamingSymmetricHashJoinValueRowConverter {
   def create(
       inputValueAttributes: Seq[Attribute],

@@ -37,6 +37,15 @@ import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStateParti
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
+/**
+ * Base trait of the state manager for stream-stream symmetric hash join operator.
+ *
+ * This defines the basic APIs for the state manager, except the methods for eviction which are
+ * defined in separate traits - See [[SupportsEvictByCondition]] and [[SupportsEvictByTimestamp]].
+ *
+ * Implementation classes are expected to inherit those traits as needed, depending on the eviction
+ * strategy they support.
+ */
 trait SymmetricHashJoinStateManager {
   import SymmetricHashJoinStateManager._
 
@@ -61,12 +70,21 @@ trait SymmetricHashJoinStateManager {
   def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo
 }
 
+/**
+ * This trait is specific to help the old version of state manager implementation (v1-v3) to work
+ * with existing tests which look up the state store with key with index.
+ */
 trait SupportsIndexedKeys {
   def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow
 
   protected[streaming] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit
 }
 
+/**
+ * This trait is for state manager implementations that support eviction by condition.
+ * This is for the state manager implementations which have to perform full scan
+ * for eviction.
+ */
 trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
@@ -81,6 +99,11 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
       removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair]
 }
 
+/**
+ * This trait is for state manager implementations that support eviction by timestamp. This is for
+ * the state manager implementations which maintain the state with event time and can efficiently
+ * scan the keys with event time smaller than the given timestamp for eviction.
+ */
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
@@ -89,6 +112,18 @@ trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair]
 }
 
+/**
+ * The version 4 of stream-stream join state manager implementation, which is designed to optimize
+ * the eviction with watermark. Previous versions require full scan to find the keys to evict,
+ * while this version only scans the keys with event time smaller than the watermark.
+ *
+ * In this implementation, we no longer build a logical array of values; instead, we store the
+ * (key, timestamp) -> values in the primary store, and maintain a secondary index of
+ * (timestamp, key) to scan the keys to evict for each watermark. To retrieve the values for a key,
+ * we perform prefix scan with the key to get all the (key, timestamp) -> values.
+ *
+ * Refer to the [[KeyWithTsToValuesStore]] and [[TsWithKeyTypeStore]] for more details.
+ */
 class SymmetricHashJoinStateManagerV4(
     joinSide: JoinSide,
     inputValueAttributes: Seq[Attribute],
@@ -133,8 +168,10 @@ class SymmetricHashJoinStateManagerV4(
         }
 
       case _ =>
-        // Need a strategy about bucketing when event time is not available
-        // - first attempt: random bucketing
+        // When event time column is not available, we will use random bucketing strategy to decide
+        // where the new value will be stored. There is a trade-off between the bucket size and the
+        // number of values in each bucket; we can tune the bucket size with the configuration if
+        // we figure out the magic number to not work well.
         random.nextInt(bucketSizeForNoEventTime)
     }
   }
@@ -162,8 +199,11 @@ class SymmetricHashJoinStateManagerV4(
     Seq(StructField("dummy", NullType, nullable = true))
   )
 
+  // TODO: [SPARK-55628] Below two fields need to be handled properly during integration with
+  //   the operator.
   private val stateStoreCkptId: Option[String] = None
   private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None
+
   private var stateStoreProvider: StateStoreProvider = _
 
   // We will use the dummy schema for the default CF since we will register CF separately.
@@ -231,9 +271,8 @@ class SymmetricHashJoinStateManagerV4(
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
       excludeRowsAlreadyMatched: Boolean): Iterator[JoinedRow] = {
-    // TODO: We could improve this method to get the scope of timestamp and scan keys
+    // TODO: [SPARK-55629] We could improve this method to get the scope of timestamp and scan keys
     //  more efficiently. For now, we just get all values for the key.
-
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -373,8 +412,21 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
+  /**
+   * The primary store to store the key-value pairs.
+   *
+   * The state format of the primary store is following:
+   * [key][timestamp (event time)] -> [(value, matched), (value, matched), ...]
+   *
+   * The values are bucketed by event time to facilitate efficient eviction by watermark; the
+   * secondary index will provide the way to scan the key + timestamp pairs for the eviction, and
+   * it will be easy to perform retrieval/removal of the values based on key + timestamp pairs.
+   * There is no case where we evict only part of the values for the same key + timestamp.
+   *
+   * The matched flag is used to indicate whether the value has been matched with any row from the
+   * other side.
+   */
   private class KeyWithTsToValuesStore {
-
     private val valueRowConverter = StreamingSymmetricHashJoinValueRowConverter.create(
       inputValueAttributes, stateFormatVersion = 4)
 
@@ -511,6 +563,17 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
+  /**
+   * The secondary index for efficient state removal with watermark.
+   *
+   * The state format of the secondary index is following:
+   * [timestamp (adjusted for ordering, 8 bytes)][key] -> [list of empty values]
+   *
+   * The value part is used to track the number of values for the same (key, timestamp) in the
+   * primary store, so that we can track the number of values being removed for each eviction and
+   * update metrics accordingly. Alternatively, we can also maintain an integer count in the value
+   * part, but we found blind merge and count later to be more efficient than read-modify-write.
+   */
   private class TsWithKeyTypeStore {
     private val valueStructType = StructType(Array(StructField("__dummy__", NullType)))
     private val EMPTY_ROW =
@@ -619,7 +682,7 @@ class SymmetricHashJoinStateManagerV4(
   override def get(key: UnsafeRow): Iterator[UnsafeRow] = {
     keyWithTsToValues.getValues(key).flatMap { result =>
       result.values.map(_.value)
-    }.iterator
+    }
   }
 
   def metrics: StateStoreMetrics = stateStore.metrics
@@ -1473,30 +1536,6 @@ class SymmetricHashJoinStateManagerV1(
   }
 
   override def metrics: StateStoreMetrics = {
-    // FIXME: purposed for benchmarking
-    // /*
-    val keyToNumValuesMetrics = keyToNumValues.metrics
-    val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
-    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
-
-    val mergedCustomMetrics = (keyToNumValuesMetrics.customMetrics.toSeq ++
-      keyWithIndexToValueMetrics.customMetrics.toSeq)
-      .groupBy(_._1)
-      .map { case (metric, metrics) =>
-        val mergedValue = metrics.map(_._2).sum
-        (metric.withNewDesc(desc = newDesc(metric.desc)), mergedValue)
-      }
-
-    StateStoreMetrics(
-      keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
-      keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
-      mergedCustomMetrics,
-      // We want to collect instance metrics from both state stores
-      keyWithIndexToValueMetrics.instanceMetrics ++ keyToNumValuesMetrics.instanceMetrics
-    )
-    // */
-
-    /*
     val keyToNumValuesMetrics = keyToNumValues.metrics
     val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
     def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
@@ -1510,7 +1549,6 @@ class SymmetricHashJoinStateManagerV1(
       // We want to collect instance metrics from both state stores
       keyWithIndexToValueMetrics.instanceMetrics ++ keyToNumValuesMetrics.instanceMetrics
     )
-     */
   }
 }
 
@@ -1881,7 +1919,8 @@ object SymmetricHashJoinStateManager {
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
     } else {
-      // TODO: Add support of KeyWithTsToValuesType and TsWithKeyType
+      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
+      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -1904,7 +1943,8 @@ object SymmetricHashJoinStateManager {
       // State key is the partition key
       new NoopStatePartitionKeyExtractor(stateKeySchema)
     } else {
-      // TODO: Add support of KeyWithTsToValuesType and TsWithKeyType
+      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
+      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -1940,6 +1980,10 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  /**
+   * Helper class for representing data (key, timestamp) to (value, matched).
+   * Designed for object reuse.
+   */
   case class KeyAndTsToValuePair(
       var key: UnsafeRow = null,
       var timestamp: Long = -1L,
