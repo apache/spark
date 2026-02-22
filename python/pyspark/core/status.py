@@ -128,7 +128,8 @@ class StatusTracker:
 
     def getExecutorInfos(self) -> List[SparkExecutorInfo]:
         """
-        Returns information of all known executors, including host, port, cacheSize,
+        Returns a list of :class:`SparkExecutorInfo`,
+        contains information of all known executors, including host, port, cacheSize,
         numRunningTasks and memory metrics.
         Note this includes information for both the driver and executors.
         """
