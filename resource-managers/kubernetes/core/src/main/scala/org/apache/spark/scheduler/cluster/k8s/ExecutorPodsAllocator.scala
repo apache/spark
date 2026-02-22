@@ -471,10 +471,7 @@ class ExecutorPodsAllocator(
       } catch {
         case NonFatal(e) =>
           // Register failure with global tracker if lifecycle manager is available
-          val failureCount = totalFailedPodCreations.incrementAndGet()
-          if (executorPodsLifecycleManager != null) {
-            executorPodsLifecycleManager.registerPodCreationFailure()
-          }
+          val failureCount = registerPodCreationFailure()
           logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
             log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
           None
@@ -504,10 +501,7 @@ class ExecutorPodsAllocator(
         } catch {
           case NonFatal(e) =>
             // Register failure with global tracker if lifecycle manager is available
-            val failureCount = totalFailedPodCreations.incrementAndGet()
-            if (executorPodsLifecycleManager != null) {
-              executorPodsLifecycleManager.registerPodCreationFailure()
-            }
+            val failureCount = registerPodCreationFailure()
             logError(log"Failed to add owner reference or create PVC for executor pod " +
               log"${MDC(LogKeys.EXECUTOR_ID, newExecutorId)}. " +
               log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
@@ -551,6 +545,16 @@ class ExecutorPodsAllocator(
       case _ => // no-op
     }
     resources.filterNot(replacedResources.contains)
+  }
+
+  /**
+   * Registers a pod creation failure with the lifecycle manager and increments the local counter.
+   * Returns the total failure count for logging purposes.
+   */
+  protected def registerPodCreationFailure(): Int = {
+    val failureCount = totalFailedPodCreations.incrementAndGet()
+    executorPodsLifecycleManager.foreach(_.registerExecutorFailure())
+    failureCount
   }
 
   protected def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {

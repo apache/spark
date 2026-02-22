@@ -78,10 +78,10 @@ private[spark] class ExecutorPodsLifecycleManager(
   protected[spark] def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
   /**
-   * Register a pod creation failure. This increments the global executor failure count
+   * Register an executor failure. This increments the global executor failure count
    * which is checked against spark.executor.maxNumFailures.
    */
-  protected[spark] def registerPodCreationFailure(): Unit = {
+  protected[spark] def registerExecutorFailure(): Unit = {
     failureTracker.registerExecutorFailure()
   }
 

@@ -194,21 +194,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       new KubernetesExecutorBuilder(),
       kubernetesClient,
       snapshotsStore,
-      new SystemClock())
+      new SystemClock()).asInstanceOf[AbstractPodsAllocator]
 
-    // Try to set the lifecycle manager using reflection for backward compatibility
-    // with custom allocators that may not have this method
+    // Set the lifecycle manager if provided
     lifecycleManager.foreach { manager =>
-      try {
-        val setLifecycleManagerMethod = cls.getMethod(
-          "setExecutorPodsLifecycleManager",
-          classOf[ExecutorPodsLifecycleManager])
-        setLifecycleManagerMethod.invoke(allocatorInstance, manager)
-      } catch {
-        case _: NoSuchMethodException =>
-          logInfo("Allocator does not support setExecutorPodsLifecycleManager method. " +
-            "Pod creation failures will not be tracked.")
-      }
+      allocatorInstance.setExecutorPodsLifecycleManager(manager)
     }
 
     allocatorInstance
