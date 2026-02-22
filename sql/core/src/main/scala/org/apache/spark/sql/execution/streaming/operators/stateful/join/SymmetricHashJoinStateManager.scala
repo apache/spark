@@ -271,7 +271,7 @@ class SymmetricHashJoinStateManagerV4(
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
       excludeRowsAlreadyMatched: Boolean): Iterator[JoinedRow] = {
-    // TODO: [SPARK-55629] We could improve this method to get the scope of timestamp and scan keys
+    // TODO: [SPARK-55147] We could improve this method to get the scope of timestamp and scan keys
     //  more efficiently. For now, we just get all values for the key.
     def getJoinedRowsFromTsAndValues(
         ts: Long,
