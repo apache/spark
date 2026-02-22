@@ -274,10 +274,7 @@ def spark_type_to_pandas_dtype(
                 return BooleanDtype()
             # StringType
             elif isinstance(spark_type, types.StringType):
-                if LooseVersion(pd.__version__) < "3.0.0":
-                    return StringDtype()
-                else:
-                    return StringDtype(na_value=np.nan)
+                return StringDtype()
 
         # FractionalType
         if extension_float_dtypes_available:
@@ -285,6 +282,10 @@ def spark_type_to_pandas_dtype(
                 return Float32Dtype()
             elif isinstance(spark_type, types.DoubleType):
                 return Float64Dtype()
+
+    if LooseVersion(pd.__version__) >= "3.0.0":
+        if extension_object_dtypes_available and isinstance(spark_type, types.StringType):
+            return StringDtype(na_value=np.nan)
 
     if isinstance(
         spark_type,
@@ -316,6 +317,16 @@ def spark_type_to_pandas_dtype(
                 spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
             ).to_pandas_dtype()
         )
+
+
+def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
+    if LooseVersion(pd.__version__) < "3.0.0":
+        return isinstance(tpe, extension_dtypes)
+
+    if extension_object_dtypes_available:
+        if isinstance(tpe, StringDtype):
+            return tpe.na_value is pd.NA
+    return isinstance(tpe, extension_dtypes)
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
