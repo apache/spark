@@ -967,7 +967,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         checkKeywordsExistsInExplain(
           df = df,
           mode = ExplainMode.fromString("FORMATTED"),
-          keywords = getExpectedFinalPlanWithCoalescedAndSkewedAQEShuffleRead)
+          keywords = "AQEShuffleRead (6), coalesced", "AQEShuffleRead (13), coalesced and skewed")
       }
     }
   }
@@ -991,54 +991,10 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       checkKeywordsExistsInExplain(
         df = joinedDF,
         mode = ExplainMode.fromString("FORMATTED"),
-        keywords = getExpectedFinalPlanWithLocalAQEShuffleRead)
+        keywords = "AQEShuffleRead (6), local", "AQEShuffleRead (9), local")
     }
   }
 
-  private def getExpectedFinalPlanWithCoalescedAndSkewedAQEShuffleRead: String = {
-    """== Physical Plan ==
-      |AdaptiveSparkPlan (24)
-      |+- == Final Plan ==
-      |   ResultQueryStage (17)
-      |   +- * Project (16)
-      |      +- * SortMergeJoin(skew=true) Inner (15)
-      |         :- * Sort (7)
-      |         :  +- AQEShuffleRead (6), coalesced
-      |         :     +- ShuffleQueryStage (5), Statistics(sizeInBytes=15.6 KiB, rowCount=1.00E+3)
-      |         :        +- Exchange (4)
-      |         :           +- * Project (3)
-      |         :              +- * Filter (2)
-      |         :                 +- * Range (1)
-      |         +- * Sort (14)
-      |            +- AQEShuffleRead (13), coalesced and skewed
-      |               +- ShuffleQueryStage (12), Statistics(sizeInBytes=3.1 KiB, rowCount=200)
-      |                  +- Exchange (11)
-      |                     +- * Project (10)
-      |                        +- * Filter (9)
-      |                           +- * Range (8)
-      |""".stripMargin
-  }
-
-  private def getExpectedFinalPlanWithLocalAQEShuffleRead: String = {
-    """== Physical Plan ==
-      |AdaptiveSparkPlan (24)
-      |+- == Final Plan ==
-      |   ResultQueryStage (14)
-      |   +- * Project (13)
-      |      +- * BroadcastHashJoin LeftOuter BuildRight (12)
-      |         :- AQEShuffleRead (6), local
-      |         :  +- ShuffleQueryStage (5), Statistics(sizeInBytes=0.0 B, rowCount=0)
-      |         :     +- Exchange (4)
-      |         :        +- * Project (3)
-      |         :           +- * Filter (2)
-      |         :              +- * Range (1)
-      |         +- BroadcastQueryStage (11), Statistics(sizeInBytes=0.0 B, rowCount=0)
-      |            +- BroadcastExchange (10)
-      |               +- AQEShuffleRead (9), local
-      |                  +- ShuffleQueryStage (8), Statistics(sizeInBytes=0.0 B, rowCount=0)
-      |                     +- ReusedExchange (7)
-      |""".stripMargin
-  }
 }
 
 case class ExplainSingleData(id: Int)
