@@ -4899,7 +4899,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
 
-    # TODO(SPARK-46162): axis should support 1 or 'columns' either at this moment
     def nunique(
         self,
         axis: Axis = 0,
@@ -4914,8 +4913,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : int, default 0 or 'index'
-            Can only be set to 0 now.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to use. 0 or 'index' for row-wise (count unique values per column),
+            1 or 'columns' for column-wise (count unique values per row).
         dropna : bool, default True
             Don’t include NaN in the count.
         approx: bool, default False
@@ -4923,13 +4923,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
             for large amounts of data.
             Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
+            For axis=1, this parameter is ignored and exact counting is always used.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
             Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
+            For axis=1, this parameter is ignored.
 
         Returns
         -------
-        The number of unique values per column as a pandas-on-Spark Series.
+        Series
+            The number of unique values per column (axis=0) or per row (axis=1).
 
         Examples
         --------
@@ -4944,6 +4947,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         B    2
         dtype: int64
 
+        >>> df.nunique(axis=1)
+        0    1
+        1    2
+        2    1
+        dtype: int32
+
+        >>> df.nunique(axis=1, dropna=False)
+        0    2
+        1    2
+        2    2
+        dtype: int32
+
         On big data, we recommend using the approximate algorithm to speed up this function.
         The result will be very close to the exact unique count.
 
@@ -4955,29 +4970,52 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-        sdf = self._internal.spark_frame.select(
-            [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
-            + [
-                self._psser_for(label)._nunique(dropna, approx, rsd)
-                for label in self._internal.column_labels
-            ]
-        )
-
-        # The data is expected to be small so it's fine to transpose/use the default index.
-        with ps.option_context("compute.max_rows", 1):
-            internal = self._internal.copy(
-                spark_frame=sdf,
-                index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
-                index_names=[None],
-                index_fields=[None],
-                data_spark_columns=[
-                    scol_for(sdf, col) for col in self._internal.data_spark_column_names
-                ],
-                data_fields=None,
+        if axis == 0:
+            sdf = self._internal.spark_frame.select(
+                [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+                + [
+                    self._psser_for(label)._nunique(dropna, approx, rsd)
+                    for label in self._internal.column_labels
+                ]
             )
-            return first_series(DataFrame(internal).transpose())
+
+            # The data is expected to be small so it's fine to transpose/use the default index.
+            with ps.option_context("compute.max_rows", 1):
+                internal = self._internal.copy(
+                    spark_frame=sdf,
+                    index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                    index_names=[None],
+                    index_fields=[None],
+                    data_spark_columns=[
+                        scol_for(sdf, col) for col in self._internal.data_spark_column_names
+                    ],
+                    data_fields=None,
+                )
+                return first_series(DataFrame(internal).transpose())
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
+
+            arr = F.array(
+                *[self._internal.spark_column_for(label) for label in self._internal.column_labels]
+            )
+            arr = F.filter(arr, lambda x: x.isNotNull()) if dropna else arr
+
+            sdf = self._internal.spark_frame.select(
+                *self._internal.index_spark_columns,
+                F.size(F.array_distinct(arr)).alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
 
     def round(self, decimals: Union[int, Dict[Name, int], "Series"] = 0) -> "DataFrame":
         """
