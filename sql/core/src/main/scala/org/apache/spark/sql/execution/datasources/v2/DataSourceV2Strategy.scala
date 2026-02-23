@@ -579,7 +579,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val table = a.table.asInstanceOf[ResolvedTable]
       ResolveTableConstraints.validateCatalogForTableChange(
         a.changes, table.catalog, table.identifier)
-      AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
+      AlterTableExec(
+        table.catalog,
+        table.identifier,
+        a.changes,
+        recacheTable(table, includeTimeTravel = false)) :: Nil
 
     case CreateIndex(ResolvedTable(_, _, table, _),
         indexName, indexType, ifNotExists, columns, properties) =>
