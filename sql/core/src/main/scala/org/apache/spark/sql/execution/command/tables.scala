@@ -679,11 +679,10 @@ case class DescribeTableCommand(
   }
 
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    // The following information has been already shown in the previous outputs
-    val excludedTableInfo = Seq(
-      "Partition Columns",
-      "Schema"
-    )
+    // Schema is excluded as it has been already shown in the previous outputs.
+    // Partition Columns is included so that DESCRIBE TABLE EXTENDED is parseable (e.g. by
+    // Catalog.listColumns) when the partition section is not present (e.g. V2 describe path).
+    val excludedTableInfo = Seq("Schema")
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
     table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }.foreach {
@@ -1431,7 +1430,27 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
-    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    // Use the session catalog and cache manager directly to avoid recursion through
+    // the user-facing catalog (CatalogImpl.refreshTable -> sql REFRESH TABLE -> this command).
+    val sessionCatalog = sparkSession.sessionState.catalog
+    // Refresh catalog first so subsequent resolution and recache use updated metadata.
+    sessionCatalog.refreshTable(tableIdent)
+    // Recache by name first (SPARK-27248), then invalidate only dependent caches that
+    // reference this table but are not this table (SPARK-33290).
+    try {
+      val qualifiedIdent = sessionCatalog.qualifyIdentifier(tableIdent)
+      val nameParts = qualifiedIdent.catalog.toSeq ++ qualifiedIdent.database.toSeq :+
+        qualifiedIdent.table
+      sparkSession.sharedState.cacheManager.recacheTableByNameWithFreshPlan(
+        sparkSession,
+        nameParts,
+        planSupplier = () =>
+          sparkSession.table(tableIdent.quotedString).queryExecution.analyzed)
+      CommandUtils.uncacheDependentTempViews(
+        sparkSession, nameParts, excludeTableNameParts = Some(nameParts))
+    } catch {
+      case NonFatal(_) => // Table may not exist or resolution may fail
+    }
     Seq.empty[Row]
   }
 }

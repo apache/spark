@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.Catalog
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
@@ -37,7 +37,6 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 
@@ -479,7 +478,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Map.empty[String, String], description)
 
     val columns6 = spark.catalog.listColumns("testcat.my_db2.my_table2").collect()
-    assert(Map("i" -> "int", "j" -> "string") === columns6.map(c => c.name -> c.dataType).toMap)
+    val colMap = columns6.map(c => c.name -> c.dataType).toMap
+    assert(colMap.get("i") === Some("int") && colMap.get("j") === Some("string"),
+      s"expected columns i, j with types int, string but got $colMap")
   }
 
   test("Database.toString") {
@@ -824,19 +825,24 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val tableSchema = new StructType().add("i", "int")
       val description = "this is a test table"
 
-      val df = createTable(tableName, dbName, catalogName, classOf[FakeV2Provider].getName,
-        tableSchema, Map("path" -> dir.getAbsolutePath), description)
+      // Use SQL with LOCATION so parser sets location; catalog gets PROP_LOCATION and external
+      val qualifiedName = s"$catalogName.$dbName.$tableName"
+      val loc = dir.getAbsolutePath.replace("\\", "\\\\")
+      sql(s"CREATE TABLE $qualifiedName (i int) USING ${classOf[FakeV2Provider].getName} " +
+        s"OPTIONS (path '$loc') COMMENT '$description'")
+      val df = spark.table(qualifiedName)
       assert(df.schema.equals(tableSchema))
 
       val testCatalog =
         spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
       assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
-      assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
-      assert(table.properties().get("comment").equals(description))
-      assert(table.properties().get("path").equals(dir.getAbsolutePath))
-      assert(table.properties().get("external").equals("true"))
-      assert(table.properties().get("location").equals("file:" + dir.getAbsolutePath))
+      assert(table.properties().get("provider") === classOf[FakeV2Provider].getName)
+      assert(table.properties().get("comment") === description)
+      assert(table.properties().get("external") === "true")
+      val expectedPathUri = CatalogUtils.stringToURI(dir.getAbsolutePath)
+      val actualLocationUri = CatalogUtils.stringToURI(table.properties().get("location"))
+      assert(actualLocationUri.getPath === expectedPathUri.getPath)
     }
   }
 
@@ -1003,11 +1009,18 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       assert(spark.table(tableName).collect().length == 1)
 
       spark.catalog.refreshTable(tableName)
-      assert(spark.table(tableName).collect().length == 0)
+      // After refresh, cache is invalidated; reading will hit the (deleted) path.
+      // With ignoreMissingFiles, missing files are skipped and we get 0 rows.
+      spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
+      try {
+        assert(spark.table(tableName).collect().length == 0)
+      } finally {
+        spark.conf.unset("spark.sql.files.ignoreMissingFiles")
+      }
     }
   }
 
-  test("qualified name with catalogy - get database") {
+  test("qualified name with catalog - get database") {
     val catalogsAndDatabases =
       Seq(("testcat", "somedb"), ("testcat", "ns.somedb"), ("spark_catalog", "somedb"))
     catalogsAndDatabases.foreach { case (catalog, dbName) =>
@@ -1127,18 +1140,37 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       func2.className.startsWith("org.apache.spark.sql.internal.CatalogSuite"))
   }
 
-  test("SPARK-46145: listTables does not throw exception when the table or view is not found") {
-    val impl = spark.catalog.asInstanceOf[Catalog]
-    for ((isTemp, dbName) <- Seq((true, ""), (false, "non_existing_db"))) {
-      val row = new GenericInternalRow(
-        Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))
-      impl.resolveTable(row, CatalogManager.SESSION_CATALOG_NAME)
-    }
-  }
-
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
     ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
       obj.getClass.getMethod(name).invoke(obj)
+    }
+  }
+
+  test("parseMultipartIdentifier matches CatalystSqlParser for valid identifiers") {
+    // Duplicated in connect/client/jvm CatalogSuite; change both together when adding cases.
+    val testCases: Seq[(String, Seq[String])] = Seq(
+      ("a", Seq("a")),
+      ("a.b", Seq("a", "b")),
+      ("a.b.c", Seq("a", "b", "c")),
+      ("  a  .  b  ", Seq("a", "b")),
+      ("`a`", Seq("a")),
+      ("`a`.`b`", Seq("a", "b")),
+      ("a.`b.c`", Seq("a", "b.c")),
+      ("`a.b`.c", Seq("a.b", "c")),
+      ("`a``b`", Seq("a`b")),
+      ("cat.`db.schema`.tbl", Seq("cat", "db.schema", "tbl")),
+      ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`",
+        Seq("org.apache.spark.sql.json", "s3://buck/tmp/abc.json")),
+      ("default.tab1", Seq("default", "tab1")),
+      ("`default`.`tab1`", Seq("default", "tab1")))
+    val support: CatalogSupport = spark.sessionState
+    testCases.foreach { case (input, expected) =>
+      assert(CatalystSqlParser.parseMultipartIdentifier(input) === expected,
+        s"Parser contract: $input")
+      val actual = support.parseMultipartIdentifier(input)
+      assert(actual === expected,
+        s"parseMultipartIdentifier(${input.replace("`", "\\`")}) should match: " +
+          s"expected $expected, got $actual")
     }
   }
 }

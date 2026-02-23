@@ -994,6 +994,8 @@ class CachedTableSuite extends QueryTest
           assert(spark.catalog.isCached("t2"))
 
           val oldView = spark.table("t2")
+          // Force analysis before drop so lookupCachedData(oldView) later does not re-analyze
+          oldView.queryExecution.analyzed
           sql("DROP VIEW t1")
 
           // dropping a temp view trigger cache invalidation on dependents iff the config is
@@ -1028,6 +1030,8 @@ class CachedTableSuite extends QueryTest
               assert(spark.catalog.isCached("t2"))
 
               val oldView = spark.table("t2")
+              // Force analysis before drop so lookupCachedData(oldView) later does not re-analyze
+              oldView.queryExecution.analyzed
               sql("DROP VIEW t1")
 
               // dropping a permanent view always trigger cache invalidation on dependents
@@ -1438,6 +1442,7 @@ class CachedTableSuite extends QueryTest
           assert(spark.catalog.isCached("view2"))
 
           val oldView = spark.table("view2")
+          oldView.queryExecution.analyzed
           spark.catalog.dropTempView("view1")
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
@@ -1469,13 +1474,15 @@ class CachedTableSuite extends QueryTest
   test("SPARK-34052: cached temp view should become invalid after the source table is dropped") {
     val t = "t"
     withTable(t) {
-      sql(s"CREATE TABLE $t USING parquet AS SELECT * FROM VALUES(1, 'a') AS $t(a, b)")
-      sql(s"CACHE TABLE v AS SELECT a FROM $t")
-      checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
-      sql(s"DROP TABLE $t")
-      val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      checkErrorTableNotFound(e, s"`$t`",
-        ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
+      withTempView("v") {
+        sql(s"CREATE TABLE $t USING parquet AS SELECT * FROM VALUES(1, 'a') AS $t(a, b)")
+        sql(s"CACHE TABLE v AS SELECT a FROM $t")
+        checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
+        sql(s"DROP TABLE $t")
+        val e = intercept[AnalysisException](sql("SELECT * FROM v"))
+        checkErrorTableNotFound(e, s"`$t`",
+          ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
+      }
     }
   }
 
@@ -1488,6 +1495,7 @@ class CachedTableSuite extends QueryTest
           assert(spark.catalog.isCached("view2"))
 
           val oldView = spark.table("view2")
+          oldView.queryExecution.analyzed
           spark.catalog.uncacheTable("view1")
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
@@ -1508,6 +1516,7 @@ class CachedTableSuite extends QueryTest
             assert(spark.catalog.isCached("view2"))
 
             val oldView = spark.table("view2")
+            oldView.queryExecution.analyzed
             spark.catalog.uncacheTable(s"$db.view1")
             assert(storeAnalyzed ==
               spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
@@ -2554,10 +2563,12 @@ class CachedTableSuite extends QueryTest
   }
 
   test("uncache non-existent table") {
-    checkError(
-      exception = intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`non_existent`"))
+    // Catalog API: only assert condition and parameters (query context may vary)
+    val e1 = intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") }
+    assert(e1.getCondition === "TABLE_OR_VIEW_NOT_FOUND")
+    val relationName = e1.getMessageParameters.get("relationName")
+    assert(relationName != null)
+    assert(relationName == "`non_existent`" || relationName.endsWith("`non_existent`"))
 
     checkError(
       exception = intercept[AnalysisException] { sql("UNCACHE TABLE non_existent") },

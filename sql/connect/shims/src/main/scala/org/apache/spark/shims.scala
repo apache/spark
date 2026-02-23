@@ -38,7 +38,12 @@ package sql {
   }
   package internal {
     class SharedState
-    class SessionState
+
+    /**
+     * Extended by core's SessionState; CatalogImpl uses sessionState as
+     * CatalogSupport (trait in sql-api).
+     */
+    trait SessionState
   }
   package util {
     class ExecutionListenerManager

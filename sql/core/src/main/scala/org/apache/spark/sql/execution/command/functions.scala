@@ -124,7 +124,6 @@ case class DescribeFunctionCommand(
   }
 }
 
-
 /**
  * The DDL command that drops a function.
  * ifExists: returns an error if the function doesn't exist, unless this is true.

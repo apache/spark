@@ -791,6 +791,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assertEqual("CLEAR CACHE", ClearCacheCommand)
   }
 
+  test("SHOW CACHED TABLES") {
+    assertEqual("SHOW CACHED TABLES", ShowCachedTablesCommand())
+  }
+
   test("CREATE TABLE LIKE COMMAND should reject reserved properties") {
     val sql1 =
       s"CREATE TABLE target LIKE source TBLPROPERTIES (${TableCatalog.PROP_OWNER}='howdy')"

@@ -82,7 +82,8 @@ class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
     extends sql.SparkSession
-    with Logging {
+    with Logging
+    with org.apache.spark.sql.internal.CatalogSupport {
 
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
@@ -352,7 +353,33 @@ class SparkSession private[sql] (
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /** @inheritdoc */
-  lazy val catalog: Catalog = new Catalog(this)
+  override def parseMultipartIdentifier(identifier: String): Seq[String] =
+    SparkSession.parseMultipartIdentifierDefault(identifier)
+
+  /** @inheritdoc */
+  override def quoteIdentifier(identifier: String): String = {
+    if (identifier.contains("`")) "`" + identifier.replace("`", "``") + "`"
+    else "`" + identifier + "`"
+  }
+
+  /** @inheritdoc */
+  override def currentDatabase: String = {
+    sql("SELECT current_database()").collect()(0).getString(0)
+  }
+
+  /** @inheritdoc */
+  override def currentCatalog(): String = {
+    sql("SELECT current_catalog()").collect()(0).getString(0)
+  }
+
+  override def getFunctionMetadata(
+      catalogName: String,
+      namespace: Array[String],
+      functionName: String): Option[(String, String)] = None
+
+  /** @inheritdoc */
+  override lazy val catalog: org.apache.spark.sql.catalog.Catalog =
+    new org.apache.spark.sql.internal.CatalogImpl(this, this)
 
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
@@ -793,6 +820,57 @@ class SparkSession private[sql] (
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession extends SparkSessionCompanion with Logging {
   override private[sql] type Session = SparkSession
+
+  /**
+   * Default implementation for parseMultipartIdentifier (no catalyst dependency).
+   * Split by '.' only when not inside backtick-quoted segments; unquote and unescape (`` -> `).
+   */
+  private[connect] def parseMultipartIdentifierDefault(identifier: String): Seq[String] = {
+    if (identifier == null || identifier.isEmpty) return Seq.empty
+    val parts = scala.collection.mutable.ArrayBuffer.empty[String]
+    var i = 0
+    val n = identifier.length
+    while (i < n) {
+      while (i < n && identifier(i) == ' ') i += 1
+      if (i >= n) return parts.toSeq
+      val partStart = i
+      if (identifier(i) == '`') {
+        i += 1
+        val sb = new StringBuilder
+        var done = false
+        while (i < n && !done) {
+          identifier(i) match {
+            case '`' =>
+              i += 1
+              if (i < n && identifier(i) == '`') {
+                sb.append('`')
+                i += 1
+              } else {
+                parts += sb.toString
+                while (i < n && identifier(i) == ' ') i += 1
+                if (i < n && identifier(i) == '.') i += 1
+                else if (i < n) {
+                  val rest = identifier.substring(i).trim
+                  if (rest.nonEmpty) parts += rest
+                  return parts.toSeq
+                }
+                done = true
+              }
+            case c =>
+              sb.append(c)
+              i += 1
+          }
+        }
+        if (!done) parts += sb.toString
+      } else {
+        while (i < n && identifier(i) != '.') i += 1
+        val part = identifier.substring(partStart, i).trim
+        if (part.nonEmpty) parts += part
+        if (i < n && identifier(i) == '.') i += 1
+      }
+    }
+    parts.toSeq
+  }
 
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong

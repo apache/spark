@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -96,6 +97,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   private def invalidateCache(catalog: TableCatalog, ident: Identifier): Unit = {
     val nameParts = ident.toQualifiedNameParts(catalog)
     cacheManager.uncacheTableOrView(session, nameParts, cascade = true)
+    // Also uncache by short name so dependent cache entries (e.g. CACHE TABLE v AS SELECT FROM t)
+    // are invalidated when t is dropped (SPARK-34052).
+    cacheManager.uncacheTableOrView(session, Seq(ident.name()), cascade = true)
   }
 
   private def makeQualifiedDBObjectPath(location: String): String = {
@@ -398,7 +402,21 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
-      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
+      val invalidateFunc = () => {
+        val nameParts = r.identifier.toQualifiedNameParts(r.catalog)
+        // Uncache dependents by plan reference first (e.g. CACHE TABLE v AS SELECT FROM t);
+        // planReferencesTable finds v even when normalized plan doesn't sameResult (SPARK-34052).
+        CommandUtils.uncacheDependentTempViews(session, nameParts)
+        // Plan-based cascade so the table's own cache is invalidated.
+        try {
+          val tableName = nameParts.mkString(".")
+          cacheManager.uncacheQuery(session.table(tableName), cascade = true)
+        } catch {
+          case NonFatal(_) =>
+            // Name-based uncache below when table lookup fails
+        }
+        CommandUtils.uncacheTableOrView(session, r)
+      }
       DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
@@ -561,7 +579,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case SubqueryAlias(_, v: View) => v.isTempView
         case _ => false
       }
-      UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
+      // When storeAnalyzedPlanForView is true, uncaching a temp view should not cascade
+      // (dependents store the analyzed plan). When false, cascade to invalidate dependents.
+      val cascade = if (isTempView(r.table)) {
+        !session.sessionState.conf.storeAnalyzedPlanForView
+      } else {
+        true
+      }
+      UncacheTableExec(r.table, cascade = cascade) :: Nil
 
     case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
       assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
