@@ -573,7 +573,7 @@ def initialize_jira():
         print_error("ERROR finding jira library. Run 'pip3 install jira' to install.")
         continue_maybe("Continue without jira?")
     elif JIRA_ACCESS_TOKEN:
-        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
+        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.0, 30.0))
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
             # authn
@@ -592,7 +592,7 @@ def initialize_jira():
         print("You can use JIRA_ACCESS_TOKEN instead of JIRA_USERNAME/JIRA_PASSWORD.")
         print("Visit https://issues.apache.org/jira/secure/ViewProfile.jspa ")
         print("and click 'Personal Access Tokens' menu to manage your own tokens.")
-        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD), timeout=(3.0, 30.0))
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
         continue_maybe("Continue without jira?")
