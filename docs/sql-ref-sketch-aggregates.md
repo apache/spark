@@ -53,6 +53,9 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [tuple_union_*](#tuple_union_)
   * [tuple_intersection_*](#tuple_intersection_)
   * [tuple_difference_*](#tuple_difference_)
+  * [tuple_union_theta_*](#tuple_union_theta_) _(union with Theta sketches)_
+  * [tuple_intersection_theta_*](#tuple_intersection_theta_) _(intersection with Theta sketches)_
+  * [tuple_difference_theta_*](#tuple_difference_theta_) _(difference with Theta sketches)_
 * [KLL Quantile Sketch Functions](#kll-quantile-sketch-functions)
   * [kll_sketch_agg_*](#kll_sketch_agg_)
   * [kll_merge_agg_*](#kll_merge_agg_)
@@ -748,6 +751,152 @@ FROM VALUES (1, 10.0, 4, 40.0), (2, 20.0, 4, 40.0), (3, 30.0, 5, 50.0), (4, 40.0
 
 ---
 
+### tuple_union_theta_*
+
+Merges a Tuple sketch with a Theta sketch using union (scalar function). This combines distinct keys from both sketches, with Theta sketch entries assigned a default summary value.
+
+**Syntax:**
+```sql
+tuple_union_theta_double(tupleSketch, thetaSketch [, lgNomEntries] [, mode])
+tuple_union_theta_integer(tupleSketch, thetaSketch [, lgNomEntries] [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `tupleSketch` | BINARY | Tuple sketch with double/integer summaries |
+| `thetaSketch` | BINARY | Theta sketch (keys only) |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" |
+
+Returns a BINARY containing the merged Tuple sketch.
+
+**Notes:**
+- When Theta sketch entries (keys without summary values) are merged with Tuple sketch entries, they receive default summary values based on the mode:
+  - **sum mode**: 0.0 (identity element for addition)
+  - **min mode**: +Infinity (identity element for minimum)
+  - **max mode**: -Infinity (identity element for maximum)
+  - **alwaysone mode**: 1.0 (all entries set to 1)
+
+**Examples:**
+```sql
+-- Union a Tuple sketch with a Theta sketch
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(user_id, spend),
+    theta_sketch_agg(visitor_id)))
+FROM VALUES (1, 10.0), (2, 20.0) users(user_id, spend)
+CROSS JOIN (VALUES (3), (4) visitors(visitor_id));
+-- Result: 4.0 (all keys: 1, 2, 3, 4)
+
+-- With custom lgNomEntries and mode
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_theta_integer(
+    tuple_sketch_agg_integer(user_id, count),
+    theta_sketch_agg(visitor_id),
+    16,
+    'sum'))
+FROM VALUES (1, 5), (2, 10) users(user_id, count)
+CROSS JOIN (VALUES (3), (4) visitors(visitor_id));
+-- Result: 4.0
+```
+
+**Use Case:** Useful for combining user activity data (Tuple sketch with metrics) with anonymous visitor data (Theta sketch) to get total distinct users across both groups.
+
+---
+
+### tuple_intersection_theta_*
+
+Computes the intersection of a Tuple sketch with a Theta sketch (scalar function). Returns keys that exist in both sketches, preserving the summary values from the Tuple sketch.
+
+**Syntax:**
+```sql
+tuple_intersection_theta_double(tupleSketch, thetaSketch [, mode])
+tuple_intersection_theta_integer(tupleSketch, thetaSketch [, mode])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `tupleSketch` | BINARY | Tuple sketch with double/integer summaries |
+| `thetaSketch` | BINARY | Theta sketch (keys only) |
+| `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" |
+
+Returns a BINARY containing the intersected Tuple sketch.
+
+**Notes:**
+- When Theta sketch entries (keys without summary values) are intersected with Tuple sketch entries, they receive default summary values based on the mode:
+  - **sum mode**: 0.0 (identity element for addition)
+  - **min mode**: +Infinity (identity element for minimum)
+  - **max mode**: -Infinity (identity element for maximum)
+  - **alwaysone mode**: 1.0 (all entries set to 1)
+
+**Examples:**
+```sql
+-- Find registered users who also appear as visitors
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(user_id, spend),
+    theta_sketch_agg(visitor_id)))
+FROM VALUES (1, 10.0), (2, 20.0), (3, 30.0) users(user_id, spend)
+CROSS JOIN (VALUES (2), (3), (4) visitors(visitor_id));
+-- Result: 2.0 (keys 2 and 3 are common)
+
+-- With mode parameter
+SELECT tuple_sketch_summary_integer(
+  tuple_intersection_theta_integer(
+    tuple_sketch_agg_integer(user_id, count),
+    theta_sketch_agg(visitor_id),
+    'sum'))
+FROM VALUES (1, 5), (2, 10), (3, 15) users(user_id, count)
+CROSS JOIN (VALUES (2), (3), (4) visitors(visitor_id));
+-- Result: 25 (sum of counts for keys 2 and 3)
+```
+
+**Use Case:** Identify registered users who also appear in visitor logs, and aggregate their associated metrics (e.g., total spend of users who visited the site).
+
+---
+
+### tuple_difference_theta_*
+
+Computes the set difference between a Tuple sketch and a Theta sketch (A - B). Returns keys in the Tuple sketch that are not in the Theta sketch, preserving summary values.
+
+**Syntax:**
+```sql
+tuple_difference_theta_double(tupleSketch, thetaSketch)
+tuple_difference_theta_integer(tupleSketch, thetaSketch)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `tupleSketch` | BINARY | Tuple sketch with double/integer summaries (A) |
+| `thetaSketch` | BINARY | Theta sketch (B) |
+
+Returns a BINARY containing a Tuple sketch representing keys in A but not in B.
+
+**Examples:**
+```sql
+-- Find registered users who have not visited recently
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(user_id, lifetime_spend),
+    theta_sketch_agg(recent_visitor_id)))
+FROM VALUES (1, 100.0), (2, 200.0), (3, 300.0), (5, 500.0) all_users(user_id, lifetime_spend)
+CROSS JOIN (VALUES (1), (2), (4) recent_visitors(recent_visitor_id));
+-- Result: 2.0 (users 3 and 5 haven't visited recently)
+
+-- Get the total lifetime spend of users who haven't visited recently
+SELECT tuple_sketch_summary_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(user_id, lifetime_spend),
+    theta_sketch_agg(recent_visitor_id)))
+FROM VALUES (1, 100.0), (2, 200.0), (3, 300.0), (5, 500.0) all_users(user_id, lifetime_spend)
+CROSS JOIN (VALUES (1), (2), (4) recent_visitors(recent_visitor_id));
+-- Result: 800.0 (sum of 300.0 + 500.0 from users 3 and 5)
+```
+
+**Use Case:** Identify inactive users (registered users who haven't visited recently) and calculate their aggregated metrics like total lifetime value to prioritize re-engagement campaigns.
+
+---
+
 ## KLL Quantile Sketch Functions
 
 KLL (K-Linear-Logarithmic) sketches provide approximate quantile estimation. They are useful for computing percentiles, medians, and other order statistics on large datasets without sorting.
@@ -1381,4 +1530,53 @@ SELECT
       (SELECT sketch FROM week2_sketch)
     )
   ) as retained_users;
+
+-- Query: Combining registered users (with spend) and anonymous visitors using theta variants
+-- This demonstrates merging Tuple sketches (with metrics) and Theta sketches (IDs only)
+
+-- Assume we have both registered user purchases and anonymous visitor data
+CREATE TABLE registered_user_purchases (
+  purchase_date DATE,
+  user_purchase_sketch BINARY  -- Tuple sketch: user_id with purchase_amount
+) USING PARQUET;
+
+CREATE TABLE anonymous_visitor_logs (
+  visit_date DATE,
+  visitor_sketch BINARY  -- Theta sketch: visitor_id only
+) USING PARQUET;
+
+-- Query: Total distinct users (registered + anonymous)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_union_theta_double(
+      (SELECT user_purchase_sketch FROM registered_user_purchases WHERE purchase_date = DATE'2024-01-01'),
+      (SELECT visitor_sketch FROM anonymous_visitor_logs WHERE visit_date = DATE'2024-01-01')
+    )
+  ) as total_unique_users;
+
+-- Query: Find registered users who also appeared as anonymous visitors
+-- (e.g., logged-in users who also browsed anonymously)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_intersection_theta_double(
+      (SELECT user_purchase_sketch FROM registered_user_purchases WHERE purchase_date = DATE'2024-01-01'),
+      (SELECT visitor_sketch FROM anonymous_visitor_logs WHERE visit_date = DATE'2024-01-01')
+    )
+  ) as cross_session_users;
+
+-- Query: Registered users who never appeared as anonymous visitors
+-- (users who only access the site while logged in)
+SELECT
+  tuple_sketch_estimate_double(
+    tuple_difference_theta_double(
+      (SELECT user_purchase_sketch FROM registered_user_purchases WHERE purchase_date = DATE'2024-01-01'),
+      (SELECT visitor_sketch FROM anonymous_visitor_logs WHERE visit_date = DATE'2024-01-01')
+    )
+  ) as logged_in_only_users,
+  tuple_sketch_summary_double(
+    tuple_difference_theta_double(
+      (SELECT user_purchase_sketch FROM registered_user_purchases WHERE purchase_date = DATE'2024-01-01'),
+      (SELECT visitor_sketch FROM anonymous_visitor_logs WHERE visit_date = DATE'2024-01-01')
+    )
+  ) as logged_in_only_revenue;
 ```
