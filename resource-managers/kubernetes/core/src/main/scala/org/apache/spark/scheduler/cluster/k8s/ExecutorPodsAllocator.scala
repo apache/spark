@@ -17,7 +17,8 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.Comparator
+import java.util.concurrent.{ConcurrentHashMap, PriorityBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
@@ -50,11 +51,12 @@ class ExecutorPodsAllocator(
 
   protected val PVC_COUNTER = new AtomicInteger(0)
 
-  protected val maxPVCs = if (Utils.isDynamicAllocationEnabled(conf)) {
+  protected val maxNumExecutors = if (Utils.isDynamicAllocationEnabled(conf)) {
     conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
   } else {
     conf.getInt(EXECUTOR_INSTANCES.key, DEFAULT_NUMBER_EXECUTORS)
   }
+  protected val maxPVCs = maxNumExecutors
 
   protected val podAllocOnPVC = conf.get(KUBERNETES_DRIVER_OWN_PVC) &&
     conf.get(KUBERNETES_DRIVER_REUSE_PVC) && conf.get(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC)
@@ -113,6 +115,14 @@ class ExecutorPodsAllocator(
   // Executor IDs that have been requested from Kubernetes but have not been detected in any POD
   // snapshot yet but already known by the scheduler backend. Mapped to the ResourceProfile id.
   protected val schedulerKnownNewlyCreatedExecs = mutable.LinkedHashMap.empty[Long, Int]
+
+  // Kubernetes services annotated with COOLDOWN_PERIOD_ANNOTATION are deleted
+  // at least this number of seconds after the corresponding executor pod got deleted
+  // known cooldown periods and their services
+  protected[k8s] val aliveServicesWithCooldown = new ConcurrentHashMap[Long, (Int, HasMetadata)]()
+  // elements encode the UNIX timestamp to delete the service, as well as the pod
+  protected[k8s] val serviceDeletionQueue = new PriorityBlockingQueue[(Long, HasMetadata)](
+    maxNumExecutors, Comparator.comparingLong[(Long, HasMetadata)](t => t._1))
 
   protected val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
@@ -231,6 +241,32 @@ class ExecutorPodsAllocator(
     if (snapshots.nonEmpty) {
       val existingExecs = lastSnapshot.executorPods.keySet
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
+
+      // schedule all services for deletion that have a cooldown period but no alive executor
+      val deletedExecutorsWithCooldownService =
+        aliveServicesWithCooldown.keySet().asScala
+          .diff(existingExecs)
+          .diff(newlyCreatedExecutors.keySet.diff(k8sKnownExecIds.toSet))
+      deletedExecutorsWithCooldownService.foreach { deletedExecId =>
+        val (cooldown, service) = aliveServicesWithCooldown.remove(deletedExecId)
+        logInfo(s"Executor with service got deleted, service removal scheduled in ${cooldown}s")
+        serviceDeletionQueue.put((currentTime + cooldown, service))
+      }
+    }
+
+    // delete services the meet their deadline
+    while (serviceDeletionQueue.peek() != null && serviceDeletionQueue.peek()._1 <= currentTime) {
+      // we might get a different service here than peek() returned above,
+      // but by definition, the deadline is less or equal to the one tested above
+      val (deadline, service) = serviceDeletionQueue.poll()
+      logInfo(s"Service deadline $deadline has passed current time $currentTime, " +
+        s"deleting service $service")
+      try {
+        kubernetesClient.resourceList(service).delete()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Failed to delete service $service", e)
+      }
     }
 
     val notDeletedPods = lastSnapshot.executorPods
@@ -459,13 +495,39 @@ class ExecutorPodsAllocator(
         .build()
       val resources = replacePVCsIfNeeded(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
+      val refAnnotation = OWNER_REFERENCE_ANNOTATION
+      val driverValue = OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE
+      val executorValue = OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE
+      val getOwnerReference = (r: HasMetadata) =>
+        r.getMetadata.getAnnotations.getOrDefault(refAnnotation, executorValue)
+      val (driverResources, executorResources) =
+        resources
+          .filter(r => Set(driverValue, executorValue).contains(getOwnerReference(r)))
+          .partition(r => getOwnerReference(r) == driverValue)
       val createdExecutorPod =
         kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
       try {
-        addOwnerReference(createdExecutorPod, resources)
-        resources
-          .filter(_.getKind == "PersistentVolumeClaim")
-          .foreach { resource =>
+        addOwnerReference(createdExecutorPod, executorResources)
+        if (driverResources.nonEmpty && driverPod.nonEmpty) {
+          addOwnerReference(driverPod.get, driverResources)
+        }
+        kubernetesClient.resourceList(resources: _*).forceConflicts().serverSideApply()
+
+        resources.foreach {
+          case resource if resource.getKind == "Service" &&
+            resource.getMetadata.getAnnotations.containsKey(COOLDOWN_PERIOD_ANNOTATION) =>
+              val cooldown =
+                resource.getMetadata.getAnnotations.get(COOLDOWN_PERIOD_ANNOTATION).toInt
+              logInfo(s"Memorizing executor service $newExecutorId with cooldown period $cooldown")
+              val (_, existing) = {
+                aliveServicesWithCooldown.computeIfAbsent(newExecutorId, _ => (cooldown, resource))
+              }
+              if (existing != resource) {
+                throw new SparkException(
+                  "Only one service with cool down period supported per executor")
+              }
+
+          case resource if resource.getKind == "PersistentVolumeClaim" =>
             if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
               addOwnerReference(driverPod.get, Seq(resource))
             }
@@ -475,7 +537,9 @@ class ExecutorPodsAllocator(
               log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
             kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
             PVC_COUNTER.incrementAndGet()
-          }
+
+          case _ =>
+        }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       } catch {
@@ -484,6 +548,7 @@ class ExecutorPodsAllocator(
             .inNamespace(namespace)
             .resource(createdExecutorPod)
             .delete()
+          kubernetesClient.resourceList(resources: _*).delete()
           throw e
       }
     }
