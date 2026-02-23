@@ -1004,15 +1004,10 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Handle the 0-column case separately to preserve row count
+        # Handle the 0-column case separately to preserve row count.
+        # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
         if len(pdf.columns) == 0:
-            # Use struct array to preserve row count for 0-column DataFrames
-            arrow_batches = [
-                pa.RecordBatch.from_struct_array(
-                    pa.array([{}] * len(pdf_slice), type=pa.struct([]))
-                )
-                for pdf_slice in pdf_slices
-            ]
+            arrow_batches = [pa.RecordBatch.from_pandas(pdf_slice) for pdf_slice in pdf_slices]
         else:
             # Create Arrow batches directly using the standalone function
             arrow_batches = [
