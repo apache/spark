@@ -104,3 +104,9 @@ class SparkSessionTestCase(unittest.TestCase):
         s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
 
         self.assertIsNot(s1, s3)
+
+
+if __name__ == "__main__":
+    from pyspark.testing import main
+
+    main()
