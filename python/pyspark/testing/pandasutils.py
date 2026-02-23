@@ -498,8 +498,8 @@ class PandasOnSparkTestUtils:
         else:
             if isinstance(obj, pd.DataFrame):
                 arrow_boolean_columns = [
-                    col
-                    for col in obj.columns
+                    name
+                    for name, col in obj.items()
                     if isinstance(col.dtype, pd.ArrowDtype)
                     and col.dtype.pyarrow_dtype == pa.bool_()
                 ]
