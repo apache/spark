@@ -196,27 +196,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    val correctAnswer = testStringRelation
-      .select($"e".rlike("magic") as "f")
-      .where($"f")
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  // Case 3: Filter references expensive to compute references.
-  test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
-    val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
-      .where($"a" > 5 || $"f")
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-
-    val correctAnswer = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
-      .where($"a" > 5 || $"f")
-      .analyze
+    // Nothing changes when everything is expensive.
+    val correctAnswer = originalQuery
 
     comparePlans(optimized, correctAnswer)
   }
@@ -224,7 +205,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
   test("SPARK-47672: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d")
+      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
       .where($"a" > 5 && $"b" < 10)
       .analyze
 
@@ -234,7 +215,7 @@ class FilterPushdownSuite extends PlanTest {
     // simple aliases (c->a, d->b) which are inexpensive
     val correctAnswer = testStringRelation
       .where($"a" > 5 && $"b" < 10)
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d")
+      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -253,6 +234,23 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
       .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 3: Filter references expensive to compute references.
+  test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 || $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 || $"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)

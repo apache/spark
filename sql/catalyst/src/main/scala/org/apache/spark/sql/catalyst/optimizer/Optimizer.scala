@@ -2100,7 +2100,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Break up the filter into its respective components by &&s.
         val splitCondition = splitConjunctivePredicates(condition)
         // Find the different aliases each component of the filter uses.
-        val usedAliasesForCondition = splitCondition.map { cond =>
+        val originalAndRewrittenConditionsWithUsedAlias = splitCondition.map { cond =>
           // Here we get which aliases were used in a given filter so we can see if the filter
           // referenced an expensive alias v.s. just checking if the filter is expensive.
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
@@ -2108,23 +2108,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
         // Split the filter's components into cheap and expensive while keeping track of
         // what each references from the projection.
-        val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
+        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
           .partition { case (cond, used, replaced) =>
-            if (!SQLConf.get.avoidDoubleFilterEval) {
-              // If we are always pushing through short circuit the check.
+            // Didn't use anything? We're good
+            if (used.isEmpty) {
+              true
+            } else if (!used.exists(_._2.child.expensive)) {
+              // If it's cheap we can push it because it might eliminate more data quickly and
+              // it may also be something which could be evaluated at the storage layer.
+              // We may wish to improve this heuristic in the future.
               true
             } else {
-              // Didn't use anything? We're good
-              if (used.isEmpty) {
-                true
-              } else if (!used.exists(_._2.child.expensive)) {
-                // If it's cheap we can push it because it might eliminate more data quickly and
-                // it may also be something which could be evaluated at the storage layer.
-                // We may wish to improve this heuristic in the future.
-                true
-              } else {
-                false
-              }
+              false
             }
           }
         // Short circuit if we do not have any cheap filters return the original filter as is.
