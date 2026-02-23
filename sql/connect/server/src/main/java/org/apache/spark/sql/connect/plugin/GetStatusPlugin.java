@@ -34,7 +34,8 @@ import org.apache.spark.sql.connect.service.SessionHolder;
  * <p>The GetStatus RPC message has two extension points:
  * <ul>
  *   <li>{@code GetStatusRequest.extensions} - request-level extensions</li>
- *   <li>{@code GetStatusRequest.OperationStatusRequest.extensions} - operation-level extensions</li>
+ *   <li>{@code GetStatusRequest.OperationStatusRequest.extensions}
+ *       - operation-level extensions</li>
  * </ul>
  *
  * <p>And corresponding response extension points:

@@ -46,7 +46,8 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
     assert(tombstoneInfo.isDefined, "Tombstone should exist for abandoned operation")
 
     val info = tombstoneInfo.get
-    assert(info.status == ExecuteStatus.Closed,
+    assert(
+      info.status == ExecuteStatus.Closed,
       s"Expected Closed status in tombstone, got ${info.status}")
     assert(info.closedTimeNs.isDefined, "closedTimeNs should be set after close()")
     assert(info.closedTimeNs.get > 0, "closedTimeNs should be > 0")
@@ -61,8 +62,7 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
     executionManager.removeExecuteHolder(executeKey)
 
     val tombstoneInfo = executionManager.getAbandonedTombstone(executeKey)
-    assert(tombstoneInfo.isEmpty,
-      "Tombstone should not exist for normal (non-abandoned) removal")
+    assert(tombstoneInfo.isEmpty, "Tombstone should not exist for normal (non-abandoned) removal")
   }
 
   test("inactiveOperations cache has correct state after abandoned removal") {
@@ -77,11 +77,14 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
     assert(inactiveInfo.isDefined, "Operation should be in inactive operations cache")
 
     val info = inactiveInfo.get
-    assert(info.status == ExecuteStatus.Closed,
+    assert(
+      info.status == ExecuteStatus.Closed,
       s"Expected Closed status in inactive cache, got ${info.status}")
-    assert(info.terminationReason.isDefined,
+    assert(
+      info.terminationReason.isDefined,
       "terminationReason should be set by postCanceled and captured by closeOperation")
-    assert(info.terminationReason.get == TerminationReason.Canceled,
+    assert(
+      info.terminationReason.get == TerminationReason.Canceled,
       s"Expected Canceled terminationReason for abandoned, got ${info.terminationReason}")
   }
 
@@ -91,21 +94,25 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
     val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
     val operationId = executeHolder.operationId
 
-    assert(sessionHolder.getOperationStatus(operationId).contains(true),
+    assert(
+      sessionHolder.getOperationStatus(operationId).contains(true),
       "Operation should be active before removal")
-    assert(sessionHolder.getInactiveOperationInfo(operationId).isEmpty,
+    assert(
+      sessionHolder.getInactiveOperationInfo(operationId).isEmpty,
       "Operation should not be in inactive cache before removal")
 
     executionManager.removeExecuteHolder(executeHolder.key)
 
-    assert(sessionHolder.getOperationStatus(operationId).contains(false),
+    assert(
+      sessionHolder.getOperationStatus(operationId).contains(false),
       "Operation should be inactive after removal")
     val inactiveInfo = sessionHolder.getInactiveOperationInfo(operationId)
     assert(inactiveInfo.isDefined, "Operation should be in inactive cache after removal")
 
     val info = inactiveInfo.get
     assert(info.operationId == operationId, "Operation ID should match")
-    assert(info.status == ExecuteStatus.Closed,
+    assert(
+      info.status == ExecuteStatus.Closed,
       s"Expected Closed status in inactive cache, got ${info.status}")
   }
 }

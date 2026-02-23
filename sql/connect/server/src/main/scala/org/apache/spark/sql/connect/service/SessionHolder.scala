@@ -205,8 +205,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns the TerminationInfo for an inactive operation if it exists in the cache.
-   * Cache expiration is configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
+   * Returns the TerminationInfo for an inactive operation if it exists in the cache. Cache
+   * expiration is configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
    *
    * @param operationId
    * @return
@@ -218,8 +218,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns all inactive operations for this session. These are operations that were
-   * closed and are still in the cache. Cache expiration is configured with
+   * Returns all inactive operations for this session. These are operations that were closed and
+   * are still in the cache. Cache expiration is configured with
    * CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
    *
    * @return

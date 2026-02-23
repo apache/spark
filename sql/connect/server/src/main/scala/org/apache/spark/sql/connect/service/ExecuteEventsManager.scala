@@ -59,8 +59,8 @@ object TerminationReason {
 }
 
 /**
- * Manage the lifecycle of an operation by tracking its status and termination reason.
- * Post request Connect events to @link org.apache.spark.scheduler.LiveListenerBus and serve as an
+ * Manage the lifecycle of an operation by tracking its status and termination reason. Post
+ * request Connect events to @link org.apache.spark.scheduler.LiveListenerBus and serve as an
  * information source for GetStatus RPC.
  *
  * {{{
@@ -136,15 +136,15 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   /**
    * @return
-   *   The reason for termination, set when the operation finishes, fails, or is canceled.
-   *   Since the closed state itself does not convey why the operation ended, this value
-   *   preserves that information for later use.
+   *   The reason for termination, set when the operation finishes, fails, or is canceled. Since
+   *   the closed state itself does not convey why the operation ended, this value preserves that
+   *   information for later use.
    */
   private[connect] def terminationReason: Option[TerminationReason] = _terminationReason
 
   /**
-   * Updates the termination reason only if the new reason has a higher value than the current one.
-   * This established the ordering Canceled > Failed > Succeeded, which is consistent with
+   * Updates the termination reason only if the new reason has a higher value than the current
+   * one. This established the ordering Canceled > Failed > Succeeded, which is consistent with
    * ExecuteStatus ordering. This handles the cases when execution is interrupted or fails during
    * cleanup.
    */

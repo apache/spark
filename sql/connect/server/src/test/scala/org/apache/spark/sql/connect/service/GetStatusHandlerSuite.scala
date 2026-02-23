@@ -68,11 +68,9 @@ abstract class EchoGetStatusPluginBase(requestPrefix: String, opPrefix: String)
   }
 }
 
-class EchoGetStatusPlugin
-    extends EchoGetStatusPluginBase("request-echo:", "op-echo:")
+class EchoGetStatusPlugin extends EchoGetStatusPluginBase("request-echo:", "op-echo:")
 
-class SecondEchoGetStatusPlugin
-    extends EchoGetStatusPluginBase("second-request:", "second-op:")
+class SecondEchoGetStatusPlugin extends EchoGetStatusPluginBase("second-request:", "second-op:")
 
 /**
  * A no-op plugin that always returns Optional.empty() for both request and operation extensions.
@@ -148,8 +146,12 @@ class GetStatusHandlerSuite extends SharedSparkSession {
       serverSideSessionId: Option[String] = None,
       requestExtensions: Seq[protobuf.Any] = Seq.empty,
       operationExtensions: Seq[protobuf.Any] = Seq.empty): GetStatusResponse = {
-    sendGetStatusRequest(sessionId, userId, serverSideSessionId,
-      requestExtensions, { builder =>
+    sendGetStatusRequest(
+      sessionId,
+      userId,
+      serverSideSessionId,
+      requestExtensions,
+      { builder =>
         val operationStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
         operationIds.foreach(operationStatusRequest.addOperationIds)
         operationExtensions.foreach(operationStatusRequest.addExtensions)
@@ -159,10 +161,7 @@ class GetStatusHandlerSuite extends SharedSparkSession {
 
   test("GetStatus returns session info for new session") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val response = sendGetStatusRequest(
-      sessionHolder.sessionId,
-      userId = sessionHolder.userId
-    )
+    val response = sendGetStatusRequest(sessionHolder.sessionId, userId = sessionHolder.userId)
 
     assert(response.getSessionId == sessionHolder.sessionId)
     assert(response.getServerSideSessionId.nonEmpty)
@@ -175,9 +174,8 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     val executeHolder2 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
     val executeHolder3 = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
 
-    val response = sendGetOperationStatusRequest(
-      sessionHolder.sessionId,
-      userId = sessionHolder.userId)
+    val response =
+      sendGetOperationStatusRequest(sessionHolder.sessionId, userId = sessionHolder.userId)
 
     val statuses = response.getOperationStatusesList.asScala
     assert(statuses.size == 3)
@@ -199,8 +197,9 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     val statuses = response.getOperationStatusesList.asScala
     assert(statuses.size == 1)
     assert(statuses.head.getOperationId == nonExistentOperationId)
-    assert(statuses.head.getState ==
-      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+    assert(
+      statuses.head.getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
   }
 
   test("GetStatus returns RUNNING status for active operation") {
@@ -217,8 +216,9 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     val statuses = response.getOperationStatusesList.asScala
     assert(statuses.size == 1)
     assert(statuses.head.getOperationId == executeHolder.operationId)
-    assert(statuses.head.getState ==
-      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+    assert(
+      statuses.head.getState ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
   }
 
   test("GetStatus propagates both request and operation extensions via plugin") {
@@ -250,13 +250,15 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     val statusByOpId = statuses.map(s => s.getOperationId -> s).toMap
     Seq(executeHolder1, executeHolder2).foreach { holder =>
       val opStatus = statusByOpId(holder.operationId)
-      assert(opStatus.getState ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
+      assert(
+        opStatus.getState ==
+          proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
 
       val opExtensions = opStatus.getExtensionsList.asScala
       assert(opExtensions.size == 1)
-      assert(opExtensions.head.unpack(classOf[StringValue]).getValue ==
-        s"op-echo:${holder.operationId}:op-data")
+      assert(
+        opExtensions.head.unpack(classOf[StringValue]).getValue ==
+          s"op-echo:${holder.operationId}:op-data")
     }
   }
 
@@ -313,7 +315,9 @@ class GetStatusHandlerSuite extends SharedSparkSession {
 
   test("GetStatus chain isolates plugin failures and collects from healthy plugins") {
     SparkConnectPluginRegistry.setGetStatusPluginsForTesting(
-      Seq(new EchoGetStatusPlugin(), new FailingGetStatusPlugin(),
+      Seq(
+        new EchoGetStatusPlugin(),
+        new FailingGetStatusPlugin(),
         new SecondEchoGetStatusPlugin()))
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val command = proto.Command.newBuilder().build()
@@ -334,8 +338,7 @@ class GetStatusHandlerSuite extends SharedSparkSession {
     assert(responseExtValues.contains("request-echo:safe"))
     assert(responseExtValues.contains("second-request:safe"))
 
-    val opExtValues = response.getOperationStatusesList.asScala
-      .head.getExtensionsList.asScala
+    val opExtValues = response.getOperationStatusesList.asScala.head.getExtensionsList.asScala
       .map(_.unpack(classOf[StringValue]).getValue)
     assert(opExtValues.size == 2)
     assert(opExtValues.contains(s"op-echo:${executeHolder.operationId}:safe"))

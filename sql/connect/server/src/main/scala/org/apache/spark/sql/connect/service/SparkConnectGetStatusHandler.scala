@@ -26,7 +26,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 
-
 class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetStatusResponse])
     extends Logging {
 
@@ -37,8 +36,7 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
     }
     val sessionHolder = SparkConnectService.sessionManager.getIsolatedSession(
       SessionKey(request.getUserContext.getUserId, request.getSessionId),
-      previousSessionId
-    )
+      previousSessionId)
 
     val responseBuilder = proto.GetStatusResponse
       .newBuilder()
@@ -51,7 +49,8 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
 
     if (request.hasOperationStatus) {
       val operationStatusRequest = request.getOperationStatus
-      val requestedOperationIds = operationStatusRequest.getOperationIdsList.asScala.distinct.toSeq
+      val requestedOperationIds =
+        operationStatusRequest.getOperationIdsList.asScala.distinct.toSeq
       val operationExtensions = operationStatusRequest.getExtensionsList
 
       val operationStatuses = if (requestedOperationIds.isEmpty) {
@@ -71,7 +70,6 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
     responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
-
 
   private def getOperationStatus(
       sessionHolder: SessionHolder,
@@ -98,16 +96,13 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
         mapStatusToState(info.operationId, info.status, info.terminationReason)
       }
       .orElse(activeState)
-      .getOrElse(
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
-      )
+      .getOrElse(proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
 
     val responseExtensions =
       processOperationExtensionsViaPlugins(sessionHolder, operationExtensions, operationId)
 
     buildOperationStatus(operationId, state, responseExtensions)
   }
-
 
   private def getAllOperationStatuses(
       sessionHolder: SessionHolder,
@@ -121,7 +116,6 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
       getOperationStatus(sessionHolder, operationId, operationExtensions)
     }
   }
-
 
   private def mapStatusToState(
       operationId: String,
@@ -150,8 +144,7 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
     }
   }
 
-  private def mapTerminationReasonToState(
-      terminationReason: Option[TerminationReason])
+  private def mapTerminationReasonToState(terminationReason: Option[TerminationReason])
       : proto.GetStatusResponse.OperationStatus.OperationState = {
     terminationReason match {
       case Some(TerminationReason.Succeeded) =>
@@ -180,7 +173,8 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
 
   private def processRequestExtensionsViaPlugins(
       sessionHolder: SessionHolder,
-      requestExtensions: java.util.List[com.google.protobuf.Any]): Seq[com.google.protobuf.Any] = {
+      requestExtensions: java.util.List[com.google.protobuf.Any])
+      : Seq[com.google.protobuf.Any] = {
     SparkConnectPluginRegistry.getStatusRegistry.flatMap { plugin =>
       try {
         plugin.processRequestExtensions(sessionHolder, requestExtensions).toScala match {
@@ -204,8 +198,9 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
       operationId: String): Seq[com.google.protobuf.Any] = {
     SparkConnectPluginRegistry.getStatusRegistry.flatMap { plugin =>
       try {
-        plugin.processOperationExtensions(
-          operationId, sessionHolder, operationExtensions).toScala match {
+        plugin
+          .processOperationExtensions(operationId, sessionHolder, operationExtensions)
+          .toScala match {
           case Some(extensions) => extensions.asScala.toSeq
           case None => Seq.empty
         }

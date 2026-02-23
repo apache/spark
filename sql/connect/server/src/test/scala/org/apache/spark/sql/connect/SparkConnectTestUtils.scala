@@ -38,8 +38,7 @@ object SparkConnectTestUtils {
   /** Creates a dummy execute holder for use in tests. */
   def createDummyExecuteHolder(
       sessionHolder: SessionHolder,
-      command: proto.Command
-  ): ExecuteHolder = {
+      command: proto.Command): ExecuteHolder = {
     sessionHolder.eventManager.status_(SessionStatus.Started)
     val request = proto.ExecutePlanRequest
       .newBuilder()
@@ -47,15 +46,13 @@ object SparkConnectTestUtils {
         proto.Plan
           .newBuilder()
           .setCommand(command)
-          .build()
-      )
+          .build())
       .setSessionId(sessionHolder.sessionId)
       .setUserContext(
         proto.UserContext
           .newBuilder()
           .setUserId(sessionHolder.userId)
-          .build()
-      )
+          .build())
       .build()
     val executeHolder =
       SparkConnectService.executionManager.createExecuteHolder(request)

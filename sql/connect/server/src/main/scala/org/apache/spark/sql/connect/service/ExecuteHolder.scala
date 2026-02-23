@@ -351,8 +351,7 @@ private[connect] class ExecuteHolder(
       sessionId = sessionHolder.sessionId,
       operationId = executeKey.operationId,
       status = eventsManager.status,
-      terminationReason = eventsManager.terminationReason
-    )
+      terminationReason = eventsManager.terminationReason)
   }
 }
 
