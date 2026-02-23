@@ -1024,9 +1024,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
 
     when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC fails to create"))
-//    intercept[KubernetesClientException] {
-//      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
-//    }
+    intercept[KubernetesClientException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    }
     assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
     assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
   }
