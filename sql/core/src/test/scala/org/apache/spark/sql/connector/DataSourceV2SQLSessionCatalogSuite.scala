@@ -87,14 +87,14 @@ class DataSourceV2SQLSessionCatalogSuite
       Row(5, 5))
   }
 
-  test("SPARK-55024: data source tables with multi-part identifiers") {
+  test("SPARK-55024: data source metadata tables with multi-part identifiers") {
     // This test querying data source tables with multi part identifiers,
     // with the example of Iceberg's metadata table, eg db.table.snapshots
     val t1 = "metadata_test_tbl"
 
-    def verify(snapshots: DataFrame, queryDesc: String): Unit = {
-      assert(snapshots.count() == 3,
-        s"$queryDesc: expected 3 snapshots")
+    def verifySnapshots(snapshots: DataFrame, expectedCount: Int, queryDesc: String): Unit = {
+      assert(snapshots.count() == expectedCount,
+        s"$queryDesc: expected $expectedCount snapshots")
       assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
         s"$queryDesc: expected schema [committed_at, snapshot_id], " +
           s"got: ${snapshots.schema.fieldNames.toSeq}")
@@ -109,11 +109,13 @@ class DataSourceV2SQLSessionCatalogSuite
       sql(s"INSERT INTO $t1 VALUES (2, 'second')")
       sql(s"INSERT INTO $t1 VALUES (3, 'third')")
 
-      verify(sql(s"SELECT * FROM $t1.snapshots"), "table.snapshots")
-      verify(sql(s"SELECT * FROM default.$t1.snapshots"), "default.table.snapshots")
-      verify(
-        sql(s"SELECT * FROM spark_catalog.default.$t1.snapshots"),
-        "spark_catalog.default.table.snapshots")
+      Seq(
+        s"$t1.snapshots",
+        s"default.$t1.snapshots",
+        s"spark_catalog.default.$t1.snapshots"
+      ).foreach { snapshotTable =>
+        verifySnapshots(sql(s"SELECT * FROM $snapshotTable"), 3, snapshotTable)
+      }
     }
   }
 }
