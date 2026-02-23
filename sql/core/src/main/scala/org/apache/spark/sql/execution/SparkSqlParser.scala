@@ -97,6 +97,19 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
+  override def parseViewDefinitionQueryText(viewDDL: String): Option[String] = {
+    try {
+      parsePlan(viewDDL) match {
+        case cmd: CreateViewCommand if cmd.originalText.isDefined =>
+          cmd.originalText
+        case _ =>
+          None
+      }
+    } catch {
+      case _: Exception => None
+    }
+  }
+
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     parseInternal(command, None)(toResult)
   }
@@ -446,6 +459,13 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitShowCurrentNamespace(
       ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
     ShowCurrentNamespaceCommand()
+  }
+
+  /**
+   * Create a [[ShowCachedTablesCommand]] logical command.
+   */
+  override def visitShowCachedTables(ctx: ShowCachedTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowCachedTablesCommand()
   }
 
   /**

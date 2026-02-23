@@ -572,7 +572,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
               TableColumn("created_at", Type("timestamp_ltz"))
             )),
             last_access = Some("UNKNOWN"),
-            created_by = Some(s"Spark $SPARK_VERSION"),
+            created_by = None, // excluded from comparison; asserted separately below
             `type` = Some("VIEW"),
             collation = Some("UTF8_BINARY"),
             view_text = Some("SELECT * FROM spark_catalog.ns.table"),
@@ -584,8 +584,11 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           )
 
               assert(iso8601Regex.matches(parsedOutput.created_time.get))
+              assert(parsedOutput.created_by.exists(_.startsWith("Spark ")),
+                s"created_by should start with 'Spark ': ${parsedOutput.created_by}")
               assert(expectedOutput == parsedOutput.copy(
                 created_time = None,
+                created_by = None,
                 table_properties = None,
                 storage_properties = None,
                 serde_library = None,

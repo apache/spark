@@ -27,10 +27,8 @@ class DropTableSuite extends v1.DropTableSuiteBase with CommandSuiteBase {
   test("hive client calls") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      // Drop existing table: 3 Hive client calls
-      // 1. tableExists (in DropTableExec to check if table exists)
-      // 2. getTable (in loadTable -> getTableRawMetadata to get table metadata)
-      // 3. dropTable (the actual drop operation)
+      // 3 calls: tableExists + getTableMetadata + dropTable (catch skips tableExists when
+      // exception indicates table/db not found).
       checkHiveClientCalls(expected = 3) {
         sql(s"DROP TABLE $t")
       }

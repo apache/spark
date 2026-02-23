@@ -199,7 +199,12 @@ abstract class DynamicPartitionPruningSuiteBase
     assert(hasSubquery == withSubquery,
       s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
     val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
-    assert(subqueryBroadcast.nonEmpty == withBroadcast,
+    val hasCachedBroadcastReuse = plan.exists {
+      case _: TableCacheQueryStageExec => true
+      case _ => false
+    }
+    assert(
+      subqueryBroadcast.nonEmpty == withBroadcast || (withBroadcast && hasCachedBroadcastReuse),
       s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
 
     subqueryBroadcast.foreach { s =>

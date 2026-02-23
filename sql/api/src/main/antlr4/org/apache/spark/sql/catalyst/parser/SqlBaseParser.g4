@@ -375,6 +375,7 @@ statement
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
+    | SHOW CACHED TABLES                                                #showCachedTables
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) PROCEDURE identifierReference                  #describeProcedure
@@ -1903,6 +1904,7 @@ ansiNonReserved
     | BY
     | BYTE
     | CACHE
+    | CACHED
     | CALLED
     | CASCADE
     | CATALOG
@@ -2271,6 +2273,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CACHED
     | CALL
     | CALLED
     | CASCADE

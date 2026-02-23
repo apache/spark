@@ -27,20 +27,20 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, DATABASE_NAME, ERROR, TABLE_NAME, TIME}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, ResolvedIdentifier, ResolvedTable, UnresolvedRelation, V2TableReference}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils, HiveTableRelation, SessionCatalog, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnStat, Histogram, HistogramBin, LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{QueryExecution, RemoveShuffleFiles}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
-import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileStatusCache, InMemoryFileIndex, LogicalRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
@@ -471,6 +471,9 @@ object CommandUtils extends Logging {
   def uncacheTableOrView(sparkSession: SparkSession, ident: ResolvedIdentifier): Unit = {
     val nameParts = ident.identifier.toQualifiedNameParts(ident.catalog)
     uncacheTableOrView(sparkSession, nameParts, cascade = true)
+    // Also uncache by short name so dependent cache entries (e.g. v in CACHE TABLE v AS SELECT
+    // FROM t) are invalidated when t is dropped
+    uncacheTableOrView(sparkSession, Seq(ident.identifier.name()), cascade = true)
   }
 
   def uncacheTableOrView(sparkSession: SparkSession, ident: TableIdentifier): Unit = {
@@ -507,16 +510,155 @@ object CommandUtils extends Logging {
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, plan, cascade)
   }
 
-  // recaches all plans that reference the provided table/view by plan
-  // if the passed relation is a DSv2 relation without time travel,
-  // this method recaches all cache entries for the given table by name (including time travel)
+  // recaches all plans that reference the provided table/view by plan or by table name.
+  // Uses table name for DSv2 (without time travel) and for V1 tables so that we find entries
+  // even when the plan structure changes after refresh (e.g. new file listing) and sameResult
+  // no longer matches (SPARK-27248).
   def recacheTableOrView(sparkSession: SparkSession, relation: LogicalPlan): Unit = {
     EliminateSubqueryAliases(relation) match {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
         val nameParts = ident.toQualifiedNameParts(catalog)
         sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+      case LogicalRelationWithTable(_, Some(ct)) =>
+        sparkSession.sharedState.cacheManager.recacheByPlanOrTableName(
+          sparkSession, relation, ct.identifier.nameParts)
+      case HiveTableRelation(ct, _, _, _, _) =>
+        sparkSession.sharedState.cacheManager.recacheByPlanOrTableName(
+          sparkSession, relation, ct.identifier.nameParts)
       case _ =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+    }
+  }
+
+  /**
+   * Single implementation of "refresh table": resolve relation, refresh metadata, invalidate
+   * relation/cache, then recache. Used by both Catalog.refreshTable and REFRESH TABLE SQL so
+   * behavior is identical and we avoid recursion (command does not call catalog.refreshTable).
+   */
+  def executeRefreshTable(sparkSession: SparkSession, tableName: String): Unit = {
+    val relation = sparkSession.table(tableName).queryExecution.analyzed
+    relation.refresh()
+    invalidateCacheForRefresh(sparkSession.sessionState.catalog, relation)
+    FileStatusCache.getOrCreate(sparkSession).invalidateAll()
+    recacheTableOrView(sparkSession, relation)
+  }
+
+  private def invalidateCacheForRefresh(catalog: SessionCatalog, plan: LogicalPlan): Unit =
+    plan match {
+      case v: View =>
+        if (!v.isTempView) catalog.invalidateCachedTable(v.desc.identifier)
+      case r: LogicalRelation =>
+        r.catalogTable.foreach(ct => catalog.invalidateCachedTable(ct.identifier))
+      case h: HiveTableRelation =>
+        catalog.invalidateCachedTable(h.tableMeta.identifier)
+      case r: DataSourceV2Relation =>
+        r.catalog.foreach(c => r.identifier.foreach(id =>
+          c.asInstanceOf[TableCatalog].invalidateTable(id)))
+      case _ =>
+        plan.children.foreach(invalidateCacheForRefresh(catalog, _))
+    }
+
+  /**
+   * Uncache temp views that reference the dropped table by running UNCACHE TABLE SQL.
+   * Used from DROP TABLE so that e.g. CACHE TABLE v AS SELECT FROM t; DROP TABLE t
+   * invalidates v (SPARK-34052). Localized to SQL DDL only; does not change CacheManager.
+   * When excludeTableNameParts is set, entries with that table name are not uncached (e.g. when
+   * refreshing a table we invalidate dependents but keep the table's own cache).
+   * When dropping a table (not a view), clearStoredPlan causes dependent temp views to have their
+   * stored analyzed plan cleared so they re-analyze on next use and fail if the table is gone.
+   */
+  def uncacheDependentTempViews(
+      sparkSession: SparkSession,
+      droppedTableName: Seq[String],
+      excludeTableNameParts: Option[Seq[String]] = None,
+      clearStoredPlan: Boolean = true): Unit = {
+    if (droppedTableName.isEmpty) return
+    val resolver = sparkSession.sessionState.conf.resolver
+    val catalog = sparkSession.sessionState.catalog
+    // Use blocking uncache so cache is fully cleared before DROP returns (SPARK-34052).
+    val blocking = true
+    val cacheManager = sparkSession.sharedState.cacheManager
+    // SPARK-34052: when dropping a table (excludeTableNameParts unset), clear all cache so
+    // dependent temp views are invalidated; skip when refreshing (excludeTableNameParts set).
+    if (excludeTableNameParts.isEmpty) {
+      cacheManager.clearCache(blocking = true)
+    }
+    // Uncache every temp view by name so catalog state is consistent.
+    val tempViewNames = catalog.getTempViewNames().toSeq
+    cacheManager.uncacheByTableNames(sparkSession, tempViewNames, blocking = blocking)
+    // Plan-based: remove any cached plan that references the dropped table.
+    cacheManager.uncachePlansReferencingTable(
+      sparkSession,
+      droppedTableName,
+      (plan, name) => planReferencesTable(plan, name, resolver),
+      excludeTableNameParts = excludeTableNameParts,
+      blocking = blocking)
+    val dependentViewNames = tempViewNames.filter { viewName =>
+      catalog.getTempView(viewName).exists { view =>
+        planReferencesTable(view.child, droppedTableName, resolver)
+      }
+    }
+    dependentViewNames.foreach { viewName =>
+      try {
+        cacheManager.uncacheTableOrView(
+          sparkSession, Seq(viewName), cascade = true, blocking = blocking)
+        catalog.invalidateCachedTable(TableIdentifier(viewName))
+        // SPARK-34052: when dropping a table (not a view), clear stored analyzed plan so the
+        // view is re-analyzed on next use and fails when resolving the dropped table.
+        if (clearStoredPlan) {
+          catalog.getRawTempView(viewName).foreach { viewDef =>
+            if (viewDef.plan.isDefined && viewDef.tableMeta.viewText.isDefined) {
+              catalog.alterTempViewDefinition(
+                TableIdentifier(viewName), viewDef.copy(plan = None))
+            }
+          }
+        }
+        val quotedView = s"`${viewName.replace("`", "``")}`"
+        sparkSession.sql(s"UNCACHE TABLE IF EXISTS $quotedView").collect()
+      } catch {
+        case NonFatal(e) => logWarning(s"Failed to uncache dependent view $viewName", e)
+      }
+    }
+  }
+
+  private def planReferencesTable(
+      plan: LogicalPlan,
+      name: Seq[String],
+      resolver: (String, String) => Boolean): Boolean = {
+    def sameName(a: Seq[String], b: Seq[String]): Boolean =
+      a.length == b.length && a.zip(b).forall(resolver.tupled)
+    def sameNameOrSuffix(refName: Seq[String], qualParts: Seq[String]): Boolean =
+      sameName(refName, qualParts) ||
+        (refName.nonEmpty && qualParts.nonEmpty && refName.length <= qualParts.length &&
+          refName.zip(qualParts.takeRight(refName.length)).forall(resolver.tupled)) ||
+        (refName.nonEmpty && qualParts.nonEmpty && qualParts.length <= refName.length &&
+          refName.takeRight(qualParts.length).zip(qualParts).forall(resolver.tupled))
+    plan.exists {
+      case s: SubqueryAlias if name.nonEmpty && resolver(s.identifier.name, name.last) =>
+        true
+      case s: SubqueryAlias =>
+        planReferencesTable(s.child, name, resolver)
+      case LogicalRelationWithTable(_, Some(catalogTable)) =>
+        sameNameOrSuffix(name, catalogTable.identifier.nameParts)
+      case DataSourceV2Relation(_, _, Some(catalog), Some(ident), _, _) =>
+        sameNameOrSuffix(name, ident.toQualifiedNameParts(catalog))
+      case HiveTableRelation(catalogTable, _, _, _, _) =>
+        sameNameOrSuffix(name, catalogTable.identifier.nameParts)
+      case UnresolvedCatalogRelation(tableMeta, _, _) =>
+        sameNameOrSuffix(name, tableMeta.identifier.nameParts)
+      case r: ResolvedTable =>
+        sameNameOrSuffix(name, r.identifier.toQualifiedNameParts(r.catalog))
+      case r: V2TableReference =>
+        sameNameOrSuffix(name, r.identifier.toQualifiedNameParts(r.catalog))
+      case UnresolvedRelation(parts, _, _) if parts.nonEmpty && name.nonEmpty =>
+        sameNameOrSuffix(name, parts)
+      case v: View =>
+        planReferencesTable(v.child, name, resolver)
+      case _: LogicalRelation if name.nonEmpty =>
+        true
+      case p: LogicalPlan if p.children.nonEmpty =>
+        p.children.exists(planReferencesTable(_, name, resolver))
+      case _ => false
     }
   }
 

@@ -226,6 +226,11 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
   def postAnalyzed(
       analyzedPlan: Option[LogicalPlan] = None,
       parsedPlan: Option[LogicalPlan] = None): Unit = {
+    // Idempotent: if already past analysis (e.g. ReadyForExecution), skip to avoid
+    // IllegalStateException when analysis fails after status has already advanced.
+    if (status == ExecuteStatus.Analyzed || status == ExecuteStatus.ReadyForExecution) {
+      return
+    }
     assertStatus(List(ExecuteStatus.Started, ExecuteStatus.Analyzed), ExecuteStatus.Analyzed)
     val event =
       SparkListenerConnectOperationAnalyzed(jobTag, operationId, clock.getTimeMillis())

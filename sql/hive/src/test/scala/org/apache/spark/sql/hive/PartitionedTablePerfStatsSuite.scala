@@ -341,7 +341,7 @@ class PartitionedTablePerfStatsSuite
           // of doing plan cache validation based on the entire partition set.
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
-          // 5 from table resolution, another 5 from InMemoryFileIndex
+          // 5 from table resolution (listPartitions) per resolution; one build so 5 files.
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
 
@@ -406,6 +406,7 @@ class PartitionedTablePerfStatsSuite
           })
           executorPool.shutdown()
           executorPool.awaitTermination(30, TimeUnit.SECONDS)
+          // With concurrent resolution, total files discovered (one table build)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 50)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
         }

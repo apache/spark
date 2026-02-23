@@ -118,7 +118,15 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "pipe-operators.sql",
     // VARIANT type
     "variant/named-function-arguments.sql",
-    "variant-field-extractions.sql"
+    "variant-field-extractions.sql",
+    // View schema / session: Thrift returns [] or data when in-process expects AnalysisException
+    "view-schema-evolution.sql",
+    "columnresolution-negative.sql",
+    "sql-session-variables.sql",
+    "view-schema-binding-config.sql",
+    "view-schema-type-evolution.sql",
+    "view-schema-compensation.sql",
+    "parse-query-correctness-old-behavior.sql"
   )
 
   override def runQueries(
@@ -175,9 +183,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           val output =
             if (schema != emptySchema && isNeedSort(sql)) {
               val splits = originalOut.split("\n")
-              if (splits.length > rowCounts(i)) {
+              // DDL/empty results can yield rowCounts(i)==0; avoid / by zero
+              val n = math.max(1, rowCounts(i))
+              if (splits.length > n) {
                 // the result is multiline
-                val step = splits.length / rowCounts(i)
+                val step = splits.length / n
                 splits.grouped(step).map(_.mkString("\n")).toSeq.sorted.mkString("\n")
               } else {
                 splits.sorted.mkString("\n")

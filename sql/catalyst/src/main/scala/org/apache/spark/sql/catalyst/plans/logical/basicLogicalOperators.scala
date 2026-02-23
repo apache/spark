@@ -878,7 +878,8 @@ case class View(
     isTempView: Boolean,
     child: LogicalPlan,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
-  require(!isTempViewStoringAnalyzedPlan || child.resolved)
+  // When viewText is set, the child may be unresolved (re-analyze-from-text path after plan clear).
+  require(!isTempViewStoringAnalyzedPlan || child.resolved || desc.viewText.isDefined)
 
   override def output: Seq[Attribute] = child.output
 

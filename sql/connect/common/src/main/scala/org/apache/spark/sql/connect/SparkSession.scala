@@ -48,7 +48,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, PrimitiveBooleanEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
@@ -82,7 +82,8 @@ class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
     private val planIdGenerator: AtomicLong)
     extends sql.SparkSession
-    with Logging {
+    with Logging
+    with org.apache.spark.sql.internal.CatalogSupport {
 
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
@@ -352,7 +353,59 @@ class SparkSession private[sql] (
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /** @inheritdoc */
-  lazy val catalog: Catalog = new Catalog(this)
+  override def parseMultipartIdentifier(identifier: String): Seq[String] =
+    SparkSession.parseMultipartIdentifierDefault(identifier)
+
+  /** @inheritdoc */
+  override def quoteIdentifier(identifier: String): String = {
+    if (identifier.contains("`")) "`" + identifier.replace("`", "``") + "`"
+    else "`" + identifier + "`"
+  }
+
+  /** @inheritdoc */
+  override def currentDatabase: String = {
+    sql("SELECT current_database()").collect()(0).getString(0)
+  }
+
+  /** @inheritdoc */
+  override def currentCatalog(): String = {
+    // Use plan-based path so the server handles CurrentCatalog via transformCurrentCatalog()
+    // and never runs SQL (avoids any client/server SQL that could reference "spark_catalog").
+    newDataset(StringEncoder) { builder =>
+      builder.getCatalogBuilder.getCurrentCatalogBuilder
+    }.head()
+  }
+
+  override def getFunctionMetadata(
+      catalogName: String,
+      namespace: Array[String],
+      functionName: String): Option[(String, String)] = None
+
+  override def dropTempViewIfExists(
+      session: org.apache.spark.sql.SparkSession,
+      viewName: String): Boolean = {
+    newDataset(PrimitiveBooleanEncoder) { builder =>
+      builder.getCatalogBuilder.getDropTempViewBuilder.setViewName(viewName)
+    }.head()
+  }
+
+  override def refreshTable(
+      session: org.apache.spark.sql.SparkSession,
+      tableName: String): Unit = {
+    execute { builder =>
+      builder.getCatalogBuilder.getRefreshTableBuilder.setTableName(tableName)
+    }
+  }
+
+  override def refreshByPath(session: org.apache.spark.sql.SparkSession, path: String): Unit = {
+    execute { builder =>
+      builder.getCatalogBuilder.getRefreshByPathBuilder.setPath(path)
+    }
+  }
+
+  /** @inheritdoc */
+  override lazy val catalog: org.apache.spark.sql.catalog.Catalog =
+    new org.apache.spark.sql.internal.CatalogImpl(this)
 
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
@@ -793,6 +846,58 @@ class SparkSession private[sql] (
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession extends SparkSessionCompanion with Logging {
   override private[sql] type Session = SparkSession
+
+  /**
+   * Default implementation for parseMultipartIdentifier (no catalyst dependency). Split by '.'
+   * only when not inside backtick-quoted segments; unquote and unescape (`` -> `). Used by
+   * Connect CatalogSuite tests and by CatalogSupport.parseMultipartIdentifier.
+   */
+  def parseMultipartIdentifierDefault(identifier: String): Seq[String] = {
+    if (identifier == null || identifier.isEmpty) return Seq.empty
+    val parts = scala.collection.mutable.ArrayBuffer.empty[String]
+    var i = 0
+    val n = identifier.length
+    while (i < n) {
+      while (i < n && identifier(i) == ' ') i += 1
+      if (i >= n) return parts.toSeq
+      val partStart = i
+      if (identifier(i) == '`') {
+        i += 1
+        val sb = new StringBuilder
+        var done = false
+        while (i < n && !done) {
+          identifier(i) match {
+            case '`' =>
+              i += 1
+              if (i < n && identifier(i) == '`') {
+                sb.append('`')
+                i += 1
+              } else {
+                parts += sb.toString
+                while (i < n && identifier(i) == ' ') i += 1
+                if (i < n && identifier(i) == '.') i += 1
+                else if (i < n) {
+                  val rest = identifier.substring(i).trim
+                  if (rest.nonEmpty) parts += rest
+                  return parts.toSeq
+                }
+                done = true
+              }
+            case c =>
+              sb.append(c)
+              i += 1
+          }
+        }
+        if (!done) parts += sb.toString
+      } else {
+        while (i < n && identifier(i) != '.') i += 1
+        val part = identifier.substring(partStart, i).trim
+        if (part.nonEmpty) parts += part
+        if (i < n && identifier(i) == '.') i += 1
+      }
+    }
+    parts.toSeq
+  }
 
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong

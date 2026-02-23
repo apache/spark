@@ -83,7 +83,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       schemaInMetastore: StructType,
       expectedFileFormat: Class[_ <: FileFormat],
       partitionSchema: Option[StructType]): Option[LogicalRelation] = {
-
     catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
       case logical @ LogicalRelationWithTable(relation: HadoopFsRelation, _) =>

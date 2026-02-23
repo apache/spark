@@ -264,11 +264,13 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
-          e match {
-            case _: HiveSQLException => throw e
-            case _ => throw HiveThriftServerErrors.runningQueryError(
+          val toThrow = e match {
+            case h: HiveSQLException => h
+            case _ => HiveThriftServerErrors.runningQueryError(
               e, conf.errorMessageFormat)
           }
+          setOperationException(toThrow)
+          throw toThrow
         }
     } finally {
       synchronized {

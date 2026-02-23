@@ -99,6 +99,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
         if (catalog.getCachedTable(qualifiedTableName) != null) {
           return V1Table(table)
         }
+        // Use V1Table so DESCRIBE uses DescribeTableCommand (partition/bucket info in output).
+        if (table.partitionColumnNames.nonEmpty || table.bucketSpec.isDefined) {
+          return V1Table(table)
+        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
             // Get the table properties during creation and append the path option

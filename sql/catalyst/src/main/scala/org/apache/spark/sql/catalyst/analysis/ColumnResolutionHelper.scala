@@ -134,11 +134,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
-          if (matched.length != expectedNumCandidates) {
+          if (matched.length == expectedNumCandidates) {
+            matched(ordinal)
+          } else {
             throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
-          matched(ordinal)
 
         case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
           // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn

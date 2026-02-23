@@ -138,6 +138,9 @@ object FileDataSourceV2 {
           filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
       case e: FileNotFoundException =>
         throw QueryExecutionErrors.fileNotExistError(filePath, e)
+      case e if e.getCause != null &&
+          e.getCause.isInstanceOf[FileNotFoundException] =>
+        throw QueryExecutionErrors.fileNotExistError(filePath, e.getCause.asInstanceOf[Exception])
       case NonFatal(e) =>
         throw QueryExecutionErrors.cannotReadFilesError(e, filePath)
     }

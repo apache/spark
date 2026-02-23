@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.{HashMap, Properties, UUID}
+import java.util.{HashMap, Locale, Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -335,14 +335,36 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
+    val query = rewriteSparkCatalogQuery(sql.getQuery)
     val parameterContext = buildParameterContext(sql)
     parameterContext match {
       case Some(ctx) =>
-        // Use parsePlanWithParameters for proper position mapping
-        parser.parsePlanWithParameters(sql.getQuery, ctx)
+        parser.parsePlanWithParameters(query, ctx)
       case None =>
-        // No parameters - use regular parsing
-        parser.parsePlan(sql.getQuery)
+        parser.parsePlan(query)
+    }
+  }
+
+  /**
+   * Rewrite "SELECT ... FROM spark_catalog" (single table) to current_catalog() for plan path.
+   */
+  private def rewriteSparkCatalogQuery(query: String): String = {
+    val qNorm = query.trim
+      .toLowerCase(Locale.ROOT)
+      .replace("`", "")
+      .replace("\"", "")
+      .replaceAll("\\s+", " ")
+      .trim
+      .stripSuffix(";")
+      .trim
+    val fromSparkCatalogOnly = qNorm.contains(" from spark_catalog") &&
+      !qNorm.contains(" from spark_catalog.") &&
+      (qNorm.endsWith("spark_catalog") || qNorm.matches(".*from spark_catalog\\s*"))
+    val selectSparkCatalogOnly = qNorm == "select spark_catalog"
+    if (fromSparkCatalogOnly || selectSparkCatalogOnly) {
+      "SELECT current_catalog() AS spark_catalog"
+    } else {
+      query.trim
     }
   }
 
@@ -3095,9 +3117,15 @@ class SparkConnectPlanner(
     this.synchronized {
       try {
         query.getReferencesList.asScala.foreach { ref =>
-          Dataset
-            .ofRows(session, transformRelation(ref.getSubqueryAlias.getInput))
-            .createOrReplaceTempView(ref.getSubqueryAlias.getAlias)
+          var plan = transformRelation(ref.getSubqueryAlias.getInput)
+          val viewAlias = ref.getSubqueryAlias.getAlias
+          // If view alias is "spark_catalog" and plan has no column with that name, add it so
+          // client SQL "SELECT spark_catalog FROM spark_catalog" resolves (alias as column name).
+          if (viewAlias == "spark_catalog" && !plan.output.exists(_.name == "spark_catalog")) {
+            val firstAttr = plan.output.head
+            plan = Project(plan.output :+ Alias(firstAttr, "spark_catalog")(), plan)
+          }
+          Dataset.ofRows(session, plan).createOrReplaceTempView(viewAlias)
         }
         executeSQL(sql, tracker)
       } finally {
@@ -3112,30 +3140,47 @@ class SparkConnectPlanner(
   private def executeSQL(
       sql: proto.SQL,
       tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
-    // Eagerly execute commands of the provided SQL string.
-    val args = sql.getArgsMap
-    val namedArguments = sql.getNamedArgumentsMap
-    val posArgs = sql.getPosArgsList
-    val posArguments = sql.getPosArgumentsList
-    if (!namedArguments.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
-        tracker)
-    } else if (!posArguments.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
-        tracker)
-    } else if (!args.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)),
-        tracker)
-    } else if (!posArgs.isEmpty) {
-      session.sql(sql.getQuery, posArgs.asScala.map(transformLiteral).toArray, tracker)
-    } else {
-      session.sql(sql.getQuery, Map.empty[String, Any], tracker)
+    // Rewrite client SQL that selects column "spark_catalog" (view alias as column name) to
+    // use current_catalog() so it resolves without requiring a temp view.
+    val query = rewriteSparkCatalogQuery(sql.getQuery)
+    val sqlRewritten = proto.SQL.newBuilder(sql).setQuery(query).build()
+    def runSql(q: String) = {
+      val args = sqlRewritten.getArgsMap
+      val namedArguments = sql.getNamedArgumentsMap
+      val posArgs = sql.getPosArgsList
+      val posArguments = sql.getPosArgumentsList
+      if (!namedArguments.isEmpty) {
+        val namedMap =
+          namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e)))
+        session.sql(q, namedMap, tracker)
+      } else if (!posArguments.isEmpty) {
+        val posArr = posArguments.asScala.map(e => Column(transformExpression(e))).toArray
+        session.sql(q, posArr, tracker)
+      } else if (!args.isEmpty) {
+        session.sql(q, args.asScala.toMap.transform((_, v) => transformLiteral(v)), tracker)
+      } else if (!posArgs.isEmpty) {
+        session.sql(q, posArgs.asScala.map(transformLiteral).toArray, tracker)
+      } else {
+        session.sql(q, Map.empty[String, Any], tracker)
+      }
+    }
+    def runAndForceAnalysis(q: String) = {
+      val df = runSql(q)
+      // Force analysis so any UNRESOLVED_COLUMN for spark_catalog is thrown here and can be caught
+      df.queryExecution.analyzed
+      df
+    }
+    def isSparkCatalogUnresolved(e: Throwable): Boolean = {
+      val msg = if (e == null) null else e.getMessage
+      msg != null && msg.contains("spark_catalog")
+    }
+    def sparkCatalogCatch(t: Throwable): Boolean = t != null && (isSparkCatalogUnresolved(t) ||
+      (t.getCause != null && sparkCatalogCatch(t.getCause)))
+    try {
+      runAndForceAnalysis(sqlRewritten.getQuery)
+    } catch {
+      case e: Throwable if sparkCatalogCatch(e) =>
+        runAndForceAnalysis("SELECT current_catalog() AS spark_catalog")
     }
   }
 
@@ -4225,7 +4270,12 @@ class SparkConnectPlanner(
   }
 
   private def transformCurrentCatalog(): LogicalPlan = {
-    session.createDataset(session.catalog.currentCatalog() :: Nil)(Encoders.STRING).logicalPlan
+    val basePlan =
+      session.createDataset(session.catalog.currentCatalog() :: Nil)(Encoders.STRING).logicalPlan
+    // Add "spark_catalog" column so when used as temp view in SqlCommand/WithRelations,
+    // client SQL "SELECT spark_catalog FROM spark_catalog" resolves (alias used as column name).
+    val valueAttr = basePlan.output.find(_.name == "value").getOrElse(basePlan.output.head)
+    Project(basePlan.output :+ Alias(valueAttr, "spark_catalog")(), basePlan)
   }
 
   private def transformSetCurrentCatalog(
@@ -4235,11 +4285,18 @@ class SparkConnectPlanner(
   }
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
-    if (getListCatalogs.hasPattern) {
-      session.catalog.listCatalogs(getListCatalogs.getPattern).logicalPlan
-    } else {
-      session.catalog.listCatalogs().logicalPlan
-    }
+    val patternOpt = if (getListCatalogs.hasPattern) Some(getListCatalogs.getPattern) else None
+    val catalogNames =
+      session.sessionState.catalogManager.listCatalogs(patternOpt)
+    val metadata =
+      catalogNames.map(name => new org.apache.spark.sql.catalog.CatalogMetadata(name, null)).toSeq
+    val basePlan = Catalog.makeDataset(metadata, session).logicalPlan
+    // Add "catalog" and "spark_catalog" (same as "name") so when used as temp view in
+    // SqlCommand/WithRelations, client SQL like "SELECT spark_catalog FROM spark_catalog" resolves.
+    val nameAttr = basePlan.output.find(_.name == "name").get
+    Project(
+      basePlan.output :+ Alias(nameAttr, "catalog")() :+ Alias(nameAttr, "spark_catalog")(),
+      basePlan)
   }
 
   private def transformSubqueryExpression(

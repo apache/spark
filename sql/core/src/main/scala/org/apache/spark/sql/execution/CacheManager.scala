@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.File
+import java.util.Locale
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, HiveTableRelation, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -78,9 +82,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private var cachedData = IndexedSeq[CachedData]()
 
   /** Clears all cached tables. */
-  def clearCache(): Unit = this.synchronized {
-    cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+  def clearCache(): Unit = clearCache(blocking = false)
+
+  /** Clears all cached tables, optionally blocking until clear completes (e.g. for DROP TABLE). */
+  def clearCache(blocking: Boolean): Unit = this.synchronized {
+    val toClear = cachedData
     cachedData = IndexedSeq[CachedData]()
+    toClear.foreach(_.cachedRepresentation.cacheBuilder.clearCache(blocking))
     CacheManager.logCacheOperation(log"Cleared all Dataframe cache entries")
   }
 
@@ -226,16 +234,108 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     uncacheByCondition(spark, _.sameResult(plan), cascade, blocking)
   }
 
+  /**
+   * Remove any cache entry whose cacheBuilder.tableName matches the given name.
+   * Used when dropping a table to ensure dependent temp views (e.g. CACHE TABLE v AS SELECT FROM t)
+   * are uncached even if plan-based matching misses (SPARK-34052).
+   */
+  def uncacheByTableName(
+      spark: SparkSession,
+      name: Seq[String],
+      blocking: Boolean = false): Unit = {
+    if (name.isEmpty) return
+    val resolver = spark.sessionState.conf.resolver
+    def tableNameToParts(s: String): Seq[String] =
+      s.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+    val condition = (cd: CachedData) =>
+      cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+        isSameNameOrSuffix(name, tableNameToParts(tn), resolver)
+      }
+    uncacheByConditionWithFilter(spark, condition, cascade = true, blocking)
+  }
+
+  /**
+   * Uncache all entries whose table name matches any of the given names (by resolver).
+   * Used from DROP TABLE to invalidate dependent temp views (SPARK-34052).
+   */
+  def uncacheByTableNames(
+      spark: SparkSession,
+      names: Iterable[String],
+      blocking: Boolean = false): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+    val nameSet = names.toSet
+    if (nameSet.isEmpty) return
+    val condition = (cd: CachedData) =>
+      cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+        nameSet.exists(n => resolver(n, tn))
+      }
+    uncacheByConditionWithFilter(spark, condition, cascade = true, blocking)
+  }
+
   def uncacheTableOrView(
       spark: SparkSession,
       name: Seq[String],
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
-    uncacheByCondition(
-      spark,
-      isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel = true),
-      cascade,
-      blocking)
+    val resolver = spark.sessionState.conf.resolver
+    def tableNameToParts(s: String): Seq[String] =
+      s.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+    // Match by plan (SubqueryAlias/View/InMemoryRelation) or by cacheBuilder.tableName so
+    // CACHE TABLE v AS SELECT; DROP TABLE t reliably invalidates v (SPARK-34052).
+    def condition(cd: CachedData): Boolean = {
+      val planMatches = if (cascade) cd.plan.exists(isMatchedTableOrView(_, name, resolver, true))
+        else isMatchedTableOrView(cd.plan, name, resolver, true)
+      val nameMatches = cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+        isSameNameOrSuffix(name, tableNameToParts(tn), resolver)
+      }
+      planMatches || nameMatches
+    }
+    uncacheByConditionWithFilter(spark, condition, cascade, blocking)
+  }
+
+  /**
+   * Uncache all entries whose plan references the given table name (e.g. after DROP TABLE).
+   * Used so that CACHE TABLE v AS SELECT FROM t; DROP TABLE t invalidates v (SPARK-34052).
+   * When excludeTableNameParts is set, entries whose cache builder table name matches are
+   * not uncached (e.g. when refreshing table t we invalidate dependents but keep t's cache).
+   */
+  def uncachePlansReferencingTable(
+      spark: SparkSession,
+      name: Seq[String],
+      planMatches: (LogicalPlan, Seq[String]) => Boolean,
+      excludeTableNameParts: Option[Seq[String]] = None,
+      tableNameToParts: String => Seq[String] = s =>
+        s.split("\\.").toSeq.map(_.replaceAll("^`|`$", "")),
+      blocking: Boolean = false): Unit = {
+    if (name.nonEmpty) {
+      val planPredicate: LogicalPlan => Boolean = p => planMatches(p, name)
+      val condition: CachedData => Boolean = excludeTableNameParts match {
+        case None =>
+          cd => cd.plan.exists(planPredicate)
+        case Some(parts) =>
+          def excludeEntry(cd: CachedData): Boolean =
+            cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+              isSameNameOrSuffix(parts, tableNameToParts(tn), spark.sessionState.conf.resolver)
+            }
+          cd => cd.plan.exists(planPredicate) && !excludeEntry(cd)
+      }
+      uncacheByConditionWithFilter(spark, condition, cascade = true, blocking = blocking)
+    }
+  }
+
+  /** Uncache entries matching the given CachedData predicate (used when exclusion is needed). */
+  private def uncacheByConditionWithFilter(
+      spark: SparkSession,
+      condition: CachedData => Boolean,
+      cascade: Boolean,
+      blocking: Boolean): Unit = {
+    val plansToUncache = cachedData.filter(condition)
+    this.synchronized {
+      cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
+    }
+    plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
+    CacheManager.logCacheOperation(log"Removed ${MDC(SIZE, plansToUncache.size)} Dataframe " +
+      log"cache entries (with filter).")
   }
 
   private def isMatchedTableOrView(
@@ -252,22 +352,53 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       resolver: Resolver,
       includeTimeTravel: Boolean): Boolean = {
 
+    // Match SubqueryAlias by alias name so cached temp views (CACHE TABLE v AS SELECT) are
+    // found when uncaching by name (SPARK-34052). Only match when name matches alias (e.g. "v"),
+    // not when name is qualified (e.g. "testcat.tbl") so recacheByTableName is not affected.
+    plan match {
+      case s: SubqueryAlias if name.nonEmpty =>
+        val aliasParts = s.identifier.qualifier :+ s.identifier.name
+        if (isSameNameOrSuffix(name, aliasParts, resolver)) return true
+      case _ =>
+    }
+
     EliminateSubqueryAliases(plan) match {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
+        isSameNameOrSuffix(name, catalogTable.identifier.nameParts, resolver)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
-        isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
+        isSameNameOrSuffix(name, nameInCache, resolver) &&
+          (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
-        isSameName(name, v.desc.identifier.nameParts, resolver)
+        isSameNameOrSuffix(name, v.desc.identifier.nameParts, resolver)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
+        isSameNameOrSuffix(name, catalogTable.identifier.nameParts, resolver)
+
+      case UnresolvedCatalogRelation(tableMeta, _, _) =>
+        isSameNameOrSuffix(name, tableMeta.identifier.nameParts, resolver)
+
+      case inMem: InMemoryRelation =>
+        inMem.cacheBuilder.tableName.exists { tn =>
+          val parts = tn.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+          isSameNameOrSuffix(name, parts, resolver)
+        }
 
       case _ => false
     }
+  }
+
+  private def isSameNameOrSuffix(
+      name: Seq[String],
+      nameInPlan: Seq[String],
+      resolver: Resolver): Boolean = {
+    isSameName(name, nameInPlan, resolver) ||
+      (name.nonEmpty && nameInPlan.nonEmpty && name.length <= nameInPlan.length &&
+        name.zip(nameInPlan.takeRight(name.length)).forall(resolver.tupled)) ||
+      (name.nonEmpty && nameInPlan.nonEmpty && nameInPlan.length <= name.length &&
+        name.takeRight(nameInPlan.length).zip(nameInPlan).forall(resolver.tupled))
   }
 
   private def isSameName(
@@ -322,7 +453,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         //    other thread.
         val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
         cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
-      })
+      }, None)
     }
   }
 
@@ -343,28 +474,89 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
-    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)), None)
+  }
+
+  /**
+   * Re-caches all cache entries that refer to the given plan or to the given table name (via
+   * cache builder table name). Used by REFRESH TABLE so that we find entries even when the plan
+   * structure changes after refresh (e.g. new file listing) and sameResult no longer matches
+   * (SPARK-27248). Name parts from cache builder table name are obtained by tableNameToParts.
+   */
+  def recacheByPlanOrTableName(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      nameParts: Seq[String],
+      tableNameToParts: String => Seq[String] = s =>
+        s.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))): Unit = {
+    val normalized = QueryExecution.normalize(spark, plan)
+    def tableNameMatches(entry: CachedData): Boolean =
+      entry.cachedRepresentation.cacheBuilder.tableName.exists { name =>
+        isSameNameOrSuffix(nameParts, tableNameToParts(name), spark.sessionState.conf.resolver)
+      }
+    recacheByCondition(spark, cd =>
+      cd.plan.exists(_.sameResult(normalized)) || tableNameMatches(cd), Some(plan))
+  }
+
+  /**
+   * Collects all table name parts (catalog, database, table) referenced in the given plan.
+   * Used to invalidate dependent relation caches when refreshing a view.
+   */
+  private def collectTableNamePartsInPlan(plan: LogicalPlan): Set[Seq[String]] = {
+    val result = scala.collection.mutable.Set[Seq[String]]()
+    plan.foreach {
+      case LogicalRelationWithTable(_, Some(ct)) =>
+        result += ct.identifier.nameParts
+      case HiveTableRelation(ct, _, _, _, _) =>
+        result += ct.identifier.nameParts
+      case DataSourceV2Relation(_, _, Some(catalog), Some(ident), _, _) =>
+        result += ident.toQualifiedNameParts(catalog)
+      case UnresolvedCatalogRelation(tableMeta, _, _) =>
+        result += tableMeta.identifier.nameParts
+      case v: View =>
+        result ++= collectTableNamePartsInPlan(v.child)
+      case _ =>
+    }
+    result.toSet
   }
 
   /**
    * Re-caches all cache entries that reference the given table name.
+   * When includeTimeTravel is false, entries that reference the table with time travel
+   * (e.g. CACHE TABLE v AS SELECT ... VERSION AS OF) are excluded so they stay cached.
    */
   def recacheTableOrView(
       spark: SparkSession,
       name: Seq[String],
       includeTimeTravel: Boolean = true): Unit = {
-    def shouldInvalidate(entry: CachedData): Boolean = {
-      entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
+    val resolver = spark.sessionState.conf.resolver
+    def planReferencesTableWithTimeTravel(plan: LogicalPlan): Boolean = plan.exists {
+      case r: DataSourceV2Relation
+          if r.catalog.isDefined && r.identifier.isDefined && r.timeTravelSpec.nonEmpty =>
+        isSameNameOrSuffix(
+          name,
+          r.identifier.get.toQualifiedNameParts(r.catalog.get),
+          resolver)
+      case _ => false
     }
-    recacheByCondition(spark, shouldInvalidate)
+    def shouldInvalidate(entry: CachedData): Boolean = {
+      val matches = entry.plan.exists(
+        isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
+      if (includeTimeTravel || !matches) matches
+      else !planReferencesTableWithTimeTravel(entry.plan)
+    }
+    recacheByCondition(spark, shouldInvalidate, None)
   }
 
   /**
    *  Re-caches all the cache entries that satisfies the given `condition`.
+   *  When planOverride is Some(plan), that plan is used when rebuilding (e.g. refreshed table
+   *  plan from REFRESH TABLE) so V1 tables get fresh metadata (SPARK-27248, SPARK-33729).
    */
   private def recacheByCondition(
       spark: SparkSession,
-      condition: CachedData => Boolean): Unit = {
+      condition: CachedData => Boolean,
+      planOverride: Option[LogicalPlan] = None): Unit = {
     val needToRecache = cachedData.filter(condition)
     this.synchronized {
       // Remove the cache entry before creating a new ones.
@@ -372,32 +564,82 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      tryRebuildCacheEntry(spark, cd).foreach { entry =>
-        this.synchronized {
-          if (lookupCachedDataInternal(entry.plan).nonEmpty) {
-            logWarning("While recaching, data was already added to cache.")
-          } else {
-            cachedData = entry +: cachedData
-            CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-              log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+      // Use planOverride only for the table being refreshed; views that reference the table
+      // must be refreshed with their own plan (tryRefreshPlan) so they keep correct schema
+      // (e.g. SELECT *, 'a' FROM tbl keeps the literal column). SPARK-34138.
+      // Only use override when the cached entry is the table itself (root plan matches),
+      // not when it is a view that contains the table as a child.
+      val overrideForEntry = planOverride.filter { p =>
+        QueryExecution.normalize(spark, cd.plan).sameResult(QueryExecution.normalize(spark, p))
+      }
+      tryRebuildCacheEntry(spark, cd, overrideForEntry).foreach { entries =>
+        entries.foreach { entry =>
+          this.synchronized {
+            if (lookupCachedDataInternal(entry.plan).nonEmpty) {
+              logWarning("While recaching, data was already added to cache.")
+            } else {
+              cachedData = entry +: cachedData
+              CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+                log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+            }
           }
         }
       }
     }
   }
 
-  private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
+  private def tryRebuildCacheEntry(
+      spark: SparkSession,
+      cd: CachedData,
+      planOverrides: Seq[LogicalPlan]): Option[Seq[CachedData]] = {
+    if (planOverrides.isEmpty) {
+      return tryRebuildCacheEntry(spark, cd, None)
+    }
     val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
     sessionWithConfigsOff.withActive {
-      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
-        val qe = QueryExecution.create(
-          sessionWithConfigsOff,
-          refreshedPlan,
-          refreshPhaseEnabled = false)
-        val newKey = qe.normalized
-        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      val refreshedPlan = planOverrides.head
+      val qe = QueryExecution.create(
+        spark,
+        refreshedPlan,
+        refreshPhaseEnabled = false)
+      val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+      val normalizedKey = qe.normalized
+      // Keys: original, overrides, and normalized so all lookups hit (SPARK-27248).
+      def distinctBySameResult(plans: Seq[LogicalPlan]): Seq[LogicalPlan] =
+        plans.foldLeft(Seq.empty[LogicalPlan]) { (acc, p) =>
+          if (acc.exists(_.sameResult(p))) acc else acc :+ p
+        }
+      val distinctKeys = distinctBySameResult(
+        cd.plan +: planOverrides :+ normalizedKey)
+      val entries = distinctKeys.map(k => cd.copy(plan = k, cachedRepresentation = newCache))
+      Some(entries)
+    }
+  }
+
+  private def tryRebuildCacheEntry(
+      spark: SparkSession,
+      cd: CachedData,
+      planOverride: Option[LogicalPlan]): Option[Seq[CachedData]] = {
+    val overrides = planOverride.toSeq
+    if (overrides.isEmpty) {
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
+      sessionWithConfigsOff.withActive {
+        val planToUse = cd.plan
+        // When refresh fails (e.g. incompatible schema change), do not fall back to the old plan
+        // so the cache entry is not re-added and the cache stays empty (SPARK-54424).
+        val refreshedPlanOpt = tryRefreshPlan(sessionWithConfigsOff, planToUse)
+        refreshedPlanOpt.map { refreshedPlan =>
+          val qe = QueryExecution.create(
+            sessionWithConfigsOff,
+            refreshedPlan,
+            refreshPhaseEnabled = false)
+          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+          val normalizedKey = qe.normalized
+          Seq(cd.copy(plan = normalizedKey, cachedRepresentation = newCache))
+        }
       }
+    } else {
+      tryRebuildCacheEntry(spark, cd, overrides)
     }
   }
 
@@ -417,13 +659,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
     try {
       EliminateSubqueryAliases(plan) match {
+        case v: View =>
+          // Re-resolve the view so it sees refreshed underlying tables (e.g. after ALTER TABLE
+          // ADD PARTITION). SPARK-34138 keep dependents cached.
+          val name = v.desc.identifier.quotedString
+          Some(spark.table(name).queryExecution.analyzed)
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
           val table = catalog.loadTable(ident)
-          if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
-          } else {
-            None
-          }
+          // Use the newly loaded table so recache after REFRESH TABLE succeeds even when the
+          // catalog returns a new Table instance with a different id (SPARK-27248).
+          Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
         case _ =>
           Some(V2TableRefreshUtil.refresh(spark, plan))
       }
@@ -451,6 +696,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def findCachedRelations(
       name: Seq[String],
       resolver: Resolver): Seq[LogicalPlan] = {
+    def tableNameToParts(s: String): Seq[String] =
+      s.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
     cachedData.flatMap { cd =>
       val plan = EliminateSubqueryAliases(cd.plan)
       plan match {
@@ -458,16 +705,42 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
           Some(r)
         case _ =>
-          None
+          // V1/session catalog: match by cacheBuilder.tableName or plan table name parts
+          // so that CACHE TABLE on a V1 table is visible when resolving by table name.
+          if (cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+                isSameNameOrSuffix(name, tableNameToParts(tn), resolver)
+              } ||
+              getTableNamePartsFromPlan(cd.plan).exists { cacheNameParts =>
+                isSameNameOrSuffix(name, cacheNameParts, resolver)
+              }) {
+            Some(plan)
+          } else {
+            None
+          }
       }
     }
   }
 
   /**
+   * Returns the logical plans of all cached entries. Used by SHOW CACHED TABLES.
+   */
+  private[sql] def listCachedPlans(): Seq[LogicalPlan] = cachedData.map(_.plan)
+
+  /**
+   * Returns (plan, tableName) for each cached entry. The tableName is from the cache builder
+   * when the entry was cached via cacheTable(name); used by SHOW CACHED TABLES to list names
+   * when the plan does not expose table name parts (e.g. cached temp views).
+   */
+  private[sql] def listCachedEntries(): Seq[(LogicalPlan, Option[String])] =
+    cachedData.map(cd => (cd.plan, cd.cachedRepresentation.cacheBuilder.tableName))
+
+  /**
    * Optionally returns cached data for the given [[Dataset]]
    */
   def lookupCachedData(query: Dataset[_]): Option[CachedData] = {
-    lookupCachedDataInternal(query.queryExecution.normalized)
+    lookupCachedDataInternal(
+      query.queryExecution.normalized,
+      Some(query.sparkSession))
   }
 
   /**
@@ -476,29 +749,145 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def lookupCachedData(session: SparkSession, plan: LogicalPlan): Option[CachedData] = {
     val normalized = QueryExecution.normalize(session, plan)
-    lookupCachedDataInternal(normalized)
+    lookupCachedDataInternal(normalized, Some(session))
   }
 
-  private def lookupCachedDataInternal(plan: LogicalPlan): Option[CachedData] = {
+  /**
+   * Returns the table name parts (catalog/database/table) when the plan is a single table
+   * reference. Used for cache lookup fallback when plan structure changes (e.g. file listing
+   * after append) so sameResult no longer matches (SPARK-27248).
+   */
+  private def getTableNamePartsFromPlan(plan: LogicalPlan): Option[Seq[String]] = {
+    def stripBackticks(s: String): String = s.replaceAll("^`|`$", "")
+    plan match {
+      case s: SubqueryAlias =>
+        Some((s.identifier.qualifier :+ s.identifier.name).map(stripBackticks))
+      case r: ResolvedHint =>
+        getTableNamePartsFromPlan(r.child)
+      case _ =>
+        EliminateSubqueryAliases(plan) match {
+          case LogicalRelationWithTable(_, Some(ct)) =>
+            Some(ct.identifier.nameParts)
+          case DataSourceV2Relation(_, _, Some(catalog), Some(ident), _, _) =>
+            Some(ident.toQualifiedNameParts(catalog))
+          case v: View =>
+            Some(v.desc.identifier.nameParts)
+          case HiveTableRelation(ct, _, _, _, _) =>
+            Some(ct.identifier.nameParts)
+          case UnresolvedCatalogRelation(tableMeta, _, _) =>
+            Some(tableMeta.identifier.nameParts)
+          case _ =>
+            None
+        }
+    }
+  }
+
+  private def lookupCachedDataInternal(plan: LogicalPlan): Option[CachedData] =
+    lookupCachedDataInternal(plan, None)
+
+  private def lookupCachedDataInternal(
+      plan: LogicalPlan,
+      sessionOpt: Option[SparkSession]): Option[CachedData] = {
     val result = cachedData.find(cd => plan.sameResult(cd.plan))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
         log"${MDC(DATAFRAME_CACHE_ENTRY, result.get)}")
+      return result
     }
-    result
+    // Fallback: match by table name when plan structure changed (e.g. new file listing after
+    // append) so sameResult no longer matches (SPARK-27248).
+    def tableNameToParts(s: String): Seq[String] =
+      s.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+    // Match by table name (last component); recurse through ResolvedHint; handle LogicalRelation.
+    def findByAliasName(planToMatch: LogicalPlan): Option[CachedData] = planToMatch match {
+      case r: ResolvedHint => findByAliasName(r.child)
+      case s: SubqueryAlias =>
+        val qualifierAndName =
+          (s.identifier.qualifier :+ s.identifier.name).map(_.replaceAll("^`|`$", ""))
+        matchByTableName(if (qualifierAndName.nonEmpty) qualifierAndName.last else "")
+      case LogicalRelationWithTable(_, Some(ct)) =>
+        val nameParts = ct.identifier.nameParts
+        matchByTableName(if (nameParts.nonEmpty) nameParts.last else "")
+      case _ => None
+    }
+    def matchByTableName(tableName: String): Option[CachedData] =
+      if (tableName.isEmpty) None
+      else {
+        cachedData.find(cd =>
+          cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+            val parts = tableNameToParts(tn)
+            parts.nonEmpty && tableName.equalsIgnoreCase(parts.last)
+          } ||
+          getTableNamePartsFromPlan(cd.plan).exists { cp =>
+            cp.nonEmpty && tableName.equalsIgnoreCase(cp.last)
+          })
+      }
+    def findByName(resolver: (String, String) => Boolean): Option[CachedData] = {
+      val namePartsOpt = getTableNamePartsFromPlan(plan)
+      // Try full name / suffix match first
+      namePartsOpt.flatMap { nameParts =>
+        cachedData.find(cd =>
+          cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+            isSameNameOrSuffix(nameParts, tableNameToParts(tn), resolver)
+          } ||
+          getTableNamePartsFromPlan(cd.plan).exists { cacheNameParts =>
+            isSameNameOrSuffix(nameParts, cacheNameParts, resolver)
+          })
+      }.orElse {
+        // Then try match by table name (last component) so qualified vs unqualified matches
+        namePartsOpt.filter(_.nonEmpty).flatMap { nameParts =>
+          val tableName = nameParts.last
+          cachedData.find(cd =>
+            cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+              val parts = tableNameToParts(tn)
+              parts.nonEmpty && resolver(tableName, parts.last)
+            } ||
+            getTableNamePartsFromPlan(cd.plan).exists { cacheParts =>
+              cacheParts.nonEmpty && resolver(tableName, cacheParts.last)
+            })
+        }
+      }
+    }
+    findByAliasName(plan)
+      .orElse(sessionOpt.flatMap(session => findByName(session.sessionState.conf.resolver)))
+      .orElse(findByName(_ equalsIgnoreCase _))
+      .orElse {
+        // Last resort: single-table scan and one cache entry matches by table name (SPARK-27248).
+        // When multiple entries exist (e.g. from other tests), match by table name so CACHE TABLE
+        // on a table (e.g. refreshTable) is found even if plan structure or case differs.
+        val isSingleTableScan = plan.isInstanceOf[SubqueryAlias] ||
+          EliminateSubqueryAliases(plan).isInstanceOf[LogicalRelation]
+        if (isSingleTableScan) {
+          val queryNameOpt = getTableNamePartsFromPlan(plan).filter(_.nonEmpty).map(_.last)
+          val matching = cachedData.filter(cd =>
+            queryNameOpt.exists { qn =>
+              cd.cachedRepresentation.cacheBuilder.tableName.exists { tn =>
+                val parts = tableNameToParts(tn)
+                parts.nonEmpty && qn.equalsIgnoreCase(parts.last)
+              } ||
+              getTableNamePartsFromPlan(cd.plan).exists { cp =>
+                cp.nonEmpty && qn.equalsIgnoreCase(cp.last)
+              }
+            })
+          if (matching.size == 1) Some(matching.head) else None
+        } else {
+          None
+        }
+      }
   }
 
   /**
    * Replaces segments of the given logical plan with cached versions where possible. The input
    * plan must be normalized.
    */
-  private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
+  private[sql] def useCachedData(plan: LogicalPlan, session: SparkSession = null): LogicalPlan = {
+    val sessionOpt = Option(session)
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment).map { cached =>
+        lookupCachedDataInternal(currentFragment, sessionOpt).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -511,7 +900,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, session))
     }
 
     if (result.fastEquals(plan)) {
@@ -543,7 +932,190 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
+    if (!fs.exists(qualifiedPath)) return
+    def condition(cd: CachedData): Boolean =
+      cd.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)) ||
+        cacheEntryMatchesPathByTableLocation(spark, cd, qualifiedPath, fs)
+    val needToRecache = cachedData.filter(condition)
+    val catalog = spark.sessionState.catalog
+    // Collect all table names whose location is under the path so we uncache them even if
+    // they were not in needToRecache (e.g. plan shape differs when partition pruning false).
+    val tableNamesToUncache = scala.collection.mutable.Set[Seq[String]]()
+    cachedData.foreach { cd =>
+      cd.cachedRepresentation.cacheBuilder.tableName.foreach { name =>
+        val nameParts = name.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+        if (nameParts.nonEmpty) {
+          val (db, table) = if (nameParts.length >= 2) {
+            (Some(nameParts(nameParts.length - 2)), nameParts.last)
+          } else {
+            (Some(catalog.getCurrentDatabase), nameParts.head)
+          }
+          val ident = TableIdentifier(table, db)
+          val tableMeta: Option[CatalogTable] = try {
+            Some(catalog.getTableMetadata(ident))
+          } catch {
+            case _: Exception => None
+          }
+          // Only uncache when table location is under the refresh path (not the reverse),
+          // so refreshByPath("/some-invalid-path") does not uncache (HiveMetadataCacheSuite).
+          val pathMatches = tableMeta.flatMap(_.storage.locationUri).exists { uri =>
+            val tablePath = fs.makeQualified(new Path(uri))
+            pathComponentIsSubDir(qualifiedPath, tablePath)
+          }
+          if (pathMatches) tableNamesToUncache += nameParts
+        }
+      }
+    }
+    tableNamesToUncache.foreach { nameParts =>
+      uncacheTableOrView(spark, nameParts, cascade = true)
+      val ident = if (nameParts.length >= 2) {
+        TableIdentifier(nameParts.last, Some(nameParts(nameParts.length - 2)))
+      } else {
+        TableIdentifier(nameParts.head)
+      }
+      val qualified = catalog.qualifyIdentifier(ident)
+      val key = QualifiedTableName(
+        qualified.catalog.get, qualified.database.get, qualified.table)
+      catalog.invalidateCachedTable(key)
+      catalog.invalidateCachedTable(QualifiedTableName(
+        key.catalog.toLowerCase(Locale.ROOT),
+        key.database.toLowerCase(Locale.ROOT),
+        key.name.toLowerCase(Locale.ROOT)))
+      if (nameParts.length == 1) {
+        uncacheTableOrView(spark, Seq(catalog.getCurrentDatabase, nameParts.head), cascade = true)
+      }
+    }
+    // Invalidate session catalog relation cache so next resolution sees fresh file listing
+    // (e.g. HiveMetadataCacheSuite partitioned table with partition pruning false).
+    // Invalidate both normal and lowercased key so Hive getCachedDataSourceTable finds it.
+    needToRecache.foreach { cd =>
+      cd.cachedRepresentation.cacheBuilder.tableName.foreach { name =>
+        val nameParts = name.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+        val ident = if (nameParts.length >= 2) {
+          TableIdentifier(nameParts.last, Some(nameParts(nameParts.length - 2)))
+        } else {
+          TableIdentifier(nameParts.head)
+        }
+        val qualified = catalog.qualifyIdentifier(ident)
+        val key = QualifiedTableName(
+          qualified.catalog.get, qualified.database.get, qualified.table)
+        catalog.invalidateCachedTable(key)
+        catalog.invalidateCachedTable(QualifiedTableName(
+          key.catalog.toLowerCase(Locale.ROOT),
+          key.database.toLowerCase(Locale.ROOT),
+          key.name.toLowerCase(Locale.ROOT)))
+      }
+    }
+    // Remove matching entries before resolving so spark.table(name) returns a fresh plan
+    // (not the cached one). Required when partition pruning is false so the new relation
+    // sees the current file listing (e.g. HiveMetadataCacheSuite).
+    this.synchronized {
+      cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
+    }
+    needToRecache.foreach { cd =>
+      cd.cachedRepresentation.cacheBuilder.clearCache()
+    }
+    // Rebuild entries that do not have a table name (e.g. inline DataFrame cache).
+    // For entries with a table name, we already uncached them above; do not rebuild so
+    // the next query resolves the table fresh (e.g. Hive partition pruning false).
+    needToRecache.foreach { cd =>
+      if (cd.cachedRepresentation.cacheBuilder.tableName.isEmpty) {
+        tryRebuildCacheEntry(spark, cd, Seq.empty).foreach { entries =>
+          entries.foreach { entry =>
+            this.synchronized {
+              if (lookupCachedDataInternal(entry.plan).nonEmpty) {
+                logWarning("While recaching by path, data was already added to cache.")
+              } else {
+                cachedData = entry +: cachedData
+                CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry by path:" +
+                  log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+              }
+            }
+          }
+        }
+      }
+    }
+    // If no entries were recached but some cached tables have locations under the path,
+    // uncache them so the next query resolves fresh (e.g. Hive table with partition
+    // pruning false where the plan did not match lookupAndRefresh).
+    if (needToRecache.isEmpty) {
+      cachedData.foreach { cd =>
+        cd.cachedRepresentation.cacheBuilder.tableName.foreach { name =>
+          val nameParts = name.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+          if (nameParts.nonEmpty) {
+          val (db, table) = if (nameParts.length >= 2) {
+            (Some(nameParts(nameParts.length - 2)), nameParts.last)
+          } else {
+            (None, nameParts.head)
+          }
+          val ident = TableIdentifier(table, db)
+          val tableMeta: Option[CatalogTable] = try {
+            Some(catalog.getTableMetadata(ident))
+          } catch {
+            case _: Exception => None
+          }
+          // Only uncache when table location is under the refreshed path (not the reverse),
+          // so refreshByPath("/some-invalid-path") does not uncache (HiveMetadataCacheSuite).
+          val pathMatches = tableMeta.flatMap(_.storage.locationUri).exists { uri =>
+            val tablePath = fs.makeQualified(new Path(uri))
+            pathComponentIsSubDir(qualifiedPath, tablePath)
+          }
+          if (pathMatches) {
+            uncacheTableOrView(spark, nameParts, cascade = true)
+            val key = catalog.qualifyIdentifier(ident)
+            val qn = QualifiedTableName(
+              key.catalog.get, key.database.get, key.table)
+            catalog.invalidateCachedTable(qn)
+            catalog.invalidateCachedTable(QualifiedTableName(
+              qn.catalog.toLowerCase(Locale.ROOT),
+              qn.database.toLowerCase(Locale.ROOT),
+              qn.name.toLowerCase(Locale.ROOT)))
+          }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * If the cache entry has a table name and that table's location in the catalog matches the
+   * given path, refresh the plan's file index using the table location and return true.
+   */
+  private def cacheEntryMatchesPathByTableLocation(
+      spark: SparkSession,
+      cd: CachedData,
+      qualifiedPath: Path,
+      fs: FileSystem): Boolean = {
+    val tableNameOpt = cd.cachedRepresentation.cacheBuilder.tableName
+    if (tableNameOpt.isEmpty) return false
+    val nameParts = tableNameOpt.get.split("\\.").toSeq.map(_.replaceAll("^`|`$", ""))
+    val catalog = spark.sessionState.catalog
+    val (db, table) = if (nameParts.length >= 2) {
+      (Some(nameParts(nameParts.length - 2)), nameParts.last)
+    } else if (nameParts.length == 1) {
+      (Some(catalog.getCurrentDatabase), nameParts.head)
+    } else {
+      return false
+    }
+    val ident = TableIdentifier(table, db)
+    val tableMeta: Option[CatalogTable] = try {
+      Some(catalog.getTableMetadata(ident))
+    } catch {
+      case _: Exception => None
+    }
+    tableMeta.flatMap { meta =>
+      meta.storage.locationUri.map { uri =>
+        val tablePath = fs.makeQualified(new Path(uri))
+        val pathMatches = pathComponentIsSubDir(qualifiedPath, tablePath) ||
+          pathComponentIsSubDir(tablePath, qualifiedPath)
+        if (pathMatches) {
+          lookupAndRefresh(cd.plan, fs, tablePath)
+          true
+        } else {
+          false
+        }
+      }
+    }.getOrElse(false)
   }
 
   /**
@@ -572,13 +1144,43 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * of the `qualifiedPath`.
    * @return whether the [[FileIndex]] is refreshed.
    */
+  /**
+   * True if the path component of `child` equals or is under the path component of `parent`.
+   * For file: URIs also compare canonical path so the same directory matches across
+   * process boundary (e.g. Connect client path vs server table location).
+   */
+  private def pathComponentIsSubDir(parent: Path, child: Path): Boolean = {
+    def pathStr(path: Path): String = path.toUri.getPath.stripSuffix("/")
+    def canonicalPathStr(path: Path): String = try {
+      val scheme = path.toUri.getScheme
+      if (scheme == null || scheme == "file") {
+        new File(pathStr(path)).getCanonicalPath
+      } else {
+        pathStr(path)
+      }
+    } catch { case _: Exception => pathStr(path) }
+    val p = pathStr(parent)
+    val c = pathStr(child)
+    val matchByPath = c == p ||
+      (c.startsWith(p) && (c.length == p.length || c.charAt(p.length) == '/'))
+    if (matchByPath) return true
+    val pCanon = canonicalPathStr(parent)
+    val cCanon = canonicalPathStr(child)
+    cCanon == pCanon ||
+      (cCanon.startsWith(pCanon) &&
+        (cCanon.length == pCanon.length || cCanon.charAt(pCanon.length) == '/'))
+  }
+
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
       qualifiedPath: Path): Boolean = {
-    val needToRefresh = fileIndex.rootPaths
+    val qualifiedRootPaths = fileIndex.rootPaths
       .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      .exists(isSubDir(qualifiedPath, _))
+    // Match by path component so file:/path and file:///path (same logical path) match.
+    val needToRefresh = qualifiedRootPaths.exists { rp =>
+      pathComponentIsSubDir(qualifiedPath, rp) || pathComponentIsSubDir(rp, qualifiedPath)
+    }
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
   }

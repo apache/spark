@@ -33,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
@@ -141,7 +142,12 @@ class QueryExecution(
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
-        sparkSession.sessionState.analyzer.executeAndCheck(sqlScriptExecuted, tracker)
+        sparkSession.sessionState.catalog match {
+          case c: SessionCatalog =>
+            sparkSession.sessionState.analyzer.executeAndCheck(sqlScriptExecuted, tracker)
+          case _ =>
+            sparkSession.sessionState.analyzer.executeAndCheck(sqlScriptExecuted, tracker)
+        }
       }
       tracker.setAnalyzed(plan)
       plan
@@ -230,7 +236,7 @@ class QueryExecution(
       assertSupported()
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      sparkSession.sharedState.cacheManager.useCachedData(normalized.clone(), sparkSession)
     }
   }
 

@@ -83,9 +83,21 @@ class RelationResolution(
    * Lookup temporary view by `identifier`. Returns `None` if the view wasn't found.
    */
   def lookupTempView(identifier: Seq[String]): Option[TemporaryViewRelation] = {
-    // We are resolving a view and this name is not a temp view when that view was created. We
-    // return None earlier here.
-    if (isResolvingView && !isReferredTempViewName(identifier)) {
+    // When resolving a persisted view's definition, only allow temp views that were referred
+    // when the view was created (referredTempViewNames). Skip temp view lookup for other names
+    // so they resolve with the view's catalog/namespace. Only apply this when the view actually
+    // had referred temp views recorded (referredTempViewNames.nonEmpty); when it's empty we
+    // allow temp view lookup so that CACHE TABLE ... AS SELECT and CREATE TEMP VIEW ... AS
+    // SELECT can reference temp views in the query (the context may be set in some code paths).
+    val referredTempViewNames = AnalysisContext.get.referredTempViewNames
+    if (isResolvingView && referredTempViewNames.nonEmpty && !isReferredTempViewName(identifier)) {
+      return None
+    }
+    // When resolving a persisted view that has catalog/namespace stored, one-part names should
+    // resolve with the view's catalog/namespace (so the view tracks current catalog), not the
+    // session's temp view that may shadow the same name.
+    if (isResolvingView && AnalysisContext.get.catalogAndNamespace.nonEmpty &&
+        identifier.length == 1 && !isReferredTempViewName(identifier)) {
       return None
     }
 

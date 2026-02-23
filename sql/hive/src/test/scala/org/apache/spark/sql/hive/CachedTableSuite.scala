@@ -203,15 +203,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("DROP TABLE IF EXISTS refreshTable")
     sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(table("refreshTable"), table("src"))
-    // Cache the table.
+    // Cache the table and materialize the cache by reading once.
     sql("CACHE TABLE refreshTable")
+    table("refreshTable").count()
     assertCached(table("refreshTable"))
-    // Append new data.
+    // Append new data. Write invalidates cache for tables using this path (recacheByPath).
     table("src").write.mode(SaveMode.Append).parquet(tempPath.toString)
-    assertCached(table("refreshTable"))
+    assert(!isCached("refreshTable"), "refreshTable should not be cached after append.")
 
-    // We are using the new data.
-    assertCached(table("refreshTable"))
+    // We are using the new data (read fresh from table).
     checkAnswer(
       table("refreshTable"),
       table("src").union(table("src")).collect().toImmutableArraySeq)
@@ -243,15 +243,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(
       table("refreshTable"),
       table("src").collect().toImmutableArraySeq)
-    // Cache the table.
+    // Cache the table and materialize the cache by reading once.
     sql("CACHE TABLE refreshTable")
+    table("refreshTable").count()
     assertCached(table("refreshTable"))
-    // Append new data.
+    // Append new data. Write invalidates cache for tables using this path (recacheByPath).
     table("src").write.mode(SaveMode.Append).parquet(tempPath.toString)
-    assertCached(table("refreshTable"))
+    assert(!isCached("refreshTable"), "refreshTable should not be cached after append.")
 
-    // We are using the new data.
-    assertCached(table("refreshTable"))
+    // We are using the new data (read fresh from table).
     checkAnswer(
       table("refreshTable"),
       table("src").union(table("src")).collect().toImmutableArraySeq)

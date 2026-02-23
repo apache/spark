@@ -32,7 +32,8 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton {
       spark.catalog.dropTempView("src")
     }
     Seq((1, "")).toDF("key", "value").createOrReplaceTempView("src")
-    Seq((1, 1, 1)).toDF("a", "a", "b").createOrReplaceTempView("dupAttributes")
+    // Use a self-join to get ambiguous "a": both sides have column "a"
+    Seq((1, 1)).toDF("id", "a").createOrReplaceTempView("dupAttributes")
   }
 
   override protected def afterEach(): Unit = {
@@ -45,13 +46,13 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton {
   }
 
   positionTest("ambiguous attribute reference 1",
-    "SELECT a from dupAttributes", "a")
+    "SELECT a FROM dupAttributes t1 JOIN dupAttributes t2 ON t1.id = t2.id", "a")
 
   positionTest("ambiguous attribute reference 2",
-    "SELECT a, b from dupAttributes", "a")
+    "SELECT a, t1.id FROM dupAttributes t1 JOIN dupAttributes t2 ON t1.id = t2.id", "a")
 
   positionTest("ambiguous attribute reference 3",
-    "SELECT b, a from dupAttributes", "a")
+    "SELECT t1.id, a FROM dupAttributes t1 JOIN dupAttributes t2 ON t1.id = t2.id", "a")
 
   positionTest("unresolved attribute 1",
     "SELECT x FROM src", "x")

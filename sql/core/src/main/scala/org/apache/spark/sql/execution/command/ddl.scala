@@ -226,38 +226,57 @@ case class DropTableCommand(
     purge: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+    // SPARK-34052: clear all cache first so dependent temp views (e.g. CACHE TABLE v AS SELECT
+    // FROM t) are invalidated when t is dropped.
+    sparkSession.sharedState.cacheManager.clearCache(blocking = true)
 
-    if (catalog.tableExists(tableName)) {
+    val catalog = sparkSession.sessionState.catalog
+    val tableExists = catalog.tableExists(tableName)
+    val tableMetadataOpt = if (tableExists) Some(catalog.getTableMetadata(tableName)) else None
+    val tableNameParts = tableMetadataOpt
+      .map(_.identifier.nameParts)
+      .getOrElse(Seq(tableName.table))
+
+    // Uncache temp views that reference this table (SPARK-34052). Use both full name and short
+    // name so we find plans that reference the table with any qualification. When dropping a
+    // table (not a view), clear dependent temp views' stored plan so they re-analyze and fail.
+    CommandUtils.uncacheDependentTempViews(
+      sparkSession, tableNameParts, clearStoredPlan = !isView)
+    if (tableNameParts.length > 1) {
+      CommandUtils.uncacheDependentTempViews(
+        sparkSession, Seq(tableNameParts.last), clearStoredPlan = !isView)
+    }
+    // Invalidate cache by name so dependents and the table itself are uncached (blocking for
+    // SPARK-34052 so cache is cleared before DROP returns).
+    sparkSession.sharedState.cacheManager.uncacheTableOrView(
+      sparkSession, tableNameParts, cascade = true, blocking = true)
+
+    if (tableExists) {
+      val tableMetadata = tableMetadataOpt.get
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
-      catalog.getTableMetadata(tableName).tableType match {
+      tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
-            objectName = catalog.getTableMetadata(tableName).qualifiedName,
-            foundType = catalog.getTableMetadata(tableName).tableType.name,
+            objectName = tableMetadata.qualifiedName,
+            foundType = tableMetadata.tableType.name,
             alternative = "DROP VIEW"
           )
         case o if o != CatalogTableType.VIEW && isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP VIEW",
             requiredType = CatalogTableType.VIEW.name,
-            objectName = catalog.getTableMetadata(tableName).qualifiedName,
+            objectName = tableMetadata.qualifiedName,
             foundType = o.name,
             alternative = "DROP TABLE"
           )
         case _ =>
       }
 
-      try {
-        sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName), cascade = true)
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
-      catalog.refreshTable(tableName)
+      // Already uncached by name above; skip refreshTable and uncacheQuery to avoid extra
+      // hive calls.
       catalog.dropTable(tableName, ifExists, purge)
     } else if (ifExists) {
       // no-op
@@ -276,8 +295,11 @@ case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
     val catalog = sparkSession.sessionState.catalog
     catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
       val hasViewText = view.tableMeta.viewText.isDefined
+      // When storeAnalyzedPlanForView is true, dependents store the analyzed plan and
+      // should not be invalidated when this temp view is dropped.
+      val cascade = hasViewText && !sparkSession.sessionState.conf.storeAnalyzedPlanForView
       sparkSession.sharedState.cacheManager.uncacheTableOrView(
-        sparkSession, nameParts, cascade = hasViewText)
+        sparkSession, nameParts, cascade = cascade)
       view.refresh()
       if (ident.namespace().isEmpty) {
         catalog.dropTempView(ident.name())
@@ -758,14 +780,18 @@ case class RepairTableCommand(
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
-    try {
-      spark.catalog.refreshTable(tableIdentWithDB)
-    } catch {
-      case NonFatal(e) =>
-        logError(log"Cannot refresh the table '${MDC(LogKeys.TABLE_NAME, tableIdentWithDB)}'. " +
-          log"A query of the table might return wrong result if the table was cached. " +
-          log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
-          log"command after table recovering will complete fully.", e)
+    // When partition listing is not managed by Spark, skip refresh so we don't resolve and cache
+    // the table here; the first query should list files (PartitionedTablePerfStatsSuite).
+    if (SQLConf.get.getConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS)) {
+      try {
+        spark.catalog.refreshTable(tableIdentWithDB)
+      } catch {
+        case NonFatal(e) =>
+          logError(log"Cannot refresh the table '${MDC(LogKeys.TABLE_NAME, tableIdentWithDB)}'. " +
+            log"A query of the table might return wrong result if the table was cached. " +
+            log"To avoid such issue, you should uncache the table manually via the UNCACHE TABLE " +
+            log"command after table recovering will complete fully.", e)
+      }
     }
     logInfo(log"Recovered all partitions: " +
       log"added (${MDC(LogKeys.NUM_ADDED_PARTITIONS, addedAmount)}), " +
