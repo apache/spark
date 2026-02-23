@@ -33,8 +33,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )

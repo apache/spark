@@ -1236,7 +1236,9 @@ def max(col: "ColumnOrName") -> Column:
 max.__doc__ = pysparkfuncs.max.__doc__
 
 
-def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("max_by", col, ord, lit(k))
     return _invoke_function_over_columns("max_by", col, ord)
 
 
@@ -1264,7 +1266,9 @@ def min(col: "ColumnOrName") -> Column:
 min.__doc__ = pysparkfuncs.min.__doc__
 
 
-def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("min_by", col, ord, lit(k))
     return _invoke_function_over_columns("min_by", col, ord)
 
 
@@ -4489,6 +4493,8 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
+# Datasketch Functions
+
 
 def hll_sketch_agg(
     col: "ColumnOrName",
@@ -5038,6 +5044,82 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
 
 
 tuple_difference_integer.__doc__ = pysparkfuncs.tuple_difference_integer.__doc__
+
+
+def tuple_difference_theta_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_theta_double", col1, col2)
+
+
+tuple_difference_theta_double.__doc__ = pysparkfuncs.tuple_difference_theta_double.__doc__
+
+
+def tuple_difference_theta_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_theta_integer", col1, col2)
+
+
+tuple_difference_theta_integer.__doc__ = pysparkfuncs.tuple_difference_theta_integer.__doc__
+
+
+def tuple_intersection_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_theta_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_theta_double.__doc__ = pysparkfuncs.tuple_intersection_theta_double.__doc__
+
+
+def tuple_intersection_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_theta_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_theta_integer.__doc__ = pysparkfuncs.tuple_intersection_theta_integer.__doc__
+
+
+def tuple_union_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_theta_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_theta_double.__doc__ = pysparkfuncs.tuple_union_theta_double.__doc__
+
+
+def tuple_union_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_theta_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_theta_integer.__doc__ = pysparkfuncs.tuple_union_theta_integer.__doc__
 
 
 # Predicates Function

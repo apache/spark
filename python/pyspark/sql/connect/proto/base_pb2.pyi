@@ -1588,6 +1588,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         VALUES_FIELD_NUMBER: builtins.int
         KEYS_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
+        ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
+        ERRORS_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1600,6 +1602,19 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         plan_id: builtins.int
+        root_error_idx: builtins.int
+        """(Optional) The index of the root error in errors.
+        The field will not be set if there are no errors.
+        """
+        @property
+        def errors(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.Error
+        ]:
+            """A list of errors that occurred while collecting the observed metrics.
+            If the length is 0, it means no errors occurred.
+            """
         def __init__(
             self,
             *,
@@ -1610,13 +1625,37 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             | None = ...,
             keys: collections.abc.Iterable[builtins.str] | None = ...,
             plan_id: builtins.int = ...,
+            root_error_idx: builtins.int | None = ...,
+            errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_root_error_idx", b"_root_error_idx", "root_error_idx", b"root_error_idx"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "keys", b"keys", "name", b"name", "plan_id", b"plan_id", "values", b"values"
+                "_root_error_idx",
+                b"_root_error_idx",
+                "errors",
+                b"errors",
+                "keys",
+                b"keys",
+                "name",
+                b"name",
+                "plan_id",
+                b"plan_id",
+                "root_error_idx",
+                b"root_error_idx",
+                "values",
+                b"values",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_root_error_idx", b"_root_error_idx"]
+        ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
     class ResultComplete(google.protobuf.message.Message):
         """If present, in a reattachable execution this means that after server sends onComplete,

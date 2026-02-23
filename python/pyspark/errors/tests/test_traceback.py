@@ -29,8 +29,8 @@ from pyspark.errors.exceptions.base import AnalysisException
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.session import SparkSession
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
