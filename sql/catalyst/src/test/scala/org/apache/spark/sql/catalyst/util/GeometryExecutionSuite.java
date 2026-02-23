@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
 
@@ -113,6 +114,17 @@ class GeometryExecutionSuite {
     assertNotNull(geometry);
     assertArrayEquals(wkb, geometry.toWkb());
     assertEquals(0, geometry.srid());
+  }
+
+  @Test
+  void testFromWkbInvalidWkb() {
+    byte[] invalidWkb = new byte[]{111};
+    SparkIllegalArgumentException exception = assertThrows(
+      SparkIllegalArgumentException.class,
+      () -> Geometry.fromWkb(invalidWkb)
+    );
+    assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    assertTrue(exception.getMessage().contains("Unexpected end of WKB buffer"));
   }
 
   /** Tests for Geometry EWKB parsing. */

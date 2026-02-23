@@ -65,6 +65,18 @@ SELECT typeof(IF(wkb IS NOT NULL, ST_GeomFromWKB(wkb)::GEOMETRY(ANY), ST_GeomFro
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result;
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result;
 
+---- ST_GeogFromWKB
+
+-- 1. Driver-level queries.
+SELECT ST_AsBinary(ST_GeogFromWKB(NULL));
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')));
+-- Error handling: invalid WKB.
+SELECT ST_GeogFromWKB(X'6F');
+
+-- 2. Table-level queries.
+SELECT COUNT(*) FROM geodata WHERE ST_GeogFromWKB(wkb) IS NULL AND wkb IS NOT NULL;
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb;
+
 ---- ST_GeomFromWKB
 
 -- 1. Driver-level queries.
@@ -76,6 +88,9 @@ SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F00000000000000
 -- Error handling: invalid SRID.
 SELECT ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', -1);
 SELECT ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 9999);
+-- Error handling: invalid WKB.
+SELECT ST_GeomFromWKB(X'6F');
+SELECT ST_GeomFromWKB(X'6F', 4326);
 
 -- 2. Table-level queries.
 SELECT COUNT(*) FROM geodata WHERE ST_GeomFromWKB(wkb) IS NULL AND wkb IS NOT NULL;

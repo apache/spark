@@ -26,6 +26,7 @@ import re
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
+from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
@@ -3601,6 +3602,25 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
 
+    def test_st_geogfromwkb(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"))],
+            ["wkb"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+        # ST_GeogFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b'\x6f'),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geogfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
+
     def test_st_geomfromwkb(self):
         df = self.spark.createDataFrame(
             [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
@@ -3617,6 +3637,12 @@ class FunctionsTestsMixin:
             "0101000000000000000000F03F0000000000000040",
         )
         self.assertEqual(results, [expected])
+        # ST_GeomFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b'\x6f'),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geomfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
 
     def test_st_setsrid(self):
         df = self.spark.createDataFrame(
