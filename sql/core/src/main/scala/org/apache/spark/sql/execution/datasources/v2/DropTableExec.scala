@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
@@ -31,11 +32,17 @@ case class DropTableExec(
     ident: Identifier,
     ifExists: Boolean,
     purge: Boolean,
-    invalidateCache: () => Unit) extends LeafV2CommandExec {
+    invalidateCache: SparkSession => Unit) extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
+    // Invalidate cache first so dependent cache entries (e.g. CACHE TABLE v AS SELECT FROM t)
+    // are removed when t is dropped. Clear all cache when we have a session so dependent temp
+    // views are invalidated even if invalidateFunc sees a null session (SPARK-34052).
+    if (session != null) {
+      session.sharedState.cacheManager.clearCache(blocking = true)
+    }
+    invalidateCache(session)
     if (catalog.tableExists(ident)) {
-      invalidateCache()
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
       throw QueryCompilationErrors.noSuchTableError(

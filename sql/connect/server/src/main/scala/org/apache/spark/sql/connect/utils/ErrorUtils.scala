@@ -37,7 +37,8 @@ import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowa
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys.{SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
@@ -320,7 +321,7 @@ private[connect] object ErrorUtils extends Logging {
     if (sessionHolderOpt.isEmpty) {
       logWarning(
         log"SessionHolder not found during error handling for " +
-          log"${MDC(OP_TYPE, opType)}. " +
+          log"${MDC(LogKeys.OP_TYPE, opType)}. " +
           log"UserId: ${MDC(USER_ID, userId)}, SessionId: ${MDC(SESSION_ID, sessionId)}. " +
           log"Error details will not be available for FetchErrorDetails.")
     }
@@ -345,13 +346,13 @@ private[connect] object ErrorUtils extends Logging {
     if (events.isDefined) {
       // Errors thrown inside execution are user query errors, return then as INFO.
       logInfo(
-        log"Spark Connect error during: ${MDC(OP_TYPE, opType)}. " +
+        log"Spark Connect error during: ${MDC(LogKeys.OP_TYPE, opType)}. " +
           log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
         st)
     } else {
       // Other errors are server RPC errors, return them as ERROR.
       logError(
-        log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
+        log"Spark Connect RPC error during: ${MDC(LogKeys.OP_TYPE, opType)}. " +
           log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
         st)
     }
@@ -435,7 +436,7 @@ private[connect] object ErrorUtils extends Logging {
       opType: String,
       call: ServerCall[ReqT, RespT],
       userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = { { case st: Throwable =>
+      sessionId: String): PartialFunction[Throwable, Unit] = { case st: Throwable =>
     // Include method name in opType for better error logging
     val methodName = call.getMethodDescriptor.getBareMethodName
     val opTypeWithMethod = s"$opType [$methodName]"
@@ -445,6 +446,5 @@ private[connect] object ErrorUtils extends Logging {
     val status = wrapped.getStatus
     val trailers = Option(wrapped.getTrailers).getOrElse(new Metadata())
     call.close(status, trailers)
-  }
   }
 }

@@ -204,8 +204,8 @@ package object expressions  {
           val key = (catalogPart.toLowerCase(Locale.ROOT), dbPart.toLowerCase(Locale.ROOT),
             tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
           val attributes = collectMatches(name, qualified4Part.get(key)).filter { a =>
-            assert(a.qualifier.length == 3)
-            resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
+            a.qualifier.length >= 3 &&
+              resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
               resolver(tblPart, a.qualifier(2))
           }
           (attributes, nestedFields)

@@ -26,16 +26,19 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, NoSuchFunctionException, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{SparkSession, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
@@ -92,7 +95,7 @@ private[sql] class SessionState(
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
     val planNormalizationRules: Seq[Rule[LogicalPlan]],
-    val artifactManagerBuilder: () => ArtifactManager) {
+    val artifactManagerBuilder: () => ArtifactManager) extends CatalogSupport {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -113,6 +116,103 @@ private[sql] class SessionState(
   lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 
   def catalogManager: CatalogManager = analyzer.catalogManager
+
+  override def parseMultipartIdentifier(identifier: String): Seq[String] =
+    sqlParser.parseMultipartIdentifier(identifier)
+
+  override def quoteIdentifier(identifier: String): String =
+    QuotingUtils.quoteIdentifier(identifier)
+
+  override def currentDatabase: String =
+    catalogManager.currentNamespace.quoted
+
+  override def currentCatalog(): String =
+    catalogManager.currentCatalog.name()
+
+  override def getFunctionMetadata(
+      catalogName: String,
+      namespace: Array[String],
+      functionName: String): Option[(String, String)] = {
+    try {
+      val catalog = catalogManager.catalog(catalogName)
+      if (catalog.isInstanceOf[FunctionCatalog]) {
+        val func = catalog.asInstanceOf[FunctionCatalog].loadFunction(
+          Identifier.of(namespace, functionName))
+        val desc = Option(func.description()).filter(_.nonEmpty).getOrElse("N/A.")
+        Some((desc, func.getClass.getName))
+      } else {
+        None
+      }
+    } catch {
+      case _: NoSuchFunctionException => None
+      case _: Exception => None
+    }
+  }
+
+  override def refreshByPath(session: org.apache.spark.sql.SparkSession, path: String): Unit = {
+    val sparkSession = session.asInstanceOf[SparkSession]
+    org.apache.spark.sql.execution.datasources.FileStatusCache
+      .getOrCreate(sparkSession).invalidateAll()
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val qualifiedPath = fs.makeQualified(hadoopPath)
+    sharedState.cacheManager.recacheByPath(sparkSession, qualifiedPath, fs)
+  }
+
+  override def uncacheTableOrView(
+      session: org.apache.spark.sql.SparkSession,
+      tableName: String): Unit = {
+    val nameParts = parseMultipartIdentifier(tableName).toSeq
+    sharedState.cacheManager.uncacheTableOrView(
+      session.asInstanceOf[SparkSession], nameParts, cascade = true)
+  }
+
+  override def recacheTableOrView(
+      session: org.apache.spark.sql.SparkSession,
+      tableName: String): Unit = {
+    val nameParts = parseMultipartIdentifier(tableName).toSeq
+    sharedState.cacheManager.recacheTableOrView(
+      session.asInstanceOf[SparkSession], nameParts)
+  }
+
+  /**
+   * Single implementation of refresh table (resolve relation, refresh, invalidate caches, recache).
+   * Used by Catalog.refreshTable and REFRESH TABLE SQL so both paths share the same behavior.
+   */
+  def doRefreshTable(session: org.apache.spark.sql.SparkSession, tableName: String): Unit = {
+    CommandUtils.executeRefreshTable(session.asInstanceOf[SparkSession], tableName)
+  }
+
+  override def refreshTable(session: org.apache.spark.sql.SparkSession, tableName: String): Unit = {
+    doRefreshTable(session, tableName)
+  }
+
+  override def isTableCached(
+      session: org.apache.spark.sql.SparkSession,
+      tableName: String): Boolean = {
+    // Resolve the table first; throws AnalysisException if it references a dropped view, etc.
+    val df = session.table(tableName)
+    sharedState.cacheManager.lookupCachedData(
+      df.asInstanceOf[org.apache.spark.sql.classic.Dataset[_]]).isDefined
+  }
+
+  override def dropTempViewIfExists(
+      session: org.apache.spark.sql.SparkSession,
+      viewName: String): Boolean = {
+    val nameParts = Seq(viewName)
+    catalog.getRawLocalOrGlobalTempView(nameParts).map { view =>
+      val hasViewText = view.tableMeta.viewText.isDefined
+      val cascade = hasViewText && !conf.storeAnalyzedPlanForView
+      sharedState.cacheManager.uncacheTableOrView(
+        session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
+        nameParts,
+        cascade = cascade,
+        blocking = false)
+      view.refresh()
+      catalog.dropTempView(viewName)
+      true
+    }.getOrElse(false)
+  }
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,

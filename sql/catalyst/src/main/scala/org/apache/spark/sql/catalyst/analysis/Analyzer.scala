@@ -1522,7 +1522,35 @@ class Analyzer(
 
       // Special case for Project as it supports lateral column alias.
       case p: Project =>
-        val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
+        // When the Project contains GetViewColumnByNameAndOrdinal (View's schema-mapping Project),
+        // resolve by view column index only when (1) child has same column count as view schema,
+        // (2) child column names do not match view column names at same position, and
+        // (3) no view column name matches any child column (position-only case, e.g. VALUES).
+        // When any view column name matches a child column, use normal resolution so
+        // INCOMPATIBLE_VIEW_SCHEMA_CHANGE is thrown when a required column is missing.
+        def viewColName(expr: Expression): Option[String] = expr match {
+          case Alias(GetViewColumnByNameAndOrdinal(_, colName, _, _, _), _) => Some(colName)
+          case _ =>
+            expr.collectFirst { case GetViewColumnByNameAndOrdinal(_, colName, _, _, _) => colName }
+        }
+        val nameMismatch = p.projectList.length == p.child.output.length &&
+          p.projectList.zip(p.child.output).forall { case (expr, attr) =>
+            viewColName(expr).forall(colName => !conf.resolver(attr.name, colName))
+          }
+        val noViewColNameMatchesChild = p.projectList.forall { expr =>
+          viewColName(expr).forall { colName =>
+            !p.child.output.exists(attr => conf.resolver(attr.name, colName))
+          }
+        }
+        val useViewColumnIndex = nameMismatch && noViewColNameMatchesChild &&
+          p.projectList.exists(_.exists(_.isInstanceOf[GetViewColumnByNameAndOrdinal]))
+        val resolvedBasic = p.projectList.zipWithIndex.map { case (expr, i) =>
+          if (useViewColumnIndex && expr.exists(_.isInstanceOf[GetViewColumnByNameAndOrdinal])) {
+            resolveExpressionByPlanChildrenWithViewColumnIndex(expr, p, i)
+          } else {
+            resolveExpressionByPlanChildren(expr, p)
+          }
+        }
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
         val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)

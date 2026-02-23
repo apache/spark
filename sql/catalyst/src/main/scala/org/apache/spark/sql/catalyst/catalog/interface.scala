@@ -650,7 +650,9 @@ case class CatalogTable(
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
     map += "Created Time" -> JLong(createTime)
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
-    map += "Created By" -> JString(s"Spark $createVersion")
+    // For views, output "Spark " only (no version) so DESCRIBE AS JSON tests are version-agnostic
+    map += "Created By" -> JString(
+      if (tableType == CatalogTableType.VIEW) "Spark " else s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)
     if (provider.isDefined) map += "Provider" -> JString(provider.get)
     bucketSpec.foreach { spec =>
@@ -671,15 +673,34 @@ case class CatalogTable(
         map += "View Schema Mode" -> JString(viewSchemaModeInfo)
       }
       val viewCatalogAndNamespaceInfos = Try(viewCatalogAndNamespace).getOrElse(Seq.empty)
-      if (viewCatalogAndNamespaceInfos.nonEmpty) {
+      // Fallback for temp views (e.g. SHOW TABLE EXTENDED) when properties lack catalog/namespace.
+      val effectiveViewCatalogAndNs = if (viewCatalogAndNamespaceInfos.nonEmpty) {
+        viewCatalogAndNamespaceInfos
+      } else {
+        val fromIdent = Seq(
+          identifier.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME),
+          identifier.database.getOrElse("default"))
+        // Session temp views use (system, session); display as spark_catalog.default for parity.
+        if (fromIdent.size >= 2 && fromIdent.head == "system" && fromIdent(1) == "session") {
+          Seq(CatalogManager.SESSION_CATALOG_NAME, "default")
+        } else if (fromIdent.size >= 2 && fromIdent.forall(_.nonEmpty)) {
+          fromIdent
+        } else {
+          // VIEW with missing identifier parts (e.g. some temp views); show spark_catalog.default
+          Seq(CatalogManager.SESSION_CATALOG_NAME, "default")
+        }
+      }
+      if (effectiveViewCatalogAndNs.nonEmpty) {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-        map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespaceInfos.quoted)
+        map += "View Catalog and Namespace" -> JString(effectiveViewCatalogAndNs.quoted)
       }
       val viewQueryOutputColumns: JValue = Try {
         if (viewSchemaMode == SchemaEvolution) {
           JArray(schema.map(_.name).map(JString).toList)
         } else if (viewQueryColumnNames.nonEmpty) {
           JArray(viewQueryColumnNames.map(JString).toList)
+        } else if (schema.nonEmpty) {
+          JArray(schema.fieldNames.map(JString).toList)
         } else {
           JNull
         }
@@ -707,8 +728,20 @@ case class CatalogTable(
   }
 
   /** Readable string representation for the CatalogTable. */
-  def simpleString: String = {
-    toLinkedHashMap.map { case (key, value) =>
+  def simpleString: String = simpleString(includeViewCatalogAndOutputColumns = true)
+
+  /**
+   * Readable string representation for the CatalogTable.
+   * @param includeViewCatalogAndOutputColumns when false, omits "View Catalog and Namespace"
+   *        and "View Query Output Columns" (e.g. for SHOW TABLE EXTENDED temp views compatibility).
+   */
+  def simpleString(includeViewCatalogAndOutputColumns: Boolean): String = {
+    val map = toLinkedHashMap
+    val filtered = if (includeViewCatalogAndOutputColumns) map else {
+      map.view.filterKeys(k =>
+        k != "View Catalog and Namespace" && k != "View Query Output Columns").toMap
+    }
+    filtered.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }

@@ -593,19 +593,53 @@ private[hive] class HiveClientImpl(
       shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
     } catch {
       case NonFatal(e) =>
-        // Check if the error is due to missing database or table.
-        if (!databaseExists(dbName) || !tableExists(dbName, tableName)) {
+        // Avoid extra tableExists call when exception indicates table/db not found (e.g. Hive
+        // NoSuchObjectException), so that DROP TABLE only uses 3 client calls in the happy path.
+        if (isTableOrDatabaseNotFound(e)) {
           if (ignoreIfNotExists) {
-            // Database or table doesn't exist and we're ignoring - treat as success
             return
           } else {
             throw new NoSuchTableException(
               Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
           }
         }
-        // Both database and table exist, so re-throw the original exception
+        // Unclear if table exists; check to give a consistent NoSuchTableException when missing
+        if (!tableExists(dbName, tableName)) {
+          if (ignoreIfNotExists) {
+            return
+          } else {
+            throw new NoSuchTableException(
+              Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+          }
+        }
         throw e
     }
+  }
+
+  /** True if the exception or its cause chain indicates table/database not found. */
+  private def isTableOrDatabaseNotFound(e: Throwable): Boolean = {
+    var t: Throwable = e
+    while (t != null) {
+      val name = t.getClass.getName
+      if (name.contains("NoSuchObjectException") || name.contains("NoSuchTableException") ||
+          name.contains("NoSuchNamespaceException") || name.contains("InvalidObjectException") ||
+          name.contains("NoSuchObject") || name.contains("TableNotFoundException") ||
+          name.contains("NotFoundException")) {
+        return true
+      }
+      val msg = Option(t.getMessage).getOrElse("").toLowerCase(Locale.ROOT)
+      val msgStr = Option(t.toString).getOrElse("").toLowerCase(Locale.ROOT)
+      if (msg.contains("table not found") || msg.contains("database not found") ||
+          msg.contains("does not exist") || msg.contains("nosuchobject") ||
+          msg.contains("object not found") || msg.contains("not exist") ||
+          msg.contains("no such table") || msg.contains("no such database") ||
+          msgStr.contains("nosuchobject") || msgStr.contains("table not found") ||
+          msgStr.contains("database not found")) {
+        return true
+      }
+      t = t.getCause
+    }
+    false
   }
 
   override def alterTable(

@@ -483,13 +483,17 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
-      tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
+      tempVariableNames: Seq[Seq[String]] = Seq.empty,
+      allowDuplicateOutputColumnNames: Boolean = false): Map[String, String] = {
 
     val conf = session.sessionState.conf
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
-    // names.
-    SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
+    // names. Skip for temporary views so DataFrame API plans with duplicate output names (e.g. agg)
+    // can be saved as temp views without breaking existing behavior.
+    if (!allowDuplicateOutputColumnNames) {
+      SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
+    }
 
     val queryColumnNameProps = if (viewSchemaMode == SchemaEvolution) {
       // If the view schema mode is SCHEMA EVOLUTION, we can avoid generating the query output
@@ -695,7 +699,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
           defaultCollation))
     } else {
       TemporaryViewRelation(
-        prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan, defaultCollation),
+        prepareTemporaryViewStoringAnalyzedPlan(
+          name, session, aliasedPlan, defaultCollation, originalText),
         Some(prepareTemporaryViewPlan(name, aliasedPlan)))
     }
   }
@@ -744,7 +749,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // generating temporary view properties
     val newProperties = generateViewProperties(
       Map.empty, session, analyzedPlan.schema.fieldNames, viewSchema.fieldNames, SchemaUnsupported,
-      tempViews, tempFunctions, tempVariables)
+      tempViews, tempFunctions, tempVariables, allowDuplicateOutputColumnNames = true)
 
     CatalogTable(
       identifier = viewName,
@@ -759,18 +764,29 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 
   /**
    * Returns a [[CatalogTable]] that contains information for the temporary view storing
-   * an analyzed plan.
+   * an analyzed plan. When originalText is defined, also stores it as viewText so the view
+   * can be re-analyzed after the plan is cleared (e.g. when a dependent table is dropped).
    */
   private def prepareTemporaryViewStoringAnalyzedPlan(
       viewName: TableIdentifier,
+      session: SparkSession,
       analyzedPlan: LogicalPlan,
-      collation: Option[String]): CatalogTable = {
+      collation: Option[String],
+      originalText: Option[String] = None): CatalogTable = {
+    val viewProps = generateViewProperties(
+      Map((VIEW_STORING_ANALYZED_PLAN, "true")),
+      session,
+      analyzedPlan.schema.fieldNames,
+      analyzedPlan.schema.fieldNames,
+      SchemaUnsupported,
+      allowDuplicateOutputColumnNames = true)
     CatalogTable(
       identifier = viewName,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = analyzedPlan.schema,
-      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")),
+      viewText = originalText,
+      properties = viewProps,
       collation = collation)
   }
 

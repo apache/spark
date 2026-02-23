@@ -66,7 +66,7 @@ case class ShowTablesExtendedExec(
     tempViews.map { tempView =>
       val database = tempView.identifier.database.getOrElse("")
       val tableName = tempView.identifier.table
-      val information = tempView.simpleString
+      val information = tempView.simpleString(includeViewCatalogAndOutputColumns = true)
       rows += toCatalystRow(database, tableName, true, s"$information\n")
     }
 
