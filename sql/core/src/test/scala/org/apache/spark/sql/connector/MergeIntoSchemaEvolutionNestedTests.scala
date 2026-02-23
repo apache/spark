@@ -18,10 +18,8 @@
 package org.apache.spark.sql.connector
 
 /**
- * Composite trait that includes all merge into schema evolution tests.
- * These can be run in both scala Dataframe and SQL modes.
+ * Composite trait that includes all nested struct/array schema evolution tests.
  */
-trait MergeIntoSchemaEvolutionTests
-  extends MergeIntoSchemaEvolutionNoCapabilityTests
-  with MergeIntoSchemaEvolutionBasicTests
-  with MergeIntoSchemaEvolutionNestedTests
+trait MergeIntoSchemaEvolutionNestedTests
+  extends MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
+  with MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
