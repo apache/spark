@@ -58,7 +58,7 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
     val df_invalid = Seq(Array[Byte](111)).toDF("wkb")
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        df_invalid.select(st_geogfromwkb(unhex($"wkb"))).collect()
+        df_invalid.select(st_geogfromwkb($"wkb")).collect()
       },
       condition = "WKB_PARSE_ERROR",
       parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
@@ -93,7 +93,7 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
     val df_invalid = Seq(Array[Byte](111)).toDF("wkb")
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        df_invalid.select(st_geomfromwkb(unhex($"wkb"))).collect()
+        df_invalid.select(st_geomfromwkb($"wkb")).collect()
       },
       condition = "WKB_PARSE_ERROR",
       parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")

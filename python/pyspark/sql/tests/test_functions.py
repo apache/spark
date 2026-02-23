@@ -3604,7 +3604,7 @@ class FunctionsTestsMixin:
 
     def test_st_geogfromwkb(self):
         df = self.spark.createDataFrame(
-            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"))],
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
             ["wkb"],
         )
         results = df.select(
@@ -3615,7 +3615,7 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
         # ST_GeogFromWKB with invalid WKB.
-        df = self.spark.createDataFrame([(bytearray(b'\x6f'),)], ["wkb"])
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
         with self.assertRaises(IllegalArgumentException) as error_context:
             df.select(F.st_geogfromwkb("wkb")).collect()
         self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
@@ -3638,7 +3638,7 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
         # ST_GeomFromWKB with invalid WKB.
-        df = self.spark.createDataFrame([(bytearray(b'\x6f'),)], ["wkb"])
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
         with self.assertRaises(IllegalArgumentException) as error_context:
             df.select(F.st_geomfromwkb("wkb")).collect()
         self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
