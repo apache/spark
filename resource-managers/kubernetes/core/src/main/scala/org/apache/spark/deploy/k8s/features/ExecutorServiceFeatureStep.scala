@@ -23,13 +23,15 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, ServiceBu
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_SERVICE_COOL_DOWN_PERIOD
-import org.apache.spark.deploy.k8s.Constants.{COOLDOWN_PERIOD_ANNOTATION, OWNER_REFERENCE_ANNOTATION, OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE, OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE, SPARK_APP_ID_LABEL, SPARK_EXECUTOR_ID_LABEL}
+import org.apache.spark.deploy.k8s.Constants.{COOLDOWN_PERIOD_ANNOTATION, OWNER_REFERENCE_ANNOTATION, OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE, OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE, SPARK_APP_ID_LABEL, SPARK_EXECUTOR_ID_LABEL, SPARK_EXECUTOR_SERVICE_ALIVE_STATE, SPARK_EXECUTOR_SERVICE_STATE_LABEL}
 import org.apache.spark.internal.config.{BLOCK_MANAGER_PORT, SHUFFLE_SERVICE_PORT}
 
 class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends KubernetesFeatureConfigStep {
   private val service_selector_labels = Set(SPARK_APP_ID_LABEL, SPARK_EXECUTOR_ID_LABEL)
   private lazy val selector = conf.labels
     .filter { case (key, _) => service_selector_labels.contains(key) }
+  private lazy val labels = selector ++
+    Map(SPARK_EXECUTOR_SERVICE_STATE_LABEL -> SPARK_EXECUTOR_SERVICE_ALIVE_STATE)
 
   private lazy val sparkAppSelector = getLabel(SPARK_APP_ID_LABEL)
   private lazy val sparkExecId = getLabel(SPARK_EXECUTOR_ID_LABEL)
@@ -87,6 +89,7 @@ class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends Kubernete
     val service = new ServiceBuilder()
       .withNewMetadata()
       .withName(serviceName)
+      .withLabels(labels.asJava)
       .withAnnotations(annotation.asJava)
       .endMetadata()
       .withNewSpec()

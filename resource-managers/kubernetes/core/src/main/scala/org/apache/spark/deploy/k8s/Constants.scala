@@ -37,6 +37,9 @@ object Constants {
   val SPARK_POD_DRIVER_ROLE = "driver"
   val SPARK_POD_EXECUTOR_ROLE = "executor"
   val SPARK_EXECUTOR_INACTIVE_LABEL = "spark-exec-inactive"
+  val SPARK_EXECUTOR_SERVICE_STATE_LABEL = "spark-exec-service-state"
+  val SPARK_EXECUTOR_SERVICE_ALIVE_STATE = "alive"
+  val SPARK_EXECUTOR_SERVICE_COOLDOWN_STATE = "cooldown"
 
   // Credentials secrets
   val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =
@@ -113,6 +116,7 @@ object Constants {
   val OWNER_REFERENCE_ANNOTATION_DRIVER_VALUE = "driver"
   val OWNER_REFERENCE_ANNOTATION_EXECUTOR_VALUE = "executor"
   val COOLDOWN_PERIOD_ANNOTATION = "spark.cooldown-period"
+  val COOLDOWN_DEADLINE_ANNOTATION = "spark.cooldown-deadline"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

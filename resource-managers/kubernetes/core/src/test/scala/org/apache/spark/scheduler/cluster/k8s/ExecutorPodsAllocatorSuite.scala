@@ -16,19 +16,21 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.time.Instant
+import java.time.{Instant, ZoneOffset}
 import java.time.temporal.ChronoUnit.MILLIS
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.stream.Stream
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
-import io.fabric8.kubernetes.client.dsl.{NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, ServerSideApplicable}
-import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import io.fabric8.kubernetes.client.dsl.{Deletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, ServerSideApplicable, ServiceResource}
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
+import org.mockito.{ArgumentCaptor, Mock, Mockito, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -955,14 +957,52 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(executorPod.getApiVersion).thenReturn("executor-version")
     when(executorPod.getKind).thenReturn("executor-kind")
 
+    val appId = TEST_SPARK_APP_ID
+    val appIdLabel = SPARK_APP_ID_LABEL
+    val execIdLabel = SPARK_EXECUTOR_ID_LABEL
+    val stateLabel = SPARK_EXECUTOR_SERVICE_STATE_LABEL
+    val aliveState = SPARK_EXECUTOR_SERVICE_ALIVE_STATE
+    val cooldownState = SPARK_EXECUTOR_SERVICE_COOLDOWN_STATE
+
     val service = new ServiceBuilder()
       .withNewMetadata()
       .withName("service")
+      .withLabels(
+        Map(
+          appIdLabel -> appId,
+          execIdLabel -> "1",
+          stateLabel -> aliveState
+        ).asJava
+      )
       .withAnnotations(
         Map(COOLDOWN_PERIOD_ANNOTATION -> "2").asJava
       )
       .endMetadata()
       .build()
+    val serviceMock = spy(service)
+
+    val serviceResource = mock[ServiceResource[Service]]
+    when(serviceResource.get()).thenReturn(serviceMock)
+    val serviceList = mock[MixedOperation[Service, ServiceList, ServiceResource[Service]]]
+    when(serviceList.resources()).thenAnswer(_ => Stream.of(serviceResource))
+    val emptyServiceList = mock[MixedOperation[Service, ServiceList, ServiceResource[Service]]]
+    when(emptyServiceList.resources()).thenAnswer(_ => Stream.empty[ServiceResource[Service]])
+
+    when(serviceList.inNamespace("default")).thenReturn(serviceList)
+    when(serviceList.withLabel(appIdLabel, appId)).thenReturn(serviceList)
+    when(serviceList.withLabel(stateLabel)).thenReturn(serviceList)
+    when(serviceList.withLabel(stateLabel, aliveState)).thenReturn(emptyServiceList)
+    when(serviceList.withLabel(stateLabel, cooldownState)).thenReturn(emptyServiceList)
+    val argumentCaptor = ArgumentCaptor.forClass(classOf[Array[String]])
+    when(serviceList.withLabelNotIn(meq(execIdLabel), argumentCaptor.capture(): _*))
+      .thenReturn(emptyServiceList)
+
+    when(emptyServiceList.withLabel(stateLabel)).thenReturn(emptyServiceList)
+    when(emptyServiceList.withLabel(meq(stateLabel), anyString())).thenReturn(emptyServiceList)
+    when(emptyServiceList.withLabelNotIn(meq(execIdLabel), argumentCaptor.capture(): _*))
+      .thenReturn(emptyServiceList)
+
+    when(kubernetesClient.services()).thenReturn(serviceList)
 
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
       // have the feature step define a kubernetes service (resource)
@@ -983,62 +1023,116 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
     verify(podResource).create()
+    verify(resourceList, times(1)).serverSideApply()
 
-    // service should have been registered with cooldown period
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    // service created and alive
+    when(serviceList.withLabel(stateLabel, aliveState)).thenReturn(serviceList)
+    when(serviceList.withLabelNotIn(meq(execIdLabel), argumentCaptor.capture(): _*))
+      .thenAnswer(a => {
+        if (a.getArguments.slice(1, Int.MaxValue).contains("1")) {
+          emptyServiceList
+        } else {
+          serviceList
+        }
+      })
 
     // make pods allocator see an empty snapshot
     waitForExecutorPodsClock.setTime(startTime + 10*1000)
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    verify(serviceResource, never).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
 
     // the executor is coming up
     waitForExecutorPodsClock.setTime(startTime + 20*1000)
     snapshotsStore.updatePod(pendingExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    verify(serviceResource, never).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
 
     // ... and running
     waitForExecutorPodsClock.setTime(startTime + 30*1000)
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    verify(serviceResource, never).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
 
     // the executor gets unscheduled
     waitForExecutorPodsClock.setTime(startTime + 40*1000)
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 0))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
+    verify(serviceResource, never).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
 
     // the executor disappears, does not trigger anything
     waitForExecutorPodsClock.setTime(startTime + 50*1000)
     snapshotsStore.updatePod(deletedExecutor(1))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
-    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
+    verify(serviceResource, never).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
 
     // the executor disappears, this triggers scheduling service for deletion
     waitForExecutorPodsClock.setTime(startTime + 60*1000)
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
-    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
+    verify(serviceResource, times(1)).get()
+
+    val contextCapture = ArgumentCaptor.forClass(classOf[PatchContext])
+    val serviceCapture = ArgumentCaptor.forClass(classOf[Service])
+    verify(serviceResource, times(1)).patch(contextCapture.capture(), serviceCapture.capture())
+    assert(contextCapture.getValue.getPatchType === PatchType.STRATEGIC_MERGE)
+    val metadata = serviceCapture.getValue.getMetadata
+    val expectedCooldownLabels = Map(stateLabel -> cooldownState)
+    assert(metadata.getLabels.asScala === expectedCooldownLabels)
+    val expectedDeadline = Instant.ofEpochMilli(waitForExecutorPodsClock.getTimeMillis() + 2000)
+      .atZone(ZoneOffset.UTC)
+    val expectedCooldownAnnotation = Map(COOLDOWN_DEADLINE_ANNOTATION -> expectedDeadline.toString)
+    assert(metadata.getAnnotations.asScala === expectedCooldownAnnotation)
+
+    verify(serviceResource, never).delete()
+    Mockito.clearInvocations(serviceResource)
+
+    // apply patch to service
+    val labels = metadata.getLabels.asScala ++ expectedCooldownLabels
+    val annotations = metadata.getAnnotations.asScala ++ expectedCooldownAnnotation
+    service.getMetadata.setLabels(labels.asJava)
+    service.getMetadata.setAnnotations(annotations.asJava)
+    // service in cooldown state
+    when(serviceList.withLabel(stateLabel, aliveState)).thenReturn(emptyServiceList)
+    when(serviceList.withLabel(stateLabel, cooldownState)).thenReturn(serviceList)
 
     // one second passes by, cooldown period is two seconds
     waitForExecutorPodsClock.setTime(startTime + 61*1000)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
-    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
-    verify(resourceList, never()).delete()
+    verify(serviceResource, times(1)).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, never).delete()
+    Mockito.clearInvocations(serviceResource)
 
     // two seconds passed by, service is being deleted
     waitForExecutorPodsClock.setTime(startTime + 62*1000)
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
-    assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
-    verify(resourceList, times(1)).delete()
+    verify(serviceResource, times(1)).get()
+    verify(serviceResource, never).patch()
+    verify(serviceResource, times(1)).delete()
+  }
+
+  test("SPARK-52505: stopping deletes services with state label") {
+    val serviceResource = mock[ServiceResource[Service]]
+    val serviceList = mock[MixedOperation[Service, ServiceList, ServiceResource[Service]]]
+    when(serviceList.resources()).thenAnswer(_ => Stream.of(serviceResource))
+    when(serviceList.inNamespace("default")).thenReturn(serviceList)
+    when(serviceList.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(serviceList)
+    when(serviceList.withLabel(SPARK_EXECUTOR_SERVICE_STATE_LABEL)).thenReturn(serviceList)
+    when(kubernetesClient.services()).thenReturn(serviceList)
+    podsAllocatorUnderTest.stop(TEST_SPARK_APP_ID)
+    verify[Deletable](serviceList, times(1)).delete()
   }
 
   test("SPARK-33262: pod allocator does not stall with pending pods") {
