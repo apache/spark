@@ -32,9 +32,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.2-alpine):
+ * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:18.2-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
