@@ -1832,6 +1832,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "operation" -> operation))
   }
 
+  def streamingSourceEvolutionConfigMismatchError(
+      sessionValue: String,
+      checkpointValue: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CONFIG_MISMATCH",
+      messageParameters = Map(
+        "sessionValue" -> sessionValue,
+        "checkpointValue" -> checkpointValue))
+  }
+
   def pythonStreamingDataSourceRuntimeError(
       action: String,
       message: String): SparkException = {

@@ -6099,6 +6099,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "CONFIG_MISMATCH" : {
+        "message" : [
+          "Configuration mismatch detected when resuming streaming query. The session config for spark.sql.streaming.queryEvolution.enableSourceEvolution is '<sessionValue>', but the checkpoint was created with '<checkpointValue>'. Please set the session config to match the checkpoint value to ensure consistent query behavior."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
