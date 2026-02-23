@@ -33,6 +33,23 @@ if have_pyarrow:
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowUDTFTestsMixin:
+    def test_arrow_udtf_data_conversion_error(self):
+        from pyspark.sql.functions import udtf
+
+        @udtf(returnType="x int, y int")
+        class DataConversionErrorUDTF:
+            def eval(self):
+                # Return a non-tuple value when multiple return values are expected.
+                # This will cause LocalDataToArrowConversion.convert to fail with TypeError (len() on int),
+                # which should be wrapped in UDTF_ARROW_DATA_CONVERSION_ERROR.
+                yield 1
+
+        # Enable Arrow optimization for regular UDTFs
+        with self.sql_conf({"spark.sql.execution.pythonUDTF.arrow.enabled": "true"}):
+            with self.assertRaisesRegex(PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"):
+                result_df = DataConversionErrorUDTF()
+                result_df.collect()
+
     def test_arrow_udtf_zero_args(self):
         @arrow_udtf(returnType="id int, value string")
         class TestUDTF:
