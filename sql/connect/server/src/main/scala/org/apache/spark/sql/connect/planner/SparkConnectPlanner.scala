@@ -1440,12 +1440,12 @@ class SparkConnectPlanner(
       else Deduplicate(allColumns, queryExecution.analyzed)
     } else {
       val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
-      val fieldNames = allColumns.map(_.name).mkString(", ")
       val groupCols = toGroupColumnNames.flatMap { (colName: String) =>
         // It is possibly there are more than one columns with the same name,
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
+          val fieldNames = allColumns.map(_.name).mkString(", ")
           throw InvalidInputErrors.invalidDeduplicateColumn(colName, fieldNames)
         }
         cols
