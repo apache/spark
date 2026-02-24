@@ -13658,7 +13658,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def groupby(
         self,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "DataFrameGroupBy":
