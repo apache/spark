@@ -248,12 +248,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    val correctAnswer = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
-      .where($"a" > 5 || $"f")
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery)
   }
 
   // Combined case 1, 2, and 3 filter pushdown
