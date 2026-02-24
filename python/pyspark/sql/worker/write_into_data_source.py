@@ -228,6 +228,11 @@ def _main(infile: IO, outfile: IO) -> None:
         messages = pa.array([pickled])
         yield pa.record_batch([messages], names=[return_col_name])
 
+    # Set the module name so UDF worker can recognize that this is a data source function.
+    # This is needed when simple worker is used because the __module__ will be set to
+    # __main__, which confuses the profiler logic.
+    data_source_write_func.__module__ = "pyspark.sql.worker.write_into_data_source"
+
     # Return the pickled write UDF.
     command = (data_source_write_func, return_type)
     pickleSer._write_with_length(command, outfile)
