@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 
 abstract class MariaDBDatabaseOnDocker extends DatabaseOnDocker with Logging {
   override val imageName: String =
-    sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:11.4.5")
+    sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:12.2.2")
   override val env: Map[String, String] = Map(
     "MYSQL_ROOT_PASSWORD" -> "rootpass"
   )

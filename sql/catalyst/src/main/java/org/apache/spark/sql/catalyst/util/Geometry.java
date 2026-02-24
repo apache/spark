@@ -23,6 +23,7 @@ import org.apache.spark.unsafe.types.GeometryVal;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
@@ -154,14 +155,23 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkt() {
-    // Once WKT conversion is implemented, it should support various precisions.
-    throw new UnsupportedOperationException("Geometry WKT conversion is not yet supported.");
+    return toWktInternal().getBytes(StandardCharsets.UTF_8);
   }
 
   @Override
   public byte[] toEwkt() {
-    // Once EWKT conversion is implemented, it should support various precisions.
-    throw new UnsupportedOperationException("Geometry EWKT conversion is not yet supported.");
+    if (srid() == DEFAULT_SRID) {
+        return toWkt();
+    }
+    String ewkt = "SRID=" + srid() + ";" + toWktInternal();
+    return ewkt.getBytes(StandardCharsets.UTF_8);
+  }
+
+  private String toWktInternal() {
+    WkbReader reader = new WkbReader();
+    GeometryModel model = reader.read(Arrays.copyOfRange(
+      getBytes(), WKB_OFFSET, getBytes().length));
+    return model.toString();
   }
 
   /** Other instance methods, inherited from the `Geo` interface. */

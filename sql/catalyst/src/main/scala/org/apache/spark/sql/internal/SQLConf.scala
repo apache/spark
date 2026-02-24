@@ -6896,6 +6896,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val PROTOBUF_EXTENSIONS_SUPPORT_ENABLED =
+    buildConf("spark.sql.function.protobufExtensions.enabled")
+      .doc("When true, the from_protobuf and to_protobuf operators will support proto2 " +
+        "extensions when a binary file descriptor set is provided. This property will have no " +
+        "effect for the overloads taking a Java class name instead of a file descriptor set.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *

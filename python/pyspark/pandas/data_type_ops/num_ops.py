@@ -46,7 +46,11 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
     _should_return_all_false,
 )
-from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type, as_spark_type
+from pyspark.pandas.typedef.typehints import (
+    as_spark_type,
+    handle_dtype_as_extension_dtype,
+    pandas_on_spark_type,
+)
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
@@ -318,7 +322,7 @@ class IntegralOps(NumericOps):
     def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+        if isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
             right_is_boolean = _is_boolean_type(right)
@@ -605,7 +609,7 @@ class FractionalOps(NumericOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+        if is_integer_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
             if get_option("compute.eager_check") and index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
@@ -614,7 +618,7 @@ class FractionalOps(NumericOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
                 scol = F.when(
@@ -666,7 +670,7 @@ class DecimalOps(FractionalOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+        if is_integer_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
             if get_option("compute.eager_check") and index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
@@ -709,12 +713,12 @@ class IntegralExtensionOps(IntegralOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
         if get_option("compute.eager_check"):
-            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if is_integer_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
                 if index_ops.hasnans:
                     raise ValueError(
                         "Cannot convert %s with missing values to integer" % self.pretty_name
                     )
-            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            elif is_bool_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
                 if index_ops.hasnans:
                     raise ValueError(
                         "Cannot convert %s with missing values to bool" % self.pretty_name
@@ -738,12 +742,12 @@ class FractionalExtensionOps(FractionalOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
         if get_option("compute.eager_check"):
-            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if is_integer_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
                 if index_ops.hasnans:
                     raise ValueError(
                         "Cannot convert %s with missing values to integer" % self.pretty_name
                     )
-            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            elif is_bool_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
                 if index_ops.hasnans:
                     raise ValueError(
                         "Cannot convert %s with missing values to bool" % self.pretty_name
@@ -752,7 +756,7 @@ class FractionalExtensionOps(FractionalOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
                 scol = F.when(
