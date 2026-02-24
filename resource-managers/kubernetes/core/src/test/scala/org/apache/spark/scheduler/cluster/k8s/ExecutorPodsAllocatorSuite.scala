@@ -112,6 +112,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
+  @Mock
+  private var lifecycleManager: ExecutorPodsLifecycleManager = _
+
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
   private var podsAllocatorUnderTest: ExecutorPodsAllocator = _
@@ -142,6 +145,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
@@ -202,6 +206,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val confWithLowMaxPendingPods = conf.clone.set(KUBERNETES_MAX_PENDING_PODS.key, "3")
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPods, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
@@ -268,6 +273,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(KUBERNETES_MAX_PENDING_PODS_PER_RPID.key, "2")
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPodsPerRpId, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     // Request more than the max per rp for one rp
@@ -321,6 +327,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val confWithAllocationMaximum = conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM.key, "1")
     podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithAllocationMaximum, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
@@ -838,6 +845,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     when(podsWithNamespace
@@ -936,6 +944,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     when(podsWithNamespace
@@ -1005,6 +1014,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       confWithPVC, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
     val startTime = Instant.now.toEpochMilli
@@ -1051,5 +1061,23 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
         k8sConf.resourceProfileId.toInt), Seq.empty)
+  }
+
+  test("SPARK-55075: Pod creation failures are tracked by ExecutorFailureTracker") {
+    // Make all pod creation attempts fail
+    when(podResource.create()).thenThrow(new KubernetesClientException("Simulated pod" +
+      " creation failure"))
+
+    // Request 3 executors
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+
+    // Verify that pod creation was attempted 3 times (once per executor, no retries)
+    verify(podResource, times(3)).create()
+
+    // Verify that registerPodCreationFailure was called 3 times (once per failed executor)
+    verify(lifecycleManager, times(3)).registerExecutorFailure()
+
+    // Verify no pods were created since all attempts failed
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
   }
 }
