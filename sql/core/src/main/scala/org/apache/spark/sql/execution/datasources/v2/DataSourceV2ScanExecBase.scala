@@ -97,7 +97,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
         val partitionKeys =
           inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        KeyedPartitioning(exprs, partitionKeys, partitionKeys)
+        KeyedPartitioning(exprs, partitionKeys)
       case _ =>
         super.outputPartitioning
     }

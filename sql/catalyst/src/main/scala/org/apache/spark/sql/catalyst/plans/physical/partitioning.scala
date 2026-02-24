@@ -351,25 +351,37 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * Represents a partitioning where rows are split across partitions based on transforms defined by
  * `expressions`.
  *
+ * == Usage Forms ==
+ * `KeyedPartitioning` is used in two distinct forms:
+ *
+ * 1. '''As outputPartitioning''': When used as a node's output partitioning (e.g., in
+ *    `BatchScanExec` or `GroupPartitionsExec`), the `partitionKeys` are always in sorted order.
+ *    This is how leaf data source nodes produce partition keys originally, and this ordering is
+ *    preserved through `GroupPartitionsExec`. The sorted order is critical for storage-partitioned
+ *    join compatibility.
+ *
+ * 2. '''In KeyGroupedShuffleSpec''': When used within `KeyGroupedShuffleSpec`, the `partitionKeys`
+ *    may not be in sorted order. This occurs because `KeyGroupedShuffleSpec` can project the
+ *    partition keys by join key positions (see `projectKeys` method), reordering them to match the
+ *    join key order rather than the original sorted partition key order. The `EnsureRequirements`
+ *    rule ensures that either the unordered keys from both sides of a join match exactly, or it
+ *    builds a common ordered set of keys and pushes them down to `GroupPartitionsExec` on both
+ *    sides to establish a compatible ordering.
+ *
  * == Partition Keys ==
- * This partitioning has two sets of partition keys:
- *
- * - `partitionKeys`: The current partition key for each partition, in ascending order. May contain
- *   duplicates when first created from a data source, but becomes unique after grouping.
- *
- * - `originalPartitionKeys`: The original partition keys from the data source, in ascending order.
- *   Always preserves the original values, even after grouping. Used to track the original
- *   distribution for optimization purposes.
+ * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
+ *   (ungrouped state), but becomes unique after `GroupPartitionsExec` applies grouping.
  *
  * == Grouping State ==
  * A KeyedPartitioning can be in two states:
  *
- * - '''Ungrouped''' (when `isGrouped == false`): `partitionKeys` contains duplicates. Multiple
- *   input partitions share the same key. This is the initial state when created from a data source.
+ * - '''Ungrouped''' (when `isGrouped == false`): `partitionKeys` contains duplicates, meaning
+ *   multiple input partitions share the same key. This occurs when a data source has multiple
+ *   splits for the same partition value.
  *
- * - '''Grouped''' (when `isGrouped == true`): `partitionKeys` contains only unique values. Each
- *   partition has a distinct key. This state is achieved by applying `GroupPartitionsExec`, which
- *   coalesces partitions with the same key.
+ * - '''Grouped''' (when `isGrouped == true`): `partitionKeys` contains only unique values, with
+ *   each partition having a distinct key. This occurs when: (1) a data source natively produces
+ *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
  * == Example ==
  * Consider a data source with partition transform `[years(ts_col)]` and 4 input splits:
@@ -377,8 +389,7 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * '''Before GroupPartitionsExec''' (ungrouped):
  * {{{
  *   expressions:           [years(ts_col)]
- *   partitionKeys:         [0, 1, 2, 2]    // partition 2 and 3 have the same key
- *   originalPartitionKeys: [0, 1, 2, 2]
+ *   partitionKeys:         [0, 1, 2, 2]    // partitions 2 and 3 have the same key
  *   numPartitions:         4
  *   isGrouped:             false
  * }}}
@@ -387,21 +398,18 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * {{{
  *   expressions:           [years(ts_col)]
  *   partitionKeys:         [0, 1, 2]       // duplicates removed, partitions coalesced
- *   originalPartitionKeys: [0, 1, 2, 2]    // unchanged, preserves original distribution
  *   numPartitions:         3
  *   isGrouped:             true
  * }}}
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
- * @param partitionKeys Current partition keys, one per partition, in ascending order.
- *                      May contain duplicates before grouping.
- * @param originalPartitionKeys Original partition keys from the data source, in ascending order.
- *                              Preserves the initial distribution even after grouping.
+ * @param partitionKeys Partition keys, one per partition. When used as outputPartitioning,
+ *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be
+ *                      unsorted after projection. May contain duplicates when ungrouped.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
-    partitionKeys: Seq[InternalRow],
-    originalPartitionKeys: Seq[InternalRow]) extends Expression with Partitioning with Unevaluable {
+    partitionKeys: Seq[InternalRow]) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
@@ -412,18 +420,16 @@ case class KeyedPartitioning(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
     copy(expressions = newChildren)
 
-  @transient private lazy val dataTypes: Seq[DataType] = expressions.map(_.dataType)
+  @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
-  @transient private lazy val comparableWrapperFactory =
-    InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-
-  @transient private lazy val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+  @transient lazy val keysComparableWrapperFactory =
+    InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(expressionDataTypes)
 
   @transient lazy val isGrouped: Boolean =
-    partitionKeys.distinctBy(comparableWrapperFactory).size == partitionKeys.size
+    partitionKeys.distinctBy(keysComparableWrapperFactory).size == partitionKeys.size
 
   def toGrouped: KeyedPartitioning = {
-    val groupedPartitionKeys = partitionKeys.distinctBy(comparableWrapperFactory)
+    val groupedPartitionKeys = partitionKeys.distinctBy(keysComparableWrapperFactory)
 
     KeyedPartitioning(expressions, groupedPartitionKeys)
   }
@@ -432,15 +438,21 @@ case class KeyedPartitioning(
    * Projects this partitioning's expressions by selecting only the specified positions.
    * Returns both the projected expressions and their data types.
    */
-  def projectKeys(positions: Seq[Int]):
-      (Seq[Expression], Seq[DataType], Seq[InternalRow], Seq[InternalRow]) = {
+  def projectKeys(positions: Seq[Int]): (Seq[Expression], Seq[DataType], Seq[InternalRow]) = {
     val projectedExpressions = positions.map(expressions)
     val projectedDataTypes = projectedExpressions.map(_.dataType)
     val projectedKeys = KeyedPartitioning.projectKeys(partitionKeys, positions, projectedDataTypes)
-    val projectedOriginalKeys =
-      KeyedPartitioning.projectKeys(originalPartitionKeys, positions, projectedDataTypes)
 
-    (projectedExpressions, projectedDataTypes, projectedKeys, projectedOriginalKeys)
+    (projectedExpressions, projectedDataTypes, projectedKeys)
+  }
+
+  /**
+   * Reduces this partitioning's partition keys by applying the given reducers.
+   * Returns the distinct reduced keys.
+   */
+  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRow] = {
+    KeyedPartitioning.reduceKeys(partitionKeys, reducers, expressionDataTypes)
+      .distinctBy(keysComparableWrapperFactory)
   }
 
   override def satisfies0(required: Distribution): Boolean = {
@@ -481,13 +493,12 @@ case class KeyedPartitioning(
       // `KeyedPartitioning` here that is grouped on the join keys instead, and use that as
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
-      val (projectedExpressions, projectedDataTypes, projectedKeys, projectedOriginalKeys) =
-        projectKeys(joinKeyPositions)
+      val (projectedExpressions, projectedDataTypes, projectedKeys) = projectKeys(joinKeyPositions)
       val projectedComparableWrapperFactory =
         InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
-      val distinctPartitionKeys = projectedKeys.distinctBy(projectedComparableWrapperFactory)
-      val projectedPartitioning = copy(expressions = projectedExpressions,
-        partitionKeys = distinctPartitionKeys, originalPartitionKeys = projectedOriginalKeys)
+      val distinctProjectedKeys = projectedKeys.distinctBy(projectedComparableWrapperFactory)
+      val projectedPartitioning =
+        copy(expressions = projectedExpressions, partitionKeys = distinctProjectedKeys)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
@@ -496,22 +507,16 @@ case class KeyedPartitioning(
 
   override def equals(that: Any): Boolean = that match {
     case k: KeyedPartitioning if this.expressions == k.expressions =>
-      def keysEqual(keys1: Seq[InternalRow], keys2: Seq[InternalRow]): Boolean = {
-        keys1.size == keys2.size && keys1.zip(keys2).forall { case (l, r) =>
-          comparableWrapperFactory(l).equals(comparableWrapperFactory(r))
+      partitionKeys.size == k.partitionKeys.size &&
+        partitionKeys.zip(k.partitionKeys).forall { case (l, r) =>
+          keysComparableWrapperFactory(l).equals(keysComparableWrapperFactory(r))
         }
-      }
-
-      keysEqual(partitionKeys, k.partitionKeys) &&
-        keysEqual(originalPartitionKeys, k.originalPartitionKeys)
 
     case _ => false
   }
 
-  override def hashCode(): Int = {
-    Objects.hash(expressions, partitionKeys.map(comparableWrapperFactory),
-      originalPartitionKeys.map(comparableWrapperFactory))
-  }
+  override def hashCode(): Int =
+    Objects.hash(expressions, partitionKeys.map(keysComparableWrapperFactory))
 }
 
 object KeyedPartitioning {
@@ -1045,8 +1050,7 @@ case class KeyGroupedShuffleSpec(
         te.copy(children = te.children.map(_ => clustering(positionSet.head)))
       case (_, positionSet) => clustering(positionSet.head)
     }
-    KeyedPartitioning(newExpressions, partitioning.partitionKeys,
-      partitioning.originalPartitionKeys)
+    KeyedPartitioning(newExpressions, partitioning.partitionKeys)
   }
 }
 

@@ -370,7 +370,7 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case k @ KeyedPartitioning(expressions, _, _) =>
+      case k @ KeyedPartitioning(expressions, _) =>
         val keyGroupedPartitioning = k.toGrouped
         val valueMap = keyGroupedPartitioning.partitionKeys.zipWithIndex.map {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
@@ -403,7 +403,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _) =>
+      case KeyedPartitioning(expressions, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID

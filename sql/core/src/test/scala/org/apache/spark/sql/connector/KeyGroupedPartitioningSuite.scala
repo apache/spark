@@ -91,12 +91,12 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val partitionKeys = Seq(50L, 51L, 52L).map(v => InternalRow.fromSeq(Seq(v)))
 
     checkQueryPlan(df, catalystDistribution,
-      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys, partitionKeys))
+      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys))
 
     // multiple group keys should work too as long as partition keys are subset of them
     df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
     checkQueryPlan(df, catalystDistribution,
-      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys, partitionKeys))
+      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys))
   }
 
   test("non-clustered distribution: no partition") {
@@ -122,7 +122,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     // Has exactly one partition.
     val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
     checkQueryPlan(df, distribution,
-      physical.KeyedPartitioning(distribution.clustering, partitionKeys, partitionKeys))
+      physical.KeyedPartitioning(distribution.clustering, partitionKeys))
   }
 
   test("non-clustered distribution: no V2 catalog") {

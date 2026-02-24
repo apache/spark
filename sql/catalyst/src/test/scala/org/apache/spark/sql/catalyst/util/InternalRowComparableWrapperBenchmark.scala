@@ -41,7 +41,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
     val partitionNum = 200_000
     val bucketNum = 4096
     val day = 20240401
-    val partitions = (0 until partitionNum).map { i =>
+    val partitionKeys = (0 until partitionNum).map { i =>
       val bucketId = i % bucketNum
       PartitionInternalRow.apply(Array(day, bucketId));
     }
@@ -51,7 +51,7 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       val internalRowComparableWrapperFactory =
         InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
           Seq(IntegerType, IntegerType))
-      val distinct = partitions
+      val distinct = partitionKeys
         .map(internalRowComparableWrapperFactory)
         .toSet
       assert(distinct.size == bucketNum)
@@ -61,8 +61,8 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
       // just to mock the data types
       val expressions = (Seq(Literal(day, IntegerType), Literal(0, IntegerType)))
 
-      val leftPartitioning = KeyedPartitioning(expressions, partitions, partitions)
-      val rightPartitioning = KeyedPartitioning(expressions, partitions, partitions)
+      val leftPartitioning = KeyedPartitioning(expressions, partitionKeys)
+      val rightPartitioning = KeyedPartitioning(expressions, partitionKeys)
       val merged = InternalRowComparableWrapper.mergePartitions(
         leftPartitioning.partitionKeys, rightPartitioning.partitionKeys, expressions)
       assert(merged.size == bucketNum)

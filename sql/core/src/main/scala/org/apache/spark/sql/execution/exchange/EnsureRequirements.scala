@@ -204,7 +204,7 @@ case class EnsureRequirements(
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             bestSpecOpt match {
-              // If keyGroupCompatible = false, we can still perform SPJ
+              // If `areChildrenCompatible` is false, we can still perform SPJ
               // by shuffling the other side based on join keys (see the else case below).
               // Hence we need to ensure that after this call, the outputPartitioning of the
               // partitioned side's BatchScanExec is grouped by join keys to match,
@@ -354,12 +354,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _)), _) =>
+      case (Some(KeyedPartitioning(clustering, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _))) =>
+      case (_, Some(KeyedPartitioning(clustering, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
@@ -465,17 +465,22 @@ case class EnsureRequirements(
     val leftSpec = specs.head
     val rightSpec = specs(1)
 
-    def contains(partitioning: Partitioning, keyedPartitioning: KeyedPartitioning): Boolean = {
+    def containsPartitioning(
+        partitioning: Partitioning,
+        keyedPartitioning: KeyedPartitioning): Boolean = {
       partitioning match {
         case k: KeyedPartitioning => k == keyedPartitioning
         case PartitioningCollection(partitionings) =>
-          partitionings.exists(contains(_, keyedPartitioning))
+          partitionings.exists(containsPartitioning(_, keyedPartitioning))
         case _ => false
       }
     }
 
-    var isCompatible = contains(left.outputPartitioning, leftSpec.partitioning) &&
-      contains(right.outputPartitioning, rightSpec.partitioning) &&
+    // We don't need to add alter or add any `GroupPartitionsExec` when the child partitionings are
+    // not modified (projected) in specs and left and right side partitionings are compatible with
+    // each other.
+    var isCompatible = containsPartitioning(left.outputPartitioning, leftSpec.partitioning) &&
+      containsPartitioning(right.outputPartitioning, rightSpec.partitioning) &&
       leftSpec.isCompatibleWith(rightSpec)
     if ((!isCompatible || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
@@ -517,16 +522,15 @@ case class EnsureRequirements(
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
         val leftReducers = leftSpec.reducers(rightSpec)
-        val leftParts = reducePartitionKeys(leftSpec.partitioning.partitionKeys,
-          partitionExprs,
-          leftReducers)
+        val leftReducedKeys = leftReducers.fold(leftSpec.partitioning.partitionKeys)(
+          leftSpec.partitioning.reduceKeys)
         val rightReducers = rightSpec.reducers(leftSpec)
-        val rightParts = reducePartitionKeys(rightSpec.partitioning.partitionKeys,
-          partitionExprs,
-          rightReducers)
+        val rightReducedKeys = rightReducers.fold(rightSpec.partitioning.partitionKeys)(
+          rightSpec.partitioning.reduceKeys)
 
         // merge values on both sides
-        var mergedPartitionKeys = mergePartitions(leftParts, rightParts, partitionExprs, joinType)
+        var mergedPartitionKeys =
+          mergePartitions(leftReducedKeys, rightReducedKeys, partitionExprs, joinType)
             .map(v => (v, 1))
 
         logInfo(log"After merging, there are " +
@@ -608,13 +612,23 @@ case class EnsureRequirements(
               replicateRightSide = false
             } else {
               // In partially clustered distribution, we should use un-grouped partition values
-              val spec = if (replicateLeftSide) rightSpec else leftSpec
-              val originalPartitionKeys = spec.partitioning.originalPartitionKeys
+              val (replicatedChild, replicatedSpec) = if (replicateLeftSide) {
+                (right, rightSpec)
+              } else {
+                (left, leftSpec)
+              }
+              val originalPartitioning = (replicatedChild match {
+                case g: GroupPartitionsExec => g.child
+                case o => o
+              }).outputPartitioning.asInstanceOf[KeyedPartitioning]
+              val dataTypes = partitionExprs.map(_.dataType)
+              val projectedOriginalPartitionKeys =
+                replicatedSpec.joinKeyPositions.fold(originalPartitioning.partitionKeys)(
+                  KeyedPartitioning.projectKeys(originalPartitioning.partitionKeys, _, dataTypes))
               val internalRowComparableWrapperFactory =
-                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
-                  partitionExprs.map(_.dataType))
+                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
 
-              val numExpectedPartitions = originalPartitionKeys
+              val numExpectedPartitions = projectedOriginalPartitionKeys
                 .groupBy(internalRowComparableWrapperFactory)
                 .view.mapValues(_.size)
 
@@ -708,21 +722,6 @@ case class EnsureRequirements(
     plan match {
       case g: GroupPartitionsExec => g.copy(joinKeyPositions = Some(positions))
       case _ => GroupPartitionsExec(plan, joinKeyPositions = Some(positions))
-    }
-  }
-
-  private def reducePartitionKeys(
-      partitionKeys: Seq[InternalRow],
-      expressions: Seq[Expression],
-      reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-    reducers match {
-      case Some(reducers) =>
-        val dataTypes = expressions.map(_.dataType)
-        val internalRowComparableWrapperFactory =
-          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-        KeyedPartitioning.reduceKeys(partitionKeys, reducers, dataTypes)
-          .distinctBy(internalRowComparableWrapperFactory)
-      case _ => partitionKeys
     }
   }
 
