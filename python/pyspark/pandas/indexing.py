@@ -636,7 +636,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if self._psdf_or_psser.name is None:
                     psser = psser.rename()
 
-                self._psdf_or_psser._psdf._update_internal_frame(
+                self._psdf_or_psser._update_internal_frame(
                     psser._psdf[
                         self._psdf_or_psser._psdf._internal.column_labels
                     ]._internal.resolved_copy,
@@ -673,7 +673,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_spark_column(
                 self._psdf_or_psser._column_label, scol  # TODO: dtype?
             )
-            self._psdf_or_psser._psdf._update_internal_frame(internal, check_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
         else:
             assert self._is_df
 
@@ -821,11 +821,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_columns(
                 new_data_spark_columns, column_labels=column_labels, data_fields=new_fields
             )
-            self._psdf_or_psser._update_internal_frame(
-                internal,
-                check_same_anchor=False,
-                anchor_force_disconnect=LooseVersion(pd.__version__) >= "3.0.0",
-            )
+            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
 
 
 class LocIndexer(LocIndexerLike):
@@ -1872,7 +1868,7 @@ class iLocIndexer(LocIndexerLike):
                         )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
-        self._psdf._update_internal_frame(
+        self._psdf_or_psser._update_internal_frame(
             self._psdf._internal.resolved_copy, check_same_anchor=False
         )
 
