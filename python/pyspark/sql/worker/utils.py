@@ -70,7 +70,15 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
             SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
         )
 
-        worker_module = main.__module__.split(".")[-1]
+        if main.__module__ == "__main__":
+            try:
+                worker_module = sys.modules["__main__"].__spec__.name
+            except Exception:
+                worker_module = "__main__"
+        else:
+            worker_module = main.__module__
+        worker_module = worker_module.split(".")[-1]
+
         if conf.profiler == "perf":
             with WorkerPerfProfiler(accumulator, worker_module):
                 main(infile, outfile)
