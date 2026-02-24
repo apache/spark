@@ -18,7 +18,7 @@ import datetime
 import unittest
 from zoneinfo import ZoneInfo
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
     ArrowArrayToPandasConversion,
     ArrowTableToRowsConversion,
@@ -285,7 +285,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(result.num_rows, 0)
 
     def test_convert_error_messages(self):
-        """Test error messages include series name from schema field."""
+        """Test error messages include column name and type information."""
         import pandas as pd
 
         schema = StructType([StructField("age", IntegerType()), StructField("name", StringType())])
@@ -294,14 +294,13 @@ class PandasToArrowConversionTests(unittest.TestCase):
         data = [pd.Series(["not_int", "bad"]), pd.Series(["a", "b"])]
         with self.assertRaises((PySparkValueError, PySparkTypeError)) as ctx:
             PandasToArrowConversion.convert(data, schema)
-        # Error message should reference the schema field name, not the positional index
         error_msg = str(ctx.exception)
-        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
-        self.assertIn("with name 'age'", error_msg)
-        self.assertIn("to Arrow Array", error_msg)
+        # Error message should reference the column name and type information
+        self.assertIn("Cannot convert column 'age'", error_msg)
+        self.assertIn("int32", error_msg)
 
     def test_convert_broad_exception_handling(self):
-        """Test unified conversion uses broad exception handling for better type coercion."""
+        """Test unified conversion produces user-friendly error messages."""
         import pandas as pd
 
         schema = StructType([StructField("val", DoubleType())])
@@ -311,9 +310,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         with self.assertRaises(PySparkValueError) as ctx:
             PandasToArrowConversion.convert(data, schema)
         error_msg = str(ctx.exception)
-        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
-        self.assertIn("with name 'val'", error_msg)
-        self.assertIn("to Arrow Array", error_msg)
+        self.assertIn("Cannot convert column 'val'", error_msg)
         self.assertIn("double", error_msg)
 
         # TypeError path (int -> struct): ArrowTypeError inherits from TypeError.
@@ -330,10 +327,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
                 ignore_unexpected_complex_type_values=True,
             )
         error_msg = str(ctx.exception)
-        self.assertIn("Exception thrown when converting pandas.Series", error_msg)
-        self.assertIn("with name 'x'", error_msg)
-        self.assertIn("to Arrow Array", error_msg)
+        self.assertIn("Cannot convert column 'x'", error_msg)
         self.assertIn("struct<a: int32>", error_msg)
+        self.assertIn("Please verify the return type annotation", error_msg)
 
     def test_convert_prefers_large_types(self):
         """Test prefers_large_types produces large Arrow types."""

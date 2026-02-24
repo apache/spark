@@ -336,9 +336,7 @@ class PandasToArrowConversion:
             # AND ArrowTypeError (e.g. dict→struct) trigger the cast fallback.
             try:
                 try:
-                    return pa.Array.from_pandas(
-                        series, mask=mask, type=arrow_type, safe=safecheck
-                    )
+                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
                 except pa.lib.ArrowException:  # broad: includes ArrowTypeError and ArrowInvalid
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
@@ -348,20 +346,27 @@ class PandasToArrowConversion:
             except (TypeError, pa.lib.ArrowTypeError) as e:
                 # ArrowTypeError is a subclass of TypeError
                 raise PySparkTypeError(
-                    f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                    f"with name '{field_name}' to Arrow Array ({arrow_type})."
+                    f"Cannot convert column '{field_name}' of pandas type "
+                    f"'{series.dtype}' to Arrow type '{arrow_type}'. "
+                    f"The data type is not compatible with the specified return type. "
+                    f"Please verify the return type annotation matches the actual data."
                 ) from e
             except (ValueError, pa.lib.ArrowInvalid) as e:
                 # ArrowInvalid is a subclass of ValueError
                 error_msg = (
-                    f"Exception thrown when converting pandas.Series ({series.dtype}) "
-                    f"with name '{field_name}' to Arrow Array ({arrow_type})."
+                    f"Cannot convert column '{field_name}' of pandas type "
+                    f"'{series.dtype}' to Arrow type '{arrow_type}'."
                 )
                 if safecheck:
                     error_msg += (
                         " It can be caused by overflows or other unsafe conversions "
                         "warned by Arrow. Arrow safe type check can be disabled by using "
                         "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    )
+                else:
+                    error_msg += (
+                        " Please verify the data values are compatible with the "
+                        "specified return type."
                     )
                 raise PySparkValueError(error_msg) from e
 
