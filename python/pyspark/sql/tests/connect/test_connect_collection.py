@@ -15,19 +15,19 @@
 # limitations under the License.
 #
 
-import unittest
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectCollectionTests(SparkConnectSQLTestCase):
+class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_collect(self):
-        cdf = self.connect.read.table(self.tbl_name)
-        sdf = self.spark.read.table(self.tbl_name)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         data = cdf.limit(10).collect()
         self.assertEqual(len(data), 10)
@@ -73,25 +73,25 @@ class SparkConnectCollectionTests(SparkConnectSQLTestCase):
 
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertIsNotNone(len(df.head()))
         self.assertIsNotNone(len(df.head(1)))
         self.assertIsNotNone(len(df.head(5)))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertIsNone(df2.head())
 
     def test_first(self):
         # SPARK-41002: test `first` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertIsNotNone(len(df.first()))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertIsNone(df2.first())
 
     def test_take(self) -> None:
         # SPARK-41002: test `take` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertEqual(5, len(df.take(5)))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertEqual(0, len(df2.take(5)))
 
     def test_to_pandas(self):
@@ -253,13 +253,13 @@ class SparkConnectCollectionTests(SparkConnectSQLTestCase):
         )
 
         # test collect nested struct
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
-        # |struct(a, struct(a, struct(c, struct(d))))|struct(a, b, struct(c, d))|     struct(e, f, struct(g))| # noqa
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
-        # |                        {1, {1, {0, {8}}}}|            {1, 4, {0, 8}}|{true, true, {[1, null, 3]}}| # noqa
-        # |                    {2, {2, {-1, {null}}}}|        {2, 5, {-1, null}}|     {false, null, {[1, 3]}}| # noqa
-        # |                     {3, {3, {null, {0}}}}|         {3, 6, {null, 0}}|     {false, null, {[null]}}| # noqa
-        # +------------------------------------------+--------------------------+----------------------------+ # noqa
+        # +------------------------------------------+--------------------------+----------------------------+
+        # |struct(a, struct(a, struct(c, struct(d))))|struct(a, b, struct(c, d))|     struct(e, f, struct(g))|
+        # +------------------------------------------+--------------------------+----------------------------+
+        # |                        {1, {1, {0, {8}}}}|            {1, 4, {0, 8}}|{true, true, {[1, null, 3]}}|
+        # |                    {2, {2, {-1, {null}}}}|        {2, 5, {-1, null}}|     {false, null, {[1, 3]}}|
+        # |                     {3, {3, {null, {0}}}}|         {3, 6, {null, 0}}|     {false, null, {[null]}}|
+        # +------------------------------------------+--------------------------+----------------------------+
         self.assertEqual(
             cdf.select(
                 CF.struct("a", CF.struct("a", CF.struct("c", CF.struct("d")))),
@@ -290,15 +290,87 @@ class SparkConnectCollectionTests(SparkConnectSQLTestCase):
             ).collect(),
         )
 
+    def test_collect_binary_type(self):
+        """Test that df.collect() respects binary_as_bytes configuration for server-side data"""
+        query = """
+            SELECT * FROM VALUES
+            (CAST('hello' AS BINARY)),
+            (CAST('world' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                connect_rows = self.connect.sql(query).collect()
+                self.assertEqual(len(connect_rows), 2)
+                for row in connect_rows:
+                    self.assertIsInstance(row.b, expected_type)
+
+                spark_rows = self.spark.sql(query).collect()
+                self.assertEqual(len(spark_rows), 2)
+                for row in spark_rows:
+                    self.assertIsInstance(row.b, expected_type)
+
+    def test_to_local_iterator_binary_type(self):
+        """Test that df.toLocalIterator() respects binary_as_bytes configuration"""
+        query = """
+            SELECT * FROM VALUES
+            (CAST('data1' AS BINARY)),
+            (CAST('data2' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                connect_count = 0
+                for row in self.connect.sql(query).toLocalIterator():
+                    self.assertIsInstance(row.b, expected_type)
+                    connect_count += 1
+                self.assertEqual(connect_count, 2)
+
+                spark_count = 0
+                for row in self.spark.sql(query).toLocalIterator():
+                    self.assertIsInstance(row.b, expected_type)
+                    spark_count += 1
+                self.assertEqual(spark_count, 2)
+
+    def test_foreach_partition_binary_type(self):
+        """Test that df.foreachPartition() respects binary_as_bytes configuration
+
+        Since foreachPartition() runs on executors and cannot return data to the driver,
+        we test by ensuring the function doesn't throw exceptions when it expects the correct types.
+        """
+        query = """
+            SELECT * FROM VALUES
+            (CAST('partition1' AS BINARY)),
+            (CAST('partition2' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            expected_type_name = "bytes" if conf_value == "true" else "bytearray"
+
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+
+                def assert_type(iterator):
+                    count = 0
+                    for row in iterator:
+                        # This will raise an exception if the type is not as expected
+                        assert isinstance(
+                            row.b, expected_type
+                        ), f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        count += 1
+                    # Ensure we actually processed rows
+                    assert count > 0, "No rows were processed"
+
+                self.connect.sql(query).foreachPartition(assert_type)
+                self.spark.sql(query).foreachPartition(assert_type)
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_collection import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

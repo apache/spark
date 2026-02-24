@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringConcat
  * @param valueType
  *   The data type of map values.
  * @param valueContainsNull
- *   Indicates if map values have `null` values.
+ *   Indicates if map values can have `null` values.
  */
 @Stable
 case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)

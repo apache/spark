@@ -31,10 +31,10 @@ import org.apache.spark.util.ArrayImplicits._
 
 class InMemoryTableWithV2Filter(
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryBaseTable(name, schema, partitioning, properties) with SupportsDeleteV2 {
+  extends InMemoryBaseTable(name, columns, partitioning, properties) with SupportsDeleteV2 {
 
   override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
     InMemoryTableWithV2Filter.supportsPredicates(predicates)

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
-import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 
@@ -38,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
  */
 object EnumTypeSetBenchmark extends BenchmarkBase {
 
-  def emptyHashSet(): util.Set[TableCapability] = Collections.emptySet()
+  def emptyHashSet(): util.Set[TableCapability] = util.Set.of()
 
   def emptyEnumSet(): util.Set[TableCapability] =
     util.EnumSet.noneOf(classOf[TableCapability])

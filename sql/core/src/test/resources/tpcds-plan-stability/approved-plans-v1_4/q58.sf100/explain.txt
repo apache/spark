@@ -328,7 +328,7 @@ Input [2]: [d_date#40, d_week_seq#41]
 
 (55) Filter [codegen id : 1]
 Input [2]: [d_date#40, d_week_seq#41]
-Condition : (isnotnull(d_week_seq#41) AND (d_week_seq#41 = ReusedSubquery Subquery scalar-subquery#42, [id=#43]))
+Condition : (isnotnull(d_week_seq#41) AND (d_week_seq#41 = ReusedSubquery Subquery scalar-subquery#42, [id=#7]))
 
 (56) Project [codegen id : 1]
 Output [1]: [d_date#40]
@@ -336,7 +336,7 @@ Input [2]: [d_date#40, d_week_seq#41]
 
 (57) BroadcastExchange
 Input [1]: [d_date#40]
-Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=8]
 
 (58) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [d_date#39]
@@ -350,11 +350,11 @@ Input [2]: [d_date_sk#5, d_date#39]
 
 (60) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
 
-Subquery:2 Hosting operator id = 55 Hosting Expression = ReusedSubquery Subquery scalar-subquery#42, [id=#43]
+Subquery:2 Hosting operator id = 55 Hosting Expression = ReusedSubquery Subquery scalar-subquery#42, [id=#7]
 
-Subquery:3 Hosting operator id = 53 Hosting Expression = Subquery scalar-subquery#42, [id=#43]
+Subquery:3 Hosting operator id = 53 Hosting Expression = Subquery scalar-subquery#42, [id=#7]
 * Project (64)
 +- * Filter (63)
    +- * ColumnarToRow (62)
@@ -362,22 +362,22 @@ Subquery:3 Hosting operator id = 53 Hosting Expression = Subquery scalar-subquer
 
 
 (61) Scan parquet spark_catalog.default.date_dim
-Output [2]: [d_date#44, d_week_seq#45]
+Output [2]: [d_date#43, d_week_seq#44]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), EqualTo(d_date,2000-01-03)]
 ReadSchema: struct<d_date:date,d_week_seq:int>
 
 (62) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date#44, d_week_seq#45]
+Input [2]: [d_date#43, d_week_seq#44]
 
 (63) Filter [codegen id : 1]
-Input [2]: [d_date#44, d_week_seq#45]
-Condition : (isnotnull(d_date#44) AND (d_date#44 = 2000-01-03))
+Input [2]: [d_date#43, d_week_seq#44]
+Condition : (isnotnull(d_date#43) AND (d_date#43 = 2000-01-03))
 
 (64) Project [codegen id : 1]
-Output [1]: [d_week_seq#45]
-Input [2]: [d_date#44, d_week_seq#45]
+Output [1]: [d_week_seq#44]
+Input [2]: [d_date#43, d_week_seq#44]
 
 Subquery:4 Hosting operator id = 17 Hosting Expression = cs_sold_date_sk#15 IN dynamicpruning#4
 

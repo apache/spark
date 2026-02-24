@@ -19,15 +19,19 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import org.apache.kafka.common.record.TimestampType
+
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
-import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
+import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead
+import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution}
+import org.apache.spark.sql.kafka010.consumer.{KafkaDataConsumer, KafkaDataConsumerIterator}
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */
 private[kafka010] case class KafkaBatchInputPartition(
@@ -67,7 +71,8 @@ private case class KafkaBatchPartitionReader(
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    includeHeaders: Boolean) extends PartitionReader[InternalRow] with Logging {
+    includeHeaders: Boolean)
+  extends SupportsRealTimeRead[InternalRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(offsetRange.topicPartition, executorKafkaParams)
 
@@ -77,6 +82,12 @@ private case class KafkaBatchPartitionReader(
 
   private var nextOffset = rangeToRead.fromOffset
   private var nextRow: UnsafeRow = _
+  private var iteratorForRealTimeMode: Option[KafkaDataConsumerIterator] = None
+
+  // Boolean flag that indicates whether we have logged the type of timestamp (i.e. create time,
+  // log-append time, etc.) for the Kafka source. We log upon reading the first record, and we
+  // then skip logging for subsequent records.
+  private var timestampTypeLogged = false
 
   override def next(): Boolean = {
     if (nextOffset < rangeToRead.untilOffset) {
@@ -91,6 +102,38 @@ private case class KafkaBatchPartitionReader(
     } else {
       false
     }
+  }
+
+  override def nextWithTimeout(timeoutMs: java.lang.Long): RecordStatus = {
+    if (!iteratorForRealTimeMode.isDefined) {
+      logInfo(s"Getting a new kafka consuming iterator for ${offsetRange.topicPartition} " +
+        s"starting from ${nextOffset}, timeoutMs ${timeoutMs}")
+      iteratorForRealTimeMode = Some(consumer.getIterator(nextOffset))
+    }
+    assert(iteratorForRealTimeMode.isDefined)
+    val nextRecord = iteratorForRealTimeMode.get.nextWithTimeout(timeoutMs)
+    nextRecord.foreach { record =>
+
+      nextRow = unsafeRowProjector(record)
+      nextOffset = record.offset + 1
+      if (record.timestampType() == TimestampType.LOG_APPEND_TIME ||
+        record.timestampType() == TimestampType.CREATE_TIME) {
+        if (!timestampTypeLogged) {
+          logInfo(log"Kafka source record timestamp type is " +
+            log"${MDC(LogKeys.TIMESTAMP_COLUMN_NAME, record.timestampType())}")
+          timestampTypeLogged = true
+        }
+
+        RecordStatus.newStatusWithArrivalTimeMs(record.timestamp())
+      } else {
+        RecordStatus.newStatusWithoutArrivalTime(true)
+      }
+    }
+    RecordStatus.newStatusWithoutArrivalTime(nextRecord.isDefined)
+  }
+
+  override def getOffset(): KafkaSourcePartitionOffset = {
+    KafkaSourcePartitionOffset(offsetRange.topicPartition, nextOffset)
   }
 
   override def get(): UnsafeRow = {

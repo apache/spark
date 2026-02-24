@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -147,7 +149,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       val goldenOutput = (header ++ outputBuffer).mkString("\n")
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
-        assert(parent.mkdirs(), "Could not create directory: " + parent)
+        assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
       }
       stringToFile(resultFile, goldenOutput)
       // scalastyle:off println
@@ -164,7 +166,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     val outputSize = outputs.size
     val headerSize = header.size
     val expectedOutputs = {
-      val expectedGoldenOutput = fileToString(resultFile)
+      val expectedGoldenOutput = Files.readString(resultFile.toPath)
       val lines = expectedGoldenOutput.split("\n")
       val expectedSize = lines.size
 

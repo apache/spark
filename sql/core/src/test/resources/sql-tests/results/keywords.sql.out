@@ -19,7 +19,9 @@ ARCHIVE	false
 ARRAY	false
 AS	false
 ASC	false
+ASENSITIVE	false
 AT	false
+ATOMIC	false
 AUTHORIZATION	false
 BEGIN	false
 BETWEEN	false
@@ -45,6 +47,7 @@ CHAR	false
 CHARACTER	false
 CHECK	false
 CLEAR	false
+CLOSE	false
 CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
@@ -73,6 +76,7 @@ CURRENT_DATE	false
 CURRENT_TIME	false
 CURRENT_TIMESTAMP	false
 CURRENT_USER	false
+CURSOR	false
 DATA	false
 DATABASE	false
 DATABASES	false
@@ -91,6 +95,7 @@ DECLARE	false
 DEFAULT	false
 DEFINED	false
 DEFINER	false
+DELAY	false
 DELETE	false
 DELIMITED	false
 DESC	false
@@ -131,6 +136,7 @@ FILEFORMAT	false
 FILTER	false
 FIRST	false
 FLOAT	false
+FLOW	false
 FOLLOWING	false
 FOR	false
 FOREIGN	false
@@ -142,6 +148,8 @@ FULL	false
 FUNCTION	false
 FUNCTIONS	false
 GENERATED	false
+GEOGRAPHY	false
+GEOMETRY	false
 GLOBAL	false
 GRANT	false
 GROUP	false
@@ -150,6 +158,7 @@ HANDLER	false
 HAVING	false
 HOUR	false
 HOURS	false
+IDENTIFIED	false
 IDENTIFIER	false
 IDENTITY	false
 IF	false
@@ -166,6 +175,7 @@ INNER	false
 INPATH	false
 INPUT	false
 INPUTFORMAT	false
+INSENSITIVE	false
 INSERT	false
 INT	false
 INTEGER	false
@@ -187,6 +197,7 @@ LAZY	false
 LEADING	false
 LEAVE	false
 LEFT	false
+LEVEL	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -202,7 +213,11 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATERIALIZED	false
+MAX	false
+MEASURE	false
 MERGE	false
+METRICS	false
 MICROSECOND	false
 MICROSECONDS	false
 MILLISECOND	false
@@ -220,6 +235,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	false
+NEXT	false
 NO	false
 NONE	false
 NORELY	false
@@ -231,6 +247,7 @@ OF	false
 OFFSET	false
 ON	false
 ONLY	false
+OPEN	false
 OPTION	false
 OPTIONS	false
 OR	false
@@ -259,11 +276,13 @@ PURGE	false
 QUARTER	false
 QUERY	false
 RANGE	false
+READ	false
 READS	false
 REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSION	false
 RECURSIVE	false
 REDUCE	false
 REFERENCES	false
@@ -317,6 +336,8 @@ START	false
 STATISTICS	false
 STORED	false
 STRATIFY	false
+STREAM	false
+STREAMING	false
 STRING	false
 STRUCT	false
 SUBSTR	false
@@ -374,6 +395,7 @@ VERSION	false
 VIEW	false
 VIEWS	false
 VOID	false
+WATERMARK	false
 WEEK	false
 WEEKS	false
 WHEN	false
@@ -382,6 +404,7 @@ WHILE	false
 WINDOW	false
 WITH	false
 WITHIN	false
+WITHOUT	false
 X	false
 YEAR	false
 YEARS	false

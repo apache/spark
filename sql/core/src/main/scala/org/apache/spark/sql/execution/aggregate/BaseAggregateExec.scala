@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode, UnaryExecNode}
-import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorPartitioning
 
 /**
  * Holds common logic for aggregate operators

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 import pandas as pd
 import numpy as np
@@ -38,9 +37,19 @@ class NumModTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser % pser, psser % psser, check_exact=False)
-            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool), check_exact=False)
-            self.assert_eq(pser % True, psser % True, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(pser % pser, psser % psser, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(
+                pser % pser.astype(bool),
+                psser % psser.astype(bool),
+                check_exact=False,
+                ignore_null=ignore_null,
+            )
+            self.assert_eq(pser % True, psser % True, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser % 1, psser % 1, check_exact=False, ignore_null=ignore_null)
+
+            if not col.startswith("decimal"):
+                self.assert_eq(pser % 0, psser % 0, check_exact=False)
             if col in ["int", "int32"]:
                 self.assert_eq(
                     pd.Series([np.nan, np.nan, np.nan], dtype=float, name=col), psser % False
@@ -66,12 +75,6 @@ class NumModTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.data_type_ops.test_num_mod import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

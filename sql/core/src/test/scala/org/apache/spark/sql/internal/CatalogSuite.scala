@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -32,13 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.Catalog
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 
 /**
@@ -811,7 +811,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val testCatalog =
       spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-    assert(table.schema().equals(tableSchema))
+    assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
     assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
     assert(table.properties().get("comment").equals(description))
   }
@@ -831,7 +831,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val testCatalog =
         spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-      assert(table.schema().equals(tableSchema))
+      assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
       assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
       assert(table.properties().get("comment").equals(description))
       assert(table.properties().get("path").equals(dir.getAbsolutePath))
@@ -999,7 +999,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.catalog.cacheTable(tableName)
       assert(spark.table(tableName).collect().length == 1)
 
-      FileUtils.deleteDirectory(dir)
+      Utils.deleteRecursively(dir)
       assert(spark.table(tableName).collect().length == 1)
 
       spark.catalog.refreshTable(tableName)

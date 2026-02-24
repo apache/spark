@@ -189,6 +189,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_csv(42)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_csv(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_csv(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a')
 -- !query schema
 struct<>
@@ -284,3 +310,163 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))"
   } ]
 }
+
+
+-- !query
+select from_csv('14:30:45', 'time TIME(0)')
+-- !query schema
+struct<from_csv(14:30:45):struct<time:time(0)>>
+-- !query output
+{"time":14:30:45}
+
+
+-- !query
+select from_csv('14:30:45.123', 'time TIME(3)')
+-- !query schema
+struct<from_csv(14:30:45.123):struct<time:time(3)>>
+-- !query output
+{"time":14:30:45.123}
+
+
+-- !query
+select from_csv('14:30:45.123456', 'time TIME(6)')
+-- !query schema
+struct<from_csv(14:30:45.123456):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select from_csv('14-30-45.123456', 'time TIME(6)', map('timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query schema
+struct<from_csv(14-30-45.123456):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45'))
+-- !query schema
+struct<to_csv(named_struct(time, TIME '14:30:45')):string>
+-- !query output
+14:30:45
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45.123456'))
+-- !query schema
+struct<to_csv(named_struct(time, TIME '14:30:45.123456')):string>
+-- !query output
+14:30:45.123456
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45.123456'), map('timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query schema
+struct<to_csv(named_struct(time, TIME '14:30:45.123456')):string>
+-- !query output
+14-30-45.123456
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45')), 'time TIME(0)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45'))):struct<time:time(0)>>
+-- !query output
+{"time":14:30:45}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.1')), 'time TIME(1)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.1'))):struct<time:time(1)>>
+-- !query output
+{"time":14:30:45.1}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.12')), 'time TIME(2)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.12'))):struct<time:time(2)>>
+-- !query output
+{"time":14:30:45.12}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.123')), 'time TIME(3)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.123'))):struct<time:time(3)>>
+-- !query output
+{"time":14:30:45.123}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.1234')), 'time TIME(4)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.1234'))):struct<time:time(4)>>
+-- !query output
+{"time":14:30:45.1234}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.12345')), 'time TIME(5)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.12345'))):struct<time:time(5)>>
+-- !query output
+{"time":14:30:45.12345}
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.123456')), 'time TIME(6)')
+-- !query schema
+struct<from_csv(to_csv(named_struct(time, TIME '14:30:45.123456'))):struct<time:time(6)>>
+-- !query output
+{"time":14:30:45.123456}
+
+
+-- !query
+select from_csv('25:00:00', 'time TIME')
+-- !query schema
+struct<from_csv(25:00:00):struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select from_csv('invalid', 'time TIME')
+-- !query schema
+struct<from_csv(invalid):struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select from_csv('', 'time TIME')
+-- !query schema
+struct<from_csv():struct<time:time(6)>>
+-- !query output
+{"time":null}
+
+
+-- !query
+select from_csv(null, 'time TIME')
+-- !query schema
+struct<from_csv(NULL):struct<time:time(6)>>
+-- !query output
+NULL
+
+
+-- !query
+select schema_of_csv('14:30:45')
+-- !query schema
+struct<schema_of_csv(14:30:45):string>
+-- !query output
+STRUCT<_c0: TIMESTAMP>
+
+
+-- !query
+select schema_of_csv('14:30:45.123456')
+-- !query schema
+struct<schema_of_csv(14:30:45.123456):string>
+-- !query output
+STRUCT<_c0: TIMESTAMP>

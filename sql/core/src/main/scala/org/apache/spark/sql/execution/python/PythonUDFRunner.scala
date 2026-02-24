@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
@@ -34,9 +35,24 @@ abstract class BasePythonUDFRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
+
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
+
+  override def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonUDFProfiler.map(p =>
+      Map(SQLConf.PYTHON_UDF_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -48,8 +64,14 @@ abstract class BasePythonUDFRunner(
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
   override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
+  override val batchSizeForPythonUDF: Int =
+    SQLConf.get.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
@@ -100,6 +122,8 @@ abstract class BasePythonUDFRunner(
             case length if length >= 0 =>
               val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
+              batchesProcessed += 1
+              totalDataReceived += length
               obj
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
@@ -122,11 +146,12 @@ class PythonUDFRunner(
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    profiler: Option[String])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
+    sessionUUID: Option[String])
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
   }
 }
 
@@ -136,12 +161,13 @@ class PythonUDFWithNamedArgumentsRunner(
     argMetas: Array[Array[ArgumentMetadata]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
   }
 }
 
@@ -150,46 +176,19 @@ object PythonUDFRunner {
   def writeUDFs(
       dataOut: DataOutputStream,
       funcs: Seq[(ChainedPythonFunctions, Long)],
-      argOffsets: Array[Array[Int]],
-      profiler: Option[String]): Unit = {
-    profiler match {
-      case Some(p) =>
-        dataOut.writeBoolean(true)
-        PythonWorkerUtils.writeUTF(p, dataOut)
-      case _ => dataOut.writeBoolean(false)
-    }
-    dataOut.writeInt(funcs.length)
-    funcs.zip(argOffsets).foreach { case ((chained, resultId), offsets) =>
-      dataOut.writeInt(offsets.length)
-      offsets.foreach { offset =>
-        dataOut.writeInt(offset)
-      }
-      dataOut.writeInt(chained.funcs.length)
-      chained.funcs.foreach { f =>
-        PythonWorkerUtils.writePythonFunction(f, dataOut)
-      }
-      if (profiler.isDefined) {
-        dataOut.writeLong(resultId)
-      }
-    }
+      argOffsets: Array[Array[Int]]): Unit = {
+    writeUDFs(dataOut, funcs, argOffsets.map(_.map(ArgumentMetadata(_, None, false))))
   }
 
   def writeUDFs(
       dataOut: DataOutputStream,
       funcs: Seq[(ChainedPythonFunctions, Long)],
-      argMetas: Array[Array[ArgumentMetadata]],
-      profiler: Option[String]): Unit = {
-    profiler match {
-      case Some(p) =>
-        dataOut.writeBoolean(true)
-        PythonWorkerUtils.writeUTF(p, dataOut)
-      case _ => dataOut.writeBoolean(false)
-    }
+      argMetas: Array[Array[ArgumentMetadata]]): Unit = {
     dataOut.writeInt(funcs.length)
     funcs.zip(argMetas).foreach { case ((chained, resultId), metas) =>
       dataOut.writeInt(metas.length)
       metas.foreach {
-        case ArgumentMetadata(offset, name) =>
+        case ArgumentMetadata(offset, name, _) =>
           dataOut.writeInt(offset)
           name match {
             case Some(name) =>
@@ -203,9 +202,7 @@ object PythonUDFRunner {
       chained.funcs.foreach { f =>
         PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
-      if (profiler.isDefined) {
-        dataOut.writeLong(resultId)
-      }
+      dataOut.writeLong(resultId)
     }
   }
 }

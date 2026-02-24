@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
+import datetime
 import unittest
 
 from pyspark.sql.types import (
+    Row,
     ArrayType,
     StringType,
     IntegerType,
@@ -30,14 +32,14 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
@@ -91,7 +93,7 @@ class DataFrameCollectionTestsMixin:
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas(self):
         import numpy as np
 
@@ -106,7 +108,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types[6], "datetime64[ns]")
         self.assertEqual(types[7], "timedelta64[ns]")
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_with_duplicated_column_names(self):
         for arrow_enabled in [False, True]:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
@@ -122,7 +124,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types.iloc[0], np.int32)
         self.assertEqual(types.iloc[1], np.int32)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_on_cross_join(self):
         for arrow_enabled in [False, True]:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
@@ -151,7 +153,7 @@ class DataFrameCollectionTestsMixin:
             with self.assertRaisesRegex(ImportError, "Pandas >= .* must be installed"):
                 self._to_pandas()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_avoid_astype(self):
         import numpy as np
 
@@ -163,7 +165,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(types[1], object)
         self.assertEqual(types[2], np.float64)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_empty_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
@@ -193,7 +195,7 @@ class DataFrameCollectionTestsMixin:
         dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
         self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_null_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
@@ -233,7 +235,7 @@ class DataFrameCollectionTestsMixin:
         self.assertTrue(np.can_cast(np.datetime64, types[9]))
         self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_mixed_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
@@ -363,6 +365,53 @@ class DataFrameCollectionTestsMixin:
                 break
         self.assertEqual(df.take(8), result)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_collect_time(self):
+        import pandas as pd
+
+        query = """
+                SELECT * FROM VALUES
+                (TIME '12:34:56', 'a'), (TIME '22:56:01', 'b'), (NULL, 'c')
+                AS tab(t, i)
+                """
+
+        df = self.spark.sql(query)
+
+        rows = df.collect()
+        self.assertEqual(
+            rows,
+            [
+                Row(t=datetime.time(12, 34, 56), i="a"),
+                Row(t=datetime.time(22, 56, 1), i="b"),
+                Row(t=None, i="c"),
+            ],
+        )
+
+        pdf = df.toPandas()
+        self.assertTrue(
+            pdf.equals(
+                pd.DataFrame(
+                    {
+                        "t": [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+                        "i": ["a", "b", "c"],
+                    }
+                )
+            )
+        )
+
+        tbl = df.toArrow()
+        self.assertEqual(
+            [t.as_py() for t in tbl.column("t")],
+            [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+        )
+        self.assertEqual(
+            [i.as_py() for i in tbl.column("i")],
+            ["a", "b", "c"],
+        )
+
 
 class DataFrameCollectionTests(
     DataFrameCollectionTestsMixin,
@@ -372,12 +421,6 @@ class DataFrameCollectionTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_collection import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -48,9 +48,30 @@ class DataFramePlotTestsMixin:
             messageParameters={"backend": "matplotlib", "supported_backends": "plotly"},
         )
 
+    def test_unsupported_plot_kind(self):
+        from pyspark.sql.plot.core import PySparkPlotAccessor
+
+        data = [Row(a=i, b=i + 1, c=i + 2, d=i + 3) for i in range(2000)]
+        sdf = self.spark.createDataFrame(data)
+        with self.assertRaises(PySparkValueError) as pe:
+            sdf.plot(kind="bubble")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNSUPPORTED_PLOT_KIND",
+            messageParameters={
+                "plot_type": "bubble",
+                "supported_plot_types": ", ".join(
+                    sorted(
+                        list(PySparkPlotAccessor.plot_data_map.keys())
+                        + ["pie", "box", "kde", "density", "hist"]
+                    )
+                ),
+            },
+        )
+
     def test_topn_max_rows(self):
         with self.sql_conf({"spark.sql.pyspark.plotting.max_rows": "1000"}):
-            self.spark.conf.set("spark.sql.pyspark.plotting.max_rows", "1000")
             sdf = self.spark.range(2500)
             pdf = PySparkTopNPlotBase().get_top_n(sdf)
             self.assertEqual(len(pdf), 1000)
@@ -67,12 +88,6 @@ class DataFramePlotTests(DataFramePlotTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.plot.test_frame_plot import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

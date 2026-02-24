@@ -44,7 +44,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.util.{SecurityUtils, Utils}
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
-private[spark] object KafkaTokenUtil extends Logging {
+object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
   private val TOKEN_SERVICE_PREFIX = "kafka.server.delegation.token"
   private val DATE_TIME_FORMATTER =
@@ -52,17 +52,17 @@ private[spark] object KafkaTokenUtil extends Logging {
       .ofPattern("yyyy-MM-dd'T'HH:mm")
       .withZone(ZoneId.systemDefault())
 
-  private[kafka010] def getTokenService(identifier: String): Text =
+  def getTokenService(identifier: String): Text =
     new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
 
   private def getClusterIdentifier(service: Text): String =
     service.toString().replace(s"$TOKEN_SERVICE_PREFIX.", "")
 
-  private[spark] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
+  class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND
   }
 
-  private[kafka010] def obtainToken(
+  def obtainToken(
       sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): (Token[KafkaDelegationTokenIdentifier], Long) = {
     checkProxyUser()
@@ -81,7 +81,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     ), token.tokenInfo.expiryTimestamp)
   }
 
-  private[kafka010] def checkProxyUser(): Unit = {
+  def checkProxyUser(): Unit = {
     val currentUser = UserGroupInformation.getCurrentUser()
     // Obtaining delegation token for proxy user is planned but not yet implemented
     // See https://issues.apache.org/jira/browse/KAFKA-6945
@@ -89,7 +89,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       "user is not yet supported.")
   }
 
-  private[kafka010] def createAdminClientProperties(
+  def createAdminClientProperties(
       sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): ju.Properties = {
     val adminClientProperties = new ju.Properties

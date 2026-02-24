@@ -2,16 +2,17 @@
 py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
-numpy>=1.21
-pyarrow>=11.0.0
+numpy>=1.22
+pyarrow>=18.0.0
 six==1.16.0
 pandas>=2.2.0
-scipy
+scipy>=1.8.0
 plotly<6.0.0
 mlflow>=2.3.1
 scikit-learn
 matplotlib
 memory-profiler>=0.61.0
+pyyaml>=3.11
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -19,13 +20,16 @@ openpyxl
 
 # PySpark test dependencies (optional)
 coverage
+tabulate
 
 # Linter
-mypy==1.8.0
-pytest-mypy-plugins==1.9.3
-flake8==3.9.0
+ruff==0.14.8
+mypy==1.19.1
+pytest-mypy-plugins==3.2.0
 # See SPARK-38680.
-pandas-stubs<1.2.0.54
+pandas-stubs>=2.2.0
+scipy-stubs;
+types-PyYAML
 
 # Documentation (SQL)
 mkdocs
@@ -58,10 +62,11 @@ black==23.12.1
 py
 
 # Spark Connect (required)
-grpcio>=1.67.0
-grpcio-status>=1.67.0
-googleapis-common-protos>=1.65.0
-protobuf==5.29.1
+grpcio>=1.76.0
+grpcio-status>=1.76.0
+googleapis-common-protos>=1.71.0
+protobuf==6.33.5
+zstandard>=0.25.0
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0
@@ -71,9 +76,13 @@ grpc-stubs==1.24.11
 # Debug for Spark and Spark Connect
 graphviz==0.20.3
 flameprof==0.4
+viztracer
+debugpy
+pystack>=1.6.0; sys_platform=='linux'
+psutil
 
 # TorchDistributor dependencies
-torch<2.6.0
+torch
 torchvision
 torcheval
 

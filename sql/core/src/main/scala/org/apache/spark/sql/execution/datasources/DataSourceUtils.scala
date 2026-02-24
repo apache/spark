@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -29,7 +30,7 @@ import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
-import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.catalyst.util.{RebaseDateTime, TypeUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
@@ -92,6 +93,7 @@ object DataSourceUtils extends PredicateHelper {
    * in a driver side.
    */
   def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
+    TypeUtils.failUnsupportedDataType(schema, SQLConf.get)
     schema.foreach { field =>
       val supported = if (readOnly) {
         format.supportReadDataType(field.dataType)
@@ -127,7 +129,7 @@ object DataSourceUtils extends PredicateHelper {
 
   private def getRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: LegacyBehaviorPolicy.Value,
+      modeByConfig: String,
       minVersion: String,
       metadataKey: String): RebaseSpec = {
     val policy = if (Utils.isTesting &&
@@ -145,7 +147,7 @@ object DataSourceUtils extends PredicateHelper {
         } else {
           LegacyBehaviorPolicy.CORRECTED
         }
-      }.getOrElse(modeByConfig)
+      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
     }
     policy match {
       case LegacyBehaviorPolicy.LEGACY =>
@@ -156,7 +158,7 @@ object DataSourceUtils extends PredicateHelper {
 
   def datetimeRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: LegacyBehaviorPolicy.Value): RebaseSpec = {
+      modeByConfig: String): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
@@ -166,7 +168,7 @@ object DataSourceUtils extends PredicateHelper {
 
   def int96RebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: LegacyBehaviorPolicy.Value): RebaseSpec = {
+      modeByConfig: String): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
@@ -195,6 +197,11 @@ object DataSourceUtils extends PredicateHelper {
       case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
+  }
+
+  def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    case _: RuntimeException | _: IOException | _: InternalError => true
+    case _ => false
   }
 
   def createDateRebaseFuncInRead(

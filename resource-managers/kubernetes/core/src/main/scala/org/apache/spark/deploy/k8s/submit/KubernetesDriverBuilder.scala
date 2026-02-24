@@ -72,7 +72,7 @@ class KubernetesDriverBuilder {
         }
       }
 
-    val features = Seq(
+    val allFeatures = Seq(
       new BasicDriverFeatureStep(conf),
       new DriverKubernetesCredentialsFeatureStep(conf),
       new DriverServiceFeatureStep(conf),
@@ -84,6 +84,9 @@ class KubernetesDriverBuilder {
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf),
       new LocalDirsFeatureStep(conf)) ++ userFeatures
+
+    val features = allFeatures.filterNot(f =>
+      conf.get(Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS).contains(f.getClass.getName))
 
     val spec = KubernetesDriverSpec(
       initialPod,

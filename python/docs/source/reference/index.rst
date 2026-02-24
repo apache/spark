@@ -36,6 +36,7 @@ This page lists an overview of all public PySpark modules, classes, functions an
    pyspark.streaming
    pyspark.mllib
    pyspark
+   pyspark.pipelines
    pyspark.resource
    pyspark.errors
    pyspark.logger

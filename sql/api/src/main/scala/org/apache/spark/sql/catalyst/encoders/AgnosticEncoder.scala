@@ -182,6 +182,12 @@ object AgnosticEncoders {
     override def clsTag: ClassTag[E] = ClassTag(udt.userClass)
   }
 
+  object UDTEncoder {
+    def apply[E >: Null](udt: UserDefinedType[E]): UDTEncoder[E] = {
+      new UDTEncoder(udt, udt.getClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
+    }
+  }
+
   // Enums are special leafs because we need to capture the class.
   protected abstract class EnumEncoder[E] extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false
@@ -240,6 +246,8 @@ object AgnosticEncoders {
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
   case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
+  case class GeographyEncoder(dt: GeographyType) extends LeafEncoder[Geography](dt)
+  case class GeometryEncoder(dt: GeometryType) extends LeafEncoder[Geometry](dt)
   case class DateEncoder(override val lenientSerialization: Boolean)
       extends LeafEncoder[jsql.Date](DateType)
   case class LocalDateEncoder(override val lenientSerialization: Boolean)
@@ -271,6 +279,10 @@ object AgnosticEncoders {
     ScalaDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
   val DEFAULT_JAVA_DECIMAL_ENCODER: JavaDecimalEncoder =
     JavaDecimalEncoder(DecimalType.SYSTEM_DEFAULT, lenientSerialization = false)
+  val DEFAULT_GEOMETRY_ENCODER: GeometryEncoder =
+    GeometryEncoder(GeometryType(Geometry.DEFAULT_SRID))
+  val DEFAULT_GEOGRAPHY_ENCODER: GeographyEncoder =
+    GeographyEncoder(GeographyType(Geography.DEFAULT_SRID))
 
   /**
    * Encoder that transforms external data into a representation that can be further processed by

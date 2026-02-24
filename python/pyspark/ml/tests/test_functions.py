@@ -23,12 +23,12 @@ from pyspark.ml.linalg import DenseVector
 from pyspark.ml.functions import array_to_vector, vector_to_array, predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
 
 
@@ -70,7 +70,7 @@ class PredictBatchUDFTestsMixin:
     def setUp(self):
         import pandas as pd
 
-        super(PredictBatchUDFTestsMixin, self).setUp()
+        super().setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
         # 4 scalar columns
@@ -573,12 +573,6 @@ class PredictBatchUDFTests(PredictBatchUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_functions import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

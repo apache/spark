@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`INT2_TBL`, false
 INSERT INTO INT2_TBL VALUES (smallint(trim('0   ')))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int2_tbl], Append, `spark_catalog`.`default`.`int2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int2_tbl), [f1]
-+- Project [cast(col1#x as smallint) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT2_TBL VALUES (smallint(trim('  1234 ')))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int2_tbl], Append, `spark_catalog`.`default`.`int2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int2_tbl), [f1]
-+- Project [cast(col1#x as smallint) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT2_TBL VALUES (smallint(trim('    -1234')))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int2_tbl], Append, `spark_catalog`.`default`.`int2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int2_tbl), [f1]
-+- Project [cast(col1#x as smallint) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -33,7 +33,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT2_TBL VALUES (smallint('32767'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int2_tbl], Append, `spark_catalog`.`default`.`int2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int2_tbl), [f1]
-+- Project [cast(col1#x as smallint) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -41,7 +41,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT2_TBL VALUES (smallint('-32767'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int2_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int2_tbl], Append, `spark_catalog`.`default`.`int2_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int2_tbl), [f1]
-+- Project [cast(col1#x as smallint) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 

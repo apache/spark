@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -67,7 +66,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
+        if (key == null) {
+          throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+        }
+        key.toString -> (if (value == null) "null" else value.toString)
       }
     case m: CreateMap =>
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
@@ -208,17 +210,6 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
           messageParameters = Map(
             "sqlExpr" -> toSQLExpr(expr),
             "dataType" -> toSQLType(expr.dataType)))
-      }
-
-      if (!expr.deterministic) {
-        // This is just a sanity check, our analysis rule PullOutNondeterministic should
-        // already pull out those nondeterministic expressions and evaluate them in
-        // a Project node.
-        throw SparkException.internalError(
-          msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
-            "grouping expression.",
-          context = expr.origin.getQueryContext,
-          summary = expr.origin.context.summary)
       }
     }
 

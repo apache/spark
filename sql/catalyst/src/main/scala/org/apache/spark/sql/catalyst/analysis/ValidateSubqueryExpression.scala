@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -34,7 +34,10 @@ object ValidateSubqueryExpression
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  def apply(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def apply(
+      plan: LogicalPlan,
+      expr: SubqueryExpression,
+      skipOuterReferenceValidationInFilter: Boolean = false): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -107,8 +110,21 @@ object ValidateSubqueryExpression
       expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
-    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
-      case f: Filter =>
+    /**
+     * Check if there is outer attribute that cannot be found from the plan.
+     *
+     * Validation in single-pass resolver is done in the bottom-up manner (right after we resolve)
+     * a [[SubqueryExpression]], at the moment when attributes haven't been pushed down yet to the
+     * lower operators so we fail with
+     * `UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_NOT_FOUND` (which isn't
+     * expected). Because of that we disable this validation in single-pass resolver by setting
+     * `skipOuterReferenceValidationInFilter` value to true.
+     */
+    def checkOuterReference(
+        p: LogicalPlan,
+        expr: SubqueryExpression,
+        skipOuterReferenceValidationInFilter: Boolean = false): Unit = p match {
+      case f: Filter if !skipOuterReferenceValidationInFilter =>
         if (hasOuterReferences(expr.plan)) {
           expr.plan.expressions.foreach(_.foreachUp {
             case o: OuterReference =>
@@ -125,8 +141,7 @@ object ValidateSubqueryExpression
       case _ =>
     }
 
-    // Check if there is outer attribute that cannot be found from the plan.
-    checkOuterReference(plan, expr)
+    checkOuterReference(plan, expr, skipOuterReferenceValidationInFilter)
 
     expr match {
       case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>

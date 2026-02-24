@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit, Indeterminate}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -30,12 +31,12 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Type coercion helper that matches against expressions in order to apply collation type coercion.
  */
-object CollationTypeCoercion {
+object CollationTypeCoercion extends SQLConfHelper {
 
   private val COLLATION_CONTEXT_TAG = new TreeNodeTag[DataType]("collationContext")
 
   private def hasCollationContextTag(expr: Expression): Boolean = {
-    expr.getTagValue(COLLATION_CONTEXT_TAG).isDefined
+    expr.containsTag(COLLATION_CONTEXT_TAG)
   }
 
   def apply(expression: Expression): Expression = expression match {
@@ -74,7 +75,8 @@ object CollationTypeCoercion {
     case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
       key match {
         case Literal(_, _: StringType) =>
-          GetMapValue(child, Cast(key, getMap.keyType))
+          GetMapValue(child,
+            Cast(key, getMap.keyType, timeZoneId = Some(conf.sessionLocalTimeZone)))
         case _ =>
           getMap
       }
@@ -117,7 +119,7 @@ object CollationTypeCoercion {
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
-          case _ => Cast(expr, newDataType)
+          case _ => Cast(expr, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
         }
 
       case _ =>
@@ -328,6 +330,11 @@ object CollationTypeCoercion {
     case expr if hasCollationContextTag(expr) =>
       Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
 
+    // WindowSpecDefinition and WindowFrame store metadata information so we don't need
+    // to check them. `partitionSpec` will be iterated separately.
+    case _: WindowSpecDefinition | _: WindowFrame =>
+      None
+
     // if `expr` doesn't have a string in its dataType then it doesn't
     // have the collation context either
     case expr if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
@@ -476,6 +483,30 @@ object CollationTypeCoercion {
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
          _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet => false
     case _ => true
+  }
+
+  /**
+   * Pre-tags [[CommonExpressionRef]]s in [[With]] expressions with the collation context of their
+   * definitions. This must be called before the bottom-up expression transformation, because that
+   * transformation processes inner expressions (like [[EqualTo]]) before reaching the [[With]]
+   * node. Without the enclosing [[With]], we have no context for what the refs point to, so we
+   * cannot correctly determine their collation strength.
+   */
+  private[analysis] def preTagCommonExpressionRefs(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveExpressionsDown {
+      case withExpression: With =>
+        withExpression.child.foreach {
+          case ref: CommonExpressionRef =>
+            withExpression.defs.find(d => d.id == ref.id && d.child.resolved)
+              .foreach { definition =>
+                findCollationContext(definition.child).foreach { context =>
+                  ref.setTagValue(COLLATION_CONTEXT_TAG, context)
+                }
+              }
+          case _ =>
+        }
+        withExpression
+    }
   }
 }
 

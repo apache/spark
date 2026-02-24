@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+set -ex
+
 echo "=================================="
 echo "Free up disk space on CI system"
 echo "=================================="
@@ -30,5 +32,9 @@ echo "Removing large packages"
 rm -rf /__t/CodeQL
 rm -rf /__t/go
 rm -rf /__t/node
+rm -rf /__t/PyPy
+rm -rf /__t/Python
+rm -rf /__t/Ruby
+du -sh /__t/*
 
 df -h

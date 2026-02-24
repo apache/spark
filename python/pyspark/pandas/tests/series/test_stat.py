@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 from decimal import Decimal
 
 import numpy as np
@@ -606,6 +605,9 @@ class SeriesStatMixin:
         with self.assertRaisesRegex(TypeError, r"lag should be an int; however, got"):
             psser.autocorr(1.0)
 
+        psser = ps.Series([1, 0, 0, 0])
+        self.assertTrue(bool(np.isnan(psser.autocorr())))
+
     def _test_autocorr(self, pdf):
         psdf = ps.from_pandas(pdf)
         for lag in range(-10, 10):
@@ -703,12 +705,6 @@ class SeriesStatTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.series.test_stat import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

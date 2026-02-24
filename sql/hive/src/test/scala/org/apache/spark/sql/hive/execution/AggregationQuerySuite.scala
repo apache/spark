@@ -23,7 +23,7 @@ import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
@@ -899,11 +899,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
       new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes ++ unsafeRowMutableFieldTypes ++
       timeTypes
-    // Right now, we will use SortAggregate to handle UDAFs.
-    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
-    // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
-    // SortAggregate to use a safe row as the aggregation buffer.
-    Seq(dataTypes).foreach { dataTypes =>
+    // A schema that contains only data types where UnsafeRow.isMutable is true
+    // will trigger the aggregator to use unsafe row as the aggregation buffer.
+    // Other dataTypes will trigger the aggregator to use a safe row as the
+    // aggregation buffer.
+    //
+    // Below we want to test with *both* UnsafeRow and safe row as the underlying
+    // buffer.
+    val mutableDataTypes = dataTypes.filter(UnsafeRow.isMutable)
+    Seq(dataTypes, mutableDataTypes).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
       }

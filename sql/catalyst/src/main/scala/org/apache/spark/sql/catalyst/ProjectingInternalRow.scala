@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types._
 
 /**
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
@@ -91,6 +91,14 @@ case class ProjectingInternalRow(schema: StructType,
 
   override def getBinary(ordinal: Int): Array[Byte] = {
     row.getBinary(colOrdinals(ordinal))
+  }
+
+  override def getGeography(ordinal: Int): GeographyVal = {
+    row.getGeography(colOrdinals(ordinal))
+  }
+
+  override def getGeometry(ordinal: Int): GeometryVal = {
+    row.getGeometry(colOrdinals(ordinal))
   }
 
   override def getInterval(ordinal: Int): CalendarInterval = {

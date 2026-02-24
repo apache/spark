@@ -21,7 +21,6 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -37,9 +36,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(s"${conf.resourceNamePrefix}-driver")
 
-  private val driverContainerImage = conf
-    .get(DRIVER_CONTAINER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the driver container image"))
+  private val driverContainerImage = conf.image
 
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES)
@@ -99,6 +96,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.sparkConf.getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
+    val driverSparkConnectServerPort =
+      conf.sparkConf.getInt(CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
@@ -116,6 +115,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .addNewPort()
         .withName(UI_PORT_NAME)
         .withContainerPort(driverUIPort)
+        .withProtocol("TCP")
+        .endPort()
+      .addNewPort()
+        .withName(SPARK_CONNECT_SERVER_PORT_NAME)
+        .withContainerPort(driverSparkConnectServerPort)
         .withProtocol("TCP")
         .endPort()
       .addNewEnv()

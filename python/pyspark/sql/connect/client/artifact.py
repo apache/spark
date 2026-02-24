@@ -29,7 +29,7 @@ import zlib
 from itertools import chain
 from typing import List, Iterable, BinaryIO, Iterator, Optional, Tuple
 import abc
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 from functools import cached_property
@@ -184,7 +184,17 @@ class ArtifactManager:
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
     ) -> List[Artifact]:
-        # Currently only local files with .jar extension is supported.
+        # Handle Windows absolute paths (e.g., C:\path\to\file) which urlparse
+        # incorrectly interprets as having URI scheme 'C' instead of being a local path.
+        # First check if path_or_uri is a Windows path, if so, convert it to file:// URI.
+        try:
+            win_path = PureWindowsPath(path_or_uri)
+            if win_path.is_absolute() and win_path.drive:
+                # Convert Windows path to file:// URI so urlparse handles it correctly
+                path_or_uri = Path(path_or_uri).resolve().as_uri()
+        except Exception:
+            pass
+
         parsed = urlparse(path_or_uri)
         # Check if it is a file from the scheme
         if parsed.scheme == "":
@@ -427,6 +437,30 @@ class ArtifactManager:
         status = resp.statuses.get(artifactName)
         return status.exists if status is not None else False
 
+    def get_cached_artifacts(self, hashes: list[str]) -> set[str]:
+        """
+        Batch check which artifacts are already cached on the server.
+        Returns a set of hashes that are already cached.
+        """
+        if not hashes:
+            return set()
+
+        artifact_names = [f"{CACHE_PREFIX}/{hash}" for hash in hashes]
+        request = proto.ArtifactStatusesRequest(
+            user_context=self._user_context, session_id=self._session_id, names=artifact_names
+        )
+        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
+            request, metadata=self._metadata
+        )
+
+        cached = set()
+        for hash in hashes:
+            artifact_name = f"{CACHE_PREFIX}/{hash}"
+            status = resp.statuses.get(artifact_name)
+            if status is not None and status.exists:
+                cached.add(hash)
+        return cached
+
     def cache_artifact(self, blob: bytes) -> str:
         """
         Cache the give blob at the session.
@@ -442,3 +476,34 @@ class ArtifactManager:
                 # TODO(SPARK-42658): Handle responses containing CRC failures.
 
         return hash
+
+    def cache_artifacts(self, blobs: list[bytes]) -> list[str]:
+        """
+        Cache the given blobs at the session.
+
+        This method batches artifact status checks and uploads to minimize RPC overhead.
+        """
+        # Compute hashes for all blobs upfront
+        hashes = [hashlib.sha256(blob).hexdigest() for blob in blobs]
+        unique_hashes = list(set(hashes))
+
+        # Batch check which artifacts are already cached
+        cached_hashes = self.get_cached_artifacts(unique_hashes)
+
+        # Collect unique artifacts that need to be uploaded
+        seen_hashes = set()
+        artifacts_to_add = []
+        for blob, hash in zip(blobs, hashes):
+            if hash not in cached_hashes and hash not in seen_hashes:
+                artifacts_to_add.append(new_cache_artifact(hash, InMemory(blob)))
+                seen_hashes.add(hash)
+
+        # Batch upload all missing artifacts in a single RPC call
+        if artifacts_to_add:
+            requests = self._add_artifacts(artifacts_to_add)
+            response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
+            summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
+            for summary in response.artifacts:
+                summaries.append(summary)
+                # TODO(SPARK-42658): Handle responses containing CRC failures.
+        return hashes

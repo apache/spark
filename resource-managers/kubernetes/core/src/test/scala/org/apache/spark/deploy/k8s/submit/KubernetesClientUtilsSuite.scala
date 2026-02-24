@@ -20,6 +20,7 @@ package org.apache.spark.deploy.k8s.submit
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.{HashMap => JHashMap}
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
@@ -100,6 +101,30 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
         .endMetadata()
         .withImmutable(true)
         .addToData(confFileMap.asJava)
+        .build()
+    assert(outputConfigMap === expectedConfigMap)
+  }
+
+  test("SPARK-53832: verify that configmap built as expected va Java-friendly APIs") {
+    val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
+    val configMapNameSpace = s"configmap-namespace-${UUID.randomUUID.toString}"
+    val properties = new JHashMap[String, String]()
+    properties.put(Config.KUBERNETES_NAMESPACE.key, configMapNameSpace)
+    val sparkConf =
+      testSetup(properties.asScala.toMap.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
+    val confFileMap =
+      KubernetesClientUtils.buildSparkConfDirFilesMapJava(configMapName, sparkConf, properties)
+    val outputConfigMap =
+      KubernetesClientUtils.buildConfigMapJava(configMapName, confFileMap, properties)
+    val expectedConfigMap =
+      new ConfigMapBuilder()
+        .withNewMetadata()
+          .withName(configMapName)
+          .withNamespace(configMapNameSpace)
+          .withLabels(properties)
+        .endMetadata()
+        .withImmutable(true)
+        .addToData(confFileMap)
         .build()
     assert(outputConfigMap === expectedConfigMap)
   }

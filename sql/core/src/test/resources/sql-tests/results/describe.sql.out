@@ -454,6 +454,58 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DROP SCHEMA IF EXISTS test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+Catalog Name	spark_catalog
+Collation	UNICODE
+Comment	
+Location [not included in comparison]/{warehouse_dir}/test_schema.db
+Namespace Name	test_schema
+Owner	[not included in comparison]
+Properties
+
+
+-- !query
+ALTER SCHEMA test_schema DEFAULT COLLATION UTF8_LCASE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+Catalog Name	spark_catalog
+Collation	UTF8_LCASE
+Comment	
+Location [not included in comparison]/{warehouse_dir}/test_schema.db
+Namespace Name	test_schema
+Owner	[not included in comparison]
+Properties
+
+
+-- !query
 DESC temp_v
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalactic.source.Position
 import org.scalatest.Tag
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 /**
  * The common settings and utility functions for all v1 and v2 test suites. When a function
@@ -62,7 +62,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
       (f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $nsCat")
       val t = s"$nsCat.$tableName"
       withTable(t) {
         f(t)
@@ -170,7 +170,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   def copyPartition(tableName: String, from: String, to: String): String = {
     val part0Loc = getPartitionLocation(tableName, from)
     val part1Loc = part0Loc.replace(from, to)
-    FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
+    Utils.copyDirectory(new File(part0Loc), new File(part1Loc))
     part1Loc
   }
 

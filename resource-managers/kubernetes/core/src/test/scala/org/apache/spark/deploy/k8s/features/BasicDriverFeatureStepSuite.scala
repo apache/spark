@@ -84,7 +84,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val expectedPortNames = Set(
       containerPort(DRIVER_PORT_NAME, DEFAULT_DRIVER_PORT),
       containerPort(BLOCK_MANAGER_PORT_NAME, DEFAULT_BLOCKMANAGER_PORT),
-      containerPort(UI_PORT_NAME, UI_PORT.defaultValue.get)
+      containerPort(UI_PORT_NAME, UI_PORT.defaultValue.get),
+      containerPort(SPARK_CONNECT_SERVER_PORT_NAME, DEFAULT_SPARK_CONNECT_SERVER_PORT)
     )
     val foundPortNames = configuredPod.container.getPorts.asScala.toSet
     assert(expectedPortNames === foundPortNames)

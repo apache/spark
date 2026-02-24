@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
 class RemoveRedundantAliasAndProjectSuite extends PlanTest {
 
@@ -236,6 +236,37 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
     withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expectedWhenNotEnabled)
+    }
+  }
+
+  test("SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val project = Project(
+      Seq(
+        Alias(attribute, "attr")(),
+        attribute
+      ),
+      LocalRelation(attribute)
+    )
+    val projectWithoutAlias =
+      Project(
+        Seq(
+          attribute,
+          attribute
+        ),
+        LocalRelation(attribute)
+      )
+    val union = Union(Seq(project, project))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(union, optimized)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      comparePlans(optimized, Union(Seq(project, projectWithoutAlias)))
     }
   }
 }

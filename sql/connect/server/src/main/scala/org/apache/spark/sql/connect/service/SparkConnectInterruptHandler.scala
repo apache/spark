@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 
@@ -41,18 +42,23 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
         sessionHolder.interruptAll()
       case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG =>
         if (!v.hasOperationTag) {
-          throw new IllegalArgumentException(
-            s"INTERRUPT_TYPE_TAG requested, but no operation_tag provided.")
+          throw new SparkSQLException(
+            errorClass = "INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_TAG_REQUIRES_TAG",
+            messageParameters =
+              Map("parameter" -> "operation_tag", "functionName" -> "interrupt"))
         }
         sessionHolder.interruptTag(v.getOperationTag)
       case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID =>
         if (!v.hasOperationId) {
-          throw new IllegalArgumentException(
-            s"INTERRUPT_TYPE_OPERATION_ID requested, but no operation_id provided.")
+          throw new SparkSQLException(
+            errorClass = "INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID",
+            messageParameters = Map("parameter" -> "operation_id", "functionName" -> "interrupt"))
         }
         sessionHolder.interruptOperation(v.getOperationId)
       case other =>
-        throw new UnsupportedOperationException(s"Unknown InterruptType $other!")
+        throw new SparkSQLException(
+          errorClass = "UNSUPPORTED_FEATURE.INTERRUPT_TYPE",
+          messageParameters = Map("interruptType" -> other.toString))
     }
 
     val response = proto.InterruptResponse

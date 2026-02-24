@@ -23,7 +23,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +46,7 @@ public class OneForOneBlockPusherSuite {
 
   @Test
   public void testPushOne() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
@@ -61,7 +60,7 @@ public class OneForOneBlockPusherSuite {
 
   @Test
   public void testPushThree() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
     blocks.put("shufflePush_0_0_2_0",
@@ -82,7 +81,7 @@ public class OneForOneBlockPusherSuite {
 
   @Test
   public void testServerFailures() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     blocks.put("shufflePush_0_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
@@ -102,7 +101,7 @@ public class OneForOneBlockPusherSuite {
 
   @Test
   public void testHandlingRetriableFailures() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shufflePush_0_0_1_0", null);
     blocks.put("shufflePush_0_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));

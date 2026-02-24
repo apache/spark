@@ -23,6 +23,10 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
 
 class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
+
+  override val validConstraintCharacteristics =
+    super.validConstraintCharacteristics ++ notEnforcedConstraintCharacteristics
+
   test("Create table with foreign key - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING," +
       " FOREIGN KEY (a) REFERENCES parent(id)) USING parquet"

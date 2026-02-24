@@ -17,7 +17,6 @@
 
 import array
 import datetime
-import unittest
 import random
 import string
 
@@ -33,9 +32,8 @@ from pyspark.sql.types import (
     Row,
 )
 from pyspark.testing.objects import MyObject, PythonOnlyUDT
-
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     import pandas as pd
@@ -45,7 +43,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import ParseException
 
 
-class SparkConnectCreationTests(SparkConnectSQLTestCase):
+class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -55,10 +53,34 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 
-        # Check correct behavior for empty DataFrame
-        pdf = pd.DataFrame({"a": []})
-        with self.assertRaises(ValueError):
-            self.connect.createDataFrame(pdf)
+    def test_from_empty_pandas_dataframe(self):
+        dfs = [
+            pd.DataFrame(),
+            pd.DataFrame({"a": []}),
+            pd.DataFrame(index=range(5)),
+        ]
+
+        for df in dfs:
+            with self.assertRaises(PySparkValueError) as pe:
+                self.connect.createDataFrame(df)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
+            )
+
+    def test_from_pandas_dataframe_with_zero_columns(self):
+        """SPARK-55350: Test that row count is preserved when creating DataFrame from
+        pandas with 0 columns but with explicit schema in Spark Connect."""
+        # Create a pandas DataFrame with 5 rows but 0 columns
+        pdf = pd.DataFrame(index=range(5))
+        schema = StructType([])
+
+        cdf = self.connect.createDataFrame(pdf, schema=schema)
+
+        self.assertEqual(cdf.schema, schema)
+        self.assertEqual(cdf.count(), 5)
+        self.assertEqual(len(cdf.collect()), 5)
 
     def test_with_local_ndarray(self):
         """SPARK-41446: Test creating a dataframe using local list"""
@@ -531,12 +553,15 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
         from pandas import Timestamp
         import pandas as pd
 
+        # Nanoseconds are truncated to microseconds in the serializer
+        # Arrow will throw an error if precision is lost
+        # (i.e., nanoseconds cannot be represented in microseconds)
         pdf = pd.DataFrame(
             {
                 "naive": [datetime(2019, 1, 1, 0)],
                 "aware": [
                     Timestamp(
-                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
+                        year=2019, month=1, day=1, nanosecond=0, tz=timezone(timedelta(hours=-8))
                     )
                 ],
             }
@@ -708,13 +733,6 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_creation import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

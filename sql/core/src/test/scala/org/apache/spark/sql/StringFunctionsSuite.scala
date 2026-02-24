@@ -464,7 +464,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("www.apache")
     )
 
-    // TODO SPARK-48779 Move E2E SQL tests with column input to collations.sql golden file.
+    // TODO SPARK-48779 Move E2E SQL tests with column input to collations-basic.sql golden file.
     val testTable = "test_substring_index"
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (num int) USING parquet")
@@ -1340,6 +1340,26 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-47646: try_to_number should return NULL for malformed input") {
     val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
     checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+  }
+
+  test("try_to_number with whitespace-only input should return NULL") {
+    // Empty string
+    checkAnswer(sql("select try_to_number('', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999')"), Seq(Row(null)))
+
+    // Spaces only
+    checkAnswer(sql("select try_to_number('   ', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' ', '9')"), Seq(Row(null)))
+
+    // Different whitespace characters (tabs, newlines)
+    checkAnswer(sql("select try_to_number('\t\t', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\n\n', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' \t\n ', '99')"), Seq(Row(null)))
+
+    // With format strings containing decimal points, dollar signs, etc.
+    checkAnswer(sql("select try_to_number('   ', '$99.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\t', '9,999')"), Seq(Row(null)))
   }
 
   test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {

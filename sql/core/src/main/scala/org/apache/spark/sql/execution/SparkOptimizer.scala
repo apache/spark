@@ -61,8 +61,8 @@ class SparkOptimizer(
       new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
     Batch("InjectRuntimeFilter", FixedPoint(1),
       InjectRuntimeFilter),
-    Batch("MergeScalarSubqueries", Once,
-      MergeScalarSubqueries,
+    Batch("MergeSubplans", Once,
+      MergeSubplans,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
@@ -93,8 +93,8 @@ class SparkOptimizer(
       InferWindowGroupLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
-      EliminateLimits,
-      ConstantFolding),
+      ConstantFolding,
+      EliminateLimits),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
 

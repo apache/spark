@@ -148,9 +148,73 @@ struct<split(hello, , -1):array<string>>
 
 
 -- !query
+SELECT split('hello', '', 0)
+-- !query schema
+struct<split(hello, , 0):array<string>>
+-- !query output
+["h","e","l","l","o"]
+
+
+-- !query
+SELECT split('hello', '', 1)
+-- !query schema
+struct<split(hello, , 1):array<string>>
+-- !query output
+["hello"]
+
+
+-- !query
+SELECT split('hello', '', 3)
+-- !query schema
+struct<split(hello, , 3):array<string>>
+-- !query output
+["h","e","llo"]
+
+
+-- !query
+SELECT split('hello', '', 5)
+-- !query schema
+struct<split(hello, , 5):array<string>>
+-- !query output
+["h","e","l","l","o"]
+
+
+-- !query
+SELECT split('hello', '', 100)
+-- !query schema
+struct<split(hello, , 100):array<string>>
+-- !query output
+["h","e","l","l","o"]
+
+
+-- !query
 SELECT split('', '')
 -- !query schema
 struct<split(, , -1):array<string>>
+-- !query output
+[""]
+
+
+-- !query
+SELECT split('', '', -1)
+-- !query schema
+struct<split(, , -1):array<string>>
+-- !query output
+[""]
+
+
+-- !query
+SELECT split('', '', 0)
+-- !query schema
+struct<split(, , 0):array<string>>
+-- !query output
+[""]
+
+
+-- !query
+SELECT split('', '', 1)
+-- !query schema
+struct<split(, , 1):array<string>>
 -- !query output
 [""]
 

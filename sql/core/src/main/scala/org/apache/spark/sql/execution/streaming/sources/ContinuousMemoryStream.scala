@@ -27,12 +27,13 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.{Encoder, SQLContext}
+import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{Offset => _, _}
+import org.apache.spark.sql.execution.streaming.{Offset => _}
+import org.apache.spark.sql.execution.streaming.runtime.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord, MemoryStreamBase}
 import org.apache.spark.util.RpcUtils
 
 /**
@@ -43,8 +44,11 @@ import org.apache.spark.util.RpcUtils
  *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
-class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sqlContext) with ContinuousStream {
+class ContinuousMemoryStream[A : Encoder](
+    id: Int,
+    sparkSession: SparkSession,
+    numPartitions: Int = 2)
+  extends MemoryStreamBase[A](sparkSession) with ContinuousStream {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -111,11 +115,33 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 object ContinuousMemoryStream {
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  /** Creates a ContinuousMemoryStream with an implicit SQLContext (backward compatible). */
+  def apply[A: Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
 
-  def singlePartition[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, 1)
+  /** Creates a ContinuousMemoryStream with specified partitions (SQLContext). */
+  def apply[A: Encoder](numPartitions: Int)(
+      implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sqlContext.sparkSession,
+      numPartitions)
+
+  /** Creates a ContinuousMemoryStream with explicit SparkSession. */
+  def apply[A: Encoder](sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
+
+  /** Creates a ContinuousMemoryStream with specified partitions (SparkSession). */
+  def apply[A: Encoder](sparkSession: SparkSession, numPartitions: Int): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
+
+  /** Creates a single partition ContinuousMemoryStream (SQLContext). */
+  def singlePartition[A: Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession, 1)
+
+  /** Creates a single partition ContinuousMemoryStream (SparkSession). */
+  def singlePartition[A: Encoder](sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
 }
 
 /**

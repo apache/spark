@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import unittest
 import datetime
 import decimal
@@ -54,6 +53,7 @@ from pyspark.pandas.typedef import (
     pandas_on_spark_type,
 )
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class TypeHintTestsMixin:
@@ -98,7 +98,15 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> "pandas.DataFrame[float]":
@@ -121,7 +129,15 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> pd.DataFrame[np.float64]:
@@ -167,15 +183,23 @@ class TypeHintTestsMixin:
         assert not ps._series_has_class_getitem
 
     def test_infer_schema_with_names_pandas_instances(self):
-        def func() -> 'pd.DataFrame["a" : np.float64, "b":str]':  # noqa: F405
+        def func() -> 'pd.DataFrame["a" : np.float64, "b":str]':  # noqa: F821
             pass
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
+        self.assertEqual(
+            inferred.dtypes,
+            [
+                np.float64,
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+            ],
+        )
         self.assertEqual(inferred.spark_type, expected)
 
-        def func() -> "pd.DataFrame['a': float, 'b': int]":  # noqa: F405
+        def func() -> "pd.DataFrame['a': float, 'b': int]":  # noqa: F821
             pass
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", LongType())])
@@ -217,7 +241,7 @@ class TypeHintTestsMixin:
 
     def test_infer_schema_with_names_pandas_instances_negative(self):
         def try_infer_return_type():
-            def f() -> 'pd.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'pd.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F821
                 pass
 
             infer_return_type(f)
@@ -236,7 +260,7 @@ class TypeHintTestsMixin:
         self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
 
         def try_infer_return_type():
-            def f() -> 'pd.DataFrame["a" : float : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'pd.DataFrame["a" : float : 1, "b":str:2]':  # noqa: F821
                 pass
 
             infer_return_type(f)
@@ -264,7 +288,7 @@ class TypeHintTestsMixin:
 
     def test_infer_schema_with_names_negative(self):
         def try_infer_return_type():
-            def f() -> 'ps.DataFrame["a" : float : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'ps.DataFrame["a" : float : 1, "b":str:2]':  # noqa: F821
                 pass
 
             infer_return_type(f)
@@ -283,7 +307,7 @@ class TypeHintTestsMixin:
         self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
 
         def try_infer_return_type():
-            def f() -> 'ps.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'ps.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F821
                 pass
 
             infer_return_type(f)
@@ -312,7 +336,6 @@ class TypeHintTestsMixin:
     def test_as_spark_type_pandas_on_spark_dtype(self):
         type_mapper = {
             # binary
-            np.character: (np.character, BinaryType()),
             np.bytes_: (np.bytes_, BinaryType()),
             bytes: (np.bytes_, BinaryType()),
             # integer
@@ -328,7 +351,12 @@ class TypeHintTestsMixin:
             float: (np.float64, DoubleType()),
             # string
             np.str_: (np.str_, StringType()),
-            str: (np.str_, StringType()),
+            str: (
+                np.str_
+                if LooseVersion(pd.__version__) < LooseVersion("3.0.0")
+                else pd.StringDtype(na_value=np.nan),
+                StringType(),
+            ),
             # bool
             bool: (np.bool_, BooleanType()),
             # datetime
@@ -346,6 +374,9 @@ class TypeHintTestsMixin:
                 LongType(),
             ),
         }
+        if LooseVersion(np.__version__) < LooseVersion("2.3"):
+            # binary
+            type_mapper.update({np.character: (np.character, BinaryType())})
 
         for numpy_or_python_type, (dtype, spark_type) in type_mapper.items():
             self.assertEqual(as_spark_type(numpy_or_python_type), spark_type)
@@ -431,17 +462,11 @@ class TypeHintTestsMixin:
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
 
-class TypeHintTests(TypeHintTestsMixin, unittest.TestCase):
+class TypeHintTests(TypeHintTestsMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_typedef import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

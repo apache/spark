@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.source.image
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
@@ -62,7 +62,7 @@ private[image] case class ImageFileFormat() extends FileFormat with DataSourceRe
       "Image data source only produces a single data column named \"image\".")
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     val imageSourceOptions = new ImageOptions(options)
 
@@ -76,7 +76,7 @@ private[image] case class ImageFileFormat() extends FileFormat with DataSourceRe
         val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
         val stream = fs.open(path)
         val bytes = try {
-          ByteStreams.toByteArray(stream)
+          stream.readAllBytes()
         } finally {
           Closeables.close(stream, true)
         }

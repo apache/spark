@@ -22,7 +22,7 @@ import java.io.Serializable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.Utils
 
 /**

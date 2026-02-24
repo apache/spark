@@ -19,12 +19,11 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.io.CharStreams;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
@@ -83,23 +82,17 @@ public class ExternalShuffleBlockResolverSuite {
 
     try (InputStream block0Stream = resolver.getBlockData(
         "app0", "exec0", 0, 0, 0).createInputStream()) {
-      String block0 =
-        CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock0, block0);
+      assertEquals(sortBlock0, JavaUtils.toString(block0Stream));
     }
 
     try (InputStream block1Stream = resolver.getBlockData(
         "app0", "exec0", 0, 0, 1).createInputStream()) {
-      String block1 =
-        CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock1, block1);
+      assertEquals(sortBlock1, JavaUtils.toString(block1Stream));
     }
 
     try (InputStream blocksStream = resolver.getContinuousBlocksData(
         "app0", "exec0", 0, 0, 0, 2).createInputStream()) {
-      String blocks =
-        CharStreams.toString(new InputStreamReader(blocksStream, StandardCharsets.UTF_8));
-      assertEquals(sortBlock0 + sortBlock1, blocks);
+      assertEquals(sortBlock0 + sortBlock1, JavaUtils.toString(blocksStream));
     }
   }
 

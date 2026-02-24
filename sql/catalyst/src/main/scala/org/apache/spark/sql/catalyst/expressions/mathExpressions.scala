@@ -48,6 +48,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
   override def prettyName: String = name
@@ -68,6 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = true
   override def toString: String = s"$prettyName($child)"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
@@ -86,6 +88,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nullable: Boolean = true
 
@@ -122,6 +126,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def toString: String = s"$prettyName($left, $right)"
 
@@ -1011,6 +1017,7 @@ case class Bin(child: Expression)
   with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1129,6 +1136,8 @@ case class Hex(child: Expression)
     case _ => super.dataType
   }
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
     case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
@@ -1164,6 +1173,7 @@ case class Hex(child: Expression)
 case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   def this(expr: Expression) = this(expr, false)
 
@@ -1263,7 +1273,7 @@ case class Pow(left: Expression, right: Expression)
 sealed trait BitShiftOperation
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   def symbol: String
   def shiftInt: (Int, Int) => Int
   def shiftLong: (Long, Int) => Long
@@ -1383,8 +1393,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off nonascii
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  // scalastyle:on nonascii
   examples = """
     Examples:
       > SELECT _FUNC_(3, 4);
@@ -1560,7 +1572,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         val decimal = input1.asInstanceOf[Decimal]
         if (_scale >= 0) {
           // Overflow cannot happen, so no need to control nullOnOverflow
-          decimal.toPrecision(decimal.precision, s, mode)
+          decimal.toPrecision(p, s, mode)
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
@@ -1632,10 +1644,9 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
           s"""
-            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, null);
+            ${ev.value} = ${ce.value}.toPrecision($p, $s, Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
-       } else {
+        } else {
           s"""
             ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
             .setScale(${_scale}, Decimal.$modeStr()), $p, $s);

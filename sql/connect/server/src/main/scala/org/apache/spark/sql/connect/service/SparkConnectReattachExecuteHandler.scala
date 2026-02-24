@@ -22,8 +22,6 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
-import org.apache.spark.sql.connect.service.ExecuteKey
 
 class SparkConnectReattachExecuteHandler(
     responseObserver: StreamObserver[proto.ExecutePlanResponse])
@@ -57,25 +55,13 @@ class SparkConnectReattachExecuteHandler(
             messageParameters = Map("handle" -> v.getOperationId))
         }
       }
-    if (!executeHolder.reattachable) {
-      logWarning(s"Reattach to not reattachable operation.")
-      throw new SparkSQLException(
-        errorClass = "INVALID_CURSOR.NOT_REATTACHABLE",
-        messageParameters = Map.empty)
-    } else if (executeHolder.isOrphan()) {
-      logWarning("Reattach to an orphan operation.")
-      SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-      throw new IllegalStateException("Operation was orphaned because of an internal error.")
-    }
 
-    val responseSender =
-      new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](executeHolder, responseObserver)
-    if (v.hasLastResponseId) {
-      // start from response after lastResponseId
-      executeHolder.runGrpcResponseSender(responseSender, v.getLastResponseId)
-    } else {
-      // start from the start of the stream.
-      executeHolder.runGrpcResponseSender(responseSender)
-    }
+    SparkConnectService.executionManager.reattachExecuteHolder(
+      executeHolder,
+      responseObserver,
+      v.hasLastResponseId match {
+        case true => Some(v.getLastResponseId)
+        case false => None
+      })
   }
 }

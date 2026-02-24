@@ -18,8 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -147,7 +148,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         fn(testData)
       } else {
         val tmp = File.createTempFile(testData.getName(), ".tmp")
-        Files.copy(testData, tmp)
+        Files.copy(testData.toPath, tmp.toPath, StandardCopyOption.REPLACE_EXISTING)
         try {
           fn(tmp)
         } finally {

@@ -69,7 +69,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
     class Net(nn.Module):
         def __init__(self) -> None:
-            super(Net, self).__init__()
+            super().__init__()
             self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
             self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
             self.conv2_drop = nn.Dropout2d()
@@ -306,6 +306,23 @@ class TorchDistributorBaselineUnitTestsMixin:
         )
         self.delete_env_vars(input_env_vars)
 
+    @patch.dict(
+        os.environ,
+        {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "MASTER_ADDR": "11.22.33.44",
+            "MASTER_PORT": "6677",
+            "RANK": "1",
+        },
+    )
+    def test_multi_gpu_node_get_torchrun_args(self):
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
+        self.assertEqual(
+            torchrun_args,
+            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+        )
+        self.assertEqual(processes_per_node, 4)
+
 
 @unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
@@ -387,7 +404,7 @@ class TorchDistributorLocalUnitTestsMixin:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
     def test_local_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -487,7 +504,7 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.spark.conf.set("spark.task.resource.gpu.amount", "1")
 
     def test_distributed_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -556,12 +573,6 @@ class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.torch.tests.test_distributor import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

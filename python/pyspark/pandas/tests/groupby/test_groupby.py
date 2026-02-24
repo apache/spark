@@ -15,13 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.groupby import is_multi_agg_with_relabel, SeriesGroupBy
+from pyspark.pandas.groupby import is_multi_agg_with_relabel
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -482,12 +481,6 @@ class GroupByTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_groupby import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

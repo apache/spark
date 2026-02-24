@@ -31,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, TableSummary, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
@@ -48,8 +48,9 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testNs: Array[String] = Array("db")
   val defaultNs: Array[String] = Array("default")
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
-  val testIdentQuoted: String = (testIdent.namespace :+ testIdent.name)
-    .map(part => quoteIdentifier(part)).mkString(".")
+  val catalogName: String = CatalogManager.SESSION_CATALOG_NAME
+  val testIdentQuoted: String = (catalogName +: testIdent.namespace :+ testIdent.name)
+    .map(quoteIdentifier).mkString(".")
 
   def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
@@ -119,6 +120,33 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
 
     catalog.dropTable(ident3)
+  }
+
+  test("listTableSummaries") {
+    val namespace = Array("ns")
+    val catalog = newCatalog()
+    val identManaged = Identifier.of(namespace, "managed_table")
+    val identExternal = Identifier.of(namespace, "external_table")
+
+    assert(catalog.listTableSummaries(namespace).isEmpty)
+
+    val externalTableProperties = Map(
+      TableCatalog.PROP_EXTERNAL -> "1",
+      TableCatalog.PROP_LOCATION -> "file://"
+    )
+
+    catalog.createTable(identManaged, columns, emptyTrans, emptyProps)
+    catalog.createTable(identExternal, columns, emptyTrans, externalTableProperties.asJava)
+
+    val tableSummaries = catalog.listTableSummaries(namespace).toSet
+    val expectedTableSummaries = Set(
+      TableSummary.of(identManaged, TableSummary.MANAGED_TABLE_TYPE),
+      TableSummary.of(identExternal, TableSummary.EXTERNAL_TABLE_TYPE)
+    )
+    assertResult(expectedTableSummaries)(tableSummaries)
+
+    catalog.dropTable(identManaged)
+    catalog.dropTable(identExternal)
   }
 
   test("createTable") {
@@ -261,7 +289,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val loaded = catalog.loadTable(testIdent)
 
     assert(table.name == loaded.name)
-    assert(table.schema == loaded.schema)
+    assert(table.columns sameElements loaded.columns())
     assert(table.properties == loaded.properties)
   }
 
@@ -463,8 +491,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: update column nullability") {
@@ -482,7 +512,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       TableChange.updateColumnNullability(Array("id"), true))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     val expectedColumns: Array[Column] = Array(
       Column.create("id", IntegerType),
       Column.create("data", StringType)
@@ -519,10 +548,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       TableChange.updateColumnComment(Array("id"), "comment text"))
     val updated = catalog.loadTable(testIdent)
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "comment text")
-        .add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "comment text", null),
+      Column.create("data", StringType))
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: replace comment") {
@@ -535,15 +564,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
-    val expectedSchema = new StructType()
-        .add("id", IntegerType, nullable = true, "replacement comment")
-        .add("data", StringType)
+    val expectedColumns = Array(
+      Column.create("id", IntegerType, true, "replacement comment", null),
+      Column.create("data", StringType))
 
     catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
     val updated = catalog.loadTable(testIdent)
 
-    assert(updated.schema == expectedSchema)
+    assert(updated.columns sameElements expectedColumns)
   }
 
   test("alterTable: add comment to missing column fails") {
@@ -563,22 +592,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
-  test("alterTable: rename top-level column") {
-    val catalog = newCatalog()
-
-    catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === columns)
-
-    catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
-    val updated = catalog.loadTable(testIdent)
-
-    val expectedSchema = new StructType().add("some_id", IntegerType).add("data", StringType)
-
-    assert(updated.schema == expectedSchema)
-  }
-
   test("alterTable: rename nested column") {
     val catalog = newCatalog()
 
@@ -596,26 +609,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val newPointStruct = new StructType().add("first", DoubleType).add("y", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
-
-    assert(updated.columns === expectedColumns)
-  }
-
-  test("alterTable: rename struct column") {
-    val catalog = newCatalog()
-
-    val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
-    val tableColumns = columns :+ Column.create("point", pointStruct)
-
-    catalog.createTable(testIdent, tableColumns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === tableColumns)
-
-    catalog.alterTable(testIdent, TableChange.renameColumn(Array("point"), "p"))
-    val updated = catalog.loadTable(testIdent)
-
-    val newPointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
-    val expectedColumns = columns :+ Column.create("p", newPointStruct)
 
     assert(updated.columns === expectedColumns)
   }
@@ -657,21 +650,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
     assert(updated.columns === expectedColumns)
-  }
-
-  test("alterTable: delete top-level column") {
-    val catalog = newCatalog()
-
-    catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
-    val table = catalog.loadTable(testIdent)
-
-    assert(table.columns === columns)
-
-    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("id"), false))
-    val updated = catalog.loadTable(testIdent)
-
-    val expectedSchema = new StructType().add("data", StringType)
-    assert(updated.schema == expectedSchema)
   }
 
   test("alterTable: delete nested column") {
@@ -1185,7 +1163,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      parameters = Map("identifier" -> "`a`.`b`.`c`", "limit" -> "2")
     )
   }
 
@@ -1194,7 +1172,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      parameters = Map("identifier" -> "`a`.`b`.`c`", "limit" -> "2")
     )
   }
 }

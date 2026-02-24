@@ -402,7 +402,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\"",
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\", \"TIME\"",
     "unsupportedType" : "\"GEO\""
   },
   "queryContext" : [ {
@@ -705,4 +705,52 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 select -0, -0.0
 -- !query analysis
 Project [0 AS 0#x, 0.0 AS 0.0#x]
++- OneRowRelation
+
+
+-- !query
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
+-- !query analysis
+Project [S"par"k AS c1#x, S"par"k AS c2#x, S""par""k AS c3#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
+-- !query analysis
+Project [S'par'k AS c1#x, S'par'k AS c2#x, S''par''k AS c3#x]
++- OneRowRelation
+
+
+-- !query
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
+-- !query analysis
+Project [Spark AS c1#x, Spark AS c2#x, Spark AS c3#x, Spark AS c4#x, Spark AS c5#x, Spark AS c6#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true
+-- !query analysis
+SetCommand (spark.sql.legacy.consecutiveStringLiterals.enabled,Some(true))
+
+
+-- !query
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3
+-- !query analysis
+Project [Spark AS c1#x, S"par"k AS c2#x, S""par""k AS c3#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3
+-- !query analysis
+Project [Spark AS c1#x, S'par'k AS c2#x, S''par''k AS c3#x]
++- OneRowRelation
+
+
+-- !query
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6
+-- !query analysis
+Project [Spark AS c1#x, Spark AS c2#x, Spark AS c3#x, Spark AS c4#x, Spark AS c5#x, Spark AS c6#x]
 +- OneRowRelation

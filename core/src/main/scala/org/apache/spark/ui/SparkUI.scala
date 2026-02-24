@@ -20,10 +20,10 @@ package org.apache.spark.ui
 import java.util.Date
 
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, WEB_URL}
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
@@ -199,6 +199,11 @@ private[spark] class SparkUI private (
         appSparkVersion = appSparkVersion
       ))
     ))
+  }
+
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    getApplicationInfoList.filter(filter).take(max)
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {

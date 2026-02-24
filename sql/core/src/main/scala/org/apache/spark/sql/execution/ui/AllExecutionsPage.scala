@@ -89,8 +89,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-runningExecutions',
-                'aggregated-runningExecutions')">
+                data-collapse-name="collapse-aggregated-runningExecutions"
+                data-collapse-table="aggregated-runningExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Queries ({running.size})</a>
@@ -115,8 +115,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-completedExecutions',
-                'aggregated-completedExecutions')">
+                data-collapse-name="collapse-aggregated-completedExecutions"
+                data-collapse-table="aggregated-completedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Completed Queries ({completed.size})</a>
@@ -142,8 +142,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
-                onClick="collapseTable('collapse-aggregated-failedExecutions',
-                'aggregated-failedExecutions')">
+                data-collapse-name="collapse-aggregated-failedExecutions"
+                data-collapse-table="aggregated-failedExecutions">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Failed Queries ({failed.size})</a>
@@ -155,12 +155,6 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       }
       _content
     }
-    content ++=
-      <script>
-        function clickDetail(details) {{
-          details.parentNode.querySelector('.stage-details').classList.toggle('collapsed')
-        }}
-      </script>
     val summary: NodeSeq =
       <div>
         <ul class="list-unstyled">
@@ -298,6 +292,7 @@ private[ui] class ExecutionPagedTable(
   private val headerInfo: Seq[(String, Boolean, Option[String])] = {
     Seq(
       ("ID", true, None),
+      ("Query ID", true, None),
       ("Description", true, None),
       ("Submitted", true, None),
       ("Duration", true, Some("Time from query submission to completion (or if still executing," +
@@ -349,9 +344,7 @@ private[ui] class ExecutionPagedTable(
 
     def executionLinks(executionData: Seq[Long]): Seq[Node] = {
       val details = if (executionData.nonEmpty) {
-        val onClickScript = "this.parentNode.parentNode.nextElementSibling.nextElementSibling" +
-          ".classList.toggle('collapsed')"
-        <span onclick={onClickScript} class="expand-details">
+        <span class="expand-details" data-toggle-sub-execution="true">
           +details
         </span>
       } else {
@@ -371,6 +364,9 @@ private[ui] class ExecutionPagedTable(
       <tr>
         <td>
           {executionUIData.executionId.toString}
+        </td>
+        <td>
+          {Option(executionUIData.queryId).getOrElse("N/A")}
         </td>
         <td>
           {descriptionCell(executionUIData)}
@@ -429,6 +425,9 @@ private[ui] class ExecutionPagedTable(
                       {executionUIData.executionId.toString}
                     </td>
                     <td>
+                      {Option(executionUIData.queryId).getOrElse("N/A")}
+                    </td>
+                    <td>
                       {descriptionCell(executionUIData)}
                     </td>
                     <td sorttable_customkey={submissionTime.toString}>
@@ -467,7 +466,7 @@ private[ui] class ExecutionPagedTable(
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
     val details = if (execution.details != null && execution.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+      <span data-toggle-details=".stage-details"
             class="expand-details">
         +details
       </span> ++
@@ -566,6 +565,7 @@ private[ui] class ExecutionDataSource(
   private def ordering(sortColumn: String, desc: Boolean): Ordering[ExecutionTableRowData] = {
     val ordering: Ordering[ExecutionTableRowData] = sortColumn match {
       case "ID" => Ordering.by(_.executionUIData.executionId)
+      case "Query ID" => Ordering.by(_.executionUIData.queryId)
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)

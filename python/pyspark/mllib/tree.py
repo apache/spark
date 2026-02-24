@@ -18,7 +18,7 @@
 import sys
 import random
 
-from pyspark import RDD, since
+from pyspark import since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint

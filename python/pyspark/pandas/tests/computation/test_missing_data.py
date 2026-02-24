@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -40,12 +40,16 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.backfill(), psdf.backfill())
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.backfill().sort_index(), psdf.backfill().sort_index())
 
-        # Test `inplace=True`
-        pdf.backfill(inplace=True)
-        psdf.backfill(inplace=True)
-        self.assert_eq(pdf, psdf)
+            # Test `inplace=True`
+            pdf.backfill(inplace=True)
+            psdf.backfill(inplace=True)
+            self.assert_eq(pdf.sort_index(), psdf.sort_index())
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.backfill()
 
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
@@ -189,17 +193,28 @@ class FrameMissingDataMixin:
         self.assert_eq(
             psdf.fillna({"x": -1, "y": -2, "z": -5}), pdf.fillna({"x": -1, "y": -2, "z": -5})
         )
-        self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
-        self.assert_eq(pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
-        self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
+            self.assert_eq(
+                pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2)
+            )
+            self.assert_eq(
+                pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+            )
+            self.assert_eq(
+                pdf.fillna(method="bfill", limit=2).sort_index(),
+                psdf.fillna(method="bfill", limit=2).sort_index(),
+            )
 
         pdf = pdf.set_index(["x", "y"])
         psdf = ps.from_pandas(pdf)
         # check multi index
         self.assert_eq(psdf.fillna(-1), pdf.fillna(-1))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
-        self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+            )
+            self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
 
         pser = pdf.z
         psser = psdf.z
@@ -228,8 +243,14 @@ class FrameMissingDataMixin:
             psdf.fillna(pd.DataFrame({"x": [-1], "y": [-1], "z": [-1]}))
         with self.assertRaisesRegex(TypeError, "Unsupported.*int64"):
             psdf.fillna({"x": np.int64(-6), "y": np.int64(-4), "z": -5})
-        with self.assertRaisesRegex(ValueError, "Expecting 'pad', 'ffill', 'backfill' or 'bfill'."):
-            psdf.fillna(method="xxx")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            with self.assertRaisesRegex(
+                ValueError, "Expecting 'pad', 'ffill', 'backfill' or 'bfill'."
+            ):
+                psdf.fillna(method="xxx")
+        else:
+            with self.assertRaises(TypeError):
+                psdf.fillna(method="xxx")
         with self.assertRaisesRegex(
             ValueError, "Must specify a fillna 'value' or 'method' parameter."
         ):
@@ -251,10 +272,17 @@ class FrameMissingDataMixin:
             psdf.fillna({("x", "a"): -1, ("x", "b"): -2, ("y", "c"): -5}),
             pdf.fillna({("x", "a"): -1, ("x", "b"): -2, ("y", "c"): -5}),
         )
-        self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
-        self.assert_eq(pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
-        self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
+            self.assert_eq(
+                pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2)
+            )
+            self.assert_eq(
+                pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+            )
+            self.assert_eq(
+                pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2)
+            )
 
         self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
         self.assert_eq(
@@ -422,8 +450,8 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.bfill(), pdf.bfill())
-        self.assert_eq(psdf.bfill(limit=1), pdf.bfill(limit=1))
+        self.assert_eq(psdf.bfill().sort_index(), pdf.bfill().sort_index())
+        self.assert_eq(psdf.bfill(limit=1).sort_index(), pdf.bfill(limit=1).sort_index())
 
         pser = pdf.x
         psser = psdf.x
@@ -431,9 +459,9 @@ class FrameMissingDataMixin:
         psdf.bfill(inplace=True)
         pdf.bfill(inplace=True)
 
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser, pser)
-        self.assert_eq(psser[idx[0]], pser[idx[0]])
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser.sort_index(), pser.sort_index())
+        self.assert_eq(psser.sort_index()[idx[0]], pser.sort_index()[idx[0]])
 
     def test_pad(self):
         pdf = pd.DataFrame(
@@ -447,12 +475,16 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.pad(), psdf.pad())
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pdf.pad(), psdf.pad())
 
-        # Test `inplace=True`
-        pdf.pad(inplace=True)
-        psdf.pad(inplace=True)
-        self.assert_eq(pdf, psdf)
+            # Test `inplace=True`
+            pdf.pad(inplace=True)
+            psdf.pad(inplace=True)
+            self.assert_eq(pdf, psdf)
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.pad()
 
 
 class FrameMissingDataTests(
@@ -464,12 +496,6 @@ class FrameMissingDataTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_missing_data import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

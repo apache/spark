@@ -24,6 +24,7 @@ from typing import (
     Dict,
     Optional,
     List,
+    overload,
     Sequence,
     TYPE_CHECKING,
     cast,
@@ -488,7 +489,17 @@ class NumpyHelper:
         return [start + step * i for i in range(num)]
 
 
-def remote_only(func: Union[Callable, property]) -> Union[Callable, property]:
+@overload
+def remote_only(func: property) -> property:
+    ...
+
+
+@overload
+def remote_only(func: FuncT) -> FuncT:
+    ...
+
+
+def remote_only(func: Union[FuncT, property]) -> Union[FuncT, property]:
     """
     Decorator to mark a function or method as only available in Spark Connect.
 

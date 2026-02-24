@@ -163,6 +163,20 @@ object Encoders {
   def BINARY: Encoder[Array[Byte]] = BinaryEncoder
 
   /**
+   * An encoder for Geometry data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOMETRY(dt: GeometryType): Encoder[Geometry] = GeometryEncoder(dt)
+
+  /**
+   * An encoder for Geography data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOGRAPHY(dt: GeographyType): Encoder[Geography] = GeographyEncoder(dt)
+
+  /**
    * Creates an encoder that serializes instances of the `java.time.Duration` class to the
    * internal representation of nullable Catalyst's DayTimeIntervalType.
    *
@@ -368,4 +382,11 @@ object Encoders {
    */
   def scalaBoolean: Encoder[Boolean] = PrimitiveBooleanEncoder
 
+  /**
+   * An encoder for UserDefinedType.
+   * @since 4.1.0
+   */
+  def udt[T >: Null](tpe: UserDefinedType[T]): Encoder[T] = {
+    UDTEncoder(tpe)
+  }
 }

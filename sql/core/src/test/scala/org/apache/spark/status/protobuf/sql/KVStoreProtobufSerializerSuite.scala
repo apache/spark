@@ -51,7 +51,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       errorMessage = normal.errorMessage,
       jobs = normal.jobs,
       stages = normal.stages,
-      metricValues = normal.metricValues
+      metricValues = normal.metricValues,
+      queryId = null
     )
     Seq(normal, withNull).foreach { input =>
       val bytes = serializer.serialize(input)
@@ -69,6 +70,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.jobs == input.jobs)
       assert(result.stages == input.stages)
       assert(result.metricValues == input.metricValues)
+      assert(result.queryId == input.queryId)
     }
   }
 
@@ -88,7 +90,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       errorMessage = templateData.errorMessage,
       jobs = templateData.jobs,
       stages = templateData.stages,
-      metricValues = Map.empty
+      metricValues = Map.empty,
+      queryId = templateData.queryId
     )
     val bytes1 = serializer.serialize(input1)
     val result1 = serializer.deserialize(bytes1, classOf[SQLExecutionUIData])
@@ -108,7 +111,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       errorMessage = templateData.errorMessage,
       jobs = templateData.jobs,
       stages = templateData.stages,
-      metricValues = null
+      metricValues = null,
+      queryId = templateData.queryId
     )
     val bytes2 = serializer.serialize(input2)
     val result2 = serializer.deserialize(bytes2, classOf[SQLExecutionUIData])

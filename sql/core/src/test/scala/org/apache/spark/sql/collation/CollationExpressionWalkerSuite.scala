@@ -384,7 +384,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "sha2",
       "sha",
       "crc32",
-      "ascii"
+      "ascii",
+      "time_trunc"
     )
 
     logInfo("Total number of expression: " + expressionCounter)

@@ -17,7 +17,11 @@
 
 from abc import abstractmethod
 import sys
-from typing import Iterator
+from typing import (
+    Iterator,
+    NamedTuple,
+    Optional,
+)
 import unittest
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -31,8 +35,11 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    DoubleType,
+    ArrayType,
+    MapType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.utils import have_pandas
 
 if have_pandas:
     import pandas as pd
@@ -46,6 +53,9 @@ class StatefulProcessorFactory:
     @abstractmethod
     def row(self):
         ...
+
+    def get(self, use_pandas: bool = False):
+        return self.pandas() if use_pandas else self.row()
 
 
 # StatefulProcessor factory implementations
@@ -225,6 +235,82 @@ class MinEventTimeStatefulProcessorFactory(StatefulProcessorFactory):
 
     def row(self):
         return RowMinEventTimeStatefulProcessor()
+
+
+class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasStatefulProcessorCompositeType()
+
+    def row(self):
+        return RowStatefulProcessorCompositeType()
+
+
+class ChunkCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountProcessor()
+
+
+class ChunkCountProcessorWithInitialStateFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountWithInitialStateProcessor()
+
+
+class CompositeOutputProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasCompositeOutputProcessor()
+
+    def row(self):
+        return RowCompositeOutputProcessor()
+
+
+class LargeValueStatefulProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasLargeValueStatefulProcessor()
+
+    def row(self):
+        return RowLargeValueStatefulProcessor()
+
+
+class RunningCountStatefulProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return RunningCountStatefulProcessor(use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return RunningCountStatefulProcessor(use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
+
+
+class TopKProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, k: int = 2, ttl_duration_ms: Optional[int] = None):
+        self.k = k
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return TopKProcessor(self.k, use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return TopKProcessor(self.k, use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
+
+
+class WordFrequencyProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return PandasWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return RowWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
+
+
+class AllMethodsTestProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return AllMethodsTestProcessor(use_pandas=True)
+
+    def row(self):
+        return AllMethodsTestProcessor(use_pandas=False)
 
 
 # StatefulProcessor implementations
@@ -685,8 +771,8 @@ class PandasTTLStatefulProcessor(StatefulProcessor):
         if self.ttl_count_state.exists():
             ttl_count = self.ttl_count_state.get()[0]
         if self.ttl_list_state.exists():
-            iter = self.ttl_list_state.get()
-            for s in iter:
+            list_iter = self.ttl_list_state.get()
+            for s in list_iter:
                 ttl_list_state_count += s[0]
         if self.ttl_map_state.exists():
             ttl_map_state_count = self.ttl_map_state.getValue(key)[0]
@@ -738,8 +824,8 @@ class RowTTLStatefulProcessor(StatefulProcessor):
         if self.ttl_count_state.exists():
             ttl_count = self.ttl_count_state.get()[0]
         if self.ttl_list_state.exists():
-            iter = self.ttl_list_state.get()
-            for s in iter:
+            list_iter = self.ttl_list_state.get()
+            for s in list_iter:
                 ttl_list_state_count += s[0]
         if self.ttl_map_state.exists():
             ttl_map_state_count = self.ttl_map_state.getValue(key)[0]
@@ -932,7 +1018,12 @@ class RowListStateProcessor(StatefulProcessor):
 
 class PandasListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        list_state_schema = StructType(
+            [
+                StructField("value", IntegerType(), True),
+                StructField("valueNull", IntegerType(), True),
+            ]
+        )
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
@@ -942,18 +1033,15 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
-        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-        #  value backed by various benchmarks.
-        # Put 90 elements per batch:
-        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
-        #   (both use inline proto)
-        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
-        #   (read uses both inline proto and Arrow, write uses Arrow)
+        # Now the magic number is not actually used, but this is to make this test be a regression
+        # test of SPARK-53743.
+        # Explicitly put 100 elements of list which triggered Arrow based list serialization before
+        # SPARK-53743.
 
         if len(elements) == 0:
             # should be the first batch
             assert self.list_size_state.get() is None
-            new_elements = [(i,) for i in range(90)]
+            new_elements = [(i, None) for i in range(100)]
             if key == ("0",):
                 self.list_state.put(new_elements)
             else:
@@ -968,18 +1056,20 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
                 elements
             ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
-            expected_elements_in_state = [(i,) for i in range(list_size)]
-            assert elements == expected_elements_in_state
+            expected_elements_in_state = [(i, None) for i in range(list_size)]
+            assert (
+                elements == expected_elements_in_state
+            ), f"expected {expected_elements_in_state} but got {elements}"
 
             if key == ("0",):
                 # Use the operation `put`
-                new_elements = [(i,) for i in range(list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size + 90)]
                 self.list_state.put(new_elements)
                 final_size = len(new_elements)
                 self.list_size_state.update((final_size,))
             else:
                 # Use the operation `appendList`
-                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size, list_size + 90)]
                 self.list_state.appendList(new_elements)
                 final_size = len(new_elements) + list_size
                 self.list_size_state.update((final_size,))
@@ -994,7 +1084,12 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
 
 class RowListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        list_state_schema = StructType(
+            [
+                StructField("value", IntegerType(), True),
+                StructField("valueNull", IntegerType(), True),
+            ]
+        )
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
@@ -1005,18 +1100,15 @@ class RowListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
-        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-        #  value backed by various benchmarks.
-        # Put 90 elements per batch:
-        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
-        #   (both use inline proto)
-        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
-        #   (read uses both inline proto and Arrow, write uses Arrow)
+        # Now the magic number is not actually used, but this is to make this test be a regression
+        # test of SPARK-53743.
+        # Explicitly put 100 elements of list which triggered Arrow based list serialization before
+        # SPARK-53743.
 
         if len(elements) == 0:
             # should be the first batch
             assert self.list_size_state.get() is None
-            new_elements = [(i,) for i in range(90)]
+            new_elements = [(i, None) for i in range(100)]
             if key == ("0",):
                 self.list_state.put(new_elements)
             else:
@@ -1031,18 +1123,20 @@ class RowListStateLargeListProcessor(StatefulProcessor):
                 elements
             ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
-            expected_elements_in_state = [(i,) for i in range(list_size)]
-            assert elements == expected_elements_in_state
+            expected_elements_in_state = [(i, None) for i in range(list_size)]
+            assert (
+                elements == expected_elements_in_state
+            ), f"expected {expected_elements_in_state} but got {elements}"
 
             if key == ("0",):
                 # Use the operation `put`
-                new_elements = [(i,) for i in range(list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size + 90)]
                 self.list_state.put(new_elements)
                 final_size = len(new_elements)
                 self.list_size_state.update((final_size,))
             else:
                 # Use the operation `appendList`
-                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size, list_size + 90)]
                 self.list_state.appendList(new_elements)
                 final_size = len(new_elements) + list_size
                 self.list_size_state.update((final_size,))
@@ -1159,7 +1253,8 @@ class PandasMapStateLargeTTLProcessor(PandasMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 1 year
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1169,7 +1264,8 @@ class RowMapStateLargeTTLProcessor(RowMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 1 year
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1613,3 +1709,886 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
+
+# A stateful processor that contains composite python type inside Value, List and Map state variable
+class PandasStatefulProcessorCompositeType(StatefulProcessor):
+    class Address(NamedTuple):
+        road_id: int
+        city: str
+
+    TAGS = [["dummy1", "dummy2"], ["dummy3"]]
+    METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+    ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
+    CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),
+                StructField("tags", ArrayType(ArrayType(StringType()))),
+                StructField(
+                    "metadata",
+                    ArrayType(
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
+                        )
+                    ),
+                ),
+            ]
+        )
+
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
+
+        self.obj_state = handle.getValueState("obj_state", obj_schema)
+        self.list_state = handle.getListState("list_state", obj_schema)
+        self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
+
+    def _update_obj_state(self, total_temperature):
+        if self.obj_state.exists():
+            ids, tags, metadata, address = self.obj_state.get()
+            assert tags == self.TAGS, f"Tag mismatch: {tags}"
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
+            ids = [int(x + total_temperature) for x in ids]
+        else:
+            ids = [0]
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
+        return ids
+
+    def _update_list_state(self, total_temperature, initial_obj):
+        existing_list = self.list_state.get()
+        updated_list = []
+        for ids, tags, metadata, address in existing_list:
+            ids.append(total_temperature)
+            updated_list.append((ids, tags, [row.asDict() for row in metadata], address))
+        if not updated_list:
+            updated_list.append(initial_obj)
+        self.list_state.put(updated_list)
+        return [id_val for ids, _, _, _ in updated_list for id_val in ids]
+
+    def _update_map_state(self, key, total_temperature):
+        if not self.map_state.containsKey(key):
+            self.map_state.updateValue(key, (0, self.ATTRIBUTES_MAP, self.CONFS_MAP))
+        else:
+            id_val, attributes, confs = self.map_state.getValue(key)
+            attributes[key] = [total_temperature]
+            confs.setdefault("e1", {})[key] = total_temperature
+            self.map_state.updateValue(key, (id_val, attributes, confs))
+        return self.map_state.getValue(key)[1], self.map_state.getValue(key)[2]
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        key = key[0]
+        total_temperature = sum(pdf["temperature"].astype(int).sum() for pdf in rows)
+
+        updated_ids = self._update_obj_state(total_temperature)
+        flattened_ids = self._update_list_state(
+            total_temperature, (updated_ids, self.TAGS, self.METADATA, self.ADDRESS)
+        )
+        attributes_map, confs_map = self._update_map_state(key, total_temperature)
+
+        import json
+        import numpy as np
+
+        def np_int64_to_int(x):
+            if isinstance(x, np.int64):
+                return int(x)
+            return x
+
+        yield pd.DataFrame(
+            {
+                "id": [key],
+                "value_arr": [",".join(map(str, updated_ids))],
+                "list_state_arr": [",".join(map(str, flattened_ids))],
+                "map_state_arr": [
+                    json.dumps(attributes_map, default=np_int64_to_int, sort_keys=True)
+                ],
+                "nested_map_state_arr": [
+                    json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)
+                ],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class RowStatefulProcessorCompositeType(StatefulProcessor):
+    class Address(NamedTuple):
+        road_id: int
+        city: str
+
+    TAGS = [["dummy1", "dummy2"], ["dummy3"]]
+    METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+    ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
+    CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),
+                StructField("tags", ArrayType(ArrayType(StringType()))),
+                StructField(
+                    "metadata",
+                    ArrayType(
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
+                        )
+                    ),
+                ),
+            ]
+        )
+
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
+
+        self.obj_state = handle.getValueState("obj_state", obj_schema)
+        self.list_state = handle.getListState("list_state", obj_schema)
+        self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
+
+    def _update_obj_state(self, total_temperature):
+        if self.obj_state.exists():
+            ids, tags, metadata, address = self.obj_state.get()
+            assert tags == self.TAGS, f"Tag mismatch: {tags}"
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
+            ids = [int(x + total_temperature) for x in ids]
+        else:
+            ids = [0]
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
+        return ids
+
+    def _update_list_state(self, total_temperature, initial_obj):
+        existing_list = self.list_state.get()
+        updated_list = []
+        for ids, tags, metadata, address in existing_list:
+            ids.append(total_temperature)
+            updated_list.append((ids, tags, [row.asDict() for row in metadata], address))
+        if not updated_list:
+            updated_list.append(initial_obj)
+        self.list_state.put(updated_list)
+        return [id_val for ids, _, _, _ in updated_list for id_val in ids]
+
+    def _update_map_state(self, key, total_temperature):
+        if not self.map_state.containsKey(key):
+            self.map_state.updateValue(key, (0, self.ATTRIBUTES_MAP, self.CONFS_MAP))
+        else:
+            id_val, attributes, confs = self.map_state.getValue(key)
+            attributes[key] = [total_temperature]
+            confs.setdefault("e1", {})[key] = total_temperature
+            self.map_state.updateValue(key, (id_val, attributes, confs))
+        return self.map_state.getValue(key)[1], self.map_state.getValue(key)[2]
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        key = key[0]
+        total_temperature = sum(int(row.temperature) for row in rows)
+
+        updated_ids = self._update_obj_state(total_temperature)
+        flattened_ids = self._update_list_state(
+            total_temperature, (updated_ids, self.TAGS, self.METADATA, self.ADDRESS)
+        )
+        attributes_map, confs_map = self._update_map_state(key, total_temperature)
+
+        import json
+
+        yield Row(
+            id=key,
+            value_arr=",".join(map(str, updated_ids)),
+            list_state_arr=",".join(map(str, flattened_ids)),
+            map_state_arr=json.dumps(attributes_map, sort_keys=True),
+            nested_map_state_arr=json.dumps(confs_map, sort_keys=True),
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        pass
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountWithInitialStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def handleInitialState(self, key, initialState, timerValues) -> None:
+        init_val = initialState.at[0, "initVal"]
+        self.value_state.update((init_val,))
+
+    def close(self) -> None:
+        pass
+
+
+# A Pandas stateful processor with a simple ValueState computation and composite output schema:
+#
+# primitiveValue: StringType
+# listOfPrimitive: ArrayType(StringType)
+# mapOfPrimitive: MapType(StringType, StringType)
+# listOfComposite: ArrayType(InnerNestedClass)
+# mapOfComposite: MapType(StringType, InnerNestedClass)
+#
+# where InnerNestedClass is a StructType with:
+# intValue: IntegerType
+# doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
+class PandasCompositeOutputProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Simple value state to track counts
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.count_state = handle.getValueState("count_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        # Calculate count from input rows
+        count = 0
+        if self.count_state.exists():
+            count = self.count_state.get()[0]
+
+        for pdf in rows:
+            count += len(pdf)
+
+        self.count_state.update((count,))
+
+        # Build output matching the composite schema
+        key_str = key[0]
+
+        # primitiveValue: StringType
+        primitive_value = f"key_{key_str}_count_{count}"
+
+        # listOfPrimitive: ArrayType(StringType)
+        list_of_primitive = [f"item_{i}" for i in range(count)]
+
+        # mapOfPrimitive: MapType(StringType, StringType)
+        map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
+
+        # listOfComposite: ArrayType(StructType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
+        list_of_composite = [
+            {
+                "intValue": i,
+                "doubleValue": float(i * 1.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
+            for i in range(count)
+        ]
+
+        # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
+        map_of_composite = {
+            f"nested_key{i}": {
+                "intValue": i * 10,
+                "doubleValue": float(i * 2.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
+            for i in range(count)
+        }
+
+        yield pd.DataFrame(
+            {
+                "primitiveValue": [primitive_value],
+                "listOfPrimitive": [list_of_primitive],
+                "mapOfPrimitive": [map_of_primitive],
+                "listOfComposite": [list_of_composite],
+                "mapOfComposite": [map_of_composite],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+# A Row stateful processor with a simple ValueState computation and composite output schema:
+#
+# primitiveValue: StringType
+# listOfPrimitive: ArrayType(StringType)
+# mapOfPrimitive: MapType(StringType, StringType)
+# listOfComposite: ArrayType(InnerNestedClass)
+# mapOfComposite: MapType(StringType, InnerNestedClass)
+#
+# where InnerNestedClass is a StructType with:
+# intValue: IntegerType
+# doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
+class RowCompositeOutputProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Simple value state to track counts
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.count_state = handle.getValueState("count_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Calculate count from input rows
+        count = 0
+        if self.count_state.exists():
+            count = self.count_state.get()[0]
+
+        for row in rows:
+            count += 1
+
+        self.count_state.update((count,))
+
+        # Build output matching the composite schema
+        key_str = key[0]
+
+        # primitiveValue: StringType
+        primitive_value = f"key_{key_str}_count_{count}"
+
+        # listOfPrimitive: ArrayType(StringType)
+        list_of_primitive = [f"item_{i}" for i in range(count)]
+
+        # mapOfPrimitive: MapType(StringType, StringType)
+        map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
+
+        # listOfComposite: ArrayType(StructType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
+        list_of_composite = [
+            Row(
+                intValue=i,
+                doubleValue=float(i * 1.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
+            for i in range(count)
+        ]
+
+        # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
+        map_of_composite = {
+            f"nested_key{i}": Row(
+                intValue=i * 10,
+                doubleValue=float(i * 2.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
+            for i in range(count)
+        }
+
+        yield Row(
+            primitiveValue=primitive_value,
+            listOfPrimitive=list_of_primitive,
+            mapOfPrimitive=map_of_primitive,
+            listOfComposite=list_of_composite,
+            mapOfComposite=map_of_composite,
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasLargeValueStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        # Test all three state types with large values
+        value_state_schema = StructType([StructField("value", StringType(), True)])
+        self.value_state = handle.getValueState("valueState", value_state_schema)
+
+        list_state_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+
+        self.map_state = handle.getMapState("mapState", "key string", "value string")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        # Create a large string (512 KB)
+        target_size_bytes = 512 * 1024
+        large_string = "a" * target_size_bytes
+
+        # Test ValueState with large string
+        self.value_state.update((large_string,))
+        value_retrieved = self.value_state.get()[0]
+
+        # Test ListState with large strings
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
+        list_retrieved = list(self.list_state.get())
+        list_elements = ",".join([elem[0] for elem in list_retrieved])
+
+        # Test MapState with large strings
+        map_key = ("large_string_key",)
+        self.map_state.updateValue(map_key, (large_string,))
+        map_retrieved = f"{map_key[0]}:{self.map_state.getValue(map_key)[0]}"
+
+        yield pd.DataFrame(
+            {
+                "id": key,
+                "valueStateResult": [value_retrieved],
+                "listStateResult": [list_elements],
+                "mapStateResult": [map_retrieved],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class RowLargeValueStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        # Test all three state types with large values
+        value_state_schema = StructType([StructField("value", StringType(), True)])
+        self.value_state = handle.getValueState("valueState", value_state_schema)
+
+        list_state_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+
+        self.map_state = handle.getMapState("mapState", "key string", "value string")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Create a large string (512 KB)
+        target_size_bytes = 512 * 1024
+        large_string = "a" * target_size_bytes
+
+        # Test ValueState with large string
+        self.value_state.update((large_string,))
+        value_retrieved = self.value_state.get()[0]
+
+        # Test ListState with large strings
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
+        list_retrieved = list(self.list_state.get())
+        list_elements = ",".join([elem[0] for elem in list_retrieved])
+
+        # Test MapState with large strings
+        map_key = ("large_string_key",)
+        self.map_state.updateValue(map_key, (large_string,))
+        map_retrieved = f"{map_key[0]}:{self.map_state.getValue(map_key)[0]}"
+
+        yield Row(
+            id=key[0],
+            valueStateResult=value_retrieved,
+            listStateResult=list_elements,
+            mapStateResult=map_retrieved,
+        )
+
+    def close(self) -> None:
+        pass
+
+
+# Simple processor to keep running count of rows with the same value of key column.
+class RunningCountStatefulProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("value", IntegerType(), True)])
+
+    def __init__(self, use_pandas=True, ttl_duration_ms: Optional[int] = None):
+        self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle) -> None:
+        self.handle = handle
+        self.count = handle.getValueState("count", self.state_schema, self.ttl_duration_ms)
+
+    def handleInitialState(self, key, initialState, timerValues) -> None:
+        if self.use_pandas:
+            self.count.update((initialState.at[0, "initial_count"],))
+        else:
+            self.count.update((initialState.initial_count,))
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
+        count = self.count.get()[0] if self.count.exists() else 0
+        if self.use_pandas:
+            count += sum(1 for row_df in rows for row in row_df.iterrows())
+            self.count.update((count,))
+            yield pd.DataFrame({"key": [key[0]], "count": [count]})
+        else:
+            count += sum(1 for row in rows)
+            self.count.update((count,))
+            yield Row(key=key[0], count=count)
+
+
+# Processor to keep track of K highest scores per each key.
+class TopKProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("score", DoubleType(), True)])
+
+    def __init__(self, k: int, use_pandas: bool = False, ttl_duration_ms: Optional[int] = None):
+        self.k = k
+        self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.topk = handle.getListState("topK", self.state_schema, self.ttl_duration_ms)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
+        scores = [score_tuple[0] for score_tuple in self.topk.get()]
+        if self.use_pandas:
+            scores.extend([row.score for row_df in rows for _, row in row_df.iterrows()])
+        else:
+            scores.extend([row.score for row in rows])
+
+        top_k_scores = sorted(scores, reverse=True)[: self.k]
+        self.topk.put([(score,) for score in top_k_scores])
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]] * len(top_k_scores), "score": top_k_scores})
+        else:
+            for score in top_k_scores:
+                yield Row(key=key[0], score=score)
+
+
+# Processor to keep track of word frequencies per each key.
+class RowWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        for row in rows:
+            word = row.word
+            current_count = (
+                self.freq_state.getValue((word,))[0] if self.freq_state.containsKey((word,)) else 0
+            )
+            updated_count = current_count + 1
+            self.freq_state.updateValue((word,), (updated_count,))
+            yield Row(key=key[0], word=word, count=updated_count)
+
+
+# Processor to keep track of word frequencies per each key.
+class PandasWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        results = []
+        for row_df in rows:
+            for _, row in row_df.iterrows():
+                word = row.word
+                current_count = (
+                    self.freq_state.getValue((word,))[0]
+                    if self.freq_state.containsKey((word,))
+                    else 0
+                )
+                updated_count = current_count + 1
+                self.freq_state.updateValue((word,), (updated_count,))
+                results.append({"key": key[0], "word": word, "count": updated_count})
+        if results:
+            yield pd.DataFrame(results)
+
+
+# Test processor that exercises all state methods for coverage testing.
+class AllMethodsTestProcessor(StatefulProcessor):
+    ALL_METHODS: list[str] = [
+        "value-exists",
+        "value-set",
+        "value-clear",
+        "list-exists",
+        "list-append",
+        "list-append-array",
+        "list-get",
+        "map-exists",
+        "map-add",
+        "map-keys",
+        "map-values",
+        "map-iterator",
+        "map-remove",
+        "map-clear",
+    ]
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value", state_schema)
+        list_element_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("list", list_element_schema)
+        self.map_state = handle.getMapState("map", "key string", "value long")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    results.append(self._process_command(key[0], row.cmd))
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                yield self._process_command(key[0], row.cmd)
+
+    def _process_command(self, key: str, cmd: str) -> Row | dict[str, str]:
+        """Process a single command and return result."""
+        if cmd == "value-exists":
+            result_str = f"value-exists:{self.value_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "value-set":
+            self.value_state.update((42,))
+            return self._make_result(key, "value-set:done")
+        elif cmd == "value-clear":
+            self.value_state.clear()
+            return self._make_result(key, "value-clear:done")
+        elif cmd == "list-exists":
+            result_str = f"list-exists:{self.list_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "list-append":
+            self.list_state.appendValue(("a",))
+            self.list_state.appendValue(("b",))
+            return self._make_result(key, "list-append:done")
+        elif cmd == "list-append-array":
+            self.list_state.appendList([("c",), ("d",)])
+            return self._make_result(key, "list-append-array:done")
+        elif cmd == "list-get":
+            items = ",".join([item[0] for item in self.list_state.get()])
+            result_str = f"list-get:{items}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-exists":
+            result_str = f"map-exists:{self.map_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-add":
+            self.map_state.updateValue(("x",), (1,))
+            self.map_state.updateValue(("y",), (2,))
+            self.map_state.updateValue(("z",), (3,))
+            return self._make_result(key, "map-add:done")
+        elif cmd == "map-keys":
+            keys = sorted([k[0] for k in self.map_state.keys()])
+            result_str = f"map-keys:{','.join(keys)}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-values":
+            values = sorted([v[0] for v in self.map_state.values()])
+            result_str = f"map-values:{','.join(map(str, values))}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-iterator":
+            pairs = sorted([(k[0], v[0]) for k, v in self.map_state.iterator()], key=lambda x: x[0])
+            result_str = f"map-iterator:{','.join([f'{k}={v}' for k, v in pairs])}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-remove":
+            self.map_state.removeKey(("y",))
+            return self._make_result(key, "map-remove:done")
+        elif cmd == "map-clear":
+            self.map_state.clear()
+            return self._make_result(key, "map-clear:done")
+        assert False, f"Unknown command {cmd}"
+
+    def _make_result(self, key: str, result: str) -> Row | dict[str, str]:
+        """Create result in appropriate format (dict for pandas, Row for non-pandas)."""
+        if self.use_pandas:
+            return {"key": key, "result": result}
+        else:
+            return Row(key=key, result=result)
+
+
+class SessionTimeoutProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return SessionTimeoutProcessor(use_pandas=True)
+
+    def row(self):
+        return SessionTimeoutProcessor(use_pandas=False)
+
+
+class EventTimeSessionProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeSessionProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeSessionProcessor(use_pandas=False)
+
+
+class EventTimeCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeCountProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeCountProcessor(use_pandas=False)
+
+
+class SessionTimeoutProcessor(StatefulProcessor):
+    """
+    Processor that registers a processing time timer on first input and emits a message on expiry.
+    Uses a 10-second timeout.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastSeen", LongType(), True)])
+        self.handle = handle
+        self.last_seen_state = handle.getValueState("lastSeen", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current_time = timerValues.getCurrentProcessingTimeInMs()
+
+        # Clear any existing timer if we have previous state
+        if self.last_seen_state.exists():
+            old_timer_time = (
+                self.last_seen_state.get()[0] + 10000
+            )  # old timeout was 10s after last seen
+            self.handle.deleteTimer(old_timer_time)
+
+        # Update last seen time and register new timer
+        self.last_seen_state.update((current_time,))
+        self.handle.registerTimer(current_time + 10000)  # 10 second timeout
+
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    results.append({"key": key[0], "result": f"received:{row.value}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                yield Row(key=key[0], result=f"received:{row.value}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        self.last_seen_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "result": ["session-expired"]})
+        else:
+            yield Row(key=key[0], result="session-expired")
+
+
+class EventTimeSessionProcessor(StatefulProcessor):
+    """
+    Processor that registers an event time timer based on watermark.
+    Input: Row(event_time_ms=..., value=...)
+    Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastEventTime", LongType(), True)])
+        self.handle = handle
+        self.last_event_time_state = handle.getValueState("lastEventTime", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    event_time_ms = int(row.event_time_ms)
+                    value = row.value
+
+                    # Clear any existing timer if we have previous state
+                    if self.last_event_time_state.exists():
+                        old_timer_time = self.last_event_time_state.get()[0] + 5000
+                        self.handle.deleteTimer(old_timer_time)
+
+                    # Update last event time and register new timer
+                    self.last_event_time_state.update((event_time_ms,))
+                    self.handle.registerTimer(event_time_ms + 5000)  # 5 second timeout
+
+                    results.append({"key": key[0], "result": f"received:{value}@{event_time_ms}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                event_time_ms = row.event_time_ms
+                value = row.value
+
+                # Clear any existing timer if we have previous state
+                if self.last_event_time_state.exists():
+                    old_timer_time = self.last_event_time_state.get()[0] + 5000
+                    self.handle.deleteTimer(old_timer_time)
+
+                # Update last event time and register new timer
+                self.last_event_time_state.update((event_time_ms,))
+                self.handle.registerTimer(event_time_ms + 5000)
+
+                yield Row(key=key[0], result=f"received:{value}@{event_time_ms}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        watermark = timerValues.getCurrentWatermarkInMs()
+        self.last_event_time_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame(
+                {"key": [key[0]], "result": [f"session-expired@watermark={watermark}"]}
+            )
+        else:
+            yield Row(key=key[0], result=f"session-expired@watermark={watermark}")
+
+
+class EventTimeCountProcessor(StatefulProcessor):
+    """
+    Processor that counts events in EventTime mode.
+    Input: Row(event_time_ms=..., value=...)
+    Output: (key, count) for current count after processing input
+    Used to test late event filtering - late events should not increment the count.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("count", LongType(), True)])
+        self.count_state = handle.getValueState("count", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current = self.count_state.get()[0] if self.count_state.exists() else 0
+
+        if self.use_pandas:
+            incoming = sum(len(row_df) for row_df in rows)
+        else:
+            incoming = sum(1 for _ in rows)
+
+        updated = current + incoming
+        self.count_state.update((updated,))
+
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "count": [updated]})
+        else:
+            yield Row(key=key[0], count=updated)

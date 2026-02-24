@@ -16,7 +16,6 @@
 # limitations under the License.
 #
 import logging
-import unittest
 import json
 import tempfile
 from io import StringIO
@@ -72,8 +71,8 @@ class LoggerTestsMixin:
         self.assertTrue("msg" in log_json["exception"])
         self.assertTrue("stacktrace" in log_json["exception"])
 
-    def test_log_warn(self):
-        self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
+    def test_log_warning(self):
+        self.logger.warning("This is an warn log", user="test_user_warn", action="test_action_warn")
         log_json = json.loads(self.handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an warn log")
@@ -215,13 +214,6 @@ class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.logger.tests.test_logger import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

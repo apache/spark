@@ -18,6 +18,7 @@
 .ensime
 .ensime_cache/
 .ensime_lucene
+.venv
 .generated-mima*
 .idea/
 .idea_modules/
@@ -57,6 +58,7 @@ docs/_site/
 docs/api
 docs/.local_ruby_bundle
 sql/docs
+sql/mkdocs.yml
 sql/site
 lib_managed/
 lint-r-report.log
@@ -78,10 +80,11 @@ python/deps
 python/docs/_site/
 python/docs/source/development/errors.rst
 python/docs/source/reference/**/api/
-python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst
+python/docs/source/tutorial/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
+python/benchmarks/.asv/
 .mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml
@@ -125,3 +128,14 @@ sql/api/gen/
 sql/api/src/main/gen/
 sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
 sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
+
+tpcds-sf-1/
+tpcds-sf-1-text/
+tpcds-kit/
+
+# For GitHub Copilot
+.github/copilot-instructions.md
+.github/agents/
+.github/instructions/
+.github/prompts/
+.github/skills/

@@ -499,7 +499,7 @@ class SummaryBuilder(JavaWrapper):
 
     def __init__(self, jSummaryBuilder: "JavaObject"):
         if not is_remote():
-            super(SummaryBuilder, self).__init__(jSummaryBuilder)
+            super().__init__(jSummaryBuilder)
 
     def summary(self, featuresCol: Column, weightCol: Optional[Column] = None) -> Column:
         """

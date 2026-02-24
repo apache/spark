@@ -89,9 +89,11 @@ class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
       sqlText: String,
       expectedTableName: String,
       expectedTableSchema: StructType) = {
+    val relationResolution =
+      Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      Resolver.createRelationResolution(spark.sessionState.catalogManager)
+      relationResolution
     )
     val dataSourceResolver = new DataSourceResolver(spark)
 

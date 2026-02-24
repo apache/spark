@@ -31,15 +31,15 @@ import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
+class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite with UpsertTests {
   override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -373,9 +373,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests 
 
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}
@@ -386,12 +386,12 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false&allowMultiQueries=true"
+        s"&useSSL=false&permitMysqlScheme&allowMultiQueries=true"
   }
 
   override def testConnection(): Unit = {
     Using.resource(getConnection()) { conn =>
-      assert(conn.getClass.getName === "org.mariadb.jdbc.MariaDbConnection")
+      assert(conn.getClass.getName === "org.mariadb.jdbc.Connection")
     }
   }
 }

@@ -23,6 +23,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -152,7 +153,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
     // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
     // children, hence not matched directly by previous HiveTableRelation case.
-    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _)
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       i.copy(table = hiveTableWithStats(relation))
   }
@@ -167,7 +168,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
-        r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _)
+          r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, _)
         if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
@@ -235,17 +236,38 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoStatement(
-          r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists, byName)
+            r: HiveTableRelation,
+            partition,
+            cols,
+            query,
+            overwrite,
+            ifPartitionNotExists,
+            byName,
+            withSchemaEvolution)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
               (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
             && isConvertible(r) =>
-        InsertIntoStatement(metastoreCatalog.convert(r, isWrite = true), partition, cols,
-          query, overwrite, ifPartitionNotExists, byName)
+        InsertIntoStatement(
+          metastoreCatalog.convert(r, isWrite = true),
+          partition,
+          cols,
+          query,
+          overwrite,
+          ifPartitionNotExists,
+          byName,
+          withSchemaEvolution)
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>
-        convertHiveTableRelationForRead(relation)
+        val logicalRelation = convertHiveTableRelationForRead(relation)
+        // We put the resolved relation into the [[AnalyzerBridgeState]] for
+        // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+        // relation metadata twice.
+        AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+          bridgeState.addLogicalRelationForHiveRelation(relation, logicalRelation)
+        }
+        logicalRelation
 
       // CTAS path
       // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,
@@ -256,7 +278,7 @@ case class RelationConversions(
         tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
-            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.getTagValue(BY_CTAS).isDefined =>
+            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.containsTag(BY_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)

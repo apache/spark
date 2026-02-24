@@ -566,7 +566,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U]
@@ -595,7 +595,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode): Dataset[U]
@@ -621,7 +621,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -657,7 +657,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode,
@@ -686,7 +686,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -719,7 +719,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
@@ -751,7 +751,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -793,7 +793,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * See [[org.apache.spark.sql.Encoder]] for more details on what types are encodable to Spark
    * SQL.
    */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S],

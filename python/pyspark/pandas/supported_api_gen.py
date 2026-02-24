@@ -38,7 +38,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
-PANDAS_LATEST_VERSION = "2.2.3"
+PANDAS_LATEST_VERSION = "2.3.3"
 
 RST_HEADER = """
 =====================
@@ -108,7 +108,9 @@ def _check_pandas_version() -> None:
     """
     Check if the installed pandas version matches the expected version.
     """
-    if LooseVersion(pd.__version__) != LooseVersion(PANDAS_LATEST_VERSION):
+    # Work around pandas version string issue,
+    # see https://github.com/pandas-dev/pandas/issues/61579.
+    if LooseVersion(pd.__version__.split("+")[0]) != LooseVersion(PANDAS_LATEST_VERSION):
         msg = (
             f"Warning: pandas {PANDAS_LATEST_VERSION} is required; your version is {pd.__version__}"
         )
@@ -395,7 +397,7 @@ def _escape_func_str(func_str: str) -> str:
     # TODO: Take into account that this function can create links incorrectly
     # We can create alias links or links to parent methods
     if func_str.endswith("_"):
-        return func_str[:-1] + "\_"  # noqa: W605
+        return func_str[:-1] + "\\_"
     else:
         return func_str
 

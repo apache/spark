@@ -21,7 +21,6 @@ import java.io._
 import java.util.EnumSet
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -33,7 +32,7 @@ import org.apache.logging.log4j.core.layout.PatternLayout
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
@@ -47,8 +46,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   private val localLogFile: String = conf.get(DRIVER_LOG_LOCAL_DIR).map {
-    FileUtils.getFile(_, DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
-  }.getOrElse(FileUtils.getFile(
+    Utils.getFile(_, DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
+  }.getOrElse(Utils.getFile(
     Utils.getLocalDir(conf),
     DriverLogger.DRIVER_LOG_DIR,
     DriverLogger.DRIVER_LOG_FILE).getAbsolutePath())
@@ -106,7 +105,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         logError(s"Error in persisting driver logs", e)
     } finally {
       Utils.tryLogNonFatalError {
-        JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
+        JavaUtils.deleteRecursively(Utils.getFile(localLogFile).getParentFile())
       }
     }
   }

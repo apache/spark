@@ -107,7 +107,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return self._origin.getCondition()
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getCondition(self._origin)
         else:
             return None
 
@@ -125,7 +126,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return dict(self._origin.getMessageParameters())
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return dict(utils.getMessageParameters(self._origin))
         else:
             return None
 
@@ -138,7 +140,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return self._origin.getSqlState()
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getSqlState(self._origin)
         else:
             return None
 
@@ -152,8 +155,9 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            errorClass = self._origin.getCondition()
-            messageParameters = self._origin.getMessageParameters()
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            errorClass = utils.getCondition(self._origin)
+            messageParameters = utils.getMessageParameters(self._origin)
 
             error_message = getattr(gw.jvm, "org.apache.spark.SparkThrowableHelper").getMessage(
                 errorClass, messageParameters
@@ -174,7 +178,8 @@ class CapturedException(PySparkException):
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
             contexts: List[BaseQueryContext] = []
-            for q in self._origin.getQueryContext():
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            for q in utils.getQueryContext(self._origin):
                 if q.contextType().toString() == "SQL":
                     contexts.append(SQLQueryContext(q))
                 else:
@@ -229,25 +234,13 @@ def _convert_exception(e: "Py4JJavaError") -> CapturedException:
         return SparkUpgradeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
         return SparkNoSuchElementException(origin=e)
-
-    c: "Py4JJavaError" = e.getCause()
-    stacktrace: str = getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e)
-    if c is not None and (
-        is_instance_of(gw, c, "org.apache.spark.api.python.PythonException")
-        # To make sure this only catches Python UDFs.
-        and any(
-            map(
-                lambda v: "org.apache.spark.sql.execution.python" in v.toString(), c.getStackTrace()
-            )
-        )
-    ):
-        msg = (
-            "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % c.getMessage()
-        )
-        return PythonException(msg, stacktrace)
-
-    return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
+    elif is_instance_of(gw, e, "org.apache.spark.api.python.PythonException"):
+        return PythonException(origin=e)
+    return UnknownException(
+        desc=e.toString(),
+        stackTrace=getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e),
+        cause=e.getCause(),
+    )
 
 
 def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -342,6 +335,17 @@ class PythonException(CapturedException, BasePythonException):
     """
     Exceptions thrown from Python workers.
     """
+
+    def __str__(self) -> str:
+        messageParameters = self.getMessageParameters()
+
+        if (
+            messageParameters is None
+            or "msg" not in messageParameters
+            or "traceback" not in messageParameters
+        ):
+            return super().__str__()
+        return f"{messageParameters['msg']}:\n{messageParameters['traceback'].strip()}"
 
 
 class ArithmeticException(CapturedException, BaseArithmeticException):

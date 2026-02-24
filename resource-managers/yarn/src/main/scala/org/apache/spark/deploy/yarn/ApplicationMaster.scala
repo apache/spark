@@ -28,10 +28,8 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -43,7 +41,7 @@ import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -272,7 +270,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + StringUtils.stringifyException(e))
+          "Uncaught exception: " + Utils.stringifyException(e))
     } finally {
       try {
         metricsSystem.foreach { ms =>
@@ -315,7 +313,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + StringUtils.stringifyException(e))
+          "Uncaught exception: " + Utils.stringifyException(e))
         if (!unregistered) {
           // It's ok to clean staging dir first because unmanaged AM can't be retried.
           cleanupStagingDir(stagingDir)
@@ -390,7 +388,7 @@ private[spark] class ApplicationMaster(
         logInfo(log"Final app status: ${MDC(LogKeys.APP_STATE, finalStatus)}, " +
           log"exitCode: ${MDC(LogKeys.EXIT_CODE, exitCode)}" +
           Option(msg).map(msg => log", (reason: ${MDC(LogKeys.REASON, msg)})").getOrElse(log""))
-        finalMsg = ComStrUtils.abbreviate(msg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
+        finalMsg = Utils.abbreviate(msg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
           logDebug("shutting down reporter thread")
@@ -592,7 +590,7 @@ private[spark] class ApplicationMaster(
           if (!NonFatal(e)) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE,
-              "Fatal exception: " + StringUtils.stringifyException(e))
+              "Fatal exception: " + Utils.stringifyException(e))
           } else if (failureCount >= reporterMaxFailures) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
@@ -749,7 +747,7 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case SparkUserAppException(exitCode) =>
+              case SparkUserAppException(exitCode, _) =>
                 val msg = log"User application exited with status " +
                   log"${MDC(LogKeys.EXIT_CODE, exitCode)}"
                 logError(msg)
@@ -758,7 +756,7 @@ private[spark] class ApplicationMaster(
                 logError("User class threw exception: ", cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + StringUtils.stringifyException(cause))
+                  "User class threw exception: " + Utils.stringifyException(cause))
             }
             sparkContextPromise.tryFailure(e.getCause())
         } finally {

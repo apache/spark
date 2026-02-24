@@ -28,8 +28,9 @@ object EvalPythonExec {
    *
    * @param offset the offset of the argument
    * @param name the name of the argument if it's a `NamedArgumentExpression`
+   * @param isTableArg whether this argument is a table argument
    */
-  case class ArgumentMetadata(offset: Int, name: Option[String])
+  case class ArgumentMetadata(offset: Int, name: Option[String], isTableArg: Boolean = false)
 }
 
 /**

@@ -27,6 +27,8 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
@@ -72,6 +74,10 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
+        } else if (pdt instanceof PhysicalGeographyType) {
+          row.update(i, getGeography(i));
+        } else if (pdt instanceof PhysicalGeometryType) {
+          row.update(i, getGeometry(i));
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (pdt instanceof PhysicalStructType t) {
@@ -80,6 +86,8 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getArray(i).copy());
         } else if (pdt instanceof PhysicalMapType) {
           row.update(i, getMap(i).copy());
+        } else if (pdt instanceof PhysicalVariantType) {
+          row.update(i, getVariant(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -133,6 +141,16 @@ public final class ColumnarBatchRow extends InternalRow {
   }
 
   @Override
+  public GeographyVal getGeography(int ordinal) {
+    return columns[ordinal].getGeography(rowId);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    return columns[ordinal].getGeometry(rowId);
+  }
+
+  @Override
   public CalendarInterval getInterval(int ordinal) {
     return columns[ordinal].getInterval(rowId);
   }
@@ -177,6 +195,10 @@ public final class ColumnarBatchRow extends InternalRow {
       return getUTF8String(ordinal);
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);
+    } else if (dataType instanceof GeographyType) {
+      return getGeography(ordinal);
+    } else if (dataType instanceof GeometryType) {
+      return getGeometry(ordinal);
     } else if (dataType instanceof DecimalType t) {
       return getDecimal(ordinal, t.precision(), t.scale());
     } else if (dataType instanceof DateType) {

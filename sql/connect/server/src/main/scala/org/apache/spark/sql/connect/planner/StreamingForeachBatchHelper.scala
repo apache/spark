@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
@@ -176,11 +176,13 @@ object StreamingForeachBatchHelper extends Logging {
                 log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
                 log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-            val msg = PythonWorkerUtils.readUTF(dataIn)
-            throw new PythonException(
+            val traceback = PythonWorkerUtils.readUTF(dataIn)
+            val msg =
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Found error inside foreachBatch Python process: $msg",
-              null)
+                s"Found error inside foreachBatch Python process"
+            throw new PythonException(
+              errorClass = "PYTHON_EXCEPTION",
+              messageParameters = Map("msg" -> msg, "traceback" -> traceback))
           case otherValue =>
             throw new IllegalStateException(
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +

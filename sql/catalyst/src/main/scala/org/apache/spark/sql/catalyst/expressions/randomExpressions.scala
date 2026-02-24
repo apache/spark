@@ -76,6 +76,7 @@ trait ExpressionWithRandomSeed extends Expression {
 
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
+  def withShiftedSeed(shift: Long): Expression
 }
 
 private[catalyst] object ExpressionWithRandomSeed {
@@ -113,6 +114,9 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends Nondetermi
   def this(child: Expression) = this(child, false)
 
   override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType), hideSeed)
+
+  override def withShiftedSeed(shift: Long): Rand =
+    Rand(Add(child, Literal(shift), evalMode = EvalMode.LEGACY), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -165,6 +169,9 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends Nondeterm
 
   override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType), hideSeed)
 
+  override def withShiftedSeed(shift: Long): Randn =
+    Randn(Add(child, Literal(shift), evalMode = EvalMode.LEGACY), hideSeed)
+
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -205,15 +212,24 @@ object Randn {
   """,
   since = "4.0.0",
   group = "math_funcs")
-case class Uniform(min: Expression, max: Expression, seedExpression: Expression, hideSeed: Boolean)
-  extends RuntimeReplaceable with TernaryLike[Expression] with RDG with ExpectsInputTypes {
+case class Uniform(
+    min: Expression,
+    max: Expression,
+    seedExpression: Expression,
+    hideSeed: Boolean,
+    timeZoneId: Option[String] = None)
+  extends RuntimeReplaceable
+    with TernaryLike[Expression]
+    with RDG
+    with ExpectsInputTypes
+    with TimeZoneAwareExpression {
   def this(min: Expression, max: Expression) =
     this(min, max, UnresolvedSeed, hideSeed = true)
   def this(min: Expression, max: Expression, seedExpression: Expression) =
     this(min, max, seedExpression, hideSeed = false)
 
   final override lazy val deterministic: Boolean = false
-  override val nodePatterns: Seq[TreePattern] =
+  override def nodePatternsInternal(): Seq[TreePattern] =
     Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -268,6 +284,9 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
   override def withNewSeed(newSeed: Long): Expression =
     Uniform(min, max, Literal(newSeed, LongType), hideSeed)
 
+  override def withShiftedSeed(shift: Long): Expression =
+    Uniform(min, max, Literal(seed + shift, LongType), hideSeed)
+
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     Uniform(newFirst, newSecond, newThird, hideSeed)
@@ -276,7 +295,9 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
       Literal(null)
     } else {
-      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+      def cast(e: Expression, to: DataType): Expression = {
+        if (e.dataType == to) e else Cast(e, to, timeZoneId)
+      }
       cast(Add(
         cast(min, DoubleType),
         Multiply(
@@ -286,6 +307,11 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
           Rand(seed))),
         dataType)
     }
+  }
+
+  /** Returns a copy of this expression with the specified timeZoneId. */
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    copy(timeZoneId = Some(timeZoneId))
   }
 }
 
@@ -348,6 +374,10 @@ case class RandStr(
 
   override def withNewSeed(newSeed: Long): Expression =
     RandStr(length, Literal(newSeed, LongType), hideSeed)
+
+  override def withShiftedSeed(shift: Long): Expression =
+    RandStr(length, Literal(seed + shift, LongType), hideSeed)
+
   override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
     RandStr(newFirst, newSecond, hideSeed)
 

@@ -67,8 +67,15 @@ message DataType {
     // UserDefinedType
     UDT udt = 23;
 
+    // Geospatial types
+    Geometry geometry = 26;
+
+    Geography geography = 27;
+
     // UnparsedDataType
     Unparsed unparsed = 24;
+
+    Time time = 28;
   }
 
   message Boolean {
@@ -122,6 +129,11 @@ message DataType {
 
   message TimestampNTZ {
     uint32 type_variation_reference = 1;
+  }
+
+  message Time {
+    optional int32 precision = 1;
+    uint32 type_variation_reference = 2;
   }
 
   message CalendarInterval {
@@ -180,6 +192,16 @@ message DataType {
     DataType value_type = 2;
     bool value_contains_null = 3;
     uint32 type_variation_reference = 4;
+  }
+
+  message Geometry {
+    int32 srid = 1;
+    uint32 type_variation_reference = 2;
+  }
+
+  message Geography {
+    int32 srid = 1;
+    uint32 type_variation_reference = 2;
   }
 
   message Variant {

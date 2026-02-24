@@ -16,12 +16,16 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 
+import com.github.luben.zstd.{Zstd, ZstdOutputStreamNoFinalizer}
+import com.google.protobuf.ByteString
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
 
@@ -178,8 +182,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     }
     withClient(sessionId = sessionId, userId = userId) { client =>
       // shall not be able to create a new session with the same id and user.
-      val query = client.execute(buildPlan("SELECT 1"))
       val queryError = intercept[SparkException] {
+        val query = client.execute(buildPlan("SELECT 1"))
         while (query.hasNext) query.next()
       }
       assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
@@ -286,6 +290,240 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
           while (query.hasNext) query.next()
         }
         assert(error.getMessage.contains("IllegalStateException"))
+      }
+    }
+  }
+
+  test("reusing operation ID after completion throws OPERATION_ALREADY_EXISTS") {
+    val fixedOperationId = UUID.randomUUID().toString
+
+    withRawBlockingStub { stub =>
+      val request1 =
+        buildExecutePlanRequest(buildPlan("SELECT 1"), operationId = fixedOperationId)
+
+      val iter1 = stub.executePlan(request1)
+
+      // Consume all results to complete the operation
+      while (iter1.hasNext) {
+        iter1.next()
+      }
+
+      val request2 =
+        buildExecutePlanRequest(buildPlan("SELECT 2"), operationId = fixedOperationId)
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        val iter2 = stub.executePlan(request2)
+        iter2.hasNext
+      }
+
+      // Verify the error is OPERATION_ALREADY_EXISTS
+      assert(error.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
+      assert(error.getMessage.contains(fixedOperationId))
+    }
+  }
+
+  test("Interrupt with TAG type without operation_tag throws proper error class") {
+    withRawBlockingStub { stub =>
+      // Create an interrupt request with INTERRUPT_TYPE_TAG but no operation_tag
+      val request = org.apache.spark.connect.proto.InterruptRequest
+        .newBuilder()
+        .setSessionId(UUID.randomUUID().toString)
+        .setUserContext(org.apache.spark.connect.proto.UserContext
+          .newBuilder()
+          .setUserId(defaultUserId))
+        .setInterruptType(
+          org.apache.spark.connect.proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
+        .build()
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        stub.interrupt(request)
+      }
+
+      // Verify the error is INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_TAG_REQUIRES_TAG
+      assert(error.getMessage.contains("INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_TAG_REQUIRES_TAG"))
+      assert(error.getMessage.contains("operation_tag"))
+    }
+  }
+
+  test("Interrupt with OPERATION_ID type without operation_id throws proper error class") {
+    withRawBlockingStub { stub =>
+      // Create an interrupt request with INTERRUPT_TYPE_OPERATION_ID but no operation_id
+      val request = org.apache.spark.connect.proto.InterruptRequest
+        .newBuilder()
+        .setSessionId(UUID.randomUUID().toString)
+        .setUserContext(org.apache.spark.connect.proto.UserContext
+          .newBuilder()
+          .setUserId(defaultUserId))
+        .setInterruptType(
+          org.apache.spark.connect.proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+        .build()
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        stub.interrupt(request)
+      }
+
+      // Verify the error is INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID
+      assert(
+        error.getMessage.contains(
+          "INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID"))
+      assert(error.getMessage.contains("operation_id"))
+    }
+  }
+
+  test("Relation as compressed plan works") {
+    withClient { client =>
+      val relation = buildPlan("SELECT 1").getRoot
+      val compressedRelation = Zstd.compress(relation.toByteArray)
+      val plan = proto.Plan
+        .newBuilder()
+        .setCompressedOperation(
+          proto.Plan.CompressedOperation
+            .newBuilder()
+            .setData(ByteString.copyFrom(compressedRelation))
+            .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
+        .build()
+      val query = client.execute(plan)
+      while (query.hasNext) query.next()
+    }
+  }
+
+  test("Command as compressed plan works") {
+    withClient { client =>
+      val command = buildSqlCommandPlan("SET spark.sql.session.timeZone=Europe/Berlin").getCommand
+      val compressedCommand = Zstd.compress(command.toByteArray)
+      val plan = proto.Plan
+        .newBuilder()
+        .setCompressedOperation(
+          proto.Plan.CompressedOperation
+            .newBuilder()
+            .setData(ByteString.copyFrom(compressedCommand))
+            .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND)
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
+        .build()
+      val query = client.execute(plan)
+      while (query.hasNext) query.next()
+    }
+  }
+
+  private def compressInZstdStreamingMode(input: Array[Byte]): Array[Byte] = {
+    val outputStream = new ByteArrayOutputStream()
+    val zstdStream = new ZstdOutputStreamNoFinalizer(outputStream)
+    zstdStream.write(input)
+    zstdStream.flush()
+    zstdStream.close()
+    outputStream.toByteArray
+  }
+
+  test("Compressed plans generated in streaming mode also work correctly") {
+    withClient { client =>
+      val relation = buildPlan("SELECT 1").getRoot
+      val compressedRelation = compressInZstdStreamingMode(relation.toByteArray)
+      val plan = proto.Plan
+        .newBuilder()
+        .setCompressedOperation(
+          proto.Plan.CompressedOperation
+            .newBuilder()
+            .setData(ByteString.copyFrom(compressedRelation))
+            .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
+        .build()
+      val query = client.execute(plan)
+      while (query.hasNext) query.next()
+    }
+  }
+
+  test("Invalid compressed bytes errors out") {
+    withClient { client =>
+      val invalidBytes = "invalidBytes".getBytes
+      val plan = proto.Plan
+        .newBuilder()
+        .setCompressedOperation(
+          proto.Plan.CompressedOperation
+            .newBuilder()
+            .setData(ByteString.copyFrom(invalidBytes))
+            .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
+        .build()
+      val ex = intercept[SparkException] {
+        val query = client.execute(plan)
+        while (query.hasNext) query.next()
+      }
+      assert(ex.getMessage.contains("CONNECT_INVALID_PLAN.CANNOT_PARSE"))
+    }
+  }
+
+  test("Invalid compressed proto message errors out") {
+    withClient { client =>
+      val data = Zstd.compress("Apache Spark".getBytes)
+      val plan = proto.Plan
+        .newBuilder()
+        .setCompressedOperation(
+          proto.Plan.CompressedOperation
+            .newBuilder()
+            .setData(ByteString.copyFrom(data))
+            .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
+        .build()
+      val ex = intercept[SparkException] {
+        val query = client.execute(plan)
+        while (query.hasNext) query.next()
+      }
+      assert(ex.getMessage.contains("CONNECT_INVALID_PLAN.CANNOT_PARSE"))
+    }
+  }
+
+  test("Large compressed plan errors out") {
+    withClient { client =>
+      withSparkEnvConfs(Connect.CONNECT_MAX_PLAN_SIZE.key -> "100") {
+        val relation = buildPlan("SELECT '" + "Apache Spark" * 100 + "'").getRoot
+        val compressedRelation = Zstd.compress(relation.toByteArray)
+
+        val plan = proto.Plan
+          .newBuilder()
+          .setCompressedOperation(
+            proto.Plan.CompressedOperation
+              .newBuilder()
+              .setData(ByteString.copyFrom(compressedRelation))
+              .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+              .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+              .build())
+          .build()
+        val ex = intercept[SparkException] {
+          val query = client.execute(plan)
+          while (query.hasNext) query.next()
+        }
+        assert(ex.getMessage.contains("CONNECT_INVALID_PLAN.PLAN_SIZE_LARGER_THAN_MAX"))
+      }
+    }
+  }
+
+  test("Large compressed plan generated in streaming mode also errors out") {
+    withClient { client =>
+      withSparkEnvConfs(Connect.CONNECT_MAX_PLAN_SIZE.key -> "100") {
+        val relation = buildPlan("SELECT '" + "Apache Spark" * 100 + "'").getRoot
+        val compressedRelation = compressInZstdStreamingMode(relation.toByteArray)
+
+        val plan = proto.Plan
+          .newBuilder()
+          .setCompressedOperation(
+            proto.Plan.CompressedOperation
+              .newBuilder()
+              .setData(ByteString.copyFrom(compressedRelation))
+              .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
+              .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+              .build())
+          .build()
+        val ex = intercept[SparkException] {
+          val query = client.execute(plan)
+          while (query.hasNext) query.next()
+        }
+        assert(ex.getMessage.contains("CONNECT_INVALID_PLAN.PLAN_SIZE_LARGER_THAN_MAX"))
       }
     }
   }

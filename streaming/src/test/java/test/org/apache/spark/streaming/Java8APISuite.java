@@ -31,7 +31,6 @@ import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.Time;
 import scala.Tuple2;
 
-import com.google.common.collect.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -218,12 +217,12 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
 
     List<Set<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-      Sets.newHashSet(
+      Set.of(
         new Tuple2<>("california",
           new Tuple2<>("dodgers", "giants")),
         new Tuple2<>("new york",
           new Tuple2<>("yankees", "mets"))),
-      Sets.newHashSet(
+      Set.of(
         new Tuple2<>("california",
           new Tuple2<>("sharks", "ducks")),
         new Tuple2<>("new york",
@@ -244,7 +243,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     List<Set<Tuple2<String, Tuple2<String, String>>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Tuple2<String, String>>> res : result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
     Assertions.assertEquals(expected, unorderedResult);

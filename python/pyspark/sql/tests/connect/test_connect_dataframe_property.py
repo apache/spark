@@ -17,12 +17,20 @@
 
 import unittest
 
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    LongType,
+    DoubleType,
+    Row,
+)
 from pyspark.sql.utils import is_remote
 from pyspark.sql import functions as SF
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.testing.sqlutils import (
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -40,7 +48,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
+class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_cached_property_is_copied(self):
         schema = StructType(
             [
@@ -64,9 +72,19 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
             df_columns.remove(col)
         assert len(df.columns) == 4
 
+        cdf = self.connect.createDataFrame(data, schema)
+        cdf_schema = cdf.schema
+        assert len(cdf._cached_schema_serialized) > 0
+        assert cdf_schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf_schema.fields) == 4
+        cdf_schema.fields.pop(0)
+        assert cdf.schema.jsonValue() == cdf._cached_schema.jsonValue()
+        assert len(cdf.schema.fields) == 4
+
     def test_cached_schema_to(self):
-        cdf = self.connect.read.table(self.tbl_name)
-        sdf = self.spark.read.table(self.tbl_name)
+        rows = [Row(id=x, name=str(x)) for x in range(100)]
+        cdf = self.connect.createDataFrame(rows)
+        sdf = self.spark.createDataFrame(rows)
 
         schema = StructType(
             [
@@ -443,13 +461,6 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_dataframe_property import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

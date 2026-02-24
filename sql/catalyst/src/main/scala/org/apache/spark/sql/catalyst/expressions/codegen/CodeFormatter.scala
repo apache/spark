@@ -144,7 +144,7 @@ private class CodeFormatter {
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
     val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
-      " " * (indentSize * (indentLevel - 1))
+      " ".repeat(indentSize * (indentLevel - 1))
     } else {
       indentString
     }
@@ -157,7 +157,7 @@ private class CodeFormatter {
     }
     code.append("\n")
     indentLevel = newIndentLevel
-    indentString = " " * (indentSize * newIndentLevel)
+    indentString = " ".repeat(indentSize * newIndentLevel)
     currentLine += 1
   }
 

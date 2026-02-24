@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -40,7 +40,8 @@ object UnsupportedOperationChecker extends Logging {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
+        throwError("Queries with streaming sources must be executed with writeStream.start(), or " +
+          "from a streaming table or flow definition within a Spark Declarative Pipeline.")(p)
 
       case d: DeduplicateWithinWatermark =>
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +
@@ -55,7 +56,7 @@ object UnsupportedOperationChecker extends Logging {
    * @param exp the expression to be checked
    * @return true if it is a event time column.
    */
-  private def hasEventTimeCol(exp: Expression): Boolean = exp.exists {
+  def hasEventTimeCol(exp: Expression): Boolean = exp.exists {
     case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
     case _ => false
   }
@@ -87,13 +88,14 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * This method is only used with ifCannotBeFollowedByStatefulOperation.
-   * Here we list up stateful operators but there is an exception for Deduplicate:
-   * it is only counted here when it has an event time column.
+   * Checks if a logical plan is a streaming stateful operation.
+   * Stateful operations include aggregations, stream-stream joins, deduplication,
+   * and stateful transformations (FlatMapGroupsWithState, TransformWithState, etc.).
+   * Note: Deduplicate is only counted as stateful when it has an event time column.
    * @param p the logical plan to be checked
    * @return true if there is a streaming stateful operation
    */
-  private def isStatefulOperation(p: LogicalPlan): Boolean = p match {
+  def isStatefulOperation(p: LogicalPlan): Boolean = p match {
     case s: Aggregate if s.isStreaming => true
     // Since the Distinct node will be replaced to Aggregate in the optimizer rule
     // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
@@ -581,6 +583,25 @@ object UnsupportedOperationChecker extends Logging {
         }
       }
     }
+  }
+
+  // Verifies that a query using real-time mode is valid. It is meant to be used in addition to
+  // the checkForStreaming method: for this reason, we call this method check *additional*
+  // real-time mode constraints.
+  //
+  // It should be called during resolution of the WriteToStreamStatement if and only if
+  // the query is using the real-time trigger.
+  def checkAdditionalRealTimeModeConstraints(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    if (outputMode != InternalOutputModes.Update) {
+      throwRealTimeError("OUTPUT_MODE_NOT_SUPPORTED", Map("outputMode" -> outputMode.toString))
+    }
+  }
+
+  private def throwRealTimeError(subClass: String, args: Map[String, String]): Unit = {
+    throw new AnalysisException(
+      errorClass = s"STREAMING_REAL_TIME_MODE.$subClass",
+      messageParameters = args
+    )
   }
 
   private def throwErrorIf(

@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`INT8_TBL`, false
 INSERT INTO INT8_TBL VALUES(bigint(trim('  123   ')),bigint(trim('  456')))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int8_tbl], Append, `spark_catalog`.`default`.`int8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int8_tbl), [q1, q2]
-+- Project [cast(col1#xL as bigint) AS q1#xL, cast(col2#xL as bigint) AS q2#xL]
++- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
    +- LocalRelation [col1#xL, col2#xL]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT8_TBL VALUES(bigint(trim('123   ')),bigint('4567890123456789'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int8_tbl], Append, `spark_catalog`.`default`.`int8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int8_tbl), [q1, q2]
-+- Project [cast(col1#xL as bigint) AS q1#xL, cast(col2#xL as bigint) AS q2#xL]
++- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
    +- LocalRelation [col1#xL, col2#xL]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT8_TBL VALUES(bigint('4567890123456789'),bigint('123'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int8_tbl], Append, `spark_catalog`.`default`.`int8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int8_tbl), [q1, q2]
-+- Project [cast(col1#xL as bigint) AS q1#xL, cast(col2#xL as bigint) AS q2#xL]
++- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
    +- LocalRelation [col1#xL, col2#xL]
 
 
@@ -33,7 +33,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT8_TBL VALUES(+4567890123456789,bigint('4567890123456789'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int8_tbl], Append, `spark_catalog`.`default`.`int8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int8_tbl), [q1, q2]
-+- Project [cast(col1#xL as bigint) AS q1#xL, cast(col2#xL as bigint) AS q2#xL]
++- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
    +- LocalRelation [col1#xL, col2#xL]
 
 
@@ -41,7 +41,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO INT8_TBL VALUES(bigint('+4567890123456789'),bigint('-4567890123456789'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/int8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/int8_tbl], Append, `spark_catalog`.`default`.`int8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/int8_tbl), [q1, q2]
-+- Project [cast(col1#xL as bigint) AS q1#xL, cast(col2#xL as bigint) AS q2#xL]
++- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
    +- LocalRelation [col1#xL, col2#xL]
 
 

@@ -24,6 +24,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toExprWithTransformation, toTypedExpr}
@@ -137,14 +138,14 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
   }
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder](
+  def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
     transformWithStateHelper(statefulProcessor, timeMode, outputMode)
 
   /** @inheritdoc */
-  private[sql] def transformWithState[U: Encoder, S: Encoder](
+  def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
@@ -152,7 +153,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     transformWithStateHelper(statefulProcessor, timeMode, outputMode, Some(initialState))
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode): Dataset[U] =
@@ -163,7 +164,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       eventTimeColumnName = eventTimeColumnName)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
@@ -261,29 +262,29 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialState)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, timeMode, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder](
+  override def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      outputEncoder: Encoder[U]) =
+      outputEncoder: Encoder[U]): Dataset[U] =
     super.transformWithState(statefulProcessor, eventTimeColumnName, outputMode, outputEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     timeMode,
     outputMode,
@@ -292,13 +293,13 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     initialStateEncoder)
 
   /** @inheritdoc */
-  override private[sql] def transformWithState[U: Encoder, S: Encoder](
+  override def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
-      initialStateEncoder: Encoder[S]) = super.transformWithState(
+      initialStateEncoder: Encoder[S]): Dataset[U] = super.transformWithState(
     statefulProcessor,
     outputMode,
     initialState,
@@ -658,8 +659,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
       eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
-    val stateEncoder = agnosticEncoderFor[S]
-    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
+    val initialStateEncoder = if (initialState.isDefined) {
+      agnosticEncoderFor[S]
+    } else {
+      // Cannot use `agnosticEncoderFor[S]` here because it points to incorrect encoder
+      // when the initial state is not provided. Using an empty state encoder instead.
+      ScalaReflection.encoderFor[EmptyInitialStateStruct]
+    }
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, initialStateEncoder, ivEncoder)
 
     // SparkUserDefinedFunction is creating a udfPacket where the input function are
     // being java serialized into bytes; we pass in `statefulProcessor` as function so it can be
@@ -780,3 +787,14 @@ private object KeyValueGroupedDatasetImpl {
     case _ => false
   }
 }
+
+/**
+ * A marker case class used as a placeholder type for initial state encoders when no actual
+ * initial state is provided to stateful streaming operations.
+ *
+ * In the `transformWithStateHelper` method, when `initialState` is not provided, we cannot use
+ * `agnosticEncoderFor[S]` for the initial state encoder because it would incorrectly point to the
+ * other encoders. Instead, we use `EmptyStruct` as a sentinel type to create a proper encoder
+ * that represents the absence of initial state data.
+ */
+case class EmptyInitialStateStruct()

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 
 /**
  * The [[DataSourceResolver]] is a [[Resolver]] extension that resolves nodes defined in the
@@ -39,11 +39,7 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
   /**
    * Resolve [[UnresolvedCatalogRelation]]:
    * - Reuse [[FindDataSourceTable]] code to resolve [[UnresolvedCatalogRelation]]
-   * - Return [[LogicalRelation]] if it's resolved
    * - Explicitly disallow [[StreamingRelation]] and [[StreamingRelationV2]] for now
-   * - [[FileResolver]], which is a [[ResolverExtension]], introduces a new [[LogicalPlan]] node
-   *    which resolution has to be handled here (further resolution of it doesn't need any specific
-   *    resolution except adding it's attributes to the scope).
    */
   override def resolveOperator(
       operator: LogicalPlan,
@@ -62,8 +58,6 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
         case other =>
           other
       })
-    case logicalRelation: LogicalRelation =>
-      Some(logicalRelation)
     case _ =>
       None
   }

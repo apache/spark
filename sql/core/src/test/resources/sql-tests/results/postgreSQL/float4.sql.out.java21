@@ -97,6 +97,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'N A N'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -121,6 +122,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'NaN x'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -145,6 +147,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "' INFINITY    x'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -193,6 +196,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'nan'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DECIMAL(10,0)\""
@@ -389,6 +393,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
     "value" : "2.1474836E9"
@@ -414,6 +419,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
     "value" : "-2.147484E9"
@@ -455,6 +461,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"BIGINT\"",
     "value" : "-9.22338E18"

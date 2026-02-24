@@ -18,13 +18,13 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, ShufflePartitionIdPassThrough, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -96,8 +97,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     val noSemanticChange = projectList.length == child.output.length &&
       projectList.zip(child.output).forall {
         case (alias: Alias, attr) =>
-          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
-            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+          alias.qualifier.isEmpty &&
+            alias.metadata == attr.metadata &&
+            alias.child.semanticEquals(attr)
         case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
         case _ => false
       }
@@ -509,7 +511,7 @@ abstract class UnionBase extends LogicalPlan {
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  private def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
+  protected def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
 
   /**
    * Maps the constraints containing a given (original) sequence of attributes to those with a
@@ -545,10 +547,82 @@ abstract class UnionBase extends LogicalPlan {
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
   }
+
+
+
+
+  /**
+   * Checks whether the child outputs are compatible by using `DataType.equalsStructurally`. Do
+   * that by comparing the size of the output with the size of the first child's output and by
+   * comparing output data types with the data types of the first child's output.
+   *
+   * This method needs to be evaluated after `childrenResolved`.
+   */
+  def allChildrenCompatible: Boolean = childrenResolved && children.tail.forall { child =>
+    child.output.length == children.head.output.length &&
+      child.output.zip(children.head.output).forall {
+        case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
+      }
+  }
+}
+
+/**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
+  /**
+   * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
+   */
+  def unapply(plan: LogicalPlan): Option[UnionBase] = plan match {
+    case u: Union => Some(u)
+    case u: SequentialStreamingUnion => Some(u)
+    case _ => None
+  }
+
+  /**
+   * Returns true if both unions are the same concrete type.
+   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
+   */
+  def isSameType(u1: UnionBase, u2: UnionBase): Boolean = (u1, u2) match {
+    case (_: Union, _: Union) => true
+    case (_: SequentialStreamingUnion, _: SequentialStreamingUnion) => true
+    case _ => false
+  }
+
+  /**
+   * Extracts byName flag from Union or SequentialStreamingUnion.
+   */
+  def byName(u: UnionBase): Boolean = u match {
+    case union: Union => union.byName
+    case ssu: SequentialStreamingUnion => ssu.byName
+  }
+
+  /**
+   * Extracts allowMissingCol flag from Union or SequentialStreamingUnion.
+   */
+  def allowMissingCol(u: UnionBase): Boolean = u match {
+    case union: Union => union.allowMissingCol
+    case ssu: SequentialStreamingUnion => ssu.allowMissingCol
+  }
+
+  /**
+   * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
+   */
+  def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
+    case union: Union => union.copy(children = newChildren)
+    case ssu: SequentialStreamingUnion => ssu.copy(children = newChildren)
+  }
 }
 
 /**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
+ * and their order does not affect the result. This allows Union-specific optimizations to
+ * reorder children (e.g., for performance), unlike SequentialStreamingUnion where order matters.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -561,19 +635,18 @@ case class Union(
     allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
-  override def maxRows: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRows: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRows match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
@@ -581,37 +654,34 @@ case class Union(
   /**
    * Note the definition has assumption about how union is implemented physically.
    */
-  override def maxRowsPerPartition: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRowsPerPartition: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRowsPerPartition match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
-  def duplicateResolved: Boolean = {
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
     children.map(_.outputSet.size).sum ==
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
   override lazy val resolved: Boolean = {
-    // allChildrenCompatible needs to be evaluated after childrenResolved
-    def allChildrenCompatible: Boolean =
-      children.tail.forall( child =>
-        // compare the attribute number with the first child
-        child.output.length == children.head.output.length &&
-        // compare the data types with the first child
-        child.output.zip(children.head.output).forall {
-          case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
-        })
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
@@ -649,7 +719,7 @@ case class Join(
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
           if left.maxRows.isDefined && right.maxRows.isDefined =>
@@ -801,11 +871,13 @@ case class InsertIntoDir(
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
  *              be a logical plan parsed from the `CatalogTable.viewText`.
+ * @param options The configuration used when reading data.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
@@ -845,38 +917,24 @@ case class View(
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
+  def effectiveSQLConf(
+      configs: Map[String, String],
+      isTempView: Boolean,
+      createSparkVersion: String = ""): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
-    // We retain below configs from current session because they are not captured by view
-    // as optimization configs but they are still needed during the view resolution.
-    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
-    // optimization phase.
-    val retainedHiveConfigs = Seq(
-      "spark.sql.hive.convertMetastoreParquet",
-      "spark.sql.hive.convertMetastoreOrc",
-      "spark.sql.hive.convertInsertingPartitionedTable",
-      "spark.sql.hive.convertInsertingUnpartitionedTable",
-      "spark.sql.hive.convertMetastoreCtas"
-    )
-
-    val retainedLoggingConfigs = Seq(
-      "spark.sql.planChangeLog.level",
-      "spark.sql.expressionTreeChangeLog.level"
-    )
-
-    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
-      retainedHiveConfigs.contains(key) || retainedLoggingConfigs.contains(key) || key.startsWith(
-        "spark.sql.catalog."
-      )
-    }
-
     val sqlConf = new SQLConf()
-    for ((k, v) <- configs ++ retainedConfigs) {
+    for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
+    Analyzer.retainResolutionConfigsForAnalysis(
+      newConf = sqlConf,
+      existingConf = activeConf,
+      createSparkVersion = createSparkVersion
+    )
+
     sqlConf
   }
 }
@@ -1293,36 +1351,60 @@ object Expand {
    * Apply the all of the GroupExpressions to every input row, hence we will get
    * multiple output rows for an input row.
    *
+   * This method performs the following steps:
+   *  1. Creates an array of Projections for the child projection, and replaces the projections'
+   *     expressions which equal GroupBy expressions with `Literal(null)`, if those expressions are
+   *     not set for this grouping set.
+   *  2. For each grouping set attribute:
+   *      - If the input attribute is in the invalid grouping expression set for this group,
+   *        replaces it with constant null.
+   *      - Otherwise, fixes the nullable field by using the nullability from
+   *        `childOutput ++ groupByAliases`. This is logic from the `UpdateAttributeNullability`
+   *        rule in which we align nullability of attributes with the output of the child plan.
+   *  3. The `groupingId` is added as the last output, using the bit mask as the concrete value for
+   *     it.
+   *  4. If `groupingSetsAttrs` has duplicate entries (e.g., `GROUPING SETS ((key), (key))`), adds
+   *     one more virtual grouping attribute (`_gen_grouping_pos`) to avoid wrongly grouping rows
+   *     with the same grouping ID.
+   * 5.  The `groupByAttrs` has different meaning in `Expand.output` (it could be the original
+   *     grouping expression or null), so new instances are created for the output.
+   *
    * @param groupingSetsAttrs The attributes of grouping sets
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
+   * @param childOutputOpt Optional child output. If not provided, then `child.output` is used
    */
   def apply(
     groupingSetsAttrs: Seq[Seq[Attribute]],
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
-    child: LogicalPlan): Expand = {
+    child: LogicalPlan,
+    childOutputOpt: Option[Seq[Attribute]] = None): Expand = {
+    val childOutput = childOutputOpt.getOrElse(child.output)
+
     val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
 
-    // Create an array of Projections for the child projection, and replace the projections'
-    // expressions which equal GroupBy expressions with Literal(null), if those expressions
-    // are not set for this grouping set.
+    val nullabilities = (childOutput ++ groupByAliases.map(_.toAttribute)).groupBy(_.exprId).map {
+      case (exprId, attributes) => exprId -> attributes.exists(_.nullable)
+    }
+
     val projections = groupingSetsAttrs.zipWithIndex.map { case (groupingSetAttrs, i) =>
-      val projAttrs = child.output ++ groupByAttrs.map { attr =>
+      val projAttrs = childOutput ++ groupByAttrs.map { attr =>
         if (!groupingSetAttrs.contains(attr)) {
-          // if the input attribute in the Invalid Grouping Expression set of for this group
-          // replace it with constant null
           Literal.create(null, attr.dataType)
         } else {
-          attr
+          if (nullabilities.contains(attr.exprId)) {
+            attr.withNullability(nullabilities(attr.exprId))
+          } else {
+            attr
+          }
         }
-      // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ {
         val bitMask = buildBitmask(groupingSetAttrs, attrMap)
         val dataType = GroupingID.dataType
@@ -1332,24 +1414,19 @@ object Expand {
       }
 
       if (hasDuplicateGroupingSets) {
-        // If `groupingSetsAttrs` has duplicate entries (e.g., GROUPING SETS ((key), (key))),
-        // we add one more virtual grouping attribute (`_gen_grouping_pos`) to avoid
-        // wrongly grouping rows with the same grouping ID.
         projAttrs :+ Literal.create(i, IntegerType)
       } else {
         projAttrs
       }
     }
 
-    // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
-    // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
+      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
-    Expand(projections, output, Project(child.output ++ groupByAliases, child))
+    Expand(projections, output, Project(childOutput ++ groupByAliases, child))
   }
 }
 
@@ -1654,6 +1731,22 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
+/**
+ * Logical node that represents the LIMIT ALL operation. This operation is usually no-op and exists
+ * to provide compatability with other databases. However, in case of recursive CTEs, Limit nodes
+ * serve another purpose, to override the default row limit which is determined by a flag. As a
+ * result, LIMIT ALL should also be used to completely negate the row limit, which is exactly what
+ * this node is used for.
+ */
+case class LimitAll(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LimitAll =
+    copy(child = newChild)
+}
+
 object OffsetAndLimit {
   def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
@@ -1719,11 +1812,15 @@ case class SubqueryAlias(
   }
 
   override def metadataOutput: Seq[Attribute] = {
-    // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
-    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
+    val canPropagate = if (conf.getConf(SQLConf.SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS)) {
+      true
+    } else {
+      // Legacy behavior: only propagate metadata columns if child is a LeafNode or SubqueryAlias.
+      child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]
+    }
+    if (canPropagate) {
       val qualifierList = identifier.qualifier :+ alias
-      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
-      nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
+      child.metadataOutput.filter(!_.qualifiedAccessOnly).map(_.withQualifier(qualifierList))
     } else {
       Nil
     }
@@ -1866,19 +1963,29 @@ trait HasPartitionExpressions extends SQLConfHelper {
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
   } else {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-        s"""
-           |SortOrder: $sortOrder
-           |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-    if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    val directShuffleExprs = partitionExpressions.filter(_.isInstanceOf[DirectShufflePartitionID])
+    if (directShuffleExprs.nonEmpty) {
+      assert(directShuffleExprs.length == 1 && partitionExpressions.length == 1,
+        s"DirectShufflePartitionID can only be used as a single partition expression, " +
+          s"but found ${directShuffleExprs.length} DirectShufflePartitionID expressions " +
+          s"out of ${partitionExpressions.length} total expressions")
+      ShufflePartitionIdPassThrough(
+        partitionExpressions.head.asInstanceOf[DirectShufflePartitionID], numPartitions)
     } else {
-      HashPartitioning(partitionExpressions, numPartitions)
+      val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+      require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of" +
+          " type `SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`," +
+          " which means `HashPartitioning`. In this case we have:" +
+          s"""
+             |SortOrder: $sortOrder
+             |NonSortOrder: $nonSortOrder
+         """.stripMargin)
+      if (sortOrder.nonEmpty) {
+        RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+      } else {
+        HashPartitioning(partitionExpressions, numPartitions)
+      }
     }
   }
 }
@@ -2033,6 +2140,8 @@ case class CollectMetrics(
   override def doCanonicalize(): LogicalPlan = {
     super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COLLECT_METRICS)
 }
 
 /**
@@ -2117,6 +2226,15 @@ case class LateralJoin(
     copy(left = newChild)
   }
 }
+
+
+object LateralJoin {
+  /**
+   * A tag to identify if a Lateral Join is added by resolving table argument.
+   */
+  val BY_TABLE_ARGUMENT = TreeNodeTag[Unit]("by_table_argument")
+}
+
 
 /**
  * A logical plan for as-of join.

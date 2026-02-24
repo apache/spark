@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -22,7 +21,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
+from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
 
 
 class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
@@ -85,7 +84,10 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
 
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.first(numeric_only=None),
+            expected_error=ValueError if using_pandas3 else None,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
 
         pdf = pd.DataFrame(
@@ -109,7 +111,10 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
 
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.last(numeric_only=None),
+            expected_error=ValueError if using_pandas3 else None,
+        )
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
 
         pdf = pd.DataFrame(
@@ -150,12 +155,6 @@ class GroupbyStatAdvTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_stat_adv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

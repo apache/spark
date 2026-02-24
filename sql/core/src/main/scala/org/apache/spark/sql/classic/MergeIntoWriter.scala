@@ -57,13 +57,18 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
 
   /** @inheritdoc */
   def merge(): Unit = {
+    val qe = sparkSession.sessionState.executePlan(mergeCommand())
+    qe.assertCommandExecuted()
+  }
+
+  private[sql] def mergeCommand(): LogicalPlan = {
     if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
       throw new SparkRuntimeException(
         errorClass = "NO_MERGE_ACTION_SPECIFIED",
         messageParameters = Map.empty)
     }
 
-    val merge = MergeIntoTable(
+    MergeIntoTable(
       UnresolvedRelation(tableName).requireWritePrivileges(MergeIntoTable.getWritePrivileges(
         matchedActions, notMatchedActions, notMatchedBySourceActions)),
       logicalPlan,
@@ -72,8 +77,6 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
       notMatchedActions.toSeq,
       notMatchedBySourceActions.toSeq,
       schemaEvolutionEnabled)
-    val qe = sparkSession.sessionState.executePlan(merge)
-    qe.assertCommandExecuted()
   }
 
   override protected[sql] def insertAll(condition: Option[Column]): this.type = {

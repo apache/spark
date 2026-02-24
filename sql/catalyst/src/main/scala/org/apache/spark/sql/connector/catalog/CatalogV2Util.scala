@@ -22,12 +22,12 @@ import java.util.{Collections, Locale}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -59,7 +60,8 @@ private[sql] object CatalogV2Util {
       TableCatalog.PROP_PROVIDER,
       TableCatalog.PROP_OWNER,
       TableCatalog.PROP_EXTERNAL,
-      TableCatalog.PROP_IS_MANAGED_LOCATION)
+      TableCatalog.PROP_IS_MANAGED_LOCATION,
+      TableCatalog.PROP_TABLE_TYPE)
 
   /**
    * The list of reserved namespace properties, which can not be removed or changed directly by
@@ -72,6 +74,7 @@ private[sql] object CatalogV2Util {
    */
   val NAMESPACE_RESERVED_PROPERTIES =
     Seq(SupportsNamespaces.PROP_COMMENT,
+      SupportsNamespaces.PROP_COLLATION,
       SupportsNamespaces.PROP_LOCATION,
       SupportsNamespaces.PROP_OWNER)
 
@@ -276,16 +279,14 @@ private[sql] object CatalogV2Util {
           }
 
         case update: UpdateColumnDefaultValue =>
-          replace(schema, update.fieldNames.toImmutableArraySeq, field =>
-            // The new DEFAULT value string will be non-empty for any DDL commands that set the
-            // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
-            // enforced by the parser). On the other hand, commands that drop the default value such
-            // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
-            if (update.newDefaultValue().nonEmpty) {
-              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+          replace(schema, update.fieldNames.toImmutableArraySeq, field => {
+            val newDefault = update.newCurrentDefault()
+            if (newDefault != null) {
+              Some(field.withCurrentDefaultValue(newDefault.getSql))
             } else {
               Some(field.clearCurrentDefaultValue())
-            })
+            }
+          })
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames.toImmutableArraySeq, _ => None, delete.ifExists)
@@ -364,7 +365,7 @@ private[sql] object CatalogV2Util {
     }
     validateTableProviderForDefaultValue(
       newSchema, tableProvider, statementType, addNewColumnToExistingTable)
-    constantFoldCurrentDefaultsToExistDefaults(newSchema, statementType)
+    newSchema
   }
 
   private def replace(
@@ -497,6 +498,27 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
+  def isSameTable(
+      rel: DataSourceV2Relation,
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table): Boolean = {
+    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
+  }
+
+  def lookupCachedRelation(
+      cache: RelationCache,
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table,
+      conf: SQLConf): Option[DataSourceV2Relation] = {
+    val nameParts = ident.toQualifiedNameParts(catalog)
+    val cached = cache.lookup(nameParts, conf.resolver)
+    cached.collect {
+      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
+    }
+  }
+
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
@@ -565,12 +587,29 @@ private[sql] object CatalogV2Util {
       .asTableCatalog
   }
 
+  def toStructType(cols: Seq[MetadataColumn]): StructType = {
+    StructType(cols.map(toStructField))
+  }
+
+  private def toStructField(col: MetadataColumn): StructField = {
+    val metadata = Option(col.metadataInJSON).map(Metadata.fromJson).getOrElse(Metadata.empty)
+    var f = StructField(col.name, col.dataType, col.isNullable, metadata)
+    if (col.comment != null) {
+      f = f.withComment(col.comment)
+    }
+    f
+  }
+
+  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+    v2ColumnsToStructType(columns.toImmutableArraySeq)
+  }
+
   /**
    * Converts DS v2 columns to StructType, which encodes column comment and default value to
    * StructField metadata. This is mainly used to define the schema of v2 scan, w.r.t. the columns
    * of the v2 table.
    */
-  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+  def v2ColumnsToStructType(columns: Seq[Column]): StructType = {
     StructType(columns.map(v2ColumnToStructField))
   }
 
@@ -590,16 +629,41 @@ private[sql] object CatalogV2Util {
   // rule will check the special metadata and change the DML input plan to fill the default value.
   private def encodeDefaultValue(defaultValue: ColumnDefaultValue, f: StructField): StructField = {
     Option(defaultValue).map { default =>
-      // The "exist default" is used to back-fill the existing data when new columns are added, and
+      // The "exists default" is used to back-fill the existing data when new columns are added, and
       // should be a fixed value which was evaluated at the definition time. For example, if the
-      // default value is `current_date()`, the "exist default" should be the value of
+      // default value is `current_date()`, the "exists default" should be the value of
       // `current_date()` when the column was defined/altered, instead of when back-fall happens.
       // Note: the back-fill here is a logical concept. The data source can keep the existing
-      //       data unchanged and let the data reader to return "exist default" for missing
+      //       data unchanged and let the data reader to return "exists default" for missing
       //       columns.
-      val existingDefault = Literal(default.getValue.value(), default.getValue.dataType()).sql
-      f.withExistenceDefaultValue(existingDefault).withCurrentDefaultValue(default.getSql)
+      // The "exists default" may not be present if the data source has its own way for back-fill.
+      val existsDefault = extractExistsDefault(default)
+      val (sql, expr) = extractCurrentDefault(default)
+      var metadataBuilder = new MetadataBuilder().withMetadata(f.metadata)
+      existsDefault.foreach { ed =>
+        metadataBuilder = metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, ed)
+      }
+      val metadata = metadataBuilder
+        .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, sql, expr)
+        .build()
+      f.copy(metadata = metadata)
     }.getOrElse(f)
+  }
+
+  private def extractExistsDefault(default: ColumnDefaultValue): Option[String] = {
+    Option(default.getValue).map { literal =>
+      Literal(literal.value, literal.dataType).sql
+    }
+  }
+
+  private def extractCurrentDefault(default: ColumnDefaultValue): (String, Option[Expression]) = {
+    val expr = Option(default.getExpression).flatMap(V2ExpressionUtils.toCatalyst)
+    val sql = Option(default.getSql).orElse(expr.map(_.sql)).getOrElse {
+      throw SparkException.internalError(
+        s"Can't generate SQL for $default. The connector expression couldn't be " +
+        "converted to Catalyst and there is no provided SQL representation.")
+    }
+    (sql, expr)
   }
 
   /**
@@ -626,24 +690,26 @@ private[sql] object CatalogV2Util {
       }.build()
     }
 
-    val isDefaultColumn = f.getCurrentDefaultValue().isDefined &&
-      f.getExistenceDefaultValue().isDefined
+    val isDefaultColumn = f.getCurrentDefaultValue().isDefined
     val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
     val isIdentityColumn = IdentityColumn.isIdentityColumn(f)
     if (isDefaultColumn) {
       checkDefaultColumnConflicts(f)
 
-      val e = analyze(
-        f,
-        statementType = "Column analysis",
-        metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val existsDefault = if (f.getExistenceDefaultValue().isDefined) {
+        val e = analyze(
+          f,
+          statementType = "Column analysis",
+          metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-      assert(e.resolved && e.foldable,
-        "The existence default value must be a simple SQL string that is resolved and foldable, " +
-          "but got: " + f.getExistenceDefaultValue().get)
-
-      val defaultValue = new ColumnDefaultValue(
-        f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
+        assert(e.resolved && e.foldable,
+          "The existence default value must be a simple SQL string that is resolved and " +
+            "foldable, but got: " + f.getExistenceDefaultValue().get)
+        LiteralValue(e.eval(), f.dataType)
+      } else {
+        null
+      }
+      val defaultValue = new ColumnDefaultValue(f.getCurrentDefaultValue().get, existsDefault)
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment", CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull, defaultValue,

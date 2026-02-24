@@ -18,12 +18,14 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FILTER, PREDICATE}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BindReferences, EqualNullSafe, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, Length, LessThan, LessThanOrEqual, Literal, Or, Predicate, StartsWith}
+import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.columnar.{ColumnStatisticsSchema, PartitionStatistics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
@@ -57,6 +59,40 @@ trait CachedBatchSerializer extends Serializable {
    * @return True if columnar input can be supported, else false.
    */
   def supportsColumnarInput(schema: Seq[Attribute]): Boolean
+
+  /**
+   * Attempt to convert a query plan to its columnar equivalence for columnar caching.
+   * Called on the query plan that is about to be cached once [[supportsColumnarInput]] returns
+   * true on its output schema.
+   *
+   * The default implementation works by stripping the topmost columnar-to-row transition to
+   * expose the columnar-based plan to the serializer.
+   *
+   * @param plan The plan to convert.
+   * @return The output plan. Could either be a columnar plan if the input plan is convertible, or
+   *         the input plan unchanged if no viable conversion can be done.
+   */
+  @DeveloperApi
+  @Since("4.1.0")
+  def convertToColumnarPlanIfPossible(plan: SparkPlan): SparkPlan = plan match {
+    case gen: WholeStageCodegenExec =>
+      gen.child match {
+        case c2r: ColumnarToRowTransition =>
+          c2r.child match {
+            case ia: InputAdapter => ia.child
+            case _ => plan
+          }
+        case _ => plan
+      }
+    case c2r: ColumnarToRowTransition => // This matches when whole stage code gen is disabled.
+      c2r.child
+    case adaptive: AdaptiveSparkPlanExec =>
+      // If AQE is enabled for cached plan and table cache supports columnar in, we should mark
+      // `AdaptiveSparkPlanExec.supportsColumnar` as true to avoid inserting `ColumnarToRow`, so
+      // that `CachedBatchSerializer` can use `convertColumnarBatchToCachedBatch` to cache data.
+      adaptive.copy(supportsColumnar = true)
+    case _ => plan
+  }
 
   /**
    * Convert an `RDD[InternalRow]` into an `RDD[CachedBatch]` in preparation for caching the data.

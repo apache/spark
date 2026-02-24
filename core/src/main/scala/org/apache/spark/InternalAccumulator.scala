@@ -88,5 +88,7 @@ private[spark] object InternalAccumulator {
     val RECORDS_READ = INPUT_METRICS_PREFIX + "recordsRead"
   }
 
+  val COLLECT_METRICS_ACCUMULATOR = METRICS_PREFIX + "collectMetricsAccumulator"
+
   // scalastyle:on
 }

@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -39,9 +41,19 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
       val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
-      a.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
+      val deterministicAggregate = a.transformExpressions { case e =>
+        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
+
+      deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
+        throw SparkException.internalError(
+          msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
+            "grouping expression.",
+          context = expr.origin.getQueryContext,
+          summary = expr.origin.context.summary)
+      })
+
+      deterministicAggregate
 
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
     // and we want to retain them inside the aggregate functions.
@@ -57,7 +69,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
       val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
       }
       val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))

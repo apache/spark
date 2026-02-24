@@ -25,8 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.spark.internal.SparkLogger;
@@ -35,6 +33,7 @@ import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.sasl.SaslTimeoutException;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -131,7 +130,7 @@ public class RetryingBlockTransferor {
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
     this.retryWaitTime = conf.ioRetryWaitTimeMs();
-    this.outstandingBlocksIds = Sets.newLinkedHashSet();
+    this.outstandingBlocksIds = new LinkedHashSet<>();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
@@ -182,13 +181,13 @@ public class RetryingBlockTransferor {
     } catch (Exception e) {
       if (numRetries > 0) {
         logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
-          MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, blockIdsToTransfer.length),
-          MDC.of(LogKeys.NUM_RETRY$.MODULE$, numRetries));
+          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length),
+          MDC.of(LogKeys.NUM_RETRY, numRetries));
       } else {
         logger.error("Exception while beginning {} of {} outstanding blocks", e,
-          MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, blockIdsToTransfer.length));
+          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length));
       }
       if (shouldRetry(e) && initiateRetry(e)) {
         // successfully initiated a retry
@@ -216,11 +215,11 @@ public class RetryingBlockTransferor {
     currentListener = new RetryingBlockTransferListener();
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
-      MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-      MDC.of(LogKeys.NUM_RETRY$.MODULE$, retryCount),
-      MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
-      MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, outstandingBlocksIds.size()),
-      MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, retryWaitTime));
+      MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+      MDC.of(LogKeys.NUM_RETRY, retryCount),
+      MDC.of(LogKeys.MAX_ATTEMPTS, maxRetries),
+      MDC.of(LogKeys.NUM_BLOCKS, outstandingBlocksIds.size()),
+      MDC.of(LogKeys.RETRY_WAIT_TIME, retryWaitTime));
 
     try {
       executorService.execute(() -> {
@@ -247,7 +246,7 @@ public class RetryingBlockTransferor {
     // If this is a non SASL request failure, reduce earlier SASL failures from retryCount
     // since some subsequent SASL attempt was successful
     if (!isSaslTimeout && saslRetryCount > 0) {
-      Preconditions.checkState(retryCount >= saslRetryCount,
+      JavaUtils.checkState(retryCount >= saslRetryCount,
         "retryCount must be greater than or equal to saslRetryCount");
       retryCount -= saslRetryCount;
       saslRetryCount = 0;
@@ -282,7 +281,7 @@ public class RetryingBlockTransferor {
           // If there were SASL failures earlier, remove them from retryCount, as there was
           // a SASL success (and some other request post bootstrap was also successful).
           if (saslRetryCount > 0) {
-            Preconditions.checkState(retryCount >= saslRetryCount,
+            JavaUtils.checkState(retryCount >= saslRetryCount,
               "retryCount must be greater than or equal to saslRetryCount");
             retryCount -= saslRetryCount;
             saslRetryCount = 0;
@@ -311,9 +310,9 @@ public class RetryingBlockTransferor {
           } else {
             if (errorHandler.shouldLogError(exception)) {
               logger.error("Failed to {} block {}, and will not retry ({} retries)", exception,
-                MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-                MDC.of(LogKeys.BLOCK_ID$.MODULE$, blockId),
-                MDC.of(LogKeys.NUM_RETRY$.MODULE$,retryCount));
+                MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+                MDC.of(LogKeys.BLOCK_ID, blockId),
+                MDC.of(LogKeys.NUM_RETRY,retryCount));
             } else {
               logger.debug(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",

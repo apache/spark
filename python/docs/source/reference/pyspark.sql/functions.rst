@@ -253,6 +253,7 @@ Date and Timestamp Functions
     convert_timezone
     curdate
     current_date
+    current_time
     current_timestamp
     current_timezone
     date_add
@@ -279,6 +280,7 @@ Date and Timestamp Functions
     make_date
     make_dt_interval
     make_interval
+    make_time
     make_timestamp
     make_timestamp_ltz
     make_timestamp_ntz
@@ -297,7 +299,10 @@ Date and Timestamp Functions
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    time_diff
+    time_trunc
     to_date
+    to_time
     to_timestamp
     to_timestamp_ltz
     to_timestamp_ntz
@@ -308,7 +313,9 @@ Date and Timestamp Functions
     try_make_timestamp
     try_make_timestamp_ltz
     try_make_timestamp_ntz
+    try_to_time
     try_to_timestamp
+    try_to_date
     unix_date
     unix_micros
     unix_millis
@@ -451,6 +458,12 @@ Aggregate Functions
     histogram_numeric
     hll_sketch_agg
     hll_union_agg
+    kll_sketch_agg_bigint
+    kll_sketch_agg_double
+    kll_sketch_agg_float
+    kll_merge_agg_bigint
+    kll_merge_agg_float
+    kll_merge_agg_double
     kurtosis
     last
     last_value
@@ -485,6 +498,15 @@ Aggregate Functions
     string_agg_distinct
     sum
     sum_distinct
+    theta_intersection_agg
+    theta_sketch_agg
+    theta_union_agg
+    tuple_intersection_agg_double
+    tuple_intersection_agg_integer
+    tuple_sketch_agg_double
+    tuple_sketch_agg_integer
+    tuple_union_agg_double
+    tuple_union_agg_integer
     try_avg
     try_sum
     var_pop
@@ -619,8 +641,6 @@ Misc Functions
     current_database
     current_schema
     current_user
-    hll_sketch_estimate
-    hll_union
     input_file_block_length
     input_file_block_start
     input_file_name
@@ -637,12 +657,65 @@ Misc Functions
     uuid
     version
 
+Datasketch Functions
+--------------------
+.. autosummary::
+    :toctree: api/
+
+    hll_sketch_estimate
+    hll_union
+    kll_sketch_get_n_bigint
+    kll_sketch_get_n_double
+    kll_sketch_get_n_float
+    kll_sketch_get_quantile_bigint
+    kll_sketch_get_quantile_double
+    kll_sketch_get_quantile_float
+    kll_sketch_get_rank_bigint
+    kll_sketch_get_rank_double
+    kll_sketch_get_rank_float
+    kll_sketch_merge_bigint
+    kll_sketch_merge_double
+    kll_sketch_merge_float
+    kll_sketch_to_string_bigint
+    kll_sketch_to_string_double
+    kll_sketch_to_string_float
+    theta_difference
+    theta_intersection
+    theta_sketch_estimate
+    theta_union
+    tuple_difference_double
+    tuple_difference_integer
+    tuple_intersection_double
+    tuple_intersection_integer
+    tuple_sketch_estimate_double
+    tuple_sketch_estimate_integer
+    tuple_sketch_summary_double
+    tuple_sketch_summary_integer
+    tuple_sketch_theta_double
+    tuple_sketch_theta_integer
+    tuple_union_double
+    tuple_union_integer
+
+
+Geospatial ST Functions
+-----------------------
+.. autosummary::
+    :toctree: api/
+
+    st_asbinary
+    st_geogfromwkb
+    st_geomfromwkb
+    st_setsrid
+    st_srid
+
 
 UDF, UDTF and UDT
 -----------------
 .. autosummary::
     :toctree: api/
 
+    arrow_udf
+    arrow_udtf
     call_udf
     pandas_udf
     udf
@@ -665,6 +738,7 @@ Table-Valued Functions
     TableValuedFunction.json_tuple
     TableValuedFunction.posexplode
     TableValuedFunction.posexplode_outer
+    TableValuedFunction.python_worker_logs
     TableValuedFunction.range
     TableValuedFunction.sql_keywords
     TableValuedFunction.stack

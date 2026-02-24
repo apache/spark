@@ -49,6 +49,11 @@ class DDLParserSuite extends AnalysisTest {
           case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
           case _ => i
         }
+      case o: OverwriteByExpression =>
+        o.table match {
+          case u: UnresolvedRelation => o.copy(table = u.clearWritePrivileges)
+          case _ => o
+        }
     }
     comparePlans(parsed, expected, checkAnalysis = false)
   }
@@ -1763,6 +1768,112 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("insert table: REPLACE WHERE with BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byName(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE without BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  for {
+    isByName <- Seq(true, false)
+    userSpecifiedCols <- if (!isByName) {
+      Seq(Seq("a", "b"), Seq.empty)
+    } else {
+      Seq(Seq.empty)
+    }
+  } {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val userSpecifiedColsClause =
+      if (userSpecifiedCols.isEmpty) "" else userSpecifiedCols.mkString("(", ", ", ")")
+    val testMsg = s"isByName=$isByName, userSpecifiedColsClause=$userSpecifiedColsClause"
+
+    test(s"INSERT INTO with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = userSpecifiedCols,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true)
+      )
+    }
+
+    test(s"INSERT OVERWRITE (static) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.STATIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = userSpecifiedCols,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT OVERWRITE (dynamic) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
@@ -1912,8 +2023,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),
+          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
@@ -2484,7 +2595,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("DESCRIBE FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DESCRIBE FUNCTION", false, None)
+      UnresolvedFunctionName(name, "DESCRIBE FUNCTION")
     }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2501,15 +2612,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "REFRESH FUNCTION", true, None)
-    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(createFuncPlan(Seq("c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(createFuncPlan(Seq("b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {
@@ -2723,7 +2831,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN"),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None,
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
       AlterColumns(
@@ -2734,7 +2843,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("42")))))
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     // It is possible to pass an empty string default value using quotes.
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
@@ -2746,7 +2855,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("''")))))
+          Some(DefaultValueExpression(Literal(""), "''"))))))
     // It is not possible to pass an empty string default value without using quotes.
     // This results in a parsing error.
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
@@ -2772,7 +2881,8 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("")))))
+          None,
+          dropDefault = true))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
@@ -3138,7 +3248,7 @@ class DDLParserSuite extends AnalysisTest {
           nullable = false,
           comment = Some("a"),
           position = Some(UnresolvedFieldPosition(first())),
-          default = Some("'abc'")
+          default = Some(DefaultValueExpression(Literal("abc"), "'abc'"))
         )
       )
     )

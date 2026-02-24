@@ -25,21 +25,23 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
@@ -47,12 +49,13 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, PushedDownOperators}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources._
@@ -142,29 +145,26 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
         tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
-      val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, "CREATE TABLE")
 
-      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+      if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "generated columns")
       }
 
-      if (IdentityColumn.hasIdentityColumns(newSchema)) {
+      if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "identity columns")
       }
 
-      val newTableDesc = tableDesc.copy(schema = newSchema)
-      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _) if parts.isEmpty =>
+        parts, _, query, overwrite, false, _, _)
+        if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -175,8 +175,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(
-        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _)
+    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+        parts, _, query, overwrite, _, _, _)
         if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -294,42 +294,77 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   private def getStreamingRelation(
-      table: CatalogTable,
-      extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
+    table: CatalogTable,
+    extraOptions: CaseInsensitiveStringMap,
+    sourceIdentifyingName: StreamingSourceIdentifyingName
+  ): StreamingRelation = {
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
       SparkSession.active,
       className = table.provider.get,
       userSpecifiedSchema = Some(table.schema),
       options = dsOptions,
-      catalogTable = Some(table))
+      catalogTable = Some(table),
+      userSpecifiedStreamingSourceName = Some(sourceIdentifyingName))
     StreamingRelation(dataSource)
   }
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+        _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
-        _, _, _, _, _, _) =>
+        _, _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case append @ AppendData(
-        DataSourceV2Relation(
-          V1Table(table: CatalogTable), _, _, _, _), _, _, _, _, _) if !append.isByName =>
+        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _) if !append.isByName =>
       InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
 
-    case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
-      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+    // Skip streaming UnresolvedCatalogRelation here - they're handled by the
+    // NamedStreamingRelation case below to preserve the source identifying name.
+    case unresolvedCatalogRelation: UnresolvedCatalogRelation
+        if !unresolvedCatalogRelation.isStreaming =>
+      val result = resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      // We put the resolved relation into the [[AnalyzerBridgeState]] for
+      // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+      // relation metadata twice.
+      AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+        bridgeState.catalogRelationsWithResolvedMetadata.put(unresolvedCatalogRelation, result)
+      }
+      result
+
+    // Handle streaming UnresolvedCatalogRelation wrapped in NamedStreamingRelation
+    // to preserve the source identifying name. With resolveOperators (bottom-up), the child
+    // is processed first but doesn't match the case above due to the !isStreaming guard,
+    // so the NamedStreamingRelation case here can match.
+    // We pass the sourceIdentifyingName directly to getStreamingRelation.
+    case NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
+      getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
+
+    // Handle NamedStreamingRelation wrapping SubqueryAlias(UnresolvedCatalogRelation)
+    // - this happens when resolving streaming tables from catalogs where the table lookup
+    // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
+    case NamedStreamingRelation(
+        SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
+      val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
+      SubqueryAlias(alias, resolved)
+
+    // Fallback for streaming UnresolvedCatalogRelation that is NOT wrapped in
+    // NamedStreamingRelation (e.g., from .readStream.table() API path).
+    // The sourceIdentifyingName defaults to Unassigned.
+    case u: UnresolvedCatalogRelation if u.isStreaming =>
+      getStreamingRelation(u.tableMeta, u.options, Unassigned)
 
     case s @ StreamingRelationV2(
-        _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+        _, _, table, extraOptions, _, _, _,
+        Some(UnresolvedCatalogRelation(tableMeta, _, true)), name) =>
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      val v1Relation = getStreamingRelation(tableMeta, extraOptions)
+      val v1Relation = getStreamingRelation(tableMeta, extraOptions, name)
       if (table.isInstanceOf[SupportsRead]
           && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
         s.copy(v1Relation = Some(v1Relation))
@@ -349,8 +384,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       case UnresolvedCatalogRelation(tableMeta, _, false) =>
         DDLUtils.readHiveTable(tableMeta)
 
+      // For streaming, the sourceIdentifyingName defaults to Unassigned.
+      // Callers that have a specific sourceIdentifyingName should call
+      // getStreamingRelation directly instead of this method.
       case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-        getStreamingRelation(tableMeta, extraOptions)
+        getStreamingRelation(tableMeta, extraOptions, Unassigned)
     }
   }
 }
@@ -392,7 +430,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         l.stream,
@@ -467,7 +505,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
@@ -491,13 +529,22 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
+    }
+  }
+
+  def translateJoinType(joinType: JoinType): Option[V2JoinType] = {
+    joinType match {
+      case Inner => Some(V2JoinType.INNER_JOIN)
+      case LeftOuter => Some(V2JoinType.LEFT_OUTER_JOIN)
+      case RightOuter => Some(V2JoinType.RIGHT_OUTER_JOIN)
+      case _ => None
     }
   }
 

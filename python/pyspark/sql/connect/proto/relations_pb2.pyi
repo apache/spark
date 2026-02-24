@@ -108,6 +108,7 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -216,6 +217,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def lateral_join(self) -> global___LateralJoin: ...
     @property
+    def chunked_cached_local_relation(self) -> global___ChunkedCachedLocalRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -301,6 +304,7 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
+        chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -334,6 +338,8 @@ class Relation(google.protobuf.message.Message):
             b"cached_remote_relation",
             "catalog",
             b"catalog",
+            "chunked_cached_local_relation",
+            b"chunked_cached_local_relation",
             "co_group_map",
             b"co_group_map",
             "collect_metrics",
@@ -459,6 +465,8 @@ class Relation(google.protobuf.message.Message):
             b"cached_remote_relation",
             "catalog",
             b"catalog",
+            "chunked_cached_local_relation",
+            b"chunked_cached_local_relation",
             "co_group_map",
             b"co_group_map",
             "collect_metrics",
@@ -614,6 +622,7 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
+            "chunked_cached_local_relation",
             "fill_na",
             "drop_na",
             "replace",
@@ -707,28 +716,57 @@ class MlRelation(google.protobuf.message.Message):
 
     TRANSFORM_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
+    MODEL_SUMMARY_DATASET_FIELD_NUMBER: builtins.int
     @property
     def transform(self) -> global___MlRelation.Transform: ...
     @property
     def fetch(self) -> global___Fetch: ...
+    @property
+    def model_summary_dataset(self) -> global___Relation:
+        """(Optional) the dataset for restoring the model summary"""
     def __init__(
         self,
         *,
         transform: global___MlRelation.Transform | None = ...,
         fetch: global___Fetch | None = ...,
+        model_summary_dataset: global___Relation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "fetch", b"fetch", "ml_type", b"ml_type", "transform", b"transform"
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
+            "fetch",
+            b"fetch",
+            "ml_type",
+            b"ml_type",
+            "model_summary_dataset",
+            b"model_summary_dataset",
+            "transform",
+            b"transform",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_model_summary_dataset", b"_model_summary_dataset"],
+    ) -> typing_extensions.Literal["model_summary_dataset"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["ml_type", b"ml_type"]
     ) -> typing_extensions.Literal["transform", "fetch"] | None: ...
@@ -1123,6 +1161,7 @@ class Read(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
         PREDICATES_FIELD_NUMBER: builtins.int
+        SOURCE_NAME_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -1154,6 +1193,11 @@ class Read(google.protobuf.message.Message):
 
             This is only supported by the JDBC data source.
             """
+        source_name: builtins.str
+        """(Optional) A user-provided name for the streaming source.
+        This name is used in checkpoint metadata and enables stable checkpoint locations
+        for source evolution.
+        """
         def __init__(
             self,
             *,
@@ -1162,6 +1206,7 @@ class Read(google.protobuf.message.Message):
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
             predicates: collections.abc.Iterable[builtins.str] | None = ...,
+            source_name: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -1170,10 +1215,14 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -1183,6 +1232,8 @@ class Read(google.protobuf.message.Message):
                 b"_format",
                 "_schema",
                 b"_schema",
+                "_source_name",
+                b"_source_name",
                 "format",
                 b"format",
                 "options",
@@ -1193,6 +1244,8 @@ class Read(google.protobuf.message.Message):
                 b"predicates",
                 "schema",
                 b"schema",
+                "source_name",
+                b"source_name",
             ],
         ) -> None: ...
         @typing.overload
@@ -1203,6 +1256,10 @@ class Read(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
         ) -> typing_extensions.Literal["schema"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_source_name", b"_source_name"]
+        ) -> typing_extensions.Literal["source_name"] | None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
@@ -2055,7 +2112,9 @@ class LocalRelation(google.protobuf.message.Message):
 global___LocalRelation = LocalRelation
 
 class CachedLocalRelation(google.protobuf.message.Message):
-    """A local relation that has been cached already."""
+    """A local relation that has been cached already.
+    CachedLocalRelation doesn't support LocalRelations of size over 2GB.
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2070,6 +2129,51 @@ class CachedLocalRelation(google.protobuf.message.Message):
     def ClearField(self, field_name: typing_extensions.Literal["hash", b"hash"]) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
+
+class ChunkedCachedLocalRelation(google.protobuf.message.Message):
+    """A local relation that has been cached already."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATAHASHES_FIELD_NUMBER: builtins.int
+    SCHEMAHASH_FIELD_NUMBER: builtins.int
+    @property
+    def dataHashes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) A list of sha-256 hashes for representing LocalRelation.data.
+        Data is serialized in Arrow IPC streaming format, each batch is cached on the server as
+        a separate artifact. Each hash represents one batch stored on the server.
+        Hashes are hex-encoded strings (e.g., "a3b2c1d4...").
+        """
+    schemaHash: builtins.str
+    """(Optional) A sha-256 hash of the serialized LocalRelation.schema.
+    Scala clients always provide the schema, Python clients can omit it.
+    Hash is a hex-encoded string (e.g., "a3b2c1d4...").
+    """
+    def __init__(
+        self,
+        *,
+        dataHashes: collections.abc.Iterable[builtins.str] | None = ...,
+        schemaHash: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_schemaHash", b"_schemaHash", "schemaHash", b"schemaHash"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_schemaHash", b"_schemaHash", "dataHashes", b"dataHashes", "schemaHash", b"schemaHash"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schemaHash", b"_schemaHash"]
+    ) -> typing_extensions.Literal["schemaHash"] | None: ...
+
+global___ChunkedCachedLocalRelation = ChunkedCachedLocalRelation
 
 class CachedRemoteRelation(google.protobuf.message.Message):
     """Represents a remote relation that has been cached on server."""

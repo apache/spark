@@ -65,6 +65,7 @@ SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
 SQLTableUDFType = Literal[300]
 SQLArrowTableUDFType = Literal[301]
+SQLArrowUDTFType = Literal[302]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...
@@ -84,4 +85,4 @@ class UserDefinedFunctionLike(Protocol):
     def __call__(self, *args: ColumnOrName) -> Column: ...
     def asNondeterministic(self) -> UserDefinedFunctionLike: ...
 
-ProfileResults = Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]
+ProfileResults = Dict[Union[int, str], Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]

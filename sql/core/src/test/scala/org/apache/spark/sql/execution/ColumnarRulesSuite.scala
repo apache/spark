@@ -21,11 +21,10 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
+class ColumnarRulesSuite extends SharedSparkSession {
 
   test("Idempotency of columnar rules - RowToColumnar/ColumnarToRow") {
     val rules = ApplyColumnarRulesAndInsertTransitions(

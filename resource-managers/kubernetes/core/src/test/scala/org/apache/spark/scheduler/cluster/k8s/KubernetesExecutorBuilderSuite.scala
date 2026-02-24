@@ -42,6 +42,10 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_EXECUTOR_SCHEDULER_NAME
   }
 
+  override protected def excludedFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_POD_EXCLUDED_FEATURE_STEPS
+  }
+
   override protected def userFeatureStepsConf: ConfigEntry[_] = {
     Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS
   }

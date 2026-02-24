@@ -207,7 +207,7 @@ class IndexingLocMixin:
     def test_loc_timestamp_str(self):
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="H", periods=100),
+            index=pd.date_range("2011-01-01", freq="h", periods=100),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -223,7 +223,7 @@ class IndexingLocMixin:
 
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="M", periods=100),
+            index=pd.date_range("2011-01-01", freq="ME", periods=100),
         )
         psdf = ps.from_pandas(pdf)
         # TODO?: self.assert_eq(pdf.loc['2011-01'], psdf.loc['2011-01'])
@@ -383,12 +383,6 @@ class IndexingLocTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.indexes.test_indexing_loc import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

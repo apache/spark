@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-import unittest
+import json
 
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LinearSVC
@@ -42,20 +42,36 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         model = svc.fit(df)
 
-        # model is cached in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 1)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
-        self.assertTrue(
-            "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
+        self.assertEqual(
+            json.loads(cache_info[0])["class"],
+            "org.apache.spark.ml.classification.LinearSVCModel",
             cache_info,
         )
+        # the `model._summary` holds another ref to the remote model.
+        assert model._java_obj._ref_count == 2
+
+        model_size = spark.client._query_model_size(model._java_obj.ref_id)
+        assert isinstance(model_size, int) and model_size > 0
+
+        model2 = model.copy()
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 1)
+        assert model._java_obj._ref_count == 3
+        assert model2._java_obj._ref_count == 3
 
         # explicitly delete the model
         del model
 
-        # model is removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 1)
+        # Note the copied model 'model2' also holds the `_summary` object,
+        # and the `_summary` object holds another ref to the remote model.
+        # so the ref count is 2.
+        assert model2._java_obj._ref_count == 2
+
+        del model2
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 
@@ -81,41 +97,28 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         model3 = svc.fit(df)
         self.assertEqual(len([model1, model2, model3]), 3)
 
-        # all 3 models are cached in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 3)
         self.assertTrue(
             all(
-                "obj: class org.apache.spark.ml.classification.LinearSVCModel" in c
+                json.loads(c)["class"] == "org.apache.spark.ml.classification.LinearSVCModel"
                 for c in cache_info
             ),
             cache_info,
         )
 
-        # explicitly delete the model1
         del model1
 
-        # model1 is removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 2)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 2)
 
         spark.client._cleanup_ml_cache()
 
-        # All models are removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_cache import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

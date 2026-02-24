@@ -36,7 +36,7 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
@@ -423,7 +423,10 @@ abstract class RDD[T: ClassTag](
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.map(cleanF))
+    new MapPartitionsRDD[U, T](
+      this,
+      (_, _, iter) => iter.map(cleanF),
+      preservesPartitionSizes = true)
   }
 
   /**
@@ -878,16 +881,22 @@ abstract class RDD[T: ClassTag](
    * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
    *                         sensitive, it may return totally different result when the input order
    *                         is changed. Mostly stateful functions are order-sensitive.
+   * @param preservesPartitionSizes Whether the input function preserves the number of rows in each
+   *                                partition. This is true for 1:1 element mappings like `map`.
+   *                                Used to optimize `RDD.zipWithIndex` by counting rows on a
+   *                                cheaper ancestor RDD instead of the immediate parent.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
-      isOrderSensitive: Boolean = false): RDD[U] = withScope {
+      isOrderSensitive: Boolean = false,
+      preservesPartitionSizes: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
-      isOrderSensitive = isOrderSensitive)
+      isOrderSensitive = isOrderSensitive,
+      preservesPartitionSizes = preservesPartitionSizes)
   }
 
   /**
@@ -928,7 +937,14 @@ abstract class RDD[T: ClassTag](
   @Since("3.5.0")
   def mapPartitionsWithEvaluator[U: ClassTag](
       evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
-    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory)
+    mapPartitionsWithEvaluator(evaluatorFactory, false)
+  }
+
+  private[spark] def mapPartitionsWithEvaluator[U: ClassTag](
+      evaluatorFactory: PartitionEvaluatorFactory[T, U],
+      preservesPartitionSizes: Boolean): RDD[U] = withScope {
+    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory,
+      preservesPartitionSizes = preservesPartitionSizes)
   }
 
   /**
@@ -1773,7 +1789,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD is reliably checkpointed and materialized.
    */
-  private[rdd] def isReliablyCheckpointed: Boolean = {
+  private[spark] def isReliablyCheckpointed: Boolean = {
     checkpointData match {
       case Some(reliable: ReliableRDDCheckpointData[_]) if reliable.isCheckpointed => true
       case _ => false
@@ -2016,7 +2032,7 @@ abstract class RDD[T: ClassTag](
     def firstDebugString(rdd: RDD[_]): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
-      val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
+      val nextPrefix = " ".repeat(leftOffset) + "|" + " ".repeat(partitionStr.length - leftOffset)
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$partitionStr $desc"
@@ -2030,7 +2046,7 @@ abstract class RDD[T: ClassTag](
       val nextPrefix = (
         thisPrefix
         + (if (isLastChild) "  " else "| ")
-        + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
+        + (" ".repeat(leftOffset)) + "|" + (" ".repeat(partitionStr.length - leftOffset)))
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"

@@ -23,6 +23,9 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
 
 class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
+  override val validConstraintCharacteristics =
+    super.validConstraintCharacteristics ++ notEnforcedConstraintCharacteristics
+
   test("Create table with unnamed unique constraint") {
     Seq(
       "CREATE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet",

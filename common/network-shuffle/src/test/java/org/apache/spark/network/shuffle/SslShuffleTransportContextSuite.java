@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.collect.ImmutableMap;
+import java.util.Map;
 
 import org.apache.spark.network.ssl.SslSampleConfigs;
 import org.apache.spark.network.util.TransportConf;
@@ -29,7 +29,7 @@ public class SslShuffleTransportContextSuite extends ShuffleTransportContextSuit
     return new TransportConf(
       "shuffle",
       SslSampleConfigs.createDefaultConfigProviderForRpcNamespaceWithAdditionalEntries(
-        ImmutableMap.of(
+        Map.of(
           "spark.shuffle.server.finalizeShuffleMergeThreadsPercent",
           separateFinalizeThread ? "1" : "0")
       )

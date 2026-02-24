@@ -2011,6 +2011,37 @@ abstract class Dataset[T] extends Serializable {
   def exceptAll(other: Dataset[T]): Dataset[T]
 
   /**
+   * Returns a new `Dataset` by appending a column containing consecutive 0-based Long indices,
+   * similar to `RDD.zipWithIndex()`.
+   *
+   * The index column is appended as the last column of the resulting `DataFrame`.
+   *
+   * @group untypedrel
+   * @since 4.2.0
+   */
+  def zipWithIndex(): DataFrame = zipWithIndex("index")
+
+  /**
+   * Returns a new `Dataset` by appending a column containing consecutive 0-based Long indices,
+   * similar to `RDD.zipWithIndex()`.
+   *
+   * The index column is appended as the last column of the resulting `DataFrame`.
+   *
+   * @note
+   *   If a column with `indexColName` already exists in the schema, the resulting `DataFrame`
+   *   will have duplicate column names. Selecting the duplicate column by name will throw
+   *   `AMBIGUOUS_REFERENCE`, and writing the `DataFrame` will throw `COLUMN_ALREADY_EXISTS`.
+   *
+   * @param indexColName
+   *   The name of the index column to append.
+   * @group untypedrel
+   * @since 4.2.0
+   */
+  def zipWithIndex(indexColName: String): DataFrame = {
+    select(col("*"), Column.internalFn("distributed_sequence_id").alias(indexColName))
+  }
+
+  /**
    * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement), using a
    * user-supplied seed.
    *
@@ -2968,6 +2999,20 @@ abstract class Dataset[T] extends Serializable {
   }
 
   /**
+   * Repartition the Dataset into the given number of partitions using the specified partition ID
+   * expression.
+   *
+   * @param numPartitions
+   *   the number of partitions to use.
+   * @param partitionIdExpr
+   *   the expression to be used as the partition ID. Must be an integer type.
+   *
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T]
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in a
@@ -3004,6 +3049,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3012,6 +3059,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3023,6 +3072,8 @@ abstract class Dataset[T] extends Serializable {
    * @param newLevel
    *   One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER`,
    *   `DISK_ONLY`, `MEMORY_ONLY_2`, `MEMORY_AND_DISK_2`, etc.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3042,6 +3093,9 @@ abstract class Dataset[T] extends Serializable {
    *
    * @param blocking
    *   Whether to block until all blocks are deleted.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */
@@ -3051,6 +3105,9 @@ abstract class Dataset[T] extends Serializable {
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
    * will not un-persist any cached data that is built upon this Dataset.
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */

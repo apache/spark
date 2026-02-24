@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog}
@@ -54,27 +53,8 @@ class InMemoryTableMetricSuite
         Array(Column.create("i", IntegerType)),
         Array.empty[Transform], Collections.emptyMap[String, String])
 
-      func("testcat.table_name")
+      val metrics = runAndFetchMetrics(func("testcat.table_name"))
 
-      // Wait until the new execution is started and being tracked.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsCount() >= oldCount)
-      }
-
-      // Wait for listener to finish computing the metrics for the execution.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsList().nonEmpty &&
-          statusStore.executionsList().last.metricValues != null)
-      }
-
-      val exec = statusStore.executionsList().last
-      val execId = exec.executionId
-      val sqlMetrics = exec.metrics.map { metric =>
-        metric.accumulatorId -> metric.name
-      }.toMap
-      val metrics = statusStore.executionMetrics(execId).map { case (k, v) =>
-        sqlMetrics(k) -> v
-      }
       checker(metrics)
     }
   }

@@ -64,7 +64,7 @@ class _LogisticRegressionParams(
     """
 
     def __init__(self, *args: Any):
-        super(_LogisticRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxIter=100,
             tol=1e-6,
@@ -215,7 +215,7 @@ class LogisticRegression(
             seed: int = 0,
         )
         """
-        super(LogisticRegression, self).__init__()
+        super().__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
 

@@ -495,6 +495,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // If we have consumed all the tokens in the format string, but characters remain unconsumed
       // in the input string, then the input string does not match the format string.
       formatMatchFailure(input, numberFormat)
+    } else if (parsedBeforeDecimalPoint.isEmpty && parsedAfterDecimalPoint.isEmpty) {
+      // If no digits were collected (e.g. input was all whitespace), treat as format match failure.
+      formatMatchFailure(input, numberFormat)
     } else {
       parseResultToDecimalValue(negateResult)
     }
@@ -619,7 +622,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // digits as the scale. This is necessary because we must determine the scale from the format
     // string alone but each input string may include a variable number of digits after the decimal
     // point.
-    val extraZeros = "0" * (scale - parsedAfterDecimalPoint.length)
+    val extraZeros = "0".repeat(scale - parsedAfterDecimalPoint.length)
     val afterDecimalPadded = parsedAfterDecimalPoint.toString + extraZeros
     val prefix = if (negateResult) "-" else ""
     val suffix = if (afterDecimalPadded.nonEmpty) "." + afterDecimalPadded else ""
@@ -763,11 +766,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // than specified in the format string, this is an overflow.
     if (numFormatDigitsBeforeDecimalPoint < beforeDecimalPoint.length ||
       numFormatDigitsAfterDecimalPoint < afterDecimalPoint.length) {
-      beforeDecimalPoint = "#" * numFormatDigitsBeforeDecimalPoint
-      afterDecimalPoint = "#" * numFormatDigitsAfterDecimalPoint
+      beforeDecimalPoint = "#".repeat(numFormatDigitsBeforeDecimalPoint)
+      afterDecimalPoint = "#".repeat(numFormatDigitsAfterDecimalPoint)
     }
-    val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
-    val trailingZeros = "0" * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
+    val leadingSpaces = " ".repeat(numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
+    val trailingZeros = "0".repeat(numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
     (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingZeros)
   }
 

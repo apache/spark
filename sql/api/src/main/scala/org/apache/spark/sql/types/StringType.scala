@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.{JString, JValue}
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SqlApiConf
@@ -80,20 +78,13 @@ class StringType private[sql] (
    * `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
-    else s"string collate $collationName"
+    s"string collate $collationName"
 
   override def toString: String =
-    if (isUTF8BinaryCollation) "StringType"
-    else s"StringType($collationName)"
+    s"StringType($collationName)"
 
   private[sql] def collationName: String =
     CollationFactory.fetchCollation(collationId).collationName
-
-  // Due to backwards compatibility and compatibility with other readers
-  // all string types are serialized in json as regular strings and
-  // the collation information is written to struct field metadata
-  override def jsonValue: JValue = JString("string")
 
   override def equals(obj: Any): Boolean = {
     obj match {
@@ -126,6 +117,10 @@ case object StringType
     val collationId = CollationFactory.collationNameToId(collation)
     new StringType(collationId)
   }
+
+  override def typeName: String = "string"
+
+  override def toString: String = "StringType"
 }
 
 /**
@@ -184,8 +179,8 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   }
 
   def removeCollation(s: StringType): StringType = s match {
-    case CharType(length) => CharType(length)
-    case VarcharType(length) => VarcharType(length)
+    case c: CharType => CharType(c.length)
+    case v: VarcharType => VarcharType(v.length)
     case _: StringType => StringType
   }
 }

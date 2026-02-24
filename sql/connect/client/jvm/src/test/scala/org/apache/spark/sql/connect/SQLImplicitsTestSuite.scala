@@ -23,19 +23,18 @@ import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.arrow.memory.RootAllocator
-import org.apache.commons.lang3.SystemUtils
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{Column, Encoder, SaveMode}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer}
 import org.apache.spark.sql.connect.test.ConnectFunSuite
+import org.apache.spark.util.SparkSystemUtils
 
 /**
  * Test suite for SQL implicits.
  */
-class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class SQLImplicitsTestSuite extends ConnectFunSuite {
   private var session: SparkSession = _
 
   override protected def beforeAll(): Unit = {
@@ -173,7 +172,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     // Spark always converts them to microseconds, this will cause the
     // test fail when using Java 17 on Linux, so add `truncatedTo(ChronoUnit.MICROS)` when
     // testing on Linux using Java 17 to ensure the accuracy of input data is microseconds.
-    if (SystemUtils.IS_OS_LINUX) {
+    if (SparkSystemUtils.isLinux) {
       testImplicit(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS))
       testImplicit(Instant.now().truncatedTo(ChronoUnit.MICROS))
       testImplicit(Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))

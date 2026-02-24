@@ -22,7 +22,7 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.internal.SQLConf
@@ -47,10 +47,39 @@ private case class ReportActiveInstance(
     providerIdsToCheck: Seq[StateStoreProviderId])
   extends StateStoreCoordinatorMessage
 
+/**
+ * Response from coordinator for ReportActiveInstance
+ * @param shouldForceSnapshotUpload Whether the current provider should force a snapshot
+ * upload on next commit
+ * @param providerIdsToUnload The list of provider IDs that should be unloaded from the executor.
+ */
+case class ReportActiveInstanceResponse(
+    shouldForceSnapshotUpload: Boolean,
+    providerIdsToUnload: Seq[StateStoreProviderId])
+  extends Serializable
+
 private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
   extends StateStoreCoordinatorMessage
 
 private case class GetLocation(storeId: StateStoreProviderId)
+  extends StateStoreCoordinatorMessage
+
+/** Report that a StateStore has committed for tracking purposes */
+private case class ReportStateStoreCommit(
+    storeId: StateStoreProviderId,
+    version: Long,
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME)
+  extends StateStoreCoordinatorMessage
+
+/** Start tracking StateStore commits for a batch */
+private case class StartStateStoreCommitTrackingForBatch(
+    runId: UUID,
+    batchId: Long,
+    expectedStores: Map[Long, Map[String, Int]]) // operatorId -> (storeName -> numPartitions)
+  extends StateStoreCoordinatorMessage
+
+/** Validate that all expected StateStores have committed for a batch */
+private case class ValidateStateStoreCommitForBatch(runId: UUID, batchId: Long)
   extends StateStoreCoordinatorMessage
 
 private case class DeactivateInstances(runId: UUID)
@@ -95,6 +124,14 @@ private case class GetLaggingStoresForTesting(
     isTerminatingTrigger: Boolean)
   extends StateStoreCoordinatorMessage
 
+/**
+ * Message used for testing.
+ * This message is used to check if a specific state store provider should force
+ * snapshot upload based on current lag status, without modifying coordinator state.
+ */
+private case class CheckIfShouldForceSnapshotUploadForTesting(providerId: StateStoreProviderId)
+  extends StateStoreCoordinatorMessage
+
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
@@ -137,8 +174,8 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
       stateStoreProviderId: StateStoreProviderId,
       host: String,
       executorId: String,
-      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
-    rpcEndpointRef.askSync[Seq[StateStoreProviderId]](
+      otherProviderIds: Seq[StateStoreProviderId]): ReportActiveInstanceResponse = {
+    rpcEndpointRef.askSync[ReportActiveInstanceResponse](
       ReportActiveInstance(stateStoreProviderId, host, executorId, otherProviderIds))
   }
 
@@ -176,6 +213,29 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
       LogLaggingStateStores(queryRunId, latestVersion, isTerminatingTrigger))
   }
 
+
+  /** Start tracking StateStore commits for a batch */
+  private[sql] def startStateStoreCommitTrackingForBatch(
+      runId: UUID,
+      batchId: Long,
+      expectedStores: Map[Long, Map[String, Int]]): Unit = {
+    rpcEndpointRef.askSync[Unit](
+      StartStateStoreCommitTrackingForBatch(runId, batchId, expectedStores))
+  }
+
+  /** Report that a StateStore has committed */
+  private[sql] def reportStateStoreCommit(
+      storeId: StateStoreProviderId,
+      version: Long,
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): Unit = {
+    rpcEndpointRef.askSync[Unit](ReportStateStoreCommit(storeId, version, storeName))
+  }
+
+  /** Validate that all expected StateStores have committed for a batch */
+  private[sql] def validateStateStoreCommitForBatch(runId: UUID, batchId: Long): Unit = {
+    rpcEndpointRef.askSync[Unit](ValidateStateStoreCommitForBatch(runId, batchId))
+  }
+
   /**
    * Endpoint used for testing.
    * Get the latest snapshot version uploaded for a state store.
@@ -199,6 +259,17 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
     )
   }
 
+  /**
+   * Endpoint used for testing.
+   * Check if a specific state store should force snapshot upload based on current lag status.
+   * This is a read-only operation that does not modify coordinator state.
+   */
+  private[state] def checkIfShouldForceSnapshotUploadForTesting(
+      providerId: StateStoreProviderId): Boolean = {
+    rpcEndpointRef.askSync[Boolean](
+      CheckIfShouldForceSnapshotUploadForTesting(providerId))
+  }
+
   private[state] def stop(): Unit = {
     rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
@@ -214,6 +285,9 @@ private class StateStoreCoordinator(
     val sqlConf: SQLConf)
   extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
+  // Key: queryRunId -> Value: HashSet of state store provider IDs
+  private val snapshotUploadLaggingStores =
+    new mutable.HashMap[UUID, mutable.HashSet[StateStoreProviderId]]
 
   // Stores the latest snapshot upload event for a specific state store
   private val stateStoreLatestUploadedSnapshot =
@@ -222,6 +296,10 @@ private class StateStoreCoordinator(
   // Default snapshot upload event to use when a provider has never uploaded a snapshot
   private val defaultSnapshotUploadEvent = SnapshotUploadEvent(0, 0)
 
+  // Tracking structure for StateStore commits per batch
+  // Key: (runId, batchId) -> Value: CommitTracker
+  private val batchCommitTrackers = new mutable.HashMap[(UUID, Long), BatchCommitTracker]
+
   // Stores the last timestamp in milliseconds for each queryRunId indicating when the
   // coordinator did a report on instances lagging behind on snapshot uploads.
   // The initial timestamp is defaulted to 0 milliseconds.
@@ -229,6 +307,9 @@ private class StateStoreCoordinator(
 
   private def shouldCoordinatorReportSnapshotLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  private def forceSnapshotUploadOnLag: Boolean =
+    sqlConf.stateStoreForceSnapshotUploadOnLag
 
   private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
@@ -245,7 +326,11 @@ private class StateStoreCoordinator(
         // This provider is is already loaded in other executor. Marked it to unload.
         providerLoc.map(_ != taskLocation).getOrElse(false)
       }
-      context.reply(providerIdsToUnload)
+      // Check if the store is lagging behind in snapshot uploads
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(id)
+      context.reply(ReportActiveInstanceResponse(
+        shouldForceSnapshotUpload,
+        providerIdsToUnload))
 
     case VerifyIfInstanceActive(id, execId) =>
       val response = instances.get(id) match {
@@ -264,10 +349,16 @@ private class StateStoreCoordinator(
       val storeIdsToRemove =
         instances.keys.filter(_.queryRunId == runId).toSeq
       instances --= storeIdsToRemove
+
+      val runIdsToRemove = batchCommitTrackers.keys.filter(_._1 == runId)
+      batchCommitTrackers --= runIdsToRemove
+
       // Also remove these instances from snapshot upload event tracking
       stateStoreLatestUploadedSnapshot --= storeIdsToRemove
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
+      // Remove the corresponding run id entries for snapshot upload lagging stores
+      snapshotUploadLaggingStores.remove(runId)
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -289,6 +380,11 @@ private class StateStoreCoordinator(
       if (shouldCoordinatorReportSnapshotLag) {
         val laggingStores =
           findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
+        if (forceSnapshotUploadOnLag) {
+          // findLaggingStores will always get a complete list of lagging stores of a query run.
+          // Therefore, we can assign the new set to the snapshotUploadLaggingStores map.
+          snapshotUploadLaggingStores.put(queryRunId, mutable.HashSet(laggingStores: _*))
+        }
         if (laggingStores.nonEmpty) {
           logWarning(
             log"StateStoreCoordinator Snapshot Lag Report for " +
@@ -336,6 +432,49 @@ private class StateStoreCoordinator(
       }
       context.reply(true)
 
+    case StartStateStoreCommitTrackingForBatch(runId, batchId, expectedStores) =>
+      val key = (runId, batchId)
+      if (batchCommitTrackers.contains(key)) {
+        context.sendFailure(new IllegalStateException(
+          s"Batch commit tracker already exists for runId=$runId, batchId=$batchId"))
+      } else {
+        batchCommitTrackers.put(key, new BatchCommitTracker(runId, batchId, expectedStores))
+        logInfo(s"Started tracking commits for batch $batchId with " +
+          s"${expectedStores.values.map(_.values.sum).sum} expected stores")
+        context.reply(())
+      }
+
+    case ReportStateStoreCommit(storeId, version, storeName) =>
+      // StateStore version = batchId + 1, so we need to adjust
+      val batchId = version - 1
+      val key = (storeId.queryRunId, batchId)
+      batchCommitTrackers.get(key) match {
+        case Some(tracker) =>
+          tracker.recordCommit(storeId, storeName)
+          context.reply(())
+        case None =>
+          // In case no commit tracker for this batch was found
+          context.reply(())
+      }
+
+    case ValidateStateStoreCommitForBatch(runId, batchId) =>
+      val key = (runId, batchId)
+      batchCommitTrackers.get(key) match {
+        case Some(tracker) =>
+          try {
+            tracker.validateAllCommitted()
+            batchCommitTrackers.remove(key) // Clean up after validation
+            context.reply(())
+          } catch {
+            case e: StateStoreCommitValidationFailed =>
+              batchCommitTrackers.remove(key) // Clean up even on failure
+              context.sendFailure(e)
+          }
+        case None =>
+          context.sendFailure(new IllegalStateException(
+            s"No commit tracker found for runId=$runId, batchId=$batchId"))
+      }
+
     case GetLatestSnapshotVersionForTesting(providerId) =>
       val version = stateStoreLatestUploadedSnapshot.get(providerId).map(_.version)
       logDebug(s"Got latest snapshot version of the state store $providerId: $version")
@@ -353,10 +492,21 @@ private class StateStoreCoordinator(
         context.reply(Seq.empty)
       }
 
+    case CheckIfShouldForceSnapshotUploadForTesting(providerId) =>
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(providerId)
+      context.reply(shouldForceSnapshotUpload)
+
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
       logInfo("StateStoreCoordinator stopped")
       context.reply(true)
+  }
+
+  private def shouldForceSnapshotUploadForProvider(
+      providerId: StateStoreProviderId): Boolean = {
+    forceSnapshotUploadOnLag && snapshotUploadLaggingStores
+      .getOrElse(providerId.queryRunId, mutable.HashSet.empty)
+      .contains(providerId)
   }
 
   private def findLaggingStores(
@@ -399,6 +549,55 @@ private class StateStoreCoordinator(
         // is not fully dependent on the maintenance interval.
         isBehindOnVersions && (isTerminatingTrigger || isBehindOnTime)
       }.toSeq
+  }
+}
+
+/**
+ * Tracks StateStore commits for a batch to ensure all expected stores commit
+ */
+private class BatchCommitTracker(
+    runId: UUID,
+    batchId: Long,
+    expectedStores: Map[Long, Map[String, Int]]) extends Logging {
+
+  // Track committed stores: (operatorId, partitionId, storeName) -> committed
+  private val committedStores = new mutable.HashSet[(Long, Int, String)]()
+
+  def recordCommit(storeId: StateStoreProviderId, storeName: String): Unit = {
+    val key = (storeId.storeId.operatorId, storeId.storeId.partitionId, storeName)
+    committedStores.add(key)
+    logDebug(s"Recorded commit for store $storeId with name $storeName for batch $batchId")
+  }
+
+  def validateAllCommitted(): Unit = {
+    val missingCommits = new mutable.ArrayBuffer[String]()
+
+    expectedStores.foreach { case (operatorId, storeMap) =>
+      storeMap.foreach { case (storeName, numPartitions) =>
+        for (partitionId <- 0 until numPartitions) {
+          val key = (operatorId, partitionId, storeName)
+          if (!committedStores.contains(key)) {
+            missingCommits += s"(operator=$operatorId, partition=$partitionId, store=$storeName)"
+          }
+        }
+      }
+    }
+
+    if (missingCommits.nonEmpty) {
+      val totalExpected = expectedStores.values.map(_.values.sum).sum
+      val errorMsg = s"Not all StateStores committed for batch $batchId. " +
+        s"Expected $totalExpected commits but got ${committedStores.size}. " +
+        s"Missing commits: ${missingCommits.mkString(", ")}"
+      logError(errorMsg)
+      throw StateStoreErrors.stateStoreCommitValidationFailed(
+        batchId,
+        totalExpected,
+        committedStores.size,
+        missingCommits.mkString(", ")
+      )
+    }
+
+    logInfo(s"All ${committedStores.size} StateStores successfully committed for batch $batchId")
   }
 }
 

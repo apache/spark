@@ -36,7 +36,6 @@ from py4j.java_collections import JavaMap
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike
-    from py4j.java_collections import JavaMap
 
 __all__ = [
     "Normalizer",

@@ -22,7 +22,7 @@ import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.operation.GetCatalogsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 
@@ -39,14 +39,10 @@ private[hive] class SparkGetCatalogsOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     val logMsg = "Listing catalogs"
     logInfo(log"Listing catalogs with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,

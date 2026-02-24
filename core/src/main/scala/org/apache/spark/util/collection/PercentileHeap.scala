@@ -38,7 +38,10 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
   // overhead (>2x slower on insert). Instead we negate values when we offer/poll/peek.
   private[this] val smallHeap = new PriorityQueue[Double]
 
-  def isEmpty(): Boolean = smallHeap.isEmpty && largeHeap.isEmpty
+  // SPARK-52418: Add `noElements` to avoid repetitive calculations of `isEmpty()`.
+  private[this] var noElements = true
+
+  def isEmpty(): Boolean = noElements
 
   def size(): Int = smallHeap.size + largeHeap.size
 
@@ -54,6 +57,7 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
   def insert(x: Double): Unit = {
     if (isEmpty()) {
       largeHeap.offer(x)
+      noElements = false
     } else {
       val p = largeHeap.peek
       val growBot = ((size() + 1) * percentage).toInt > smallHeap.size

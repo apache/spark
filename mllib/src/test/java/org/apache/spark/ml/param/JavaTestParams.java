@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.spark.ml.util.Identifiable$;
-import scala.reflect.ClassTag;
 
 /**
  * A subclass of Params for testing.
@@ -111,7 +110,7 @@ public class JavaTestParams extends JavaParams {
       ParamValidators.inRange(0.0, 1.0));
     List<String> validStrings = Arrays.asList("a", "b");
     myStringParam_ = new Param<>(this, "myStringParam", "this is a string param",
-      ParamValidators.inArray(validStrings), ClassTag.apply(String.class));
+      ParamValidators.inArray(validStrings));
     myDoubleArrayParam_ =
       new DoubleArrayParam(this, "myDoubleArrayParam", "this is a double param");
 

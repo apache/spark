@@ -28,7 +28,6 @@ import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
@@ -77,11 +76,7 @@ import org.apache.spark.util.SparkFileUtils
  * `sql/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite
-    extends ConnectFunSuite
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with Logging {
+class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
@@ -148,7 +143,7 @@ class PlanGenerationTestSuite
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = trimJvmOriginFields(f.plan.getRoot)
+    val actual = normalizeProtoForComparison(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -200,7 +195,12 @@ class PlanGenerationTestSuite
     }
   }
 
-  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+  /**
+   * Normalize proto messages for stable comparison:
+   *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
+   *   - Populate default StringType collation when missing (UTF8_BINARY)
+   */
+  private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
       builder
         .clearLine()
@@ -221,6 +221,17 @@ class PlanGenerationTestSuite
     val builder = message.toBuilder
 
     builder match {
+      // For comparison only, we add UTF8_BINARY when StringType collation is missing
+      // to ensure deterministic plan equality across environments.
+      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
+        val sb = dt.getStringBuilder
+        if (sb.getCollation.isEmpty) {
+          val defaultCollationName =
+            CollationFactory
+              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
+              .collationName
+          sb.setCollation(defaultCollationName)
+        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -232,10 +243,10 @@ class PlanGenerationTestSuite
 
     builder.getAllFields.asScala.foreach {
       case (desc, msg: protobuf.Message) =>
-        builder.setField(desc, trimJvmOriginFields(msg))
+        builder.setField(desc, normalizeProtoForComparison(msg))
       case (desc, list: java.util.List[_]) =>
         val newList = list.asScala.map {
-          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case msg: protobuf.Message => normalizeProtoForComparison(msg)
           case other => other // Primitive types
         }
         builder.setField(desc, newList.asJava)
@@ -306,6 +317,8 @@ class PlanGenerationTestSuite
   private def binary = createLocalRelation(binarySchemaString)
   private def temporals = createLocalRelation(temporalsSchemaString)
   private def boolean = createLocalRelation(booleanSchemaString)
+
+  private case class CaseClass(a: Int, b: String)
 
   /* Spark Session API */
   test("range") {
@@ -687,6 +700,14 @@ class PlanGenerationTestSuite
     simple.withMetadata("id", builder.build())
   }
 
+  test("zipWithIndex") {
+    simple.zipWithIndex()
+  }
+
+  test("zipWithIndex custom column") {
+    simple.zipWithIndex("my_index")
+  }
+
   test("drop single string") {
     simple.drop("a")
   }
@@ -745,6 +766,10 @@ class PlanGenerationTestSuite
 
   test("repartitionByRange expressions") {
     simple.repartitionByRange(fn.col("a").asc, fn.col("id").desc_nulls_first)
+  }
+
+  test("repartitionById") {
+    simple.repartitionById(10, fn.col("id").cast("int"))
   }
 
   test("coalesce") {
@@ -2369,6 +2394,14 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("try_to_date") {
+    fn.try_to_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("try_to_date with format") {
+    fn.try_to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
   temporalFunctionTest("xpath") {
     fn.xpath(fn.col("s"), lit("a/b/text()"))
   }
@@ -3319,6 +3352,7 @@ class PlanGenerationTestSuite
       fn.lit(java.sql.Date.valueOf("2023-02-23")),
       fn.lit(java.time.Duration.ofSeconds(200L)),
       fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
@@ -3389,13 +3423,29 @@ class PlanGenerationTestSuite
       fn.typedLit(java.sql.Date.valueOf("2023-02-23")),
       fn.typedLit(java.time.Duration.ofSeconds(200L)),
       fn.typedLit(java.time.Period.ofDays(100)),
+      fn.typedLit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
+      fn.typedLit(
+        (
+          java.time.LocalDate.of(2020, 10, 10),
+          java.time.Instant.ofEpochMilli(1677155519808L),
+          new java.sql.Timestamp(12345L),
+          java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
+          java.sql.Date.valueOf("2023-02-23"),
+          java.time.Duration.ofSeconds(200L),
+          java.time.Period.ofDays(100),
+          java.time.LocalTime.of(23, 59, 59, 999999999),
+          new CalendarInterval(2, 20, 100L))),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
       fn.typedLit(Array(1, 2, 3)),
+      fn.typedLit[Array[Integer]](Array(null, null)),
+      fn.typedLit[Array[(Int, String)]](Array(null, null, (1, "a"), (2, null))),
+      fn.typedLit[Array[Option[(Int, String)]]](Array(None, None, Some((1, "a")))),
       fn.typedLit(Seq(1, 2, 3)),
-      fn.typedLit(Map("a" -> 1, "b" -> 2)),
+      fn.typedLit(mutable.LinkedHashMap("a" -> 1, "b" -> 2)),
+      fn.typedLit(mutable.LinkedHashMap[String, Integer]("a" -> null, "b" -> null)),
       fn.typedLit(("a", 2, 1.0)),
       fn.typedLit[Option[Int]](None),
       fn.typedLit[Array[Option[Int]]](Array(Some(1))),
@@ -3404,9 +3454,27 @@ class PlanGenerationTestSuite
       fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
         collection.immutable.Map(1 -> None)),
       fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
-      fn.typedLit(Seq(Map("a" -> 1, "b" -> 2), Map("a" -> 3, "b" -> 4), Map("a" -> 5, "b" -> 6))),
-      fn.typedLit(Map(1 -> Map("a" -> 1, "b" -> 2), 2 -> Map("a" -> 3, "b" -> 4))),
-      fn.typedLit((Seq(1, 2, 3), Map("a" -> 1, "b" -> 2), ("a", Map(1 -> "a", 2 -> "b")))))
+      fn.typedLit(Seq((1, "2", Seq("3", "4")), (5, "6", Seq.empty[String]))),
+      fn.typedLit(Seq(CaseClass(1, "2"), CaseClass(3, "4"), CaseClass(5, "6"))),
+      fn.typedLit(
+        Seq(
+          mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          mutable.LinkedHashMap("a" -> 3, "b" -> 4),
+          mutable.LinkedHashMap("a" -> 5, "b" -> 6))),
+      fn.typedLit(
+        Seq(
+          mutable.LinkedHashMap("a" -> Seq("1", "2"), "b" -> Seq("3", "4")),
+          mutable.LinkedHashMap("a" -> Seq("5", "6"), "b" -> Seq("7", "8")),
+          mutable.LinkedHashMap("a" -> Seq.empty[String], "b" -> Seq.empty[String]))),
+      fn.typedLit(
+        mutable.LinkedHashMap(
+          1 -> mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          2 -> mutable.LinkedHashMap("a" -> 3, "b" -> 4))),
+      fn.typedLit(
+        (
+          Seq(1, 2, 3),
+          mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          ("a", mutable.LinkedHashMap(1 -> "a", 2 -> "b")))))
   }
 
   /* Window API */

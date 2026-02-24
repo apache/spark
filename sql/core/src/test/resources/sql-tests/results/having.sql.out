@@ -152,3 +152,302 @@ struct<k:string,sum(v):bigint>
 -- !query output
 one	6
 three	3
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(try_add(v, 1)) = 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(ifnull(v, 1)) = 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ALL HAVING sum(ifnull(v, 1)) = 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY v HAVING sum(ifnull(v, 1)) = 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1)) = 1
+-- !query schema
+struct<(v + 1):int>
+-- !query output
+
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1) + 1) = 1
+-- !query schema
+struct<(v + 1):int>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ifnull(v, 1) + 1 order by ifnull(v, 1) + 1
+-- !query schema
+struct<sum(v):bigint>
+-- !query output
+1
+2
+3
+5
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int>
+-- !query output
+
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query schema
+struct<2:int>
+-- !query output
+
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING SUM(v) + 1
+-- !query schema
+struct<(sum(v) + 1):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1
+-- !query schema
+struct<(1 + sum(v)):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v)
+-- !query schema
+struct<(sum(v) + 1):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v)
+-- !query schema
+struct<(max(v) + sum(v)):bigint>
+-- !query output
+16
+
+
+-- !query
+SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v)
+-- !query schema
+struct<((sum(v) + 1) + min(v)):bigint>
+-- !query output
+13
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(1)
+GROUP BY col1
+HAVING (
+    SELECT col1 = 1
+)
+-- !query schema
+struct<alias:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(named_struct('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1.a = 1
+)
+-- !query schema
+struct<alias:struct<a:int>>
+-- !query output
+{"a":1}
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(array(1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+)
+-- !query schema
+struct<alias:array<int>>
+-- !query output
+[1]
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(map('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+)
+-- !query schema
+struct<alias:map<string,int>>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT col1, col1 AS a FROM VALUES(1) GROUP BY col1 HAVING col1 > 0
+-- !query schema
+struct<col1:int,a:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT col1 AS a, col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 0
+-- !query schema
+struct<a:int,col1:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM VALUES(1,2,3) GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01'
+-- !query schema
+struct<a:date,b:date>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM VALUES(1) GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0
+-- !query schema
+struct<a:int,b:double,zeroifnull(sum(col1)):bigint>
+-- !query output
+1	1.0	1
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES(1,2) GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1
+-- !query schema
+struct<a:int,b:bigint,c:int>
+-- !query output
+1	2	1
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query schema
+struct<col1:int>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == MAX(col2)
+-- !query schema
+struct<col1:int>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query schema
+struct<col1:int>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING bool_or(col2 = 1) AND bool_or(col2 = 1)
+-- !query schema
+struct<col1:int>
+-- !query output
+
+
+
+-- !query
+SELECT 1 GROUP BY COALESCE(1, 1) HAVING COALESCE(1, 1) = 1  OR COALESCE(1, 1) IS NOT NULL
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
+    SELECT MAX(t2.col1) FROM VALUES (1) t2 WHERE t2.col1 == MAX(t1.col1) GROUP BY t2.col1 HAVING (
+        SELECT t3.col1 FROM VALUES (1) t3 WHERE t3.col1 == MAX(t2.col1)
+    )
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1

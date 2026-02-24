@@ -18,18 +18,16 @@
 package org.apache.spark.sql.util
 
 import java.io.{File, FileNotFoundException}
-import java.nio.file.NoSuchFileException
+import java.nio.file.{Files, NoSuchFileException}
 
 import scala.util.control.NonFatal
-
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.errors.CompilationErrors
 
 object ProtobufUtils {
   def readDescriptorFileContent(filePath: String): Array[Byte] = {
     try {
-      FileUtils.readFileToByteArray(new File(filePath))
+      Files.readAllBytes(new File(filePath).toPath())
     } catch {
       case ex: FileNotFoundException =>
         throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)

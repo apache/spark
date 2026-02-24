@@ -50,6 +50,15 @@ object TaskContext {
     }
   }
 
+  def withTaskContext[T](context: TaskContext)(task: => T): T = {
+    try {
+      TaskContext.setTaskContext(context)
+      task
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
   private[this] val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 
   // Note: protected[spark] instead of private[spark] to prevent the following two from
@@ -299,6 +308,9 @@ abstract class TaskContext extends Serializable {
 
   /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(error: Option[Throwable]): Unit
+
+  /** If the task fails, the exception that caused it, otherwise None. */
+  private[spark] def getTaskFailure: Option[Throwable] = None
 
   /** Optionally returns the stored fetch failure in the task. */
   private[spark] def fetchFailed: Option[FetchFailedException]

@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import unittest
 from inspect import signature
-from typing import Union, Iterator, Tuple, cast, get_type_hints
+from typing import Union, Iterator, Tuple, get_type_hints
 
 from pyspark.sql.functions import mean, lit
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -40,7 +40,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):
@@ -156,6 +156,14 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
 
         self.assertEqual(
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG
+        )
+
+        def func() -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func), "pandas"),
+            PandasUDFType.GROUPED_AGG,
         )
 
     def test_type_annotation_negative(self):
@@ -359,12 +367,6 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations import *  # noqa: #401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

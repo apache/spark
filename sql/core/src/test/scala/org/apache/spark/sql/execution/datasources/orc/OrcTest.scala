@@ -22,9 +22,6 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.commons.io.FileUtils
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -35,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * OrcTest
@@ -49,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest {
 
   val orcImp: String = "native"
 
@@ -143,7 +141,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
     // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
     val file = File.createTempFile("orc-test", ".orc")
     file.deleteOnExit();
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
   }
 

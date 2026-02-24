@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
  * Utility wrapper on top of [[RuleExecutor]], used to apply post-resolution rules on single-pass
  * resolution result. [[SinglePassRewriter]] transforms the plan and the subqueries inside.
  */
-class PlanRewriter(planRewriteRules: Seq[Rule[LogicalPlan]]) {
+class PlanRewriter(
+    planRewriteRules: Seq[Rule[LogicalPlan]],
+    extendedRewriteRules: Seq[Rule[LogicalPlan]]) {
   private val planRewriter = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
       Seq(
@@ -34,6 +36,11 @@ class PlanRewriter(planRewriteRules: Seq[Rule[LogicalPlan]]) {
           "Plan Rewriting",
           Once,
           planRewriteRules: _*
+        ),
+        Batch(
+          "Extended Rewriting",
+          Once,
+          extendedRewriteRules: _*
         )
       )
   }
@@ -42,18 +49,23 @@ class PlanRewriter(planRewriteRules: Seq[Rule[LogicalPlan]]) {
    * Rewrites the plan by first recursing into all subqueries and applying post-resolution rules on
    * them and then applying post-resolution rules on the entire plan.
    */
-  def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan =
+  def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      val planWithRewrittenSubqueries =
-        plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-          case subqueryExpression: SubqueryExpression =>
-            val rewrittenSubqueryPlan = rewrite(subqueryExpression.plan)
-
-            subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
-        }
-
-      rewrite(planWithRewrittenSubqueries)
+      doRewriteWithSubqueries(plan)
     }
+  }
+
+  private def doRewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
+    val planWithRewrittenSubqueries =
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+        case subqueryExpression: SubqueryExpression =>
+          val rewrittenSubqueryPlan = doRewriteWithSubqueries(subqueryExpression.plan)
+
+          subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
+      }
+
+    rewrite(planWithRewrittenSubqueries)
+  }
 
   /**
    * Rewrites the plan __without__ recursing into the subqueries.

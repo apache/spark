@@ -29,7 +29,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
-import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -136,8 +135,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
       .thenAnswer { invocation =>
         import scala.jdk.CollectionConverters._
-        invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
-          .complete(hostLocalDirs.asJava)
+        if (hostLocalDirs == null) {
+          invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
+            .completeExceptionally(new RuntimeException("force fail"))
+        } else {
+          invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
+            .complete(hostLocalDirs.asJava)
+        }
       }
 
     blockManager.hostLocalDirManager = Some(hostLocalDirManager)
@@ -284,7 +288,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       intercept[FetchFailedException] {
         val inputStream = iterator.next()._2
         // Consume the data to trigger the corruption
-        ByteStreams.readFully(inputStream, new Array[Byte](100))
+        Utils.readFully(inputStream, new Array[Byte](100), 0, 100)
       }
       // The block will be fetched only once because corruption can't be detected in
       // maxBytesInFlight/3 of the data size
@@ -692,7 +696,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
           ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
         listener.onBlockFetchFailure(
           ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
-          listener.onBlockFetchFailure(
+        listener.onBlockFetchFailure(
             ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
         sem.release()
       }
@@ -705,11 +709,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()
 
-    // The first block should be returned without an exception, and the last two should throw
-    // FetchFailedExceptions (due to failure)
+    // There are one success fetch and 2 failures. Since failures are consumed firstly so
+    // the first 2 should throw FetchFailedExceptions (due to failure) and the last block
+    // should be returned without an exception.
+    intercept[FetchFailedException] { iterator.next() }
+    intercept[FetchFailedException] { iterator.next() }
     iterator.next()
-    intercept[FetchFailedException] { iterator.next() }
-    intercept[FetchFailedException] { iterator.next() }
   }
 
   private def mockCorruptBuffer(size: Long = 1L, corruptAt: Int = 0): ManagedBuffer = {
@@ -1506,10 +1511,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
         Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
       blockManager = Some(blockManager))
-    // 1st instance of iterator.next() returns the original shuffle block (0, 0, 2)
-    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 2))
-    // 2nd instance of iterator.next() throws FetchFailedException
+    // 1st instance of iterator.next() throws FetchFailedException
     intercept[FetchFailedException] { iterator.next() }
+    // 2nd instance of iterator.next() returns the original shuffle block (0, 0, 2)
+    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 2))
   }
 
   test("SPARK-32922: failure to fetch push-merged-local block should fallback to fetch " +
@@ -1967,5 +1972,108 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
           "but corruption diagnosis is skipped due to lack of " +
           "shuffle checksum support for ShuffleBlockBatchId")))
     }
+  }
+
+  test("SPARK-52395: Fast fail when fetch failure happens for local blocks") {
+    val blockManager = createMockBlockManager()
+    val localBmId = blockManager.blockManagerId
+
+    // Make sure blockManager.getBlockData would return the blocks
+    val localBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
+    localBlocks.take(2).foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
+    }
+    localBlocks.takeRight(1).foreach { case (blockId, buf) =>
+      doThrow(new RuntimeException("force fail")).when(blockManager)
+        .getLocalBlockData(meq(blockId))
+    }
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(localBmId -> toBlockList(localBlocks.keys, 1L, 0)),
+      blockManager = Some(blockManager)
+    )
+
+    // Fetch failure should be placed in the head of results, exception should be thrown for the
+    // 1st instance.
+    intercept[FetchFailedException] { iterator.next() }
+    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
+    assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
+    assert(!iterator.hasNext)
+  }
+
+  test("SPARK-52395: Fast fail when fetch failure happens for host local blocks") {
+    val blockManager = createMockBlockManager()
+    // Create a block manager running on the same host (host-local)
+    val hostLocalBmId = BlockManagerId("test-host-local-client-1", "test-local-host", 3)
+    val hostLocalBlocks = 0.to(2).map(ShuffleBlockId(0, _, 0) -> createMockManagedBuffer()).toMap
+
+    hostLocalBlocks.take(2).foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager)
+        .getHostLocalShuffleData(meq(blockId), any())
+    }
+    hostLocalBlocks.takeRight(1).foreach { case (blockId, buf) =>
+      doThrow(new RuntimeException("force fail")).when(blockManager)
+        .getHostLocalShuffleData(meq(blockId), any())
+    }
+    val hostLocalDirs = Map("test-host-local-client-1" -> Array("local-dir"))
+    // returning local dir for hostLocalBmId
+    initHostLocalDirManager(blockManager, hostLocalDirs)
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 0)),
+      blockManager = Some(blockManager)
+    )
+
+    // Fetch failure should be placed in the head of results, exception should be thrown for the
+    // 1st instance.
+    intercept[FetchFailedException] { iterator.next() }
+    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
+    assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
+    assert(!iterator.hasNext)
+  }
+
+  test("SPARK-52395: Fast fail when failed to get host local dirs") {
+    val blockManager = createMockBlockManager()
+    val localBmId = blockManager.blockManagerId
+
+    // Make sure blockManager.getBlockData would return the blocks
+    val localBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer())
+    localBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
+    }
+
+    // Create a block manager running on the same host (host-local)
+    val hostLocalBmId = BlockManagerId("test-host-local-client-1", "test-local-host", 3)
+    val hostLocalBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
+    hostLocalBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager)
+        .getHostLocalShuffleData(meq(blockId), any())
+    }
+
+    // Setting hostLocalDirs as null to force fail `getHostLocalDirs`.
+    initHostLocalDirManager(blockManager, null)
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(
+        localBmId -> toBlockList(localBlocks.keys, 1L, 0),
+        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
+      ),
+      blockManager = Some(blockManager)
+    )
+
+    verify(blockManager, times(0)).getHostLocalShuffleData(any(), any())
+
+    // Fetch failure should be placed in the head of results, exception should be thrown for the
+    // 1st instance.
+    intercept[FetchFailedException] { iterator.next() }
+    assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
+    assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
+    assert(!iterator.hasNext)
   }
 }

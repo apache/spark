@@ -21,9 +21,8 @@ import java.{util => ju}
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.storage.StorageLevel
@@ -75,11 +74,12 @@ private[kafka010] class KafkaSourceRDD(
       sourcePartition.offsetRange.topicPartition, executorKafkaParams)
 
     val range = resolveRange(consumer, sourcePartition.offsetRange)
-    assert(
-      range.fromOffset <= range.untilOffset,
-      s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +
-        s"for topic ${range.topic} partition ${range.partition}. " +
-        "You either provided an invalid fromOffset, or the Kafka topic has been damaged")
+    if (range.fromOffset < 0 || range.untilOffset < 0) {
+      throw SparkException.internalError(
+        s"Should not have negative offsets for topic ${range.topic} partition ${range.partition} " +
+          s"at this point: fromOffset ${range.fromOffset} untilOffset ${range.untilOffset}"
+      )
+    }
     if (range.fromOffset == range.untilOffset) {
       logInfo(log"Beginning offset ${MDC(FROM_OFFSET, range.fromOffset)} is the same as ending " +
         log"offset skipping ${MDC(TOPIC, range.topic)} ${MDC(PARTITION_ID, range.partition)}")
@@ -137,6 +137,14 @@ private[kafka010] class KafkaSourceRDD(
       } else {
         range.untilOffset
       }
+
+      KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
+        fromOffset,
+        untilOffset,
+        range.topicPartition,
+        KafkaExceptions.resolvedStartOffsetGreaterThanEndOffset
+      )
+
       KafkaOffsetRange(range.topicPartition,
         fromOffset, untilOffset, range.preferredLoc)
     } else {

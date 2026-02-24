@@ -27,34 +27,53 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "scan with aggregate push-down: VAR_POP with DISTINCT",
-    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP without DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: CORR without DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 without DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "scan with aggregate push-down: VAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: CORR without DISTINCT (false)",
+    "scan with aggregate push-down: CORR without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)")
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
@@ -297,9 +316,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 }
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
  * }}}
@@ -322,6 +341,6 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+        s"&useSSL=false&permitMysqlScheme"
   }
 }

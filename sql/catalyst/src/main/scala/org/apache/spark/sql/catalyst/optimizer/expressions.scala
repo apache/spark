@@ -59,7 +59,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private def tryFold(expr: Expression, isConditionalBranch: Boolean): Expression = {
+    try {
+      Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
+    } catch {
+      case NonFatal(_) if isConditionalBranch =>
+        // When doing constant folding inside conditional expressions, we should not fail
+        // during expression evaluation, as the branch we are evaluating may not be reached at
+        // runtime, and we shouldn't fail the query, to match the original behavior.
+        expr.setTagValue(FAILED_TO_EVALUATE, ())
+        expr
+    }
+  }
+
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -75,20 +88,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length / 2)
 
-    case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
+    case e if e.containsTag(FAILED_TO_EVALUATE) => e
 
     // Fold expressions that are foldable.
-    case e if e.foldable =>
-      try {
-        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
-      } catch {
-        case NonFatal(_) if isConditionalBranch =>
-          // When doing constant folding inside conditional expressions, we should not fail
-          // during expression evaluation, as the branch we are evaluating may not be reached at
-          // runtime, and we shouldn't fail the query, to match the original behavior.
-          e.setTagValue(FAILED_TO_EVALUATE, ())
-          e
-      }
+    case e if e.foldable => tryFold(e, isConditionalBranch)
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
     case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
@@ -100,7 +103,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
 
-    case other => other.mapChildren(constantFolding(_, isConditionalBranch))
+    case other =>
+      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch))
+      if (newOther.foldable) {
+        tryFold(newOther, isConditionalBranch)
+      } else {
+        newOther
+      }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
@@ -352,154 +361,172 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     _.containsAnyPattern(AND, OR, NOT), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsAnyPattern(AND, OR, NOT), ruleId) {
-      case TrueLiteral And e => e
-      case e And TrueLiteral => e
-      case FalseLiteral Or e => e
-      case e Or FalseLiteral => e
-
-      case FalseLiteral And _ => FalseLiteral
-      case _ And FalseLiteral => FalseLiteral
-      case TrueLiteral Or _ => TrueLiteral
-      case _ Or TrueLiteral => TrueLiteral
-
-      case a And b if Not(a).semanticEquals(b) =>
-        If(IsNull(a), Literal.create(null, a.dataType), FalseLiteral)
-      case a And b if a.semanticEquals(Not(b)) =>
-        If(IsNull(b), Literal.create(null, b.dataType), FalseLiteral)
-
-      case a Or b if Not(a).semanticEquals(b) =>
-        If(IsNull(a), Literal.create(null, a.dataType), TrueLiteral)
-      case a Or b if a.semanticEquals(Not(b)) =>
-        If(IsNull(b), Literal.create(null, b.dataType), TrueLiteral)
-
-      case a And b if a.semanticEquals(b) => a
-      case a Or b if a.semanticEquals(b) => a
-
-      // The following optimizations are applicable only when the operands are not nullable,
-      // since the three-value logic of AND and OR are different in NULL handling.
-      // See the chart:
-      // +---------+---------+---------+---------+
-      // | operand | operand |   OR    |   AND   |
-      // +---------+---------+---------+---------+
-      // | TRUE    | TRUE    | TRUE    | TRUE    |
-      // | TRUE    | FALSE   | TRUE    | FALSE   |
-      // | FALSE   | FALSE   | FALSE   | FALSE   |
-      // | UNKNOWN | TRUE    | TRUE    | UNKNOWN |
-      // | UNKNOWN | FALSE   | UNKNOWN | FALSE   |
-      // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
-      // +---------+---------+---------+---------+
-
-      // (NULL And (NULL Or FALSE)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
-      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
-      // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
-      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
-      // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
-      case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
-      // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
-      case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
-
-      // (NULL Or (NULL And TRUE)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
-      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
-      // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
-      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
-      // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
-      case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
-      // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
-      case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
-
-      // Common factor elimination for conjunction
-      case and @ (left And right) =>
-        // 1. Split left and right to get the disjunctive predicates,
-        //    i.e. lhs = (a || b), rhs = (a || c)
-        // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-        // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. If common is non-empty, apply the formula to get the optimized predicate:
-        //    common || (ldiff && rdiff)
-        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
-        //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
-        //    optimized predicate: (a && b && c)
-        val lhs = splitDisjunctivePredicates(left)
-        val rhs = splitDisjunctivePredicates(right)
-        val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.nonEmpty) {
-          val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
-          val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
-          if (ldiff.isEmpty || rdiff.isEmpty) {
-            // (a || b || c || ...) && (a || b) => (a || b)
-            common.reduce(Or)
-          } else {
-            // (a || b || c || ...) && (a || b || d || ...) =>
-            // a || b || ((c || ...) && (d || ...))
-            (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
-          }
-        } else {
-          // No common factors from disjunctive predicates, reduce common factor from conjunction
-          val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
-          val distinct = ExpressionSet(all)
-          if (all.size == distinct.size) {
-            // No common factors, return the original predicate
-            and
-          } else {
-            // (a && b) && a && (a && c) => a && b && c
-            buildBalancedPredicate(distinct.toSeq, And)
-          }
-        }
-
-      // Common factor elimination for disjunction
-      case or @ (left Or right) =>
-        // 1. Split left and right to get the conjunctive predicates,
-        //    i.e.  lhs = (a && b), rhs = (a && c)
-        // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
-        // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. If common is non-empty, apply the formula to get the optimized predicate:
-        //    common && (ldiff || rdiff)
-        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
-        // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
-        // optimized predicate: (a || b || c)
-        val lhs = splitConjunctivePredicates(left)
-        val rhs = splitConjunctivePredicates(right)
-        val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.nonEmpty) {
-          val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
-          val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
-          if (ldiff.isEmpty || rdiff.isEmpty) {
-            // (a && b) || (a && b && c && ...) => a && b
-            common.reduce(And)
-          } else {
-            // (a && b && c && ...) || (a && b && d && ...) =>
-            // a && b && ((c && ...) || (d && ...))
-            (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
-          }
-        } else {
-          // No common factors in conjunctive predicates, reduce common factor from disjunction
-          val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
-          val distinct = ExpressionSet(all)
-          if (all.size == distinct.size) {
-            // No common factors, return the original predicate
-            or
-          } else {
-            // (a || b) || a || (a || c) => a || b || c
-            buildBalancedPredicate(distinct.toSeq, Or)
-          }
-        }
-
-      case Not(TrueLiteral) => FalseLiteral
-      case Not(FalseLiteral) => TrueLiteral
-
-      case Not(a GreaterThan b) => LessThanOrEqual(a, b)
-      case Not(a GreaterThanOrEqual b) => LessThan(a, b)
-
-      case Not(a LessThan b) => GreaterThanOrEqual(a, b)
-      case Not(a LessThanOrEqual b) => GreaterThan(a, b)
-
-      case Not(a Or b) => And(Not(a), Not(b))
-      case Not(a And b) => Or(Not(a), Not(b))
-
-      case Not(Not(e)) => e
-
-      case Not(IsNull(e)) => IsNotNull(e)
-      case Not(IsNotNull(e)) => IsNull(e)
+      actualExprTransformer
     }
+  }
+
+  val actualExprTransformer: PartialFunction[Expression, Expression] = {
+    case TrueLiteral And e => e
+    case e And TrueLiteral => e
+    case FalseLiteral Or e => e
+    case e Or FalseLiteral => e
+
+    case FalseLiteral And _ => FalseLiteral
+    case _ And FalseLiteral => FalseLiteral
+    case TrueLiteral Or _ => TrueLiteral
+    case _ Or TrueLiteral => TrueLiteral
+
+    case a And b if Not(a).semanticEquals(b) =>
+      If(IsNull(a), Literal.create(null, a.dataType), FalseLiteral)
+    case a And b if a.semanticEquals(Not(b)) =>
+      If(IsNull(b), Literal.create(null, b.dataType), FalseLiteral)
+
+    case a Or b if Not(a).semanticEquals(b) =>
+      If(IsNull(a), Literal.create(null, a.dataType), TrueLiteral)
+    case a Or b if a.semanticEquals(Not(b)) =>
+      If(IsNull(b), Literal.create(null, b.dataType), TrueLiteral)
+
+    case a And b if a.semanticEquals(b) => a
+    case a Or b if a.semanticEquals(b) => a
+
+    // The following optimizations are applicable only when the operands are not nullable,
+    // since the three-value logic of AND and OR are different in NULL handling.
+    // See the chart:
+    // +---------+---------+---------+---------+
+    // | operand | operand |   OR    |   AND   |
+    // +---------+---------+---------+---------+
+    // | TRUE    | TRUE    | TRUE    | TRUE    |
+    // | TRUE    | FALSE   | TRUE    | FALSE   |
+    // | FALSE   | FALSE   | FALSE   | FALSE   |
+    // | UNKNOWN | TRUE    | TRUE    | UNKNOWN |
+    // | UNKNOWN | FALSE   | UNKNOWN | FALSE   |
+    // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+    // +---------+---------+---------+---------+
+
+    // (NULL And (NULL Or FALSE)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+    case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
+    // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+    case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
+    // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+    // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+    case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
+
+    // (NULL Or (NULL And TRUE)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+    case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
+    // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+    case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
+    // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+    // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+    case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
+
+    // Common factor elimination for conjunction
+    case and @ (left And right) =>
+      // 1. Split left and right to get the disjunctive predicates,
+      //    i.e. lhs = (a || b), rhs = (a || c)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+      // 4. If common is non-empty, apply the formula to get the optimized predicate:
+      //    common || (ldiff && rdiff)
+      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
+      //    optimized predicate: (a && b && c)
+      val lhs = splitDisjunctivePredicates(left)
+      val rhs = splitDisjunctivePredicates(right)
+      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      if (common.nonEmpty) {
+        val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
+        val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
+        if (ldiff.isEmpty || rdiff.isEmpty) {
+          // (a || b || c || ...) && (a || b) => (a || b)
+          common.reduce(Or)
+        } else {
+          // (a || b || c || ...) && (a || b || d || ...) =>
+          // a || b || ((c || ...) && (d || ...))
+          (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+        }
+      } else {
+        // No common factors from disjunctive predicates, reduce common factor from conjunction
+        val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
+        val distinct = ExpressionSet(all)
+        if (all.size == distinct.size) {
+          // No common factors, return the original predicate
+          and
+        } else {
+          // (a && b) && a && (a && c) => a && b && c
+          buildBalancedPredicate(distinct.toSeq, And)
+        }
+      }
+
+    // Common factor elimination for disjunction
+    case or @ (left Or right) =>
+      // 1. Split left and right to get the conjunctive predicates,
+      //    i.e.  lhs = (a && b), rhs = (a && c)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+      // 4. If common is non-empty, apply the formula to get the optimized predicate:
+      //    common && (ldiff || rdiff)
+      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
+      // optimized predicate: (a || b || c)
+      val lhs = splitConjunctivePredicates(left)
+      val rhs = splitConjunctivePredicates(right)
+      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      if (common.nonEmpty) {
+        val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
+        val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
+        if (ldiff.isEmpty || rdiff.isEmpty) {
+          // (a && b) || (a && b && c && ...) => a && b
+          common.reduce(And)
+        } else {
+          // (a && b && c && ...) || (a && b && d && ...) =>
+          // a && b && ((c && ...) || (d && ...))
+          (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+        }
+      } else {
+        // No common factors in conjunctive predicates, reduce common factor from disjunction
+        val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
+        val distinct = ExpressionSet(all)
+        if (all.size == distinct.size) {
+          // No common factors, return the original predicate
+          or
+        } else {
+          // (a || b) || a || (a || c) => a || b || c
+          buildBalancedPredicate(distinct.toSeq, Or)
+        }
+      }
+
+    case not: Not => simplifyNot(not)
+  }
+
+  /**
+   * Simplify Not expressions. This method is extracted to allow recursive calls for
+   * Not(a Or b) and Not(a And b) cases, which avoids calling the entire actualExprTransformer
+   * and only focuses on Not simplification.
+   */
+  private def simplifyNot(not: Not): Expression = not match {
+    case Not(TrueLiteral) => FalseLiteral
+    case Not(FalseLiteral) => TrueLiteral
+
+    case Not(a GreaterThan b) => LessThanOrEqual(a, b)
+    case Not(a GreaterThanOrEqual b) => LessThan(a, b)
+
+    case Not(a LessThan b) => GreaterThanOrEqual(a, b)
+    case Not(a LessThanOrEqual b) => GreaterThan(a, b)
+
+    // De Morgan's Laws can create new Not expressions that need further simplification.
+    case Not(a Or b) =>
+      And(simplifyNot(Not(a)), simplifyNot(Not(b)))
+    case Not(a And b) =>
+      Or(simplifyNot(Not(a)), simplifyNot(Not(b)))
+
+    case Not(Not(e)) => e
+
+    case Not(IsNull(e)) => IsNotNull(e)
+    case Not(IsNotNull(e)) => IsNull(e)
+
+    case _ => not
   }
 }
 
@@ -726,7 +753,7 @@ object SupportedBinaryExpr {
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimestampAddInterval =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case BinaryPredicate(expr) =>
@@ -743,10 +770,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
+  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  private val startsWith = "([^_%]+)%+".r
+  private val endsWith = "%+([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
+  private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
@@ -1132,6 +1160,48 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Removes date and time related functions that are unnecessary.
+ */
+object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+      _.containsPattern(DATETIME), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+        _.containsPattern(DATETIME), ruleId) {
+      // Remove a string to timestamp conversions followed by a timestamp to string conversions if
+      // original string is in the same format.
+      case DateFormatClass(
+          GetTimestamp(
+            e @ DateFormatClass(_, pattern, timeZoneId),
+            pattern2,
+            TimestampType,
+            _,
+            timeZoneId2,
+            _),
+          pattern3,
+          timeZoneId3)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+
+      // Remove a timestamp to string conversion followed by a string to timestamp conversions if
+      // original timestamp is built with the same format.
+      case GetTimestamp(
+          DateFormatClass(
+            e @ GetTimestamp(_, pattern, TimestampType, _, timeZoneId, _),
+            pattern2,
+            timeZoneId2),
+          pattern3,
+          TimestampType,
+          _,
+          timeZoneId3,
+          _)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+    }
+  }
+}
 
 /**
  * Combine nested [[Concat]] expressions.

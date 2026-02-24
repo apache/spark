@@ -1,5 +1,6 @@
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (1, 'a'), (2, 'b') tbl(c1, c2);
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2);
+CREATE TABLE jsonTable (col1 INT, col2 INT, col3 INT, col4 INT) USING json;
 
 -- Simple Union
 SELECT *
@@ -59,6 +60,13 @@ SELECT SUM(t.v) FROM (
   SELECT v + v AS v FROM t3
 ) t;
 
+-- SPARK-52462: UNION should produce consistent results with different underlying table providers.
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM jsonTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM jsonTable;
+
 -- Clean-up
 DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;
@@ -66,3 +74,4 @@ DROP VIEW IF EXISTS t3;
 DROP VIEW IF EXISTS p1;
 DROP VIEW IF EXISTS p2;
 DROP VIEW IF EXISTS p3;
+DROP TABLE IF EXISTS jsonTable;

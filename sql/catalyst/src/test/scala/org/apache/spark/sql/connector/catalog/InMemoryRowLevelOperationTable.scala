@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,8 +39,13 @@ class InMemoryRowLevelOperationTable(
     partitioning: Array[Transform],
     properties: util.Map[String, String],
     constraints: Array[Constraint] = Array.empty)
-  extends InMemoryTable(name, schema, partitioning, properties, constraints)
-    with SupportsRowLevelOperations {
+  extends InMemoryTable(
+    name,
+    CatalogV2Util.structTypeToV2Columns(schema),
+    partitioning,
+    properties,
+    constraints)
+  with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
@@ -106,7 +112,16 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan) extends TestBatchWrite {
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+
+    override def commit(messages: Array[WriterCommitMessage], metrics: WriteSummary): Unit = {
+      commit(messages)
+      commits += Commit(Instant.now().toEpochMilli, Some(metrics))
+    }
+  }
+
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -160,15 +175,15 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends DeltaBatchWrite {
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
-      DeltaBufferedRowsWriterFactory
+      new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
-      withData(newData)
+      withData(newData, columns())
       lastWriteLog = newData.flatMap(buffer => buffer.log).toIndexedSeq
     }
 
@@ -176,13 +191,14 @@ class InMemoryRowLevelOperationTable(
   }
 }
 
-private object DeltaBufferedRowsWriterFactory extends DeltaWriterFactory {
+private class DeltaBufferedRowsWriterFactory(schema: StructType) extends DeltaWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DeltaWriter[InternalRow] = {
-    new DeltaBufferWriter
+    new DeltaBufferWriter(schema)
   }
 }
 
-private class DeltaBufferWriter extends BufferWriter with DeltaWriter[InternalRow] {
+private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
+  with DeltaWriter[InternalRow] {
 
   private final val DELETE = UTF8String.fromString(Delete.toString)
   private final val UPDATE = UTF8String.fromString(Update.toString)

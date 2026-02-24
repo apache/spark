@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -524,6 +525,23 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSessi
         ).select($"t1.id", $"t.*"),
         sql("SELECT t1.id, t.* FROM variant_table AS t1, LATERAL variant_explode_outer(v) AS t")
       )
+    }
+  }
+
+  test("explode with udf") {
+    Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode)  {
+        sql("""create or replace temporary function spark_func (params array<struct<x int, y int>>)
+            | returns STRUCT<a: int, b: int> LANGUAGE SQL
+            | return (select ns from (
+            | SELECT try_divide(SUM(item.x * item.y), SUM(item.x * item.x)) AS beta1,
+            | NAMED_STRUCT('a', beta1,'b', beta1) ns
+            | FROM (SELECT params) LATERAL VIEW EXPLODE(params) AS item LIMIT 1));""".stripMargin)
+        val expected = Seq(Row(Row(1, 1)))
+        val actual =
+          sql("""select spark_func(collect_list(NAMED_STRUCT('x', 1, 'y', 1))) as result;""")
+        checkAnswer(actual, expected)
+      }
     }
   }
 }

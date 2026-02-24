@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomS
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
@@ -681,7 +681,7 @@ class NonStreamV2Table(override val name: String)
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       owner = null,
-      schema = schema(),
+      schema = StructType(Nil),
       provider = Some("parquet"))
   }
 }

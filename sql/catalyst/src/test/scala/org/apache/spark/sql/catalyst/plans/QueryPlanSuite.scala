@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -25,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.types.IntegerType
 
 class QueryPlanSuite extends SparkFunSuite {
@@ -159,5 +161,28 @@ class QueryPlanSuite extends SparkFunSuite {
     // The test rule with `transformUpWithNewOutput` should not change the nullability.
     val planAfterTestRule = testRule(plan)
     assert(planAfterTestRule.output(0).nullable)
+  }
+
+  test("SPARK-54865: pruning works correctly in foreachWithSubqueriesAndPruning") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val plan = Project(
+      Seq(a),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+
+    val visited = ArrayBuffer[LogicalPlan]()
+    plan.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.FILTER)) { p =>
+      visited += p
+    }
+
+    // Only 2 nodes contain FILTER pattern: outer Project and Filter
+    assert(visited.size == 2)
+    assert(visited.forall(_.containsPattern(TreePattern.FILTER)))
   }
 }

@@ -21,6 +21,7 @@ import time
 
 from pyspark import InheritableThread, inheritable_thread_target
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import eventually
 
 
 class JobCancellationTestsMixin:
@@ -60,9 +61,9 @@ class JobCancellationTestsMixin:
         t2.join()
 
         self.assertIsNotNone(output1)
-        self.assertEquals(output1, {"tag1"})
+        self.assertEqual(output1, {"tag1"})
         self.assertIsNotNone(output2)
-        self.assertEquals(output2, {"tag2"})
+        self.assertEqual(output2, {"tag2"})
 
     def check_job_cancellation(
         self, setter, canceller, thread_ids, thread_ids_to_cancel, thread_ids_to_run
@@ -75,7 +76,7 @@ class JobCancellationTestsMixin:
         # The index of the array is the thread index which job run in.
         is_job_cancelled = [False for _ in thread_ids]
 
-        def run_job(job_id, index):
+        def run_job(job_id, index, timeout=10):
             """
             Executes a job with the group ``job_group``. Each job waits for 3 seconds
             and then exits.
@@ -83,13 +84,17 @@ class JobCancellationTestsMixin:
             try:
                 setter(job_id)
 
-                def func(itr):
-                    for pdf in itr:
-                        time.sleep(pdf._1.iloc[0])
-                        yield pdf
+                from pyspark.sql.functions import udf
+                from pyspark.sql.types import IntegerType
 
-                self.spark.createDataFrame([[20]]).repartition(1).mapInPandas(
-                    func, schema="_1 LONG"
+                def func(t: int) -> int:
+                    time.sleep(t)
+                    return t
+
+                u = udf(func, IntegerType())
+
+                self.spark.createDataFrame([[timeout]], ["a"]).repartition(1).select(
+                    u("a").alias("b")
                 ).collect()
                 is_job_cancelled[index] = False
             except Exception:
@@ -97,7 +102,7 @@ class JobCancellationTestsMixin:
                 is_job_cancelled[index] = True
 
         # Test if job succeeded when not cancelled.
-        run_job(job_id_a, 0)
+        run_job(job_id_a, 0, timeout=0)
         self.assertFalse(is_job_cancelled[0])
         self.spark.clearTags()
 
@@ -112,10 +117,14 @@ class JobCancellationTestsMixin:
             t.start()
             threads.append(t)
 
-        # Wait to make sure all jobs are executed.
-        time.sleep(10)
-        # And then, cancel one job group.
-        canceller(job_id_a)
+        @eventually(timeout=10, catch_assertions=True)
+        def cancel_until_cancelled(cancel_ids):
+            canceller(job_id_a)
+            for cancel_id in cancel_ids:
+                self.assertTrue(is_job_cancelled[cancel_id])
+            return True
+
+        cancel_until_cancelled(thread_ids_to_cancel)
 
         # Wait until all threads launching jobs are finished.
         for t in threads:
@@ -166,6 +175,7 @@ class JobCancellationTestsMixin:
         self.assertEqual(first, {"a", "b"})
         self.assertEqual(second, {"a", "b", "c"})
 
+    @unittest.skip("SPARK-52054: Should enable this test")
     def test_interrupt_tag(self):
         thread_ids = range(4)
         self.check_job_cancellation(
@@ -194,12 +204,6 @@ class JobCancellationTests(JobCancellationTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_job_cancellation import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

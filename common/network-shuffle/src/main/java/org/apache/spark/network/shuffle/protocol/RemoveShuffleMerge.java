@@ -17,10 +17,9 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -54,23 +53,19 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, appAttemptId, shuffleId, shuffleMergeId);
+    return Objects.hash(appId, appAttemptId, shuffleId, shuffleMergeId);
   }
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("appId", appId)
-      .append("attemptId", appAttemptId)
-      .append("shuffleId", shuffleId)
-      .append("shuffleMergeId", shuffleMergeId)
-      .toString();
+    return "RemoveShuffleMerge[appId=" + appId + ",attemptId=" + appAttemptId +
+        ",shuffleId=" + shuffleId + ",shuffleMergeId=" + shuffleMergeId + "]";
   }
 
   @Override
   public boolean equals(Object other) {
     if (other != null && other instanceof RemoveShuffleMerge o) {
-      return Objects.equal(appId, o.appId)
+      return Objects.equals(appId, o.appId)
         && appAttemptId == o.appAttemptId
         && shuffleId == o.shuffleId
         && shuffleMergeId == o.shuffleMergeId;

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -356,7 +356,7 @@ object FileFormat {
 /**
  * The base class file format that is based on text file.
  */
-abstract class TextBasedFileFormat extends FileFormat {
+abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
   private var codecFactory: CompressionCodecFactory = _
 
   override def isSplitable(
@@ -364,8 +364,7 @@ abstract class TextBasedFileFormat extends FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(
-        sparkSession.sessionState.newHadoopConfWithOptions(options))
+      codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
     }
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]

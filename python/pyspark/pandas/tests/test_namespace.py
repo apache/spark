@@ -206,13 +206,13 @@ class NamespaceTestsMixin:
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="ME"),
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="3M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="3M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="3ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="3ME"),
         )
 
         self.assert_eq(
@@ -299,8 +299,8 @@ class NamespaceTestsMixin:
             pd.timedelta_range(end="3 days", periods=3, closed="right"),
         )
         self.assert_eq(
-            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
-            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            ps.timedelta_range(start="1 day", end="3 days", freq="6h"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6h"),
         )
         self.assert_eq(
             ps.timedelta_range(start="1 day", end="3 days", periods=4),
@@ -682,13 +682,6 @@ class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_namespace import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

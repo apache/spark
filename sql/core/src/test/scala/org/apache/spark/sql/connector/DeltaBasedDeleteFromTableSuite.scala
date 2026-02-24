@@ -30,6 +30,8 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     props
   }
 
+  override def enforceCheckConstraintOnDelete: Boolean = false
+
   test("delete handles metadata columns correctly") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

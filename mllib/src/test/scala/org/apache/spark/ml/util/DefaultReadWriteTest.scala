@@ -41,20 +41,38 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    */
   def testDefaultReadWrite[T <: Params with MLWritable](
       instance: T,
-      testParams: Boolean = true): T = {
+      testParams: Boolean = true,
+      testSaveToLocal: Boolean = false): T = {
     val uid = instance.uid
     val subdirName = Identifiable.randomUID("test")
 
     val subdir = new File(tempDir, subdirName)
     val path = new File(subdir, uid).getPath
 
-    instance.save(path)
-    intercept[IOException] {
+    if (testSaveToLocal) {
+      instance.write.saveToLocal(path)
+      assert(
+        new File(path, "metadata").isFile(),
+        "saveToLocal should generate metadata as a file."
+      )
+      intercept[IOException] {
+        instance.write.saveToLocal(path)
+      }
+      instance.write.overwrite().saveToLocal(path)
+    } else {
       instance.save(path)
+      intercept[IOException] {
+        instance.save(path)
+      }
+      instance.write.overwrite().save(path)
     }
-    instance.write.overwrite().save(path)
+
     val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
-    val newInstance = loader.load(path)
+    val newInstance = if (testSaveToLocal) {
+      loader.loadFromLocal(path)
+    } else {
+      loader.load(path)
+    }
     assert(newInstance.uid === instance.uid)
     if (testParams) {
       instance.params.foreach { p =>
@@ -73,9 +91,14 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
         }
       }
     }
-
-    val load = instance.getClass.getMethod("load", classOf[String])
-    val another = load.invoke(instance, path).asInstanceOf[T]
+    val another = if (testSaveToLocal) {
+      val read = instance.getClass.getMethod("read")
+      val reader = read.invoke(instance).asInstanceOf[MLReader[T]]
+      reader.loadFromLocal(path)
+    } else {
+      val load = instance.getClass.getMethod("load", classOf[String])
+      load.invoke(instance, path).asInstanceOf[T]
+    }
     assert(another.uid === instance.uid)
     another
   }
@@ -104,7 +127,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       dataset: Dataset[_],
       testEstimatorParams: Map[String, Any],
       testModelParams: Map[String, Any],
-      checkModelData: (M, M) => Unit): Unit = {
+      checkModelData: (M, M) => Unit,
+      skipTestSaveLocal: Boolean = false): Unit = {
     // Set some Params to make sure set Params are serialized.
     testEstimatorParams.foreach { case (p, v) =>
       estimator.set(estimator.getParam(p), v)
@@ -119,13 +143,20 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     }
 
     // Test Model save/load
-    val model2 = testDefaultReadWrite(model)
-    testModelParams.foreach { case (p, v) =>
-      val param = model.getParam(p)
-      assert(model.get(param).get === model2.get(param).get)
+    val testTargets = if (skipTestSaveLocal) {
+      Seq(false)
+    } else {
+      Seq(false, true)
     }
+    for (testSaveToLocal <- testTargets) {
+      val model2 = testDefaultReadWrite(model, testSaveToLocal = testSaveToLocal)
+      testModelParams.foreach { case (p, v) =>
+        val param = model.getParam(p)
+        assert(model.get(param).get === model2.get(param).get)
+      }
 
-    checkModelData(model, model2)
+      checkModelData(model, model2)
+    }
   }
 }
 

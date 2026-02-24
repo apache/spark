@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 
 /**

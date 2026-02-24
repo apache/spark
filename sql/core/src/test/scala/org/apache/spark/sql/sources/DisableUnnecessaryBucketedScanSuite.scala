@@ -61,16 +61,18 @@ abstract class DisableUnnecessaryBucketedScanSuite
   private lazy val df2 =
     (0 until 50).map(i => (i % 7, i % 11, i.toString)).toDF("i", "j", "k").as("df2")
 
+  protected def checkNumBucketedScan(query: String, expectedNumBucketedScan: Int): Unit = {
+    val df = sql(query)
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+    val bucketedScan = collect(plan) { case s: FileSourceScanExec if s.bucketedScan => s }
+    assert(bucketedScan.length == expectedNumBucketedScan)
+  }
+
   private def checkDisableBucketedScan(
       query: String,
       expectedNumScanWithAutoScanEnabled: Int,
       expectedNumScanWithAutoScanDisabled: Int): Unit = {
-
-    def checkNumBucketedScan(query: String, expectedNumBucketedScan: Int): Unit = {
-      val plan = sql(query).queryExecution.executedPlan
-      val bucketedScan = collect(plan) { case s: FileSourceScanExec if s.bucketedScan => s }
-      assert(bucketedScan.length == expectedNumBucketedScan)
-    }
 
     withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
       checkNumBucketedScan(query, expectedNumScanWithAutoScanEnabled)

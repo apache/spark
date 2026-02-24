@@ -18,16 +18,19 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, ExceptionHandlerType, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.StructType
 
 /**
  * SQL scripting executor - executes script and returns result statements.
  * This supports returning multiple result statements from a single script.
  * The caller of the SqlScriptingExecution API must wrap the interpretation and execution of
- * statements with the [[withLocalVariableManager]] method, and adhere to the contract of executing
+ * statements with the [[withContextManager]] method, and adhere to the contract of executing
  * the returned statement before continuing iteration. Executing the statement needs to be done
  * inside withErrorHandling block.
  *
@@ -57,15 +60,86 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private val variableManager = new SqlScriptingLocalVariableManager(context)
-  private val variableManagerHandle = SqlScriptingLocalVariableManager.create(variableManager)
+  private val contextManager = new SqlScriptingContextManagerImpl(context)
+  private val contextManagerHandle = SqlScriptingContextManager.create(contextManager)
 
   /**
    * Handles scripting context creation/access/deletion. Calls to execution API must be wrapped
    * with this method.
    */
-  def withLocalVariableManager[R](f: => R): R = {
-    variableManagerHandle.runWith(f)
+  def withContextManager[R](f: => R): R = {
+    contextManagerHandle.runWith(f)
+  }
+
+  /**
+   * Helper method to inject leave statement into the execution plan.
+   * @param executionPlan Execution plan to inject leave statement into.
+   * @param label Label of the leave statement.
+   */
+  private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
+    // Go as deep as possible, to find a leaf node. Instead of a statement that
+    // should be executed next, inject LEAVE statement in its place.
+    var currExecPlan = executionPlan
+    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
+      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
+    }
+    currExecPlan.curr = Some(new LeaveStatementExec(label))
+  }
+
+  /**
+   * Helper method to execute interrupts to ConditionalStatements.
+   * This method should only interrupt when the exception was thrown during evaluation of
+   * the conditional statement's condition.
+   * @param executionPlan Execution plan.
+   */
+  private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
+    // Go as deep as possible into the execution plan children nodes, to find a leaf node.
+    // That leaf node is the next statement that is to be executed. If the parent node of that
+    // leaf node is a conditional statement, skip the conditional statement entirely.
+    var currExecPlan = executionPlan
+    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
+      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
+    }
+
+    currExecPlan match {
+      case exec: ConditionalStatementExec if exec.isInCondition =>
+        // Only interrupt the conditional if its condition/query was being evaluated when the
+        // exception occurred. This distinguishes between two scenarios:
+        //   1. Exception during condition evaluation -> interrupt (skip the conditional)
+        //   2. Exception before reaching the conditional -> don't interrupt (execute normally)
+        //
+        // Different conditional statements track evaluation state differently:
+        //   - SimpleCaseStatementExec: hasStartedCaseVariableEvaluation flag is set when
+        //     validateCache() begins evaluating the case variable expression.
+        //   - ForStatementExec: hasStartedQueryEvaluation flag is set when cachedQueryResult()
+        //     begins evaluating the FOR loop's query.
+        //   - IF/ELSEIF, WHILE, REPEAT, SEARCHED CASE: curr.isExecuted flag is set by
+        //     evaluateBooleanCondition() before evaluating each condition.
+        val shouldInterrupt =
+          exec match {
+            case simpleCaseStmt: SimpleCaseStatementExec
+              if simpleCaseStmt.hasStartedCaseVariableEvaluation =>
+              // Only interrupt if case variable evaluation was attempted.
+              true
+            case forStmt: ForStatementExec =>
+              // Only interrupt if query evaluation was attempted.
+              forStmt.hasStartedQueryEvaluation
+            case _ =>
+              // For IF, WHILE, REPEAT, SEARCHED/SIMPLE CASE: check if condition was executed.
+              // evaluateBooleanCondition sets isExecuted=true before evaluation, so if an
+              // exception occurs during evaluation, isExecuted will be true. If the exception
+              // happened before reaching the conditional, isExecuted will still be false.
+              exec.curr match {
+                case Some(stmt: SingleStatementExec) => stmt.isExecuted
+                case _ => false
+              }
+          }
+
+        if (shouldInterrupt) {
+          exec.interrupted = true
+        }
+      case _ =>
+    }
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -83,20 +157,32 @@ class SqlScriptingExecution(
 
       context.frames.remove(context.frames.size - 1)
 
-      // If the last frame is a handler, set leave statement to be the next one in the
+      // If the last frame is an EXIT handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
-      if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
+      if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
+          && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
           context.firstHandlerScopeLabel = None
         }
 
-        var execPlan: CompoundBodyExec = context.frames.last.executionPlan
-        while (execPlan.curr.exists(_.isInstanceOf[CompoundBodyExec])) {
-          execPlan = execPlan.curr.get.asInstanceOf[CompoundBodyExec]
+        // Inject leave statement into the execution plan of the last frame.
+        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+      }
+
+      // If the last frame is a CONTINUE handler, leave the handler without injecting anything, but
+      // skip the conditional statement if the exception originated from its conditional expression.
+      if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
+          && context.frames.nonEmpty) {
+        // Remove the scope if handler is executed.
+        if (context.firstHandlerScopeLabel.isDefined
+          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
+          context.firstHandlerScopeLabel = None
         }
-        execPlan.curr = Some(new LeaveStatementExec(lastFrame.scopeLabel.get))
+
+        // Interrupt conditional statements
+        interruptConditionalStatements(context.frames.last.executionPlan)
       }
     }
     // If there are still frames available, get the next statement.
@@ -155,15 +241,32 @@ class SqlScriptingExecution(
       case Some(handler) =>
         val handlerFrame = new SqlScriptingExecutionFrame(
           handler.body,
-          SqlScriptingFrameType.HANDLER,
+          if (handler.handlerType == ExceptionHandlerType.CONTINUE) {
+            SqlScriptingFrameType.CONTINUE_HANDLER
+          } else {
+            SqlScriptingFrameType.EXIT_HANDLER
+          },
           handler.scopeLabel
         )
         context.frames.append(
           handlerFrame
         )
+        handler.reset()
         handlerFrame.executionPlan.enterScope()
       case None =>
-        throw e.asInstanceOf[Throwable]
+        // SQL Standard: Unhandled completion conditions (SQLSTATE class '02' - no data)
+        // continue execution after the statement that caused the condition.
+        // Unhandled exception conditions (all other classes) are resignaled (thrown).
+        // Note: SQLSTATE class '01' (warnings) are not currently raised by Spark.
+        val sqlState = e.getSqlState
+        val isCompletionCondition = sqlState != null && sqlState.startsWith("02")
+
+        if (!isCompletionCondition) {
+          // Exception condition - resignal (throw)
+          throw e.asInstanceOf[Throwable]
+        }
+        // Otherwise: Completion condition (no data) - continue execution without throwing
+        // This allows statements like FETCH to return "no data" without causing script failure
     }
   }
 
@@ -175,6 +278,53 @@ class SqlScriptingExecution(
         handleException(sparkThrowable)
       case throwable: Throwable =>
         throw throwable
+    }
+  }
+}
+
+object SqlScriptingExecution {
+
+  /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args   A map of parameter names to SQL literal expressions.
+   * @return The result as a `DataFrame`.
+   */
+  def executeSqlScript(
+      session: SparkSession,
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): LogicalPlan = {
+    val sse = new SqlScriptingExecution(script, session, args)
+    sse.withContextManager {
+      var result: Option[Seq[Row]] = None
+
+      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+      // advances the script execution and executes all statements until the next result. We must
+      // collect results immediately to maintain execution order.
+      // This ensures we respect the contract of SqlScriptingExecution API.
+      var df: Option[DataFrame] = sse.getNextResult
+      var resultSchema: Option[StructType] = None
+      while (df.isDefined) {
+        sse.withErrorHandling {
+          // Collect results from the current DataFrame.
+          result = Some(df.get.collect().toSeq)
+          resultSchema = Some(df.get.schema)
+        }
+        df = sse.getNextResult
+      }
+
+      if (result.isEmpty) {
+        // Return empty LocalRelation.
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
+      } else {
+        // If `result` is defined, then `resultSchema` must be defined as well.
+        assert(resultSchema.isDefined)
+
+        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
+        LocalRelation.fromExternalRows(attributes, result.get)
+      }
     }
   }
 }

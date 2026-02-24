@@ -126,9 +126,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
+        >>> import pandas as pd
         >>> from pyspark.sql import functions as sf
-        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
         >>> df.show()
@@ -166,11 +165,12 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Same as above but uses pandas UDF.
 
-        >>> @pandas_udf('int')  # doctest: +SKIP
+        >>> from pyspark.sql.functions import pandas_udf
+        >>> @pandas_udf('int')
         ... def min_udf(v: pd.Series) -> int:
         ...     return v.min()
         ...
-        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()
         +-----+------------+
         | name|min_udf(age)|
         +-----+------------+
@@ -456,7 +456,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import Row
+        >>> from pyspark.sql import Row, functions as sf
         >>> df1 = spark.createDataFrame([
         ...     Row(course="dotNET", year=2012, earnings=10000),
         ...     Row(course="Java", year=2012, earnings=20000),
@@ -474,28 +474,30 @@ class GroupedData(PandasGroupedOpsMixin):
         |dotNET|2013|   48000|
         |  Java|2013|   30000|
         +------+----+--------+
+
         >>> df2 = spark.createDataFrame([
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
         ...     Row(training="junior", sales=Row(course="Java", year=2012, earnings=20000)),
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
         ...     Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
         ...     Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
-        ... ])  # doctest: +SKIP
-        >>> df2.show()  # doctest: +SKIP
-        +--------+--------------------+
-        |training|               sales|
-        +--------+--------------------+
-        |  expert|{dotNET, 2012, 10...|
-        |  junior| {Java, 2012, 20000}|
-        |  expert|{dotNET, 2012, 5000}|
-        |  junior|{dotNET, 2013, 48...|
-        |  expert| {Java, 2013, 30000}|
-        +--------+--------------------+
+        ... ])
+        >>> df2.show(truncate=False)
+        +--------+---------------------+
+        |training|sales                |
+        +--------+---------------------+
+        |expert  |{dotNET, 2012, 10000}|
+        |junior  |{Java, 2012, 20000}  |
+        |expert  |{dotNET, 2012, 5000} |
+        |junior  |{dotNET, 2013, 48000}|
+        |expert  |{Java, 2013, 30000}  |
+        +--------+---------------------+
 
         Compute the sum of earnings for each year by course with each course as a separate column
 
         >>> df1.groupBy("year").pivot(
-        ...     "course", ["dotNET", "Java"]).sum("earnings").sort("year").show()
+        ...    "course", ["dotNET", "Java"]
+        ... ).sum("earnings").sort("year").show()
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -512,9 +514,10 @@ class GroupedData(PandasGroupedOpsMixin):
         |2012|20000| 15000|
         |2013|30000| 48000|
         +----+-----+------+
-        >>> df2.groupBy(
-        ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
-        ... # doctest: +SKIP
+
+        >>> df2.groupBy("sales.year").pivot(
+        ...     "sales.course"
+        ... ).agg(sf.sum("sales.earnings")).sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
@@ -533,8 +536,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.group
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.group.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.group.GroupedData.agg.__doc__
+
     spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
     globs["spark"] = spark
 

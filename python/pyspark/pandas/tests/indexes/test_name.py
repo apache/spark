@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -88,12 +86,6 @@ class IndexNameMixin:
             psidx.name = ["renamed"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psidx.name = ["0", "1"]
-        # Specifying `names` when creating Index is no longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            pass
-        else:
-            with self.assertRaisesRegex(TypeError, expected_error_message):
-                ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
 
     def test_multi_index_names(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
@@ -172,12 +164,6 @@ class IndexNameTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.indexes.test_name import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

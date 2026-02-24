@@ -285,34 +285,35 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       val n1 = makeNum(p1, s1)
       val n2 = makeNum(p2, s2)
 
-      val mulActual = Multiply(
-        Literal(Decimal(BigDecimal(n1), p1, s1)),
-        Literal(Decimal(BigDecimal(n2), p2, s2))
-      )
-      val mulExact = new java.math.BigDecimal(n1).multiply(new java.math.BigDecimal(n2))
-
-      val divActual = Divide(
-        Literal(Decimal(BigDecimal(n1), p1, s1)),
-        Literal(Decimal(BigDecimal(n2), p2, s2))
-      )
-      val divExact = new java.math.BigDecimal(n1)
-        .divide(new java.math.BigDecimal(n2), 100, RoundingMode.DOWN)
-
-      val remActual = Remainder(
-        Literal(Decimal(BigDecimal(n1), p1, s1)),
-        Literal(Decimal(BigDecimal(n2), p2, s2))
-      )
-      val remExact = new java.math.BigDecimal(n1).remainder(new java.math.BigDecimal(n2))
-
-      val quotActual = IntegralDivide(
-        Literal(Decimal(BigDecimal(n1), p1, s1)),
-        Literal(Decimal(BigDecimal(n2), p2, s2))
-      )
-      val quotExact =
-        new java.math.BigDecimal(n1).divideToIntegralValue(new java.math.BigDecimal(n2))
-
       Seq(true, false).foreach { allowPrecLoss =>
         withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss.toString) {
+          val mulActual = Multiply(
+            Literal(Decimal(BigDecimal(n1), p1, s1)),
+            Literal(Decimal(BigDecimal(n2), p2, s2))
+          )
+          val mulExact = new java.math.BigDecimal(n1).multiply(new java.math.BigDecimal(n2))
+
+          val divActual = Divide(
+            Literal(Decimal(BigDecimal(n1), p1, s1)),
+            Literal(Decimal(BigDecimal(n2), p2, s2))
+          )
+          val divExact = new java.math.BigDecimal(n1)
+            .divide(new java.math.BigDecimal(n2), 100, RoundingMode.DOWN)
+
+          val remActual = Remainder(
+            Literal(Decimal(BigDecimal(n1), p1, s1)),
+            Literal(Decimal(BigDecimal(n2), p2, s2))
+          )
+          val remExact = new java.math.BigDecimal(n1).remainder(new java.math.BigDecimal(n2))
+
+          val quotActual = IntegralDivide(
+            Literal(Decimal(BigDecimal(n1), p1, s1)),
+            Literal(Decimal(BigDecimal(n2), p2, s2))
+          )
+          val quotExact =
+            new java.math.BigDecimal(n1).divideToIntegralValue(new java.math.BigDecimal(n2))
+
+
           val mulType = Multiply(null, null).resultDecimalType(p1, s1, p2, s2)
           val mulResult = Decimal(mulExact.setScale(mulType.scale, RoundingMode.HALF_UP))
           val mulExpected =
@@ -463,7 +464,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       }
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         checkExceptionInExpression[ArithmeticException](
-          Remainder(left, Literal(convert(0))), "Division by zero")
+          Remainder(left, Literal(convert(0))), "Remainder by zero")
       }
     }
     checkEvaluation(Remainder(positiveShortLit, positiveShortLit), 0.toShort)
@@ -483,7 +484,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("Remainder/Pmod: exception should contain SQL text context") {
-    Seq(("%", Remainder), ("pmod", Pmod)).foreach { case (symbol, exprBuilder) =>
+    type BinaryOpFn = (Expression, Expression, EvalMode.Value) => BinaryArithmetic
+    Seq[(String, BinaryOpFn)](
+      ("%", Remainder.apply),
+      ("pmod", Pmod.apply)
+    ).foreach { case (symbol, exprBuilder) =>
       val query = s"1L $symbol 0L"
       val o = Origin(
         line = Some(1),
@@ -567,7 +572,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       }
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         checkExceptionInExpression[ArithmeticException](
-          Pmod(left, Literal(convert(0))), "Division by zero")
+          Pmod(left, Literal(convert(0))), "Remainder by zero")
       }
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
@@ -710,11 +715,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
     val N = 2000
-    val strings = (1 to N).map(x => "s" * x)
+    val strings = (1 to N).map(x => "s".repeat(x))
     val inputsExpr = strings.map(Literal.create(_, StringType))
 
-    checkEvaluation(Least(inputsExpr), "s" * 1, EmptyRow)
-    checkEvaluation(Greatest(inputsExpr), "s" * N, EmptyRow)
+    checkEvaluation(Least(inputsExpr), "s".repeat(1), EmptyRow)
+    checkEvaluation(Greatest(inputsExpr), "s".repeat(N), EmptyRow)
   }
 
   test("SPARK-22704: Least and greatest use less global variables") {
@@ -873,18 +878,35 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("SPARK-33008: division by zero on divide-like operations returns incorrect result") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      // Test division operations
+      val divideOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Divide(_, _), testDecimalAndDoubleType),
-          (IntegralDivide(_, _), testDecimalAndLongType),
-          (Remainder(_, _), testNumericDataTypes),
-          (Pmod(_, _), testNumericDataTypes))
-      operators.foreach { case (operator, testTypesFn) =>
+          (IntegralDivide(_, _), testDecimalAndLongType))
+      divideOperators.foreach { case (operator, testTypesFn) =>
         testTypesFn { convert =>
           val one = Literal(convert(1))
           val zero = Literal(convert(0))
           checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
           checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "Division by zero")
+        }
+      }
+
+      // Test remainder operations
+      val remainderOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
+        Seq((Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      remainderOperators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[ArithmeticException](operator(one, zero), "Remainder by zero")
         }
       }
     }
@@ -931,12 +953,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("SPARK-34920: error class") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      // Test division operations
+      val divideOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Divide(_, _), testDecimalAndDoubleType),
-          (IntegralDivide(_, _), testDecimalAndLongType),
-          (Remainder(_, _), testNumericDataTypes),
-          (Pmod(_, _), testNumericDataTypes))
-      operators.foreach { case (operator, testTypesFn) =>
+          (IntegralDivide(_, _), testDecimalAndLongType))
+      divideOperators.foreach { case (operator, testTypesFn) =>
         testTypesFn { convert =>
           val one = Literal(convert(1))
           val zero = Literal(convert(0))
@@ -944,6 +967,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
           checkExceptionInExpression[SparkArithmeticException](operator(one, zero),
             "Division by zero")
+        }
+      }
+
+      // Test remainder operations
+      val remainderOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
+        Seq((Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      remainderOperators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[SparkArithmeticException](operator(one, zero),
+            "Remainder by zero")
         }
       }
     }

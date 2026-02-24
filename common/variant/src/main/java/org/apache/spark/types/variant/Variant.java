@@ -99,6 +99,11 @@ public final class Variant {
     return VariantUtil.getDecimal(value, pos);
   }
 
+  // Get the decimal value, including trailing zeros
+  public BigDecimal getDecimalWithOriginalScale() {
+    return VariantUtil.getDecimalWithOriginalScale(value, pos);
+  }
+
   // Get a float value from the variant.
   public float getFloat() {
     return VariantUtil.getFloat(value, pos);
@@ -316,9 +321,15 @@ public final class Variant {
       case STRING:
         sb.append(escapeJson(VariantUtil.getString(value, pos)));
         break;
-      case DOUBLE:
-        sb.append(VariantUtil.getDouble(value, pos));
+      case DOUBLE: {
+        double d = VariantUtil.getDouble(value, pos);
+        if (Double.isFinite(d)) {
+          sb.append(d);
+        } else {
+          appendQuoted(sb, Double.toString(d));
+        }
         break;
+      }
       case DECIMAL:
         sb.append(VariantUtil.getDecimal(value, pos).toPlainString());
         break;
@@ -333,9 +344,15 @@ public final class Variant {
         appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
             microsToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
         break;
-      case FLOAT:
-        sb.append(VariantUtil.getFloat(value, pos));
+      case FLOAT: {
+        float f = VariantUtil.getFloat(value, pos);
+        if (Float.isFinite(f)) {
+          sb.append(f);
+        } else {
+          appendQuoted(sb, Float.toString(f));
+        }
         break;
+      }
       case BINARY:
         appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
         break;

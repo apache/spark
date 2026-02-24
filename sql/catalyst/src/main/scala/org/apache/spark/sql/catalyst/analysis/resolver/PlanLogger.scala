@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{MESSAGE, QUERY_PLAN}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 class PlanLogger extends Logging {
   private val planChangeLogLevel = SQLConf.get.planChangeLogLevel
   private val expressionTreeChangeLogLevel = SQLConf.get.expressionTreeChangeLogLevel
+  private val nameResolutionLogLevel = SQLConf.get.nameResolutionLogLevel
 
   def logPlanResolutionEvent(plan: LogicalPlan, event: String): Unit = {
     logBasedOnLevel(planChangeLogLevel) {
@@ -71,5 +72,23 @@ class PlanLogger extends Logging {
          |${MDC(QUERY_PLAN, sideBySide(unresolved, resolved).mkString("\n"))}
          """.stripMargin
     }
+  }
+
+  def logNameResolutionEvent(
+      multipartName: Seq[String],
+      candidates: Seq[Expression],
+      event: String): Unit = {
+    logBasedOnLevel(nameResolutionLogLevel) {
+      log"""
+         |=== Name resolution: ${MDC(MESSAGE, event)} ===
+         |${MDC(QUERY_PLAN, formatMultipartNameToCandidates(multipartName, candidates))}
+         """.stripMargin
+    }
+  }
+
+  private def formatMultipartNameToCandidates(
+      multipartName: Seq[String],
+      candidates: Seq[Expression]): String = {
+    s"${multipartName.mkString(".")} -> ${candidates.map(_.treeString).mkString(", ")}"
   }
 }

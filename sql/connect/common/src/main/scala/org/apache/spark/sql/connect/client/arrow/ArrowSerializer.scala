@@ -20,7 +20,7 @@ import java.io.{ByteArrayOutputStream, OutputStream}
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.nio.channels.Channels
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JMap, Objects}
 
 import scala.jdk.CollectionConverters._
@@ -38,10 +38,9 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
-import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
 import org.apache.spark.unsafe.types.VariantVal
 
 /**
@@ -392,6 +391,11 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
+      case (LocalTimeEncoder, v: TimeNanoVector) =>
+        new FieldSerializer[LocalTime, TimeNanoVector](v) {
+          override def set(index: Int, value: LocalTime): Unit =
+            vector.setSafe(index, SparkDateTimeUtils.localTimeToNanos(value))
+        }
 
       case (OptionEncoder(value), v) =>
         new Serializer {
@@ -481,6 +485,14 @@ object ArrowSerializer {
             new StructFieldSerializer(
               extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
               serializerFor(BinaryEncoder, struct.getChild("metadata")))))
+
+      case (_: GeographyEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeographyArrowSerDe
+        gser.createSerializer(struct, vectors)
+
+      case (_: GeometryEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeometryArrowSerDe
+        gser.createSerializer(struct, vectors)
 
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>
@@ -580,12 +592,14 @@ object ArrowSerializer {
     }
   }
 
-  private class StructFieldSerializer(val extractor: Any => Any, val serializer: Serializer) {
+  private[arrow] class StructFieldSerializer(
+      val extractor: Any => Any,
+      val serializer: Serializer) {
     def write(index: Int, value: Any): Unit = serializer.write(index, extractor(value))
     def writeNull(index: Int): Unit = serializer.write(index, null)
   }
 
-  private class StructSerializer(
+  private[arrow] class StructSerializer(
       struct: StructVector,
       fieldSerializers: Seq[StructFieldSerializer])
       extends Serializer {

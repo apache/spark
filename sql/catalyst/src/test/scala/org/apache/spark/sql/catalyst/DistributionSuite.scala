@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Murmur3Hash, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{CollationAwareMurmur3Hash, Expression, Literal, Pmod}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -322,7 +322,7 @@ class DistributionSuite extends SparkFunSuite {
     val expressions = Seq($"a", $"b", $"c")
     val hashPartitioning = HashPartitioning(expressions, 10)
     hashPartitioning.partitionIdExpression match {
-      case Pmod(Murmur3Hash(es, 42), Literal(10, IntegerType), _) =>
+      case Pmod(CollationAwareMurmur3Hash(es, 42), Literal(10, IntegerType), _) =>
         assert(es.length == expressions.length && es.zip(expressions).forall {
           case (l, r) => l.semanticEquals(r)
         })

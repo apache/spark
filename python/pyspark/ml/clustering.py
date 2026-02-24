@@ -169,7 +169,7 @@ class _GaussianMixtureParams(
     )
 
     def __init__(self, *args: Any):
-        super(_GaussianMixtureParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
 
     @since("2.0.0")
@@ -255,23 +255,6 @@ class GaussianMixtureModel(
         """
         return self._call_java("gaussiansDF")
 
-    @property
-    @since("2.1.0")
-    def summary(self) -> "GaussianMixtureSummary":
-        """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
-        """
-        if self.hasSummary:
-            s = GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
         """
@@ -285,6 +268,10 @@ class GaussianMixtureModel(
         Predict probability for the given features.
         """
         return self._call_java("predictProbability", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return GaussianMixtureSummary
 
 
 @inherit_doc
@@ -435,7 +422,7 @@ class GaussianMixture(
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
                  aggregationDepth=2, weightCol=None)
         """
-        super(GaussianMixture, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.GaussianMixture", self.uid
         )
@@ -630,7 +617,7 @@ class _KMeansParams(
     )
 
     def __init__(self, *args: Any):
-        super(_KMeansParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             k=2,
             initMode="k-means||",
@@ -705,29 +692,16 @@ class KMeansModel(
         """
         return self._call_java("numFeatures")
 
-    @property
-    @since("2.1.0")
-    def summary(self) -> KMeansSummary:
-        """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
-        """
-        if self.hasSummary:
-            s = KMeansSummary(super(KMeansModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
         """
         Predict label for the given features.
         """
         return self._call_java("predict", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return KMeansSummary
 
 
 @inherit_doc
@@ -826,7 +800,7 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
                  maxBlockSizeInMB=0.0)
         """
-        super(KMeans, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -978,7 +952,7 @@ class _BisectingKMeansParams(
     )
 
     def __init__(self, *args: Any):
-        super(_BisectingKMeansParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(maxIter=20, k=4, minDivisibleClusterSize=1.0)
 
     @since("2.0.0")
@@ -1055,29 +1029,16 @@ class BisectingKMeansModel(
         """
         return self._call_java("numFeatures")
 
-    @property
-    @since("2.1.0")
-    def summary(self) -> "BisectingKMeansSummary":
-        """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
-        """
-        if self.hasSummary:
-            s = BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
         """
         Predict label for the given features.
         """
         return self._call_java("predict", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return BisectingKMeansSummary
 
 
 @inherit_doc
@@ -1185,7 +1146,7 @@ class BisectingKMeans(
                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean", \
                  weightCol=None)
         """
-        super(BisectingKMeans, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.BisectingKMeans", self.uid
         )
@@ -1376,7 +1337,7 @@ class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     )
 
     def __init__(self, *args: Any):
-        super(_LDAParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxIter=20,
             checkpointInterval=10,
@@ -1581,9 +1542,12 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
 
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
-        model = LocalLDAModel(self._call_java("toLocal"))
         if is_remote():
-            return model
+            from pyspark.ml.util import RemoteModelRef
+
+            return LocalLDAModel(RemoteModelRef(self._call_java("toLocal")))
+
+        model = LocalLDAModel(self._call_java("toLocal"))
 
         # SPARK-10931: Temporary fix to be removed once LDAModel defines Params
         model._create_params_from_java()
@@ -1749,7 +1713,7 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
                   docConcentration=None, topicConcentration=None,\
                   topicDistributionCol="topicDistribution", keepLastCheckpoint=True)
         """
-        super(LDA, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -1987,7 +1951,7 @@ class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     )
 
     def __init__(self, *args: Any):
-        super(_PowerIterationClusteringParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst")
 
     @since("2.4.0")
@@ -2093,7 +2057,7 @@ class PowerIterationClustering(
         __init__(self, \\*, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",\
                  weightCol=None)
         """
-        super(PowerIterationClustering, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid
         )

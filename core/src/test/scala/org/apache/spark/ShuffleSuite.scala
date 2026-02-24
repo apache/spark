@@ -23,8 +23,6 @@ import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -37,8 +35,8 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, MyRDD, SparkListener,
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
+import org.apache.spark.util.{MutablePair, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDirsTest {
 
@@ -426,8 +424,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
 
   test("SPARK-34541: shuffle can be removed") {
     withTempDir { tmpDir =>
-      def getAllFiles: Set[File] =
-        FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+      def getAllFiles: Set[File] = Utils.listFiles(tmpDir).asScala.toSet
       conf.set("spark.local.dir", tmpDir.getAbsolutePath)
       sc = new SparkContext("local", "test", conf)
       // For making the taskAttemptId starts from 1.

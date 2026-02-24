@@ -19,13 +19,15 @@ package org.apache.spark.sql.collation
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
@@ -608,16 +610,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"ALTER TABLE $tableName ALTER COLUMN c3.value TYPE STRING COLLATE UTF8_BINARY")
       sql(s"ALTER TABLE $tableName ALTER COLUMN c4.t TYPE STRING COLLATE UNICODE")
       val testCatalog = catalog("testcat").asTableCatalog
-      val tableSchema = testCatalog.loadTable(Identifier.of(Array(), "alter_column_tbl")).schema()
-      val c1Metadata = tableSchema.find(_.name == "c1").get.metadata
-      assert(c1Metadata === createMetadata("c1"))
-      val c2Metadata = tableSchema.find(_.name == "c2").get.metadata
-      assert(c2Metadata === createMetadata("c2"))
-      val c3Metadata = tableSchema.find(_.name == "c3").get.metadata
-      assert(c3Metadata === createMetadata("c3"))
-      val c4Metadata = tableSchema.find(_.name == "c4").get.metadata
-      assert(c4Metadata === createMetadata("c4"))
-      val c4tMetadata = tableSchema.find(_.name == "c4").get.dataType
+      val columns = testCatalog.loadTable(Identifier.of(Array(), "alter_column_tbl")).columns()
+      val c1Metadata = columns.find(_.name() == "c1").get.metadataInJSON()
+      assert(c1Metadata === createMetadata("c1").json)
+      val c2Metadata = columns.find(_.name() == "c2").get.metadataInJSON()
+      assert(c2Metadata === createMetadata("c2").json)
+      val c3Metadata = columns.find(_.name() == "c3").get.metadataInJSON()
+      assert(c3Metadata === createMetadata("c3").json)
+      val c4Metadata = columns.find(_.name() == "c4").get.metadataInJSON()
+      assert(c4Metadata === createMetadata("c4").json)
+      val c4tMetadata = columns.find(_.name() == "c4").get.dataType()
         .asInstanceOf[StructType].find(_.name == "t").get.metadata
       assert(c4tMetadata === createMetadata("c4t"))
     }
@@ -687,7 +689,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -699,7 +701,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
       checkError(
@@ -709,7 +711,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING""""
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY""""
         )
       )
 
@@ -721,7 +723,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+          "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -862,7 +864,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       assert(table.columns().head.dataType() == StringType(collationId))
 
       val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+      checkAnswer(spark.internalCreateDataFrame(rdd,
+        CatalogV2Util.v2ColumnsToStructType(table.columns)), Seq.empty)
 
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
@@ -1423,9 +1426,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             sql(s"insert into $tableName values (map('aaa', 'AAA'), 1)")
             sql(s"insert into $tableName values (map('BBb', 'bBB'), 2)")
 
-            // `collationSetupError` is created because "COLLATE UTF8_BINARY" is omitted in data
-            // type in checkError
-            val collationSetupError = if (collation != "UTF8_BINARY") collationSetup else ""
             val query = s"select c from $tableName order by m"
             val ctx = "m"
             checkError(
@@ -1433,7 +1433,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
               condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
               parameters = Map(
                 "functionName" -> "`sortorder`",
-                "dataType" -> s"\"MAP<STRING$collationSetupError, STRING$collationSetupError>\"",
+                "dataType" -> s"\"MAP<STRING$collationSetup, STRING$collationSetup>\"",
                 "sqlExpr" -> "\"m ASC NULLS FIRST\""
               ),
               context = ExpectedContext(
@@ -1502,6 +1502,62 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       val dfBinary =
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
+    }
+  }
+
+  test("Window functions with implicit collation rule") {
+    val table = "table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table(s1 string, s2 string collate utf8_lcase, i int)")
+      sql(s"INSERT INTO $table VALUES ('aA', 'aA', 2), ('Aa', 'Aa', 1)," +
+        s"('ab', 'ab', 3), ('aa', 'aa', 1)")
+
+      checkAnswer(
+        sql(s"select s1 collate unicode = " +
+          s"(first(s1) over (partition by s1 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+      checkAnswer(
+        sql(s"select s1 = " +
+          s"(first(s1 collate unicode) over (partition by s1 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+      checkAnswer(
+        sql(s"select s2 = " +
+          s"(first(s2) over (partition by s2 order by i)) from $table;"),
+        Seq(Row(true), Row(true), Row(true), Row(true)))
+    }
+  }
+
+  test("CommonExpressionRef inherits different collation strengths") {
+    val table = "table"
+    // Implicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $table VALUES ('test'), ('OTHER')")
+
+      checkAnswer(
+        sql(s"SELECT NULLIF(c1, 'TEST') FROM $table"),
+        Seq(Row(null), Row("OTHER"))
+      )
+    }
+
+    // Explicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UNICODE)")
+      sql(s"INSERT INTO $table VALUES ('test'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT NULLIF('test' COLLATE UTF8_LCASE, c1) FROM $table"),
+        Seq(Row(null), Row("test"))
+      )
+    }
+
+    // Default collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UNICODE_CI)")
+      sql(s"INSERT INTO $table VALUES ('TEST'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT NULLIF('test', c1) FROM $table"),
+        Seq(Row(null), Row("test"))
+      )
     }
   }
 
@@ -1862,6 +1918,34 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("inline COLLATE expressions in join conditions should not use nested loop join") {
+    withTable("table1", "table2", "table3") {
+      sql("CREATE TABLE table1 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table1 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table2 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table2 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table3 (col1 STRING COLLATE UTF8_LCASE_RTRIM) USING PARQUET")
+      sql("INSERT INTO table3 VALUES ('a'), ('b')")
+
+      val df = sql(
+        """SELECT t1.col1 COLLATE UTF8_LCASE_RTRIM AS result
+          |FROM table1 t1
+          |INNER JOIN table2 t2 ON t2.id = t1.id
+          |INNER JOIN table3 t3 ON t3.col1 = t1.col1 COLLATE UTF8_LCASE_RTRIM
+          |""".stripMargin
+      )
+
+      checkAnswer(df, Seq(Row("a"), Row("b")))
+
+      val queryPlan = df.queryExecution.executedPlan
+      assert(collectFirst(queryPlan) {
+        case _: BroadcastNestedLoopJoinExec => ()
+      }.isEmpty)
+    }
+  }
+
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(
@@ -1876,6 +1960,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     )
     testCases.foreach(t => {
       val q = s"SELECT hll_sketch_estimate(hll_sketch_agg(col collate ${t.c})) FROM " +
+        "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
+      val df = sql(q)
+      checkAnswer(df, Seq(Row(t.result)))
+    })
+  }
+
+  test("theta sketch aggregate should respect collation") {
+    case class ThetaSketchAggTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      ThetaSketchAggTestCase("UTF8_BINARY", 5),
+      ThetaSketchAggTestCase("UTF8_BINARY_RTRIM", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE_RTRIM", 3),
+      ThetaSketchAggTestCase("UNICODE", 5),
+      ThetaSketchAggTestCase("UNICODE_RTRIM", 4),
+      ThetaSketchAggTestCase("UNICODE_CI", 4),
+      ThetaSketchAggTestCase("UNICODE_CI_RTRIM", 3)
+    )
+    testCases.foreach(t => {
+      val q = s"SELECT theta_sketch_estimate(theta_sketch_agg(col collate ${t.c})) FROM " +
         "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
       val df = sql(q)
       checkAnswer(df, Seq(Row(t.result)))
@@ -1919,7 +2023,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     // verify that the output ordering is as expected (UTF8_BINARY, UTF8_LCASE, etc.)
     val df = sql("SELECT * FROM collations() limit 10")
-    val icvVersion = "76.1.0.0"
+    val icvVersion = ICU_VERSION.toString
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
@@ -2061,6 +2165,87 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // Make sure DDLs can use fully qualified names.
     withTable("t") {
       sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
+    }
+  }
+
+  test("null aware anti join from NOT IN with collated columns") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 STRING COLLATE UTF8_LCASE_RTRIM)")
+      sql(s"CREATE TABLE $tableName2 (C1 STRING COLLATE UTF8_LCASE_RTRIM)")
+      sql(s"INSERT INTO $tableName1 VALUES ('a')")
+      sql(s"INSERT INTO $tableName2 VALUES ('A   ')")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES ('b')")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer ++ Seq(Row("b")))
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 = 'B  '"), Row("b"))
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 > 'b'"), Seq())
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 = 'c'"), Seq())
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
+    }
+  }
+
+  test("null aware anti join from NOT IN with collated columns in array type") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 ARRAY<STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"CREATE TABLE $tableName2 (C1 ARRAY<STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"INSERT INTO $tableName1 VALUES (ARRAY('a  ', 'Aa '))")
+      sql(s"INSERT INTO $tableName2 VALUES (ARRAY('A', 'aa'))")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
+    }
+  }
+
+  test("null aware anti join from NOT IN with collated columns in struct type") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 STRUCT<x: STRING COLLATE UTF8_LCASE_RTRIM," +
+        s" y: STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"CREATE TABLE $tableName2 (C1 STRUCT<x: STRING COLLATE UTF8_LCASE_RTRIM," +
+        s" y: STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"INSERT INTO $tableName1 VALUES (named_struct('x', 'a  ', 'y', 'Aa '))")
+      sql(s"INSERT INTO $tableName2 VALUES (named_struct('x', 'A', 'y', 'aa'))")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
     }
   }
 }

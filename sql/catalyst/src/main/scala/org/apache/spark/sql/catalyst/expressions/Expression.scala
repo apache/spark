@@ -28,13 +28,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -98,6 +102,18 @@ abstract class Expression extends TreeNode[Expression] {
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
+
+  /**
+   * Returns true if the expression can be folded without relying on external context,
+   * such as current time zone, session configurations, or catalogs.
+   *
+   * When an expression is context-independent foldable, it can be safely evaluated during DDL
+   * operations like creating tables, views, or constraints. This allows systems to store the
+   * computed value rather than the expression itself, improving both simplicity and performance.
+   *
+   * Default is false to ensure explicit marking of context independence.
+   */
+  def contextIndependentFoldable: Boolean = false
 
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
@@ -371,6 +387,14 @@ abstract class Expression extends TreeNode[Expression] {
     throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(ExpressionPatternBitMask.mask),
+        s"${this.getClass.getName} returns Operator patterns")
+    }
+  }
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -382,12 +406,25 @@ abstract class Expression extends TreeNode[Expression] {
     }
 }
 
+object ExpressionPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.setUntil(TreePattern.maxId)
+    bits.clearUntil(OPERATOR_START.id)
+    bits
+  }
+}
+
+
 /**
- * An expression that cannot be evaluated but is guaranteed to be replaced with a foldable value
- * by query optimizer (e.g. CurrentDate).
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
  */
-trait FoldableUnevaluable extends Expression {
-  override def foldable: Boolean = true
+trait Unevaluable extends Expression {
+
+  /** Unevaluable is not foldable because we don't have an eval for it. */
+  final override def foldable: Boolean = false
 
   override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -396,19 +433,6 @@ trait FoldableUnevaluable extends Expression {
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
-/**
- * An expression that cannot be evaluated. These expressions don't live past analysis or
- * optimization time (e.g. Star) and should not be evaluated during query planning and
- * execution.
- */
-trait Unevaluable extends Expression with FoldableUnevaluable {
-
-  /** Unevaluable is not foldable by default because we don't have an eval for it.
-   * Exception are expressions that will be replaced by a literal by Optimizer (e.g. CurrentDate).
-   * Hence we allow overriding overriding of this field in special cases.
-   */
-  final override def foldable: Boolean = false
-}
 
 /**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
@@ -1399,13 +1423,13 @@ trait CommutativeExpression extends Expression {
   protected def buildCanonicalizedPlan(
       collectOperands: PartialFunction[Expression, Seq[Expression]],
       buildBinaryOp: (Expression, Expression) => Expression,
-      evalMode: Option[EvalMode.Value] = None): Expression = {
+      evalContext: Option[NumericEvalContext] = None): Expression = {
     val operands = orderCommutative(collectOperands)
     val reorderResult =
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(buildBinaryOp)
       } else {
-        MultiCommutativeOp(operands, this.getClass, evalMode)(this)
+        MultiCommutativeOp(operands, this.getClass, evalContext)(this)
       }
     reorderResult
   }
@@ -1422,7 +1446,7 @@ trait CommutativeExpression extends Expression {
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
  * @param operands A sequence of operands that produces a commutative expression tree.
  * @param opCls The class of the root operator of the expression tree.
- * @param evalMode The optional expression evaluation mode.
+ * @param evalContext The optional expression evaluation context.
  * @param originalRoot Root operator of the commutative expression tree before canonicalization.
  *                     This object reference is used to deduce the return dataType of Add and
  *                     Multiply operations when the input datatype is decimal.
@@ -1430,7 +1454,7 @@ trait CommutativeExpression extends Expression {
 case class MultiCommutativeOp(
     operands: Seq[Expression],
     opCls: Class[_],
-    evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
+    evalContext: Option[NumericEvalContext])(originalRoot: Expression) extends Unevaluable {
   // Helper method to deduce the data type of a single operation.
   private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
     originalRoot match {

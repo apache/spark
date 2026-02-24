@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.junit.jupiter.api.Assertions;
@@ -38,7 +37,7 @@ public class DBProviderSuite {
 
   @Test
   public void testLevelDBCheckVersionFailed() throws IOException, InterruptedException {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+    assumeFalse(JavaUtils.isMacOnAppleSilicon);
     testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
   }
 

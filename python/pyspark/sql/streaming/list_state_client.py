@@ -130,24 +130,12 @@ class ListStateClient:
     def append_list(self, state_name: str, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        send_data_via_arrow = False
-
-        # To workaround mypy type assignment check.
-        values_as_bytes: Any = []
-        if len(values) == 100:
-            # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-            #  value backed by various benchmarks.
-            # Arrow codepath
-            send_data_via_arrow = True
-        else:
-            values_as_bytes = map(
-                lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
-                values,
-            )
-
-        append_list_call = stateMessage.AppendList(
-            value=values_as_bytes, fetchWithArrow=send_data_via_arrow
+        values_as_bytes = map(
+            lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
+            values,
         )
+
+        append_list_call = stateMessage.AppendList(value=values_as_bytes, fetchWithArrow=False)
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendList=append_list_call
         )
@@ -155,9 +143,6 @@ class ListStateClient:
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
-
-        if send_data_via_arrow:
-            self._stateful_processor_api_client._send_arrow_state(self.schema, values)
 
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]
@@ -168,31 +153,18 @@ class ListStateClient:
     def put(self, state_name: str, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        send_data_via_arrow = False
-        # To workaround mypy type assignment check.
-        values_as_bytes: Any = []
-        if len(values) == 100:
-            # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-            #  value backed by various benchmarks.
-            send_data_via_arrow = True
-        else:
-            values_as_bytes = map(
-                lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
-                values,
-            )
-
-        put_call = stateMessage.ListStatePut(
-            value=values_as_bytes, fetchWithArrow=send_data_via_arrow
+        values_as_bytes = map(
+            lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
+            values,
         )
+
+        put_call = stateMessage.ListStatePut(value=values_as_bytes, fetchWithArrow=False)
 
         list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
         message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
 
         self._stateful_processor_api_client._send_proto_message(message.SerializeToString())
-
-        if send_data_via_arrow:
-            self._stateful_processor_api_client._send_arrow_state(self.schema, values)
 
         response_message = self._stateful_processor_api_client._receive_proto_message()
         status = response_message[0]

@@ -17,7 +17,8 @@
 
 package org.apache.spark.unsafe.types
 
-import scala.collection.parallel.immutable.ParSeq
+import java.util.stream.IntStream
+
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import com.ibm.icu.util.ULocale
@@ -27,13 +28,14 @@ import org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
 import org.apache.spark.sql.catalyst.util.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
 
-  val currentIcuVersion: String = "76.1"
+  val currentIcuVersion: String = s"${ICU_VERSION.getMajor}.${ICU_VERSION.getMinor}"
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
@@ -138,7 +140,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)
 
-  test("collation aware equality and hash") {
+  test("collation aware equality and sort key") {
     val checks = Seq(
       CollationTestCase("UTF8_BINARY", "aaa", "aaa", true),
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
@@ -193,9 +195,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       assert(collation.equalsFunction(toUTF8(testCase.s1), toUTF8(testCase.s2)) ==
         testCase.expectedResult)
 
-      val hash1 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s2))
-      assert((hash1 == hash2) == testCase.expectedResult)
+      val sortKey1 = collation.sortKeyFunction.apply(toUTF8(testCase.s1)).asInstanceOf[Array[Byte]]
+      val sortKey2 = collation.sortKeyFunction.apply(toUTF8(testCase.s2)).asInstanceOf[Array[Byte]]
+      assert(sortKey1.sameElements(sortKey2) == testCase.expectedResult)
     })
   }
 
@@ -292,7 +294,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     (0 to 10).foreach(_ => {
       val collator = fetchCollation("UNICODE").getCollator
 
-      ParSeq(0 to 100).foreach { _ =>
+      IntStream.rangeClosed(0, 100).parallel().forEach { _ =>
         collator.getCollationKey("aaa")
       }
     })

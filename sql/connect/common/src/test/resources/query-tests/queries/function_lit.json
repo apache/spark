@@ -358,15 +358,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 8
           }, {
             "integer": 6
           }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -389,6 +394,10 @@
     }, {
       "literal": {
         "null": {
+          "null": {
+          }
+        },
+        "dataType": {
           "null": {
           }
         }
@@ -564,6 +573,30 @@
     }, {
       "literal": {
         "yearMonthInterval": 0
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "lit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "time": {
+          "nano": "86399999999999",
+          "precision": 6
+        }
       },
       "common": {
         "origin": {

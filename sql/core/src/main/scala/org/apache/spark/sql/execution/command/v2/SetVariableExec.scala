@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import java.util.Locale
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
@@ -66,7 +66,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingLocalVariableManager.get()
+    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
 
     val variableManager = variable.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>

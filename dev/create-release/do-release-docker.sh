@@ -71,16 +71,24 @@ if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
 fi
 
 if [ -d "$WORKDIR/output" ]; then
-  read -p "Output directory already exists. Overwrite and continue? [y/n] " ANSWER
-  if [ "$ANSWER" != "y" ]; then
+  if [ -z "$ANSWER" ]; then
+    read -p "Output directory already exists. Overwrite and continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 fi
 
 if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
   echo "THIS STEP IS IRREVERSIBLE! Make sure the vote has passed and you pick the right RC to finalize."
-  read -p "You must be a PMC member to run this step. Continue? [y/n] " ANSWER
-  if [ "$ANSWER" != "y" ]; then
+  if [ -z "$ANSWER" ]; then
+    read -p "You must be a PMC member to run this step. Continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 
@@ -112,6 +120,11 @@ GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
 $GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
+# Build base image first (contains common tools shared across all branches)
+run_silent "Building spark-rm-base image..." "docker-build-base.log" \
+  docker build -t "spark-rm-base:latest" -f "$SELF/spark-rm/Dockerfile.base" "$SELF/spark-rm"
+
+# Build branch-specific image (extends base with Java/Python versions for this branch)
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"
 
@@ -138,6 +151,7 @@ RELEASE_TAG=$RELEASE_TAG
 GIT_REF=$GIT_REF
 SPARK_PACKAGE_VERSION=$SPARK_PACKAGE_VERSION
 ASF_USERNAME=$ASF_USERNAME
+ASF_NEXUS_TOKEN=$ASF_NEXUS_TOKEN
 GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
@@ -146,6 +160,10 @@ PYPI_API_TOKEN=$PYPI_API_TOKEN
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER
+DEBUG_MODE=$DEBUG_MODE
+ANSWER=$ANSWER
+GITHUB_ACTIONS=$GITHUB_ACTIONS
+SPARK_RC_COUNT=$SPARK_RC_COUNT
 EOF
 
 JAVA_VOL=
@@ -155,7 +173,7 @@ if [ -n "$JAVA" ]; then
 fi
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker run -ti \
+docker run $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
   --env-file "$ENVFILE" \
   --volume "$WORKDIR:/opt/spark-rm" \
   $JAVA_VOL \

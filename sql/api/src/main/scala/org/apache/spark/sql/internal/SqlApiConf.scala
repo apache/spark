@@ -37,6 +37,7 @@ private[sql] trait SqlApiConf {
   def exponentLiteralAsDecimalEnabled: Boolean
   def enforceReservedKeywords: Boolean
   def doubleQuotedIdentifiers: Boolean
+  def singleCharacterPipeOperatorEnabled: Boolean
   def timestampType: AtomicType
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
@@ -47,6 +48,11 @@ private[sql] trait SqlApiConf {
   def stackTracesInDataFrameContext: Int
   def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
+  def manageParserCaches: Boolean
+  def parserDfaCacheFlushThreshold: Int
+  def parserDfaCacheFlushRatio: Double
+  def legacyParameterSubstitutionConstantsOnly: Boolean
+  def legacyIdentifierClauseOnly: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -57,9 +63,19 @@ private[sql] object SqlApiConf {
   val SESSION_LOCAL_TIMEZONE_KEY: String = SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES: String =
     SqlApiConfHelper.ARROW_EXECUTION_USE_LARGE_VAR_TYPES
-  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = {
+  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String =
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
-  }
+  val LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY: String =
+    SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY
+  val LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY: String =
+    SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY
+  val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY: String =
+    SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY
+  val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
+    SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY
+  val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String =
+    SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_RATIO_KEY
+  val MANAGE_PARSER_CACHES_KEY: String = SqlApiConfHelper.MANAGE_PARSER_CACHES_KEY
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -78,6 +94,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def exponentLiteralAsDecimalEnabled: Boolean = false
   override def enforceReservedKeywords: Boolean = false
   override def doubleQuotedIdentifiers: Boolean = false
+  override def singleCharacterPipeOperatorEnabled: Boolean = true
   override def timestampType: AtomicType = TimestampType
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
@@ -88,4 +105,9 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def stackTracesInDataFrameContext: Int = 1
   override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
+  override def manageParserCaches: Boolean = false
+  override def parserDfaCacheFlushThreshold: Int = -1
+  override def parserDfaCacheFlushRatio: Double = -1.0
+  override def legacyParameterSubstitutionConstantsOnly: Boolean = false
+  override def legacyIdentifierClauseOnly: Boolean = false
 }

@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.COUNT
-import org.apache.spark.internal.MDC
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.MavenUtils.LogStringContext
 
 /**
  * Model fitted by [[WeightedLeastSquares]].
@@ -85,7 +84,7 @@ private[ml] class WeightedLeastSquares(
     val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
     val maxIter: Int = 100,
     val tol: Double = 1e-6
-  ) extends Serializable {
+  ) extends Serializable with Logging {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")

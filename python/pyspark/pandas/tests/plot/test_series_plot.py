@@ -22,6 +22,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import have_plotly, plotly_requirement_message
 
 
@@ -83,17 +84,11 @@ class SeriesPlotTestsMixin:
         self.assertEqual([50], result["fliers"])
 
 
-class SeriesPlotTests(SeriesPlotTestsMixin, unittest.TestCase):
+class SeriesPlotTests(SeriesPlotTestsMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.plot.test_series_plot import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

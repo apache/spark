@@ -91,6 +91,20 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
+  def withAliasedColumns(
+      columns: Array[String],
+      aliases: Array[Option[String]]): JdbcSQLQueryBuilder = {
+    if (columns.nonEmpty) {
+      assert(columns.length == aliases.length,
+        "Number of columns does not match the number of provided aliases")
+
+      columnList = columns.zip(aliases).map {
+        case (column, alias) => if (alias.isDefined) s"$column AS ${alias.get}" else column
+      }.mkString(",")
+    }
+    this
+  }
+
   /**
    * Constructs the WHERE clause that following dialect's SQL syntax.
    */
@@ -165,6 +179,38 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   /**
+   * Represents JOIN subquery in case Join has been pushed down. This value should be used
+   * instead of options.tableOrQuery if join has been pushed down.
+   */
+  private var joinQuery: Option[String] = None
+
+  def withJoin(
+      left: JdbcSQLQueryBuilder,
+      right: JdbcSQLQueryBuilder,
+      leftSideQualifier: String,
+      rightSideQualifier: String,
+      columns: Array[String],
+      joinType: String,
+      joinCondition: String): JdbcSQLQueryBuilder = {
+    columnList = columns.mkString(",")
+    joinQuery = Some(
+      s"""(
+       |SELECT ${columns.mkString(",")} FROM
+       |(${left.build()}) $leftSideQualifier
+       |$joinType
+       |(${right.build()}) $rightSideQualifier
+       |ON $joinCondition
+       |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin
+    )
+
+    this
+  }
+
+  // If join has been pushed down, reuse join query as a subquery. Otherwise, fallback to
+  // what is provided in options.
+  protected final def tableOrQuery: String = joinQuery.getOrElse(options.tableOrQuery)
+
+  /**
    * Build the final SQL query that following dialect's SQL syntax.
    */
   def build(): String = {
@@ -174,7 +220,15 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     val offsetClause = dialect.getOffsetClause(offset)
 
     options.prepareQuery +
-      s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+      s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
+  }
+}
+
+object JoinPushdownAliasGenerator {
+  private val subQueryId = new java.util.concurrent.atomic.AtomicLong()
+
+  def getSubqueryQualifier: String = {
+    "join_subquery_" + subQueryId.getAndIncrement()
   }
 }

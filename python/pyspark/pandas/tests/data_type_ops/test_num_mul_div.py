@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
 
 import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -38,21 +38,37 @@ class NumMulDivTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser * pser, psser * psser, check_exact=False)
-            self.assert_eq(pser * pser.astype(bool), psser * psser.astype(bool), check_exact=False)
-            self.assert_eq(pser * True, psser * True, check_exact=False)
-            self.assert_eq(pser * False, psser * False, check_exact=False)
+            ignore_null = self.ignore_null(col)
+            self.assert_eq(pser * pser, psser * psser, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(
+                pser * pser.astype(bool),
+                psser * psser.astype(bool),
+                check_exact=False,
+                ignore_null=ignore_null,
+            )
+            self.assert_eq(pser * True, psser * True, check_exact=False, ignore_null=ignore_null)
+            self.assert_eq(pser * False, psser * False, check_exact=False, ignore_null=ignore_null)
 
             if psser.dtype in [int, np.int32]:
                 self.assert_eq(pser * pdf["string"], psser * psdf["string"])
             else:
                 self.assertRaises(TypeError, lambda: psser * psdf["string"])
 
-            self.assert_eq(pser * pdf["bool"], psser * psdf["bool"], check_exact=False)
+            self.assert_eq(
+                pser * pdf["bool"], psser * psdf["bool"], check_exact=False, ignore_null=ignore_null
+            )
 
             self.assertRaises(TypeError, lambda: psser * psdf["datetime"])
             self.assertRaises(TypeError, lambda: psser * psdf["date"])
             self.assertRaises(TypeError, lambda: psser * psdf["categorical"])
+
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] * psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] * psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 * psdf["decimal"])
 
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
@@ -70,6 +86,14 @@ class NumMulDivTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser / psdf[n_col])
 
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] / psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] / psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 / psdf["decimal"])
+
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
         pser, psser = pdf["float"], psdf["float"]
@@ -86,6 +110,43 @@ class NumMulDivTestsMixin:
                     psser = psdf[col]
                     self.assertRaises(TypeError, lambda: psser // psdf[n_col])
 
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] // psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] // psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
+
+    def test_mod(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        # element-wise modulo for numeric columns
+        for col in self.numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+
+            if psser.dtype in [float, int, np.int32]:
+                self.assert_eq(pser % pser, psser % psser)
+                self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
+                self.assert_eq(pser % True, psser % True)
+                # TODO: decide if to follow pser % False
+                self.assert_eq(pser % 0, psser % False)
+
+            # modulo with non-numeric columns
+            for n_col in self.non_numeric_df_cols:
+                if n_col == "bool":
+                    self.assert_eq(pdf["float"] % pdf["bool"], psdf["float"] % psdf["bool"])
+                else:
+                    self.assertRaises(TypeError, lambda: psser % psdf[n_col])
+
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 % psdf["decimal"])
+
 
 class NumMulDivTests(
     NumMulDivTestsMixin,
@@ -96,12 +157,6 @@ class NumMulDivTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.data_type_ops.test_num_mul_div import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

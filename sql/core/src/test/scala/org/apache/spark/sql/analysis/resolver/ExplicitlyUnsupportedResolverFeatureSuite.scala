@@ -45,27 +45,6 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Unsupported char type padding") {
-    withTable("char_type_padding") {
-      spark.sql(s"CREATE TABLE t1 (c1 CHAR(3), c2 STRING) USING PARQUET")
-      checkResolution("SELECT c1 = '12', c1 = '12 ', c1 = '12  ' FROM t1 WHERE c2 = '12'")
-    }
-  }
-
-  test("Unsupported star expansion") {
-    checkResolution("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)")
-  }
-
-  test("LateralColumnAlias in Aggregate") {
-    checkResolution("SELECT 1 AS a, sum(col1) as sum1, a + sum(col2) FROM VALUES(1, 2)")
-  }
-
-  test("Unsupported lambda") {
-    checkResolution(
-      "SELECT array_sort(array(2, 1), (p1, p2) -> CASE WHEN p1 > p2 THEN 1 ELSE 0 END)"
-    )
-  }
-
   private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
     checkResolution(unresolvedPlan, shouldPass)

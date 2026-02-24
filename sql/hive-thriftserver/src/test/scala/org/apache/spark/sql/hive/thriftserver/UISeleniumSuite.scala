@@ -18,15 +18,13 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -39,7 +37,7 @@ import org.apache.spark.ui.SparkUICssErrorHandler
 @WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
-  with WebBrowser with Matchers with BeforeAndAfterAll {
+  with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
@@ -75,7 +73,7 @@ class UISeleniumSuite
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
-      Files.asCharSink(new File(s"$tempLog4jConf/log4j2.properties"), StandardCharsets.UTF_8).write(
+      Files.writeString(new File(s"$tempLog4jConf/log4j2.properties").toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.file.ref = console
           |appender.console.type = Console
@@ -157,7 +155,7 @@ class UISeleniumSuite
       }
 
       val sessionLink =
-        find(cssSelector("table#sessionstat td a")).head.underlying.getAttribute("href")
+        find(cssSelector("table#sessionstat td a")).head.underlying.getDomProperty("href")
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to sessionLink
         val statements = findAll(

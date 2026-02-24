@@ -248,6 +248,24 @@ class BitSet(numBits: Int) extends Serializable {
     }
   }
 
+  /**
+   * Returns true if the bitset intersects with the given other bitset.
+   *
+   * @param other -- the bitset, should have the same size in words as the current one.
+   * @return true if the intersection of two bitsets is non-empty.
+   */
+  def intersects(other: BitSet): Boolean = {
+    assert(numWords == other.numWords)
+    var ind = 0
+    while (ind < numWords) {
+      if ((words(ind) & other.words(ind)) != 0) {
+        return true
+      }
+      ind += 1
+    }
+    false
+  }
+
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
 

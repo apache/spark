@@ -18,17 +18,18 @@ package org.apache.spark.sql.connect.client.arrow
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.util.Text
 
-import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, UpCastRule, YearMonthIntervalType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Base class for reading leaf values from an arrow vector. This reader has read methods for all
@@ -59,6 +60,7 @@ private[arrow] abstract class ArrowVectorReader {
   def getInstant(i: Int): java.time.Instant = unsupported()
   def getLocalDate(i: Int): java.time.LocalDate = unsupported()
   def getLocalDateTime(i: Int): java.time.LocalDateTime = unsupported()
+  def getLocalTime(i: Int): java.time.LocalTime = unsupported()
   private def unsupported(): Nothing = throw new UnsupportedOperationException()
 }
 
@@ -90,6 +92,7 @@ object ArrowVectorReader {
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
       case v: TimeStampMicroTZVector => new TimeStampMicroTZVectorReader(v)
       case v: TimeStampMicroVector => new TimeStampMicroVectorReader(v, timeZoneId)
+      case v: TimeNanoVector => new TimeVectorReader(v)
       case _: NullVector => NullVectorReader
       case _ => throw new RuntimeException("Unsupported Vector Type: " + vector.getClass)
     }
@@ -274,4 +277,12 @@ private[arrow] class TimeStampMicroVectorReader(v: TimeStampMicroVector, timeZon
   override def getInstant(i: Int): Instant = microsToInstant(tzMicros(i))
   override def getLocalDateTime(i: Int): LocalDateTime = microsToLocalDateTime(utcMicros(i))
   override def getString(i: Int): String = formatter.format(utcMicros(i))
+}
+
+private[arrow] class TimeVectorReader(v: TimeNanoVector)
+    extends TypedArrowVectorReader[TimeNanoVector](v) {
+  private lazy val formatter = TimeFormatter.getFractionFormatter()
+  private def nanos(i: Int): Long = vector.get(i)
+  override def getLocalTime(i: Int): LocalTime = nanosToLocalTime(nanos(i))
+  override def getString(i: Int): String = formatter.format(nanos(i))
 }

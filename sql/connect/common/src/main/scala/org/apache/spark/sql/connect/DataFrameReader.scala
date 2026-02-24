@@ -79,8 +79,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   def load(paths: String*): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
-      assertSourceFormatSpecified()
-      dataSourceBuilder.setFormat(source)
+      Option(source).foreach(dataSourceBuilder.setFormat)
       userSpecifiedSchema.foreach(schema => dataSourceBuilder.setSchema(schema.toDDL))
       extraOptions.foreach { case (k, v) =>
         dataSourceBuilder.putOptions(k, v)
@@ -210,12 +209,6 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   /** @inheritdoc */
   @scala.annotation.varargs
   override def textFile(paths: String*): Dataset[String] = super.textFile(paths: _*)
-
-  private def assertSourceFormatSpecified(): Unit = {
-    if (source == null) {
-      throw new IllegalArgumentException("The source format must be specified.")
-    }
-  }
 
   private def parse(ds: Dataset[String], format: ParseFormat): DataFrame = {
     sparkSession.newDataFrame { builder =>

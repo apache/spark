@@ -50,6 +50,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 1146
+  }
+
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
     override def visitExtract(extract: Extract): String = {
@@ -192,7 +196,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def quoteIdentifier(colName: String): String = {
-    s"`$colName`"
+    // Per MySQL documentation: https://dev.mysql.com/doc/refman/8.4/en/identifiers.html
+    //
+    // Identifier quote characters can be included within an identifier if you quote the
+    // identifier. If the character to be included within the identifier is the same as
+    // that used to quote the identifier itself, then you need to double the character.
+    val escapedColName = colName.replace("`", "``")
+    s"`$escapedColName`"
   }
 
   override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
@@ -236,6 +246,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getUpdateColumnTypeQuery(
@@ -436,7 +451,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
 
       options.prepareQuery +
-        s"SELECT $hintClause$columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
     }
   }
@@ -449,4 +464,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def supportsOffset: Boolean = true
 
   override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }

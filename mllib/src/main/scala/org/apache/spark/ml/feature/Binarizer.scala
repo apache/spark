@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._

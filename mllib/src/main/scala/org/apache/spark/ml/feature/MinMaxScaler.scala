@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -26,7 +28,6 @@ import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -243,17 +244,29 @@ class MinMaxScalerModel private[ml] (
 
 @Since("1.6.0")
 object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
+  private[ml] case class Data(originalMin: Vector, originalMax: Vector)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.originalMin, dos)
+    serializeVector(data.originalMax, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val originalMin = deserializeVector(dis)
+    val originalMax = deserializeVector(dis)
+    Data(originalMin, originalMax)
+  }
 
   private[MinMaxScalerModel]
   class MinMaxScalerModelWriter(instance: MinMaxScalerModel) extends MLWriter {
 
-    private case class Data(originalMin: Vector, originalMax: Vector)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = new Data(instance.originalMin, instance.originalMax)
+      val data = Data(instance.originalMin, instance.originalMax)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -264,12 +277,8 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     override def load(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(originalMin: Vector, originalMax: Vector) =
-        MLUtils.convertVectorColumnsToML(data, "originalMin", "originalMax")
-          .select("originalMin", "originalMax")
-          .head()
-      val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new MinMaxScalerModel(metadata.uid, data.originalMin, data.originalMax)
       metadata.getAndSetParams(model)
       model
     }

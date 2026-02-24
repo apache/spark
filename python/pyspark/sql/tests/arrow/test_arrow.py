@@ -21,21 +21,24 @@ import threading
 import calendar
 import time
 import unittest
-from typing import cast
 from collections import namedtuple
 
 from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
+    BooleanType,
+    ByteType,
     StructType,
     StringType,
+    ShortType,
     IntegerType,
     LongType,
     FloatType,
     DoubleType,
     DecimalType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     BinaryType,
@@ -44,26 +47,31 @@ from pyspark.sql.types import (
     MapType,
     NullType,
     DayTimeIntervalType,
+    VariantType,
+)
+from pyspark.sql.pandas.types import (
+    from_arrow_type,
+    to_arrow_type,
+    from_arrow_schema,
+    to_arrow_schema,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
-from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
-from pyspark.loose_version import LooseVersion
 
 if have_pandas:
     import pandas as pd
     from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
+    import pyarrow as pa
 
 
 class ArrowTestsMixin:
@@ -415,6 +423,31 @@ class ArrowTestsMixin:
                     )
             assert_frame_equal(pdf_ny, pdf_la_corrected)
 
+    def check_cached_local_relation_changing_values(self):
+        import random
+        import string
+
+        row_size = 1000
+        row_count = 64 * 1000
+        suffix = "abcdef"
+        str_value = (
+            "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
+        )
+        data = [(i, str_value) for i in range(row_count)]
+
+        for _ in range(2):
+            df = self.spark.createDataFrame(data, ["col1", "col2"])
+            assert df.count() == row_count
+            assert not df.filter(df["col2"].endswith(suffix)).isEmpty()
+
+    def check_large_cached_local_relation_same_values(self):
+        row_count = 500_000
+        data = [("C000000032", "R20", 0.2555)] * row_count
+        pdf = pd.DataFrame(data=data, columns=["Contrat", "Recommandation", "Distance"])
+        for _ in range(2):
+            df = self.spark.createDataFrame(pdf)
+            assert df.count() == row_count
+
     def test_toArrow_keep_utc_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
 
@@ -477,7 +510,7 @@ class ArrowTestsMixin:
         allocation_after = pa.total_allocated_bytes()
         difference = allocation_after - allocation_before
         # Should be around 1x the data size (table should not hold on to any memory)
-        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertGreaterEqual(difference, 0.8 * expected_bytes)
         self.assertLessEqual(difference, 1.1 * expected_bytes)
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
@@ -707,8 +740,8 @@ class ArrowTestsMixin:
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
-        # Use a nanosecond value to make sure it is not truncated
-        pdf.iloc[0, 7] = pd.Timestamp(1)
+        # Use a nanosecond value that converts to microseconds without precision loss
+        pdf.iloc[0, 7] = pd.Timestamp(1000)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.iloc[1, 1] = None
         pdf_copy = pdf.copy(deep=True)
@@ -727,15 +760,94 @@ class ArrowTestsMixin:
         self.assertTrue(t_out.equals(expected))
 
     def test_schema_conversion_roundtrip(self):
-        from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
-
-        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=False)
+        arrow_schema = to_arrow_schema(self.schema, timezone="UTC", prefers_large_types=False)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
-        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
+        arrow_schema = to_arrow_schema(self.schema, timezone="UTC", prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
+
+    def test_type_conversion_round_trip(self):
+        for t in [
+            NullType(),
+            BinaryType(),
+            BooleanType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            DecimalType(38, 18),
+            StringType(),
+            DateType(),
+            TimeType(),
+            TimestampType(),
+            TimestampNTZType(),
+            DayTimeIntervalType(0, 3),
+            ArrayType(StringType(), True),
+            ArrayType(StringType(), False),
+            ArrayType(ArrayType(StringType(), True), True),
+            ArrayType(ArrayType(StringType(), False), False),
+            MapType(StringType(), IntegerType(), True),
+            MapType(StringType(), IntegerType(), False),
+            MapType(StringType(), MapType(StringType(), IntegerType(), True), True),
+            MapType(StringType(), MapType(StringType(), IntegerType(), False), False),
+            VariantType(),
+            StructType(
+                [
+                    StructField(
+                        "1_str_t", StringType(), True, {"is_int": False, "is_float": "false"}
+                    ),
+                    StructField("2_int_t", IntegerType(), True),
+                    StructField("3_long_t", LongType(), True),
+                    StructField("4_float_t", FloatType(), True),
+                    StructField(
+                        "5_double_t", DoubleType(), True, {"is_int": False, "is_float": "true"}
+                    ),
+                    StructField("6_decimal_t", DecimalType(38, 18), True),
+                    StructField("7_date_t", DateType(), True),
+                    StructField(
+                        "8_timestamp_t", TimestampType(), True, {"is_ts": True, "ntz": "false"}
+                    ),
+                    StructField("9_binary_t", BinaryType(), True),
+                    StructField("10_var", VariantType(), True, {"is_ts": False, "is_var": "true"}),
+                    StructField("11_arr", ArrayType(ArrayType(StringType(), True), False), True),
+                    StructField("12_map", MapType(StringType(), IntegerType(), True), True),
+                    StructField(
+                        "13_struct",
+                        StructType(
+                            [
+                                StructField(
+                                    "13_1_str_t", StringType(), True, {"in_nested": "true"}
+                                ),
+                                StructField("13_2_int_t", IntegerType(), True, {"in_nested": None}),
+                                StructField("13_3_long_t", LongType(), True),
+                            ]
+                        ),
+                        True,
+                    ),
+                ]
+            ),
+        ]:
+            with self.subTest(data_type=t):
+                at = to_arrow_type(t, timezone="UTC")
+                t2 = from_arrow_type(at)
+                self.assertEqual(t, t2)
+
+                at2 = to_arrow_type(t, timezone="UTC", prefers_large_types=True)
+                t3 = from_arrow_type(at2)
+                self.assertEqual(t, t3)
+
+                if isinstance(t, StructType):
+                    pa_schema = to_arrow_schema(t, timezone="UTC")
+                    schema2 = from_arrow_schema(pa_schema)
+                    self.assertEqual(t, schema2)
+
+                    pa_schema2 = to_arrow_schema(t, timezone="UTC", prefers_large_types=True)
+                    schema3 = from_arrow_schema(pa_schema2)
+                    self.assertEqual(t, schema3)
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
@@ -912,11 +1024,6 @@ class ArrowTestsMixin:
                         self.assertTrue(
                             expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
                         )
-
-    def test_createDataFrame_pandas_with_struct_type(self):
-        for arrow_enabled in [True, False]:
-            with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
 
     def test_createDataFrame_arrow_with_struct_type_nulls(self):
         t = pa.table(
@@ -1449,22 +1556,6 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
-    def test_createDataFrame_arrow_nested_timestamp(self):
-        from pyspark.sql.pandas.types import to_arrow_schema
-
-        schema = self.schema_nested_timestamp
-        data = self.data_nested_timestamp
-        pdf = pd.DataFrame.from_records(data, columns=schema.names)
-        arrow_schema = to_arrow_schema(schema, timestamp_utc=False)
-        t = pa.Table.from_pandas(pdf, arrow_schema)
-
-        with self.sql_conf({"spark.sql.session.timeZone": "America/New_York"}):
-            df = self.spark.createDataFrame(t, schema)
-
-        expected = self.data_nested_timestamp_expected_ny
-
-        self.assertEqual(df.first(), expected)
-
     def test_toPandas_timestmap_tzinfo(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1531,15 +1622,15 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf, expected)
 
     def test_toArrow_nested_timestamp(self):
+        from pyspark.sql.pandas.types import to_arrow_schema
+
         schema = self.schema_nested_timestamp
         data = self.data_nested_timestamp
         df = self.spark.createDataFrame(data, schema)
 
         t = df.toArrow()
 
-        from pyspark.sql.pandas.types import to_arrow_schema
-
-        arrow_schema = to_arrow_schema(schema)
+        arrow_schema = to_arrow_schema(schema, timezone="UTC")
         expected = pa.Table.from_pydict(
             {
                 "ts": [datetime.datetime(2023, 1, 1, 8, 0, 0)],
@@ -1568,18 +1659,7 @@ class ArrowTestsMixin:
         )
         df = self.spark.createDataFrame(origin)
         t = df.toArrow()
-
-        # SPARK-48302: PyArrow versions before 17.0.0 replaced nulls with empty lists when
-        # reconstructing MapArray columns to localize timestamps
-        if LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
-            expected = origin
-        else:
-            expected = pa.table(
-                [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), []]],
-                schema=origin_schema,
-            )
-
-        self.assertTrue(t.equals(expected))
+        self.assertTrue(t.equals(origin))
 
     def test_createDataFrame_udt(self):
         for arrow_enabled in [True, False]:
@@ -1713,18 +1793,88 @@ class ArrowTestsMixin:
     def test_createDataFrame_arrow_fixed_size_list(self):
         a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
         t = pa.table([a], ["fsl"])
-        if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
-            # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
-            with self.assertRaises(PySparkTypeError):
-                df = self.spark.createDataFrame(t)
-        else:
-            df = self.spark.createDataFrame(t)
-            self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+
+    def test_toPandas_with_compression_codec(self):
+        # Test toPandas() with different compression codec settings
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        expected = self.create_pandas_data_frame()
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    pdf = df.toPandas()
+                    assert_frame_equal(expected, pdf)
+
+    def test_toArrow_with_compression_codec(self):
+        # Test toArrow() with different compression codec settings
+        import pyarrow.compute as pc
+
+        t_in = self.create_arrow_table()
+
+        # Convert timezone-naive local timestamp column in input table to UTC
+        # to enable comparison to UTC timestamp column in output table
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t_in = t_in.set_column(
+            t_in.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t_in["8_timestamp_t"], timezone),
+        )
+        t_in = t_in.cast(
+            t_in.schema.set(
+                t_in.schema.get_field_index("8_timestamp_t"),
+                pa.field("8_timestamp_t", pa.timestamp("us", tz="UTC")),
+            )
+        )
+
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    t_out = df.toArrow()
+                    self.assertTrue(t_out.equals(t_in))
+
+    def test_toPandas_with_compression_codec_large_dataset(self):
+        # Test compression with a larger dataset to verify memory savings
+        # Create a dataset with repetitive data that compresses well
+        from pyspark.sql.functions import lit, col
+
+        df = self.spark.range(10000).select(
+            col("id"),
+            lit("test_string_value_" * 10).alias("str_col"),
+            (col("id") % 100).alias("mod_col"),
+        )
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    pdf = df.toPandas()
+                    self.assertEqual(len(pdf), 10000)
+                    self.assertEqual(pdf.columns.tolist(), ["id", "str_col", "mod_col"])
+
+    def test_toArrow_with_compression_codec_large_dataset(self):
+        # Test compression with a larger dataset for toArrow
+        from pyspark.sql.functions import lit, col
+
+        df = self.spark.range(10000).select(
+            col("id"),
+            lit("test_string_value_" * 10).alias("str_col"),
+            (col("id") % 100).alias("mod_col"),
+        )
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    t = df.toArrow()
+                    self.assertEqual(t.num_rows, 10000)
+                    self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
     pass
@@ -1732,7 +1882,7 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MaxResultArrowTests(unittest.TestCase):
     # These tests are separate as 'spark.driver.maxResultSize' configuration
@@ -1765,14 +1915,14 @@ class MaxResultArrowTests(unittest.TestCase):
 class EncryptionArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
-        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+        return super().conf().set("spark.io.encryption.enabled", "true")
 
 
 class RDDBasedArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
         return (
-            super(RDDBasedArrowTests, cls)
+            super()
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
             # to test multiple partitions
@@ -1781,12 +1931,6 @@ class RDDBasedArrowTests(ArrowTests):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

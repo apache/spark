@@ -83,6 +83,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             os.unlink(conn_info_file)
 
             env = dict(os.environ)
+            env["SPARK_CONNECT_MODE"] = "0"
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
 
             # Launch the Java gateway.

@@ -36,7 +36,7 @@ script as shown here while passing your jar.
 For Python, you can use the `--py-files` argument of `spark-submit` to add `.py`, `.zip` or `.egg`
 files to be distributed with your application. If you depend on multiple Python files we recommend
 packaging them into a `.zip` or `.egg`. For third-party Python dependencies,
-see [Python Package Management](api/python/user_guide/python_packaging.html).
+see [Python Package Management](api/python/tutorial/python_packaging.html).
 
 # Launching Applications with spark-submit
 

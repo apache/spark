@@ -20,8 +20,6 @@ package org.apache.spark.network.shuffle.protocol;
 import java.util.*;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -64,11 +62,9 @@ public class LocalDirsForExecutors extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("execIds", Arrays.toString(execIds))
-      .append("numLocalDirsByExec", Arrays.toString(numLocalDirsByExec))
-      .append("allLocalDirs", Arrays.toString(allLocalDirs))
-      .toString();
+    return "LocalDirsForExecutors[execIds=" + Arrays.toString(execIds) +
+        ",numLocalDirsByExec=" + Arrays.toString(numLocalDirsByExec) +
+        ",allLocalDirs=" + Arrays.toString(allLocalDirs) + "]";
   }
 
   @Override

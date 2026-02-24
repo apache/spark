@@ -53,6 +53,13 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
 
 Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
 
+``breakpoint()`` Support in PySpark Tests
+-----------------------------------------
+
+To debug a certain test, you can add ``breakpoint()`` in the test code, and run the test with
+``python/run-tests`` as usual. The script will stop at the ``breakpoint()`` line and open an
+interactive ``pdb`` debugging session. 
+
 
 Running Tests using GitHub Actions
 ----------------------------------

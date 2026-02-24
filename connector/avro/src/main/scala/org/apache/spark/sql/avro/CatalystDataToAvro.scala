@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-private[sql] case class CatalystDataToAvro(
+case class CatalystDataToAvro(
     child: Expression,
     jsonFormatSchema: Option[String]) extends UnaryExpression {
 

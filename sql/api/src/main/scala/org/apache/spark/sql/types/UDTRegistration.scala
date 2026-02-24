@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.SparkClassUtils
 

@@ -20,13 +20,12 @@ package org.apache.spark.util
 import java.io.{File, PrintStream}
 import java.net.URI
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmit
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -83,7 +82,7 @@ private[spark] object DependencyUtils extends Logging {
 
     val (transitive, exclusionList, repos) = MavenUtils.parseQueryParams(uri)
     val fullReposList = Seq(ivyProperties.repositories, repos)
-      .filter(!StringUtils.isBlank(_))
+      .filter(!SparkStringUtils.isBlank(_))
       .mkString(",")
     resolveMavenDependencies(
       transitive,
@@ -103,7 +102,7 @@ private[spark] object DependencyUtils extends Logging {
       ivyRepoPath: String,
       ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
-      if (!StringUtils.isBlank(packagesExclusions)) {
+      if (!SparkStringUtils.isBlank(packagesExclusions)) {
         packagesExclusions.split(",").toImmutableArraySeq
       } else {
         Nil
@@ -237,7 +236,7 @@ private[spark] object DependencyUtils extends Logging {
    * no files, into a single comma-separated string.
    */
   def mergeFileLists(lists: String*): String = {
-    val merged = lists.filterNot(StringUtils.isBlank)
+    val merged = lists.filterNot(SparkStringUtils.isBlank)
       .flatMap(Utils.stringToSeq)
     if (merged.nonEmpty) merged.mkString(",") else null
   }

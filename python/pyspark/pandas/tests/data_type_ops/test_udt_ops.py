@@ -130,6 +130,26 @@ class UDTOpsTestsMixin:
         self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_with_first_null(self):
+        lst = [None, None, None, SparseVector(1, {0: 0.1})]
+        pser = pd.Series(lst)
+        psser = ps.Series(lst)
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+        lst2 = [SparseVector(1, {0: 0.1}), None, None, None]
+        pdf = pd.DataFrame({"a": lst, "b": lst2})
+        psdf = ps.DataFrame({"a": lst, "b": lst2})
+        self.assert_eq(pdf, psdf._to_pandas())
+        self.assert_eq(ps.from_pandas(pdf), psdf)
+
+    def test_with_all_null(self):
+        lst = [None, None, None, None]
+        pser = pd.Series(lst, dtype=object)
+        psser = ps.Series(lst, dtype=object)
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
     def test_isnull(self):
         self.assert_eq(self.pser.isnull(), self.psser.isnull())
 
@@ -185,13 +205,6 @@ class UDTOpsTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.data_type_ops.test_udt_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

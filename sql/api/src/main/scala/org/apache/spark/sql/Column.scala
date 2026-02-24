@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -1423,6 +1423,22 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
    * @since 4.0.0
    */
   def outer(): Column = Column(internal.LazyExpression(node))
+
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def addPrefix(c: Column): Column = concat(lit("prefix_"), c)
+   *
+   *   df.select($"name".transform(addPrefix))
+   *
+   *   // Chaining multiple transformations
+   *   df.select($"name".transform(addPrefix).transform(upper))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.1.0
+   */
+  def transform(f: Column => Column): Column = f(this)
 
 }
 

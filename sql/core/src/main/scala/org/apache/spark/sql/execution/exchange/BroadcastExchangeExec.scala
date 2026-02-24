@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -143,6 +142,12 @@ case class BroadcastExchangeExec(
     val dataSize = metrics("dataSize").value
     val rowCount = metrics("numOutputRows").value
     Statistics(dataSize, Some(rowCount))
+  }
+
+  override def resetMetrics(): Unit = {
+    // no-op
+    // BroadcastExchangeExec after materialized won't be materialized again, so we should not
+    // reset the metrics. Otherwise, we will lose the metrics collected in the broadcast job.
   }
 
   @transient

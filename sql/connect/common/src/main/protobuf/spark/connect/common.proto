@@ -148,6 +148,12 @@ message StackTraceElement {
   int32 line_number = 7;
 }
 
+message ResolvedIdentifier {
+  string catalog_name = 1;
+  repeated string namespace = 2;
+  string table_name = 3;
+}
+
 message Bools {
   repeated bool values = 1;
 }

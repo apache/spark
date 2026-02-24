@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -62,16 +62,16 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     )
   }
 
-  test("PARSE_SYNTAX_ERROR: Execute immediate syntax error with INTO specified") {
+  test("UNRESOLVED_COLUMN: Execute immediate with unresolved column in INTO clause") {
     val query = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1"
     checkError(
-      exception = parseException(query),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'SELCT'", "hint" -> ""),
+      exception = intercept[AnalysisException](sql(query)),
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`a`"),
       context = ExpectedContext(
-        start = 0,
-        stop = 56,
-        fragment = query)
+        start = 48,
+        stop = 48,
+        fragment = "a")
     )
   }
 
@@ -725,5 +725,43 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         fragment = "like 'pattern%' escape '##'",
         start = 32,
         stop = 58))
+  }
+
+  test("INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE: Empty IN clause") {
+    // Test with single column IN ()
+    // PredicateContext captures "IN ()" starting at position 33
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE id IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 33,
+        stop = 37))
+
+    // Test with expression IN ()
+    // PredicateContext captures "IN ()" starting at position 39
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE (id + 1) IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 39,
+        stop = 43))
+
+    // Test with NOT IN ()
+    // PredicateContext captures "NOT IN ()" starting at position 33
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE id NOT IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "NOT IN ()",
+        start = 33,
+        stop = 41))
   }
 }

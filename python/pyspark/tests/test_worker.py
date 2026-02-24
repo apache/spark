@@ -227,7 +227,7 @@ class WorkerMemoryTest(unittest.TestCase):
 class WorkerSegfaultTest(ReusedPySparkTestCase):
     @classmethod
     def conf(cls):
-        _conf = super(WorkerSegfaultTest, cls).conf()
+        _conf = super().conf()
         _conf.set("spark.python.worker.faulthandler.enabled", "true")
         return _conf
 
@@ -252,7 +252,7 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
 class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
     @classmethod
     def conf(cls):
-        _conf = super(WorkerSegfaultNonDaemonTest, cls).conf()
+        _conf = super().conf()
         _conf.set("spark.python.use.daemon", "false")
         return _conf
 
@@ -273,13 +273,6 @@ class WorkerPoolCrashTest(PySparkTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.tests.test_worker import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

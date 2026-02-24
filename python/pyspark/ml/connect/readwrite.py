@@ -275,7 +275,6 @@ class RemoteMLReader(MLReader[RL]):
                 from pyspark.ml.util import RemoteModelRef
 
                 if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
-                    session.client.add_ml_cache(result.obj_ref.id)
                     remote_model_ref = RemoteModelRef(result.obj_ref.id)
                     instance = py_type(remote_model_ref)
                 else:

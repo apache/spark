@@ -50,6 +50,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
+    DefaultValueExpressionCoercion ::
     new CombinedTypeCoercionRule(
       CollationTypeCasts ::
       InConversion ::
@@ -96,6 +97,13 @@ object TypeCoercion extends TypeCoercionBase {
         Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
       case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
         Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+
+      // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
+      // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+      case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
+      // We allow coercion from GEOMETRY(<srid>) types (i.e. fixed SRID types) to the
+      // GEOMETRY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+      case (t1: GeometryType, t2: GeometryType) if t1 != t2 => Some(GeometryType("ANY"))
 
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }

@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Message indicating an error when transferring a stream.
@@ -70,10 +68,7 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("streamId", streamId)
-      .append("error", error)
-      .toString();
+    return "StreamFailure[streamId=" + streamId + ",error=" + error + "]";
   }
 
 }

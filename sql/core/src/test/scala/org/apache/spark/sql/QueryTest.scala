@@ -232,6 +232,10 @@ abstract class QueryTest extends PlanTest {
       s"level $storageLevel, but it doesn't.")
   }
 
+  def assertNotCached(query: Dataset[_]): Unit = {
+    assertCached(query, numCachedTables = 0)
+  }
+
   /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */

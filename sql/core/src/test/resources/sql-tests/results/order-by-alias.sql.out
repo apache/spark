@@ -229,3 +229,35 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "c"
   } ]
 }
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+1	2
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query schema
+struct<2:int,2:int>
+-- !query output
+2	1
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query schema
+struct<2:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) ORDER BY `2`
+-- !query schema
+struct<2:int>
+-- !query output
+2

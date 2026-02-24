@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
@@ -165,19 +165,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").append()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Append: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").append()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -270,19 +275,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Overwrite: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -375,19 +385,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {
@@ -410,7 +425,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties == defaultOwnership.asJava)
   }
@@ -426,7 +441,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -442,7 +457,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("prop" -> "value") ++ defaultOwnership).asJava)
   }
@@ -458,7 +473,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties == defaultOwnership.asJava)
   }
@@ -555,7 +570,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // table should not have been changed
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -592,7 +607,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the initial table
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -609,9 +624,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.columns sameElements Array(
-      Column.create("id", LongType),
-      Column.create("data", StringType),
-      Column.create("even_or_odd", StringType)))
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -629,7 +644,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the initial table
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -646,9 +661,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.columns sameElements Array(
-      Column.create("id", LongType),
-      Column.create("data", StringType),
-      Column.create("even_or_odd", StringType)))
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -666,7 +681,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the initial table
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -683,9 +698,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.columns sameElements
-      Array(Column.create("id", LongType),
-        Column.create("data", StringType),
-        Column.create("even_or_odd", StringType)))
+      Array(ColumnV2.create("id", LongType),
+        ColumnV2.create("data", StringType),
+        ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -710,7 +725,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -729,7 +744,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the initial table
     assert(table.name === "testcat.table_name")
     assert(table.columns sameElements
-      Array(Column.create("id", LongType), Column.create("data", StringType)))
+      Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -746,9 +761,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.columns sameElements Array(
-      Column.create("id", LongType),
-      Column.create("data", StringType),
-      Column.create("even_or_odd", StringType)))
+      ColumnV2.create("id", LongType),
+      ColumnV2.create("data", StringType),
+      ColumnV2.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -874,5 +889,16 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         }
       }
     }
+  }
+
+  test("SPARK-52312: caching dataframe created from INSERT shouldn't re-execute the command") {
+    spark.sql("CREATE TABLE testcat.table_name (c1 int, c2 string) USING foo")
+
+    val insertDF = spark.sql("INSERT INTO testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+
+    // Caching the DataFrame created from INSERT should not re-execute the command
+    insertDF.cache()
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
   }
 }

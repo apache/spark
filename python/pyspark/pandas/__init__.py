@@ -39,16 +39,6 @@ except ImportError as e:
     else:
         raise
 
-if "PYARROW_IGNORE_TIMEZONE" not in os.environ:
-    warnings.warn(
-        "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
-        "set this environment variable to '1' in both driver and executor sides if you use "
-        "pyarrow>=2.0.0. "
-        "pandas-on-Spark will set it for you but it does not work if there is a Spark context "
-        "already launched."
-    )
-    os.environ["PYARROW_IGNORE_TIMEZONE"] = "1"
-
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.indexes.category import CategoricalIndex

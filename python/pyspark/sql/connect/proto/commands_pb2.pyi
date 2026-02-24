@@ -43,6 +43,7 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.ml_pb2
+import pyspark.sql.connect.proto.pipelines_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
 import typing
@@ -107,6 +108,7 @@ class Command(google.protobuf.message.Message):
     MERGE_INTO_TABLE_COMMAND_FIELD_NUMBER: builtins.int
     ML_COMMAND_FIELD_NUMBER: builtins.int
     EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
+    PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -153,6 +155,8 @@ class Command(google.protobuf.message.Message):
     @property
     def execute_external_command(self) -> global___ExecuteExternalCommand: ...
     @property
+    def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -183,6 +187,7 @@ class Command(google.protobuf.message.Message):
         merge_into_table_command: global___MergeIntoTableCommand | None = ...,
         ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
         execute_external_command: global___ExecuteExternalCommand | None = ...,
+        pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -206,6 +211,8 @@ class Command(google.protobuf.message.Message):
             b"merge_into_table_command",
             "ml_command",
             b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -251,6 +258,8 @@ class Command(google.protobuf.message.Message):
             b"merge_into_table_command",
             "ml_command",
             b"ml_command",
+            "pipeline_command",
+            b"pipeline_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -297,6 +306,7 @@ class Command(google.protobuf.message.Message):
             "merge_into_table_command",
             "ml_command",
             "execute_external_command",
+            "pipeline_command",
             "extension",
         ]
         | None
@@ -918,6 +928,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     AVAILABLE_NOW_FIELD_NUMBER: builtins.int
     ONCE_FIELD_NUMBER: builtins.int
     CONTINUOUS_CHECKPOINT_INTERVAL_FIELD_NUMBER: builtins.int
+    REAL_TIME_BATCH_DURATION_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
@@ -944,6 +955,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     available_now: builtins.bool
     once: builtins.bool
     continuous_checkpoint_interval: builtins.str
+    real_time_batch_duration: builtins.str
     output_mode: builtins.str
     query_name: builtins.str
     path: builtins.str
@@ -968,6 +980,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         available_now: builtins.bool = ...,
         once: builtins.bool = ...,
         continuous_checkpoint_interval: builtins.str = ...,
+        real_time_batch_duration: builtins.str = ...,
         output_mode: builtins.str = ...,
         query_name: builtins.str = ...,
         path: builtins.str = ...,
@@ -995,6 +1008,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"path",
             "processing_time_interval",
             b"processing_time_interval",
+            "real_time_batch_duration",
+            b"real_time_batch_duration",
             "sink_destination",
             b"sink_destination",
             "table_name",
@@ -1034,6 +1049,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"processing_time_interval",
             "query_name",
             b"query_name",
+            "real_time_batch_duration",
+            b"real_time_batch_duration",
             "sink_destination",
             b"sink_destination",
             "table_name",
@@ -1051,7 +1068,11 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
     ) -> (
         typing_extensions.Literal[
-            "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
+            "processing_time_interval",
+            "available_now",
+            "once",
+            "continuous_checkpoint_interval",
+            "real_time_batch_duration",
         ]
         | None
     ): ...

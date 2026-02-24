@@ -279,6 +279,40 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Time(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PRECISION_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        precision: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            precision: builtins.int | None = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_precision", b"_precision", "precision", b"precision"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_precision",
+                b"_precision",
+                "precision",
+                b"precision",
+                "type_variation_reference",
+                b"type_variation_reference",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+        ) -> typing_extensions.Literal["precision"] | None: ...
+
     class CalendarInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -640,6 +674,46 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Geometry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SRID_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        srid: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            srid: builtins.int = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
+    class Geography(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SRID_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        srid: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            srid: builtins.int = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "srid", b"srid", "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
     class Variant(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -787,7 +861,10 @@ class DataType(google.protobuf.message.Message):
     MAP_FIELD_NUMBER: builtins.int
     VARIANT_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
+    GEOMETRY_FIELD_NUMBER: builtins.int
+    GEOGRAPHY_FIELD_NUMBER: builtins.int
     UNPARSED_FIELD_NUMBER: builtins.int
+    TIME_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -843,8 +920,15 @@ class DataType(google.protobuf.message.Message):
     def udt(self) -> global___DataType.UDT:
         """UserDefinedType"""
     @property
+    def geometry(self) -> global___DataType.Geometry:
+        """Geospatial types"""
+    @property
+    def geography(self) -> global___DataType.Geography: ...
+    @property
     def unparsed(self) -> global___DataType.Unparsed:
         """UnparsedDataType"""
+    @property
+    def time(self) -> global___DataType.Time: ...
     def __init__(
         self,
         *,
@@ -872,7 +956,10 @@ class DataType(google.protobuf.message.Message):
         map: global___DataType.Map | None = ...,
         variant: global___DataType.Variant | None = ...,
         udt: global___DataType.UDT | None = ...,
+        geometry: global___DataType.Geometry | None = ...,
+        geography: global___DataType.Geography | None = ...,
         unparsed: global___DataType.Unparsed | None = ...,
+        time: global___DataType.Time | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -899,6 +986,10 @@ class DataType(google.protobuf.message.Message):
             b"double",
             "float",
             b"float",
+            "geography",
+            b"geography",
+            "geometry",
+            b"geometry",
             "integer",
             b"integer",
             "kind",
@@ -915,6 +1006,8 @@ class DataType(google.protobuf.message.Message):
             b"string",
             "struct",
             b"struct",
+            "time",
+            b"time",
             "timestamp",
             b"timestamp",
             "timestamp_ntz",
@@ -956,6 +1049,10 @@ class DataType(google.protobuf.message.Message):
             b"double",
             "float",
             b"float",
+            "geography",
+            b"geography",
+            "geometry",
+            b"geometry",
             "integer",
             b"integer",
             "kind",
@@ -972,6 +1069,8 @@ class DataType(google.protobuf.message.Message):
             b"string",
             "struct",
             b"struct",
+            "time",
+            b"time",
             "timestamp",
             b"timestamp",
             "timestamp_ntz",
@@ -1016,7 +1115,10 @@ class DataType(google.protobuf.message.Message):
             "map",
             "variant",
             "udt",
+            "geometry",
+            "geography",
             "unparsed",
+            "time",
         ]
         | None
     ): ...

@@ -274,7 +274,7 @@ public class ExpressionImplUtils {
           return cipher.doFinal(input, 0, input.length);
         }
       }
-    } catch (GeneralSecurityException e) {
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
   }

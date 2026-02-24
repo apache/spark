@@ -17,10 +17,12 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
@@ -33,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.ShuffleIndexBlockId
@@ -238,7 +241,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     }
     Seq("=== Applying Rule org.apache.spark.sql.execution",
-        "=== Result of Batch Preparations ===").foreach { expectedMsg =>
+        "=== Result of Batch Preparations ===",
+        "Output Information:").foreach { expectedMsg =>
       assert(testAppender.loggingEvents.exists(
         _.getMessage.getFormattedMessage.contains(expectedMsg)))
     }
@@ -326,31 +330,100 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, DoNotCleanup)
-    df.collect()
+  test("SPARK-53413: Cleanup shuffle dependencies for commands") {
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+        (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan)
+        df.write.format("noop").mode(SaveMode.Overwrite).save()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-    cleanupShuffles()
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-53413: Cleanup shuffle dependencies for DataWritingCommandExec") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { adaptiveEnabled => {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+          (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan)
+          // V1 API write
+          df.write.format("csv").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
+
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, DoNotCleanup)
+        df.collect()
+
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, SkipMigration)
-    df.collect()
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, SkipMigration)
+        df.collect()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-    cleanupShuffles()
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+        df.collect()
+
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
+  }
+
+  test("SPARK-55035: Shuffle cleanup performed in child executions") {
+    val sourceDF = spark.range(100).repartition(10)
+    sourceDF.createOrReplaceTempView("source")
+
+    val createTablePlan = spark.sessionState.sqlParser.parsePlan(
+      """
+        CREATE TABLE child_exec_test
+        USING parquet
+        AS SELECT * FROM source WHERE id < 50
+      """)
+    val df = Dataset.ofRows(spark, createTablePlan, RemoveShuffleFiles)
     df.collect()
 
     val blockManager = spark.sparkContext.env.blockManager
@@ -433,9 +506,79 @@ class QueryExecutionSuite extends SharedSparkSession {
         }
         assert(
           ex.getMessage.contains("Queries with streaming sources must be executed with " +
-            "writeStream.start()")
+            "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+            "Declarative Pipeline.")
         )
       }
+    }
+  }
+
+  test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
+    }
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+    }
+  }
+
+  test("SPARK-55064: Jobs are tracked in DAGScheduler before query finished") {
+    val jobs = new mutable.HashSet[Int]()
+
+    var sqlExecutionEndVerified: Boolean = false
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobs += jobStart.jobId
+      }
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case e: SparkListenerSQLExecutionEnd =>
+            val jobsTracked = e.jobIds
+            assert(jobsTracked == jobs)
+            jobs.clear()
+            sqlExecutionEndVerified = true
+          case _ =>
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    try {
+      withTable("t1", "t2") {
+        spark.range(10).selectExpr("id as A", "id as D")
+          .write.partitionBy("A").mode("overwrite").saveAsTable("t1")
+        spark.range(2).selectExpr("id as B", "id as C")
+          .write.mode("overwrite").saveAsTable("t2")
+
+        Seq(true, false).foreach { adaptiveEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptiveEnabled.toString) {
+            sqlExecutionEndVerified = false
+            val df = sql(
+              """
+                |SELECT avg(A) FROM t1
+                |WHERE A = (
+                |  SELECT B from t2 where C = 1
+                |)
+              """.stripMargin)
+
+            df.collect()
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(sqlExecutionEndVerified)
+            // The jobs tracked by DAGScheduler should be cleared after the query is done.
+            eventually(timeout(10.seconds)) {
+              assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+              assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+            }
+          }
+        }
+      }
+      eventually(timeout(10.seconds)) {
+        assert(spark.sparkContext.dagScheduler.activeQueryToJobs.isEmpty)
+        assert(spark.sparkContext.dagScheduler.jobIdToQueryExecutionId.isEmpty)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
     }
   }
 

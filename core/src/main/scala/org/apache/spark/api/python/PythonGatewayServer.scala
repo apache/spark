@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, PATH}
 
 /**

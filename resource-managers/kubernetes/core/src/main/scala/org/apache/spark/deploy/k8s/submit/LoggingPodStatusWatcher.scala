@@ -23,7 +23,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, POD_PHASE, POD_STATE, STATUS, SUBMISSION_ID}
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
@@ -98,7 +98,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   override def watchOrStop(sId: String): Boolean = {
-    logInfo(log"Waiting for application ${MDC(APP_NAME, conf.appName)}} with application ID " +
+    logInfo(log"Waiting for application ${MDC(APP_NAME, conf.appName)} with application ID " +
       log"${MDC(APP_ID, appId)} and submission ID ${MDC(SUBMISSION_ID, sId)} to finish...")
     val interval = conf.get(REPORT_INTERVAL)
     synchronized {

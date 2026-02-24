@@ -107,8 +107,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
   }
 

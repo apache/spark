@@ -22,6 +22,7 @@ import java.util
 import java.util.regex.Pattern
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config.ConfigReader
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -93,10 +94,15 @@ private[sql] object Catalogs {
   private def catalogOptions(name: String, conf: SQLConf) = {
     val prefix = Pattern.compile("^spark\\.sql\\.catalog\\." + name + "\\.(.+)")
     val options = new util.HashMap[String, String]
+    val reader = new ConfigReader(options)
     conf.getAllConfs.foreach {
       case (key, value) =>
         val matcher = prefix.matcher(key)
-        if (matcher.matches && matcher.groupCount > 0) options.put(matcher.group(1), value)
+        if (matcher.matches && matcher.groupCount > 0) {
+          // pass config entries through default ConfigReader mechanics,
+          // substituting prefixes from bindings: ${env:XYZ} -> sys.env.get("XYZ")
+          options.put(matcher.group(1), reader.substitute(value))
+        }
     }
     new CaseInsensitiveStringMap(options)
   }

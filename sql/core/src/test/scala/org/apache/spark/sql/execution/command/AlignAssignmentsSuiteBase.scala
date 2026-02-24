@@ -218,6 +218,13 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     }
   }
 
+  protected def assertNoNullCheckExists(plan: LogicalPlan): Unit = {
+    val asserts = plan.expressions.flatMap(e => e.collect {
+      case assert: AssertNotNull => assert
+    })
+    assert(asserts.isEmpty, s"Must not have NOT NULL checks")
+  }
+
   protected def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {
     val asserts = plan.expressions.flatMap(e => e.collect {
       case assert: AssertNotNull if assert.walkedTypePath == colPath => assert

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
@@ -58,6 +59,7 @@ case class BloomFilterMightContain(
           case GetStructField(subquery: PlanExpression[_], _, _)
             if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
+          case _: ScalarSubqueryReference => TypeCheckResult.TypeCheckSuccess
           case _ =>
             DataTypeMismatch(
               errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",

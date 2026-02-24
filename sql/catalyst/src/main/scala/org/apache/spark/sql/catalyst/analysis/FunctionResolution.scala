@@ -26,17 +26,16 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
-  CatalogV2Util,
-  FunctionCatalog,
-  Identifier,
   LookupCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{
   AggregateFunction => V2AggregateFunction,
-  ScalarFunction
+  ScalarFunction,
+  UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
@@ -52,10 +51,14 @@ class FunctionResolution(
       resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
         val CatalogAndIdentifier(catalog, ident) =
           relationResolution.expandIdentifier(u.nameParts)
-        if (CatalogV2Util.isSessionCatalog(catalog)) {
-          resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
-        } else {
-          resolveV2Function(catalog.asFunctionCatalog, ident, u.arguments, u)
+        catalog.asFunctionCatalog.loadFunction(ident) match {
+          case v1Func: V1Function =>
+            // V1Function has a lazy builder - invoke() triggers resource loading
+            // and builder creation only on first invocation
+            val func = v1Func.invoke(u.arguments)
+            validateFunction(func, u.arguments.length, u)
+          case unboundV2Func =>
+            resolveV2Function(unboundV2Func, u.arguments, u)
         }
       }
     }
@@ -115,14 +118,6 @@ class FunctionResolution(
     }
   }
 
-  private def resolveV1Function(
-      ident: FunctionIdentifier,
-      arguments: Seq[Expression],
-      u: UnresolvedFunction): Expression = {
-    val func = v1SessionCatalog.resolvePersistentFunction(ident, arguments)
-    validateFunction(func, arguments.length, u)
-  }
-
   private def validateFunction(
       func: Expression,
       numArgs: Int,
@@ -157,18 +152,8 @@ class FunctionResolution(
             wf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
-          wf match {
-            case nthValue: NthValue =>
-              nthValue.copy(ignoreNulls = u.ignoreNulls)
-            case _ =>
-              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                wf.prettyName,
-                "IGNORE NULLS"
-              )
-          }
         } else {
-          wf
+          resolveIgnoreNulls(wf, u.ignoreNulls)
         }
       case owf: FrameLessOffsetWindowFunction =>
         if (u.isDistinct) {
@@ -181,15 +166,8 @@ class FunctionResolution(
             owf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
-          owf match {
-            case lead: Lead =>
-              lead.copy(ignoreNulls = u.ignoreNulls)
-            case lag: Lag =>
-              lag.copy(ignoreNulls = u.ignoreNulls)
-          }
         } else {
-          owf
+          resolveIgnoreNulls(owf, u.ignoreNulls)
         }
       // We get an aggregate function, we need to wrap it in an AggregateExpression.
       case agg: AggregateFunction =>
@@ -221,21 +199,8 @@ class FunctionResolution(
             )
           case _ =>
         }
-        if (u.ignoreNulls) {
-          val aggFunc = newAgg match {
-            case first: First => first.copy(ignoreNulls = u.ignoreNulls)
-            case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
-            case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
-            case _ =>
-              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                newAgg.prettyName,
-                "IGNORE NULLS"
-              )
-          }
-          aggFunc.toAggregateExpression(u.isDistinct, u.filter)
-        } else {
-          newAgg.toAggregateExpression(u.isDistinct, u.filter)
-        }
+        val aggFunc = resolveIgnoreNulls(newAgg, u.ignoreNulls)
+        aggFunc.toAggregateExpression(u.isDistinct, u.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
         checkUnsupportedAggregateClause(other, u)
@@ -263,7 +228,8 @@ class FunctionResolution(
         "FILTER clause"
       )
     }
-    if (u.ignoreNulls) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "IGNORE NULLS"
@@ -271,12 +237,47 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Resolves the IGNORE NULLS / RESPECT NULLS clause for a function.
+   * If ignoreNulls is defined, applies it to the function; otherwise returns unchanged.
+   */
+  private def resolveIgnoreNulls[T <: Expression](func: T, ignoreNulls: Option[Boolean]): T = {
+    ignoreNulls.map(applyIgnoreNulls(func, _)).getOrElse(func)
+  }
+
+  /**
+   * Applies the IGNORE NULLS / RESPECT NULLS clause to functions that support it.
+   * Returns the modified function if supported, throws error otherwise.
+   */
+  private def applyIgnoreNulls[T <: Expression](func: T, ignoreNulls: Boolean): T = {
+    val result = func match {
+      // Window functions
+      case nthValue: NthValue => nthValue.copy(ignoreNulls = ignoreNulls)
+      case lead: Lead => lead.copy(ignoreNulls = ignoreNulls)
+      case lag: Lag => lag.copy(ignoreNulls = ignoreNulls)
+      // Aggregate functions
+      case first: First => first.copy(ignoreNulls = ignoreNulls)
+      case last: Last => last.copy(ignoreNulls = ignoreNulls)
+      case anyValue: AnyValue => anyValue.copy(ignoreNulls = ignoreNulls)
+      case collectList: CollectList => collectList.copy(ignoreNulls = ignoreNulls)
+      case collectSet: CollectSet => collectSet.copy(ignoreNulls = ignoreNulls)
+      case _ if ignoreNulls =>
+        // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName,
+          "IGNORE NULLS"
+        )
+      case _ =>
+        // RESPECT NULLS is the default, silently return unchanged
+        func
+    }
+    result.asInstanceOf[T]
+  }
+
   private def resolveV2Function(
-      catalog: FunctionCatalog,
-      ident: Identifier,
+      unbound: UnboundFunction,
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    val unbound = catalog.loadFunction(ident)
     val inputType = StructType(arguments.zipWithIndex.map {
       case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
     })
@@ -319,7 +320,8 @@ class FunctionResolution(
         scalarFunc.name(),
         "FILTER clause"
       )
-    } else if (u.ignoreNulls) {
+    } else if (u.ignoreNulls.contains(true)) {
+      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
         "IGNORE NULLS"
@@ -333,7 +335,8 @@ class FunctionResolution(
       aggFunc: V2AggregateFunction[_, _],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    if (u.ignoreNulls) {
+    // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
         "IGNORE NULLS"

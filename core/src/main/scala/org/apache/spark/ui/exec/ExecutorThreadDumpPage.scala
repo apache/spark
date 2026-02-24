@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
-import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, SparkUITab, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
 import org.apache.spark.ui.flamegraph.FlamegraphNode
 
@@ -59,9 +59,7 @@ private[ui] class ExecutorThreadDumpPage(
         val heldLocks = (synchronizers ++ monitors).mkString(", ")
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
-            onclick={s"toggleThreadStackTrace($threadId, false)"}
-            onmouseover={s"onMouseOverAndOut($threadId)"}
-            onmouseout={s"onMouseOverAndOut($threadId)"}>
+            data-thread-id={threadId.toString}>
           <td id={s"${threadId}_td_id"}>{threadId}</td>
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
@@ -73,6 +71,7 @@ private[ui] class ExecutorThreadDumpPage(
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
+        {threadDumpSummary(threadDump)}
         { if (flamegraphEnabled) {
             drawExecutorFlamegraph(request, threadDump) }
           else {
@@ -82,22 +81,25 @@ private[ui] class ExecutorThreadDumpPage(
         {
           // scalastyle:off
           <p></p>
-          <span class="collapse-thead-stack-trace-table collapse-table" onClick="collapseTableAndButton('collapse-thead-stack-trace-table', 'thead-stack-trace-table')">
+          <span class="collapse-thead-stack-trace-table collapse-table"
+                data-collapse-name="collapse-thead-stack-trace-table"
+                data-collapse-table="thead-stack-trace-table"
+                data-collapse-button="true">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Thread Stack Trace</a>
             </h4>
           </span>
           <div class="thead-stack-trace-table-button" style="display: flex; align-items: center;">
-            <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
-            <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
+            <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
+            <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
             <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
             <div class="form-inline">
               <div class="bs-example" data-example-id="simple-form-inline">
                 <div class="form-group">
                   <div class="input-group">
                     <label class="mr-2" for="search">Search:</label>
-                    <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+                    <input type="text" class="form-control" id="search" data-search-input="true"></input>
                   </div>
                 </div>
               </div>
@@ -107,10 +109,10 @@ private[ui] class ExecutorThreadDumpPage(
         }
         <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
           <thead>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
-            <th onClick="collapseAllThreadStackTrace(false)">
+            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread ID</th>
+            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
+            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
+            <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
               <span data-toggle="tooltip" data-placement="top"
                     title="Objects whose lock the thread currently holds">
                 Thread Locks
@@ -123,10 +125,8 @@ private[ui] class ExecutorThreadDumpPage(
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
-    // scalastyle:on
   }
 
-  // scalastyle:off
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
     val js =
       s"""
@@ -150,9 +150,38 @@ private[ui] class ExecutorThreadDumpPage(
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
-        <script type="module">{Unparsed(js)}</script>
+        <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
       </div>
     </div>
   }
-  // scalastyle:off
+
+
+  private def threadDumpSummary(threadDump: Array[ThreadStackTrace]): Seq[Node] = {
+    val totalCount = threadDump.length
+    <div>
+      <span class="thead-dump-summary collapse-table"
+            data-collapse-name="thead-dump-summary"
+            data-collapse-table="thread-dump-summary-table">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Thread Dump Summary: { totalCount }</a>
+        </h4>
+      </span>
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thread-dump-summary-table collapsible-table"}>
+        <thead><th>Thread State</th><th>Count</th><th>Percentage</th></thead>
+        <tbody>
+          {
+          threadDump.groupBy(_.threadState).map { case (state, threads) =>
+            <tr>
+              <td>{state}</td>
+              <td>{threads.length}</td>
+              <td>{"%.2f%%".format(threads.length * 100.0 / totalCount)}</td>
+            </tr>
+          }.toSeq
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  // scalastyle:on
 }

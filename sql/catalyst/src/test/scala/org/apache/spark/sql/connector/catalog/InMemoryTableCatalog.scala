@@ -46,9 +46,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 
   private var _name: Option[String] = None
+  private var copyOnLoad: Boolean = false
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
+    copyOnLoad = options.getBoolean("copyOnLoad", false)
   }
 
   override def name: String = _name.get
@@ -57,10 +59,38 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
   }
 
+  // load table for scans
   override def loadTable(ident: Identifier): Table = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryTable) if copyOnLoad =>
+        table.copy() // copy to validate logical table equality
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
+  // load table for writes
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
     Option(tables.get(ident)) match {
       case Some(table) =>
         table
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
+  def pinTable(ident: Identifier, version: String): Unit = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryBaseTable) =>
+        val versionIdent = Identifier.of(ident.namespace, ident.name + version)
+        val versionTable = table.copy()
+        tables.put(versionIdent, versionTable)
+      case Some(table) =>
+        throw new UnsupportedOperationException(s"Can't pin ${table.getClass.getName}")
       case _ =>
         throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
@@ -118,7 +148,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
     // scalastyle:on argcount
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
@@ -126,7 +155,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, constraints,
+    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
       distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
       distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
@@ -150,14 +179,22 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    table.increaseVersion()
+    val currentVersion = table.version()
     val newTable = new InMemoryTable(
       name = table.name,
-      schema = schema,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
       partitioning = finalPartitioning,
       properties = properties,
-      constraints = constraints)
-      .withData(table.data)
-
+      constraints = constraints,
+      id = table.id)
+      .alterTableWithData(table.data, schema)
+    newTable.setVersion(currentVersion)
+    changes.foreach {
+      case a: TableChange.AddConstraint =>
+        newTable.setValidatedVersion(a.validatedTableVersion())
+      case _ =>
+    }
     tables.put(ident, newTable)
 
     newTable
@@ -171,7 +208,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     Option(tables.remove(oldIdent)) match {
-      case Some(table) =>
+      case Some(table: InMemoryBaseTable) =>
+        table.increaseVersion()
         tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent.asMultipartIdentifier)

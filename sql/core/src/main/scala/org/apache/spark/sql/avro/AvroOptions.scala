@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -40,6 +40,21 @@ private[sql] class AvroOptions(
   extends FileSourceOptions(parameters) with Logging {
 
   import AvroOptions._
+
+  private def parseBoolean(optionName: String, value: String): Boolean = {
+    try {
+      value.toBoolean
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryCompilationErrors.avroOptionsException(
+          optionName,
+          s"Cannot cast value '$value' to Boolean.")
+    }
+  }
+
+  private def getBoolean(optionName: String, defaultValue: => Boolean): Boolean = {
+    parameters.get(optionName).map(v => parseBoolean(optionName, v)).getOrElse(defaultValue)
+  }
 
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
@@ -78,19 +93,18 @@ private[sql] class AvroOptions(
    * name. This allows for a structurally equivalent Catalyst schema to be used with an Avro schema
    * whose field names do not match. Defaults to false.
    */
-  val positionalFieldMatching: Boolean =
-    parameters.get(POSITIONAL_FIELD_MATCHING).exists(_.toBoolean)
+  val positionalFieldMatching: Boolean = getBoolean(POSITIONAL_FIELD_MATCHING, defaultValue = false)
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.12.0/specification/#schema-record .
+   * See https://avro.apache.org/docs/1.12.1/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.12.0/specification/#schema-record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.12.1/specification/#schema-record .
    */
   val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 
@@ -107,10 +121,7 @@ private[sql] class AvroOptions(
       AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
       ignoreFilesWithoutExtensionByDefault)
 
-    parameters
-      .get(IGNORE_EXTENSION)
-      .map(_.toBoolean)
-      .getOrElse(!ignoreFilesWithoutExtension)
+    getBoolean(IGNORE_EXTENSION, defaultValue = !ignoreFilesWithoutExtension)
   }
 
   /**
@@ -129,12 +140,12 @@ private[sql] class AvroOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  val datetimeRebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
-    .get(DATETIME_REBASE_MODE).map(LegacyBehaviorPolicy.withName)
-    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+  val datetimeRebaseModeInRead: String = parameters
+    .get(DATETIME_REBASE_MODE)
+    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ).toString)
 
   val useStableIdForUnionType: Boolean =
-    parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+    getBoolean(STABLE_ID_FOR_UNION_TYPE, defaultValue = false)
 
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")

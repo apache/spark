@@ -27,7 +27,15 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
 SELECT split('hello', '');
+SELECT split('hello', '', 0);
+SELECT split('hello', '', 1);
+SELECT split('hello', '', 3);
+SELECT split('hello', '', 5);
+SELECT split('hello', '', 100);
 SELECT split('', '');
+SELECT split('', '', -1);
+SELECT split('', '', 0);
+SELECT split('', '', 1);
 SELECT split('abc', null);
 SELECT split(null, 'b');
 

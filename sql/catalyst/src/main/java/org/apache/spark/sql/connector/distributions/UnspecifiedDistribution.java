@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.distributions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A distribution where no promises are made about co-location of data.
  *
  * @since 3.2.0
  */
-@Experimental
+@Evolving
 public interface UnspecifiedDistribution extends Distribution {}

@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+set -ex
+
 echo "=================================="
 echo "Free up disk space on CI system"
 echo "=================================="
@@ -40,10 +42,13 @@ sudo rm -rf /opt/az
 sudo rm -rf /opt/hostedtoolcache/CodeQL
 sudo rm -rf /opt/hostedtoolcache/go
 sudo rm -rf /opt/hostedtoolcache/node
+du -sh /opt/*
 
+sudo apt-get update --fix-missing
 sudo apt-get remove --purge -y '^aspnet.*'
 sudo apt-get remove --purge -y '^dotnet-.*'
 sudo apt-get remove --purge -y '^llvm-.*'
+sudo apt-get remove --purge -y '^temurin-.*'
 sudo apt-get remove --purge -y 'php.*'
 sudo apt-get remove --purge -y '^mongodb-.*'
 sudo apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox

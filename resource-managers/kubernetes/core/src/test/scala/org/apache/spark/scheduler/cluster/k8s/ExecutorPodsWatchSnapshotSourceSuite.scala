@@ -51,6 +51,9 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   private var executorRoleLabeledPods: LABELED_PODS = _
 
   @Mock
+  private var executorRoleLabeledActivePods: LABELED_PODS = _
+
+  @Mock
   private var watchConnection: Watch = _
 
   private var watch: ArgumentCaptor[Watcher[Pod]] = _
@@ -66,7 +69,9 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
       .thenReturn(appIdLabeledPods)
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)
-    when(executorRoleLabeledPods.watch(watch.capture())).thenReturn(watchConnection)
+    when(executorRoleLabeledPods.withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true"))
+      .thenReturn(executorRoleLabeledActivePods)
+    when(executorRoleLabeledActivePods.watch(watch.capture())).thenReturn(watchConnection)
   }
 
   test("Watch events should be pushed to the snapshots store as snapshot updates.") {

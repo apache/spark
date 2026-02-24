@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, ObjectType, StringType}
 
-private[sql] case class SchemaOfAvro(
+case class SchemaOfAvro(
     jsonFormatSchema: String,
     options: Map[String, String])
   extends LeafExpression with RuntimeReplaceable {

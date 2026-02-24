@@ -41,7 +41,7 @@ def main():
 
     nonmigrated_files = {}
 
-    scala_files = glob.glob(os.path.join("../", "**", "*.scala"), recursive=True)
+    scala_files = glob.glob(os.path.join(__file__, "../", "**", "*.scala"), recursive=True)
 
     for file in scala_files:
         skip_file = False
