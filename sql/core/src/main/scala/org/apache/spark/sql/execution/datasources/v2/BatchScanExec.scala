@@ -48,7 +48,8 @@ case class BatchScanExec(
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
-          this.runtimeFilters == other.runtimeFilters
+          this.runtimeFilters == other.runtimeFilters &&
+          this.keyGroupedPartitioning == other.keyGroupedPartitioning
     case _ =>
       false
   }
