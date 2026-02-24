@@ -49,24 +49,52 @@ import org.apache.spark.util.NextIterator
 trait SymmetricHashJoinStateManager {
   import SymmetricHashJoinStateManager._
 
+  /** Append a new value to the given key, with the flag of matched or not. */
   def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit
 
+  /**
+   * Retrieve all matched values from given key. This doesn't update the matched flag for the
+   * values being returned, hence should be only used if appropriate for the join type and the
+   * side.
+   */
   def get(key: UnsafeRow): Iterator[UnsafeRow]
 
+  /**
+   * Retrieve all joined rows for the given key. The joined rows are generated with the provided
+   * generateJoinedRow function and filtered with the provided predicate.
+   *
+   * For excludeRowsAlreadyMatched = true, the method will only return the joined rows for the
+   * values which have not been marked as matched yet. The matched flag will be updated to true
+   * for the values being returned, if it is semantically required to do so.
+   *
+   * It is caller's responsibility to consume the whole iterator.
+   */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
       excludeRowsAlreadyMatched: Boolean = false): Iterator[JoinedRow]
 
+  /**
+   * Provide all key-value pairs in the state manager.
+   *
+   * It is caller's responsibility to consume the whole iterator.
+   */
   def iterator: Iterator[KeyToValuePair]
 
+  /** Commit all the changes to all the state stores */
   def commit(): Unit
 
+  /** Abort any changes to the state stores if needed */
   def abortIfNeeded(): Unit
 
+  /** Provide the metrics. */
   def metrics: StateStoreMetrics
 
+  /**
+   * Get state store checkpoint information of the two state stores for this joiner, after
+   * they finished data processing.
+   */
   def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo
 }
 
@@ -88,13 +116,25 @@ trait SupportsIndexedKeys {
 trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
+  /** Evict the state via condition on the key. Returns the number of values evicted. */
   def evictByKeyCondition(removalCondition: UnsafeRow => Boolean): Long
 
+  /**
+   * Evict the state via condition on the key, and return the evicted key-value pairs.
+   *
+   * It is caller's responsibility to consume the whole iterator.
+   */
   def evictAndReturnByKeyCondition(
       removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair]
 
+  /** Evict the state via condition on the value. Returns the number of values evicted. */
   def evictByValueCondition(removalCondition: UnsafeRow => Boolean): Long
 
+  /**
+   * Evict the state via condition on the value, and return the evicted key-value pairs.
+   *
+   * It is caller's responsibility to consume the whole iterator.
+   */
   def evictAndReturnByValueCondition(
       removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair]
 }
@@ -107,8 +147,14 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
+  /** Evict the state by timestamp. Returns the number of values evicted. */
   def evictByTimestamp(endTimestamp: Long): Long
 
+  /**
+   * Evict the state by timestamp and return the evicted key-value pairs.
+   *
+   * It is caller's responsibility to consume the whole iterator.
+   */
   def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair]
 }
 
@@ -154,7 +200,7 @@ class SymmetricHashJoinStateManagerV4(
     allowMultipleEventTimeColumns = false)
 
   private val random = new scala.util.Random(System.currentTimeMillis())
-  private val bucketSizeForNoEventTime = 1024
+  private val bucketCountForNoEventTime = 1024
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
     eventTimeColIdxOpt match {
       case Some(idx) =>
@@ -172,7 +218,7 @@ class SymmetricHashJoinStateManagerV4(
         // where the new value will be stored. There is a trade-off between the bucket size and the
         // number of values in each bucket; we can tune the bucket size with the configuration if
         // we figure out the magic number to not work well.
-        random.nextInt(bucketSizeForNoEventTime)
+        random.nextInt(bucketCountForNoEventTime)
     }
   }
 
@@ -343,6 +389,10 @@ class SymmetricHashJoinStateManagerV4(
     ret.filter(_ != null)
   }
 
+  /**
+   * NOTE: The entry provided by Iterator.next() will be reused. It is a caller's responsibility
+   * to copy it properly if caller needs to keep the reference after next() is called again.
+   */
   override def iterator: Iterator[KeyToValuePair] = {
     val reusableKeyToValuePair = KeyToValuePair()
     keyWithTsToValues.iterator().map { kv =>
