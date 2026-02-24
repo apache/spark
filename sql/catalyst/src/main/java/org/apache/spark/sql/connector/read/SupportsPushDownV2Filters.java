@@ -60,4 +60,16 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * empty array should be returned for this case.
    */
   Predicate[] pushedPredicates();
+
+  /**
+   * Returns true if this data source supports enhanced partition filtering: a second call to
+   * {@link #pushPredicates(Predicate[])} with partition-only predicates (e.g.
+   * {@link org.apache.spark.sql.connector.expressions.filter.PartitionPredicate}) will
+   * be called.
+   *
+   * @since 4.2.0
+   */
+  default boolean supportsEnhancedPartitionFiltering() {
+    return false;
+  }
 }

@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.internal.connector.PartitionPredicateImpl
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -697,6 +698,8 @@ private[sql] object DataSourceV2Strategy extends Logging {
           rebuildExpressionFromFilter(or.right(), translatedFilterToExpr))
       case not: V2Not =>
         expressions.Not(rebuildExpressionFromFilter(not.child(), translatedFilterToExpr))
+      case p: PartitionPredicateImpl =>
+        p.expression
       case _ =>
         translatedFilterToExpr.getOrElse(predicate,
           throw SparkException.internalError(
