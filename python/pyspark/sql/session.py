@@ -612,14 +612,14 @@ class SparkSession(SparkConversionMixin):
                 with self._lock:
                     instantiated_session = SparkSession._instantiatedSession
                     # Get SparkContext
-                    if instantiated_session is None or instantiated_session._sc._jsc is None:
+                    if instantiated_session is not None and instantiated_session._sc._jsc is not None:
+                        sc = instantiated_session._sc
+                    else:
                         sparkConf = SparkConf()
                         for key, value in self._options.items():
                             sparkConf.set(key, value)
                         # This SparkContext may be an existing one.
                         sc = SparkContext.getOrCreate(sparkConf)
-                    else:
-                        sc = instantiated_session._sc
                     jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
                     # Create a new SparkSession in the JVM
                     jSparkSession = jSparkSessionClass.builder().config(self._options).create()
