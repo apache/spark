@@ -52,7 +52,7 @@ sealed trait StreamingSourceIdentifyingName {
    * Extracts only user-provided names, filtering out flow-assigned or unassigned sources.
    * Used when narrowing to explicitly user-specified names (e.g., when passing to DataSource).
    *
-   * @return Some(UserProvided) if this is a user-provided name, None otherwise
+   * @return Option value set to the user-provided name if available, None otherwise
    */
   def toUserProvided: Option[UserProvided] = this match {
     case up: UserProvided => Some(up)
@@ -66,7 +66,8 @@ sealed trait StreamingSourceIdentifyingName {
    * Useful for pattern matching when both UserProvided and FlowAssigned should be
    * treated identically (e.g., when computing metadata paths or building sourceIdMap).
    *
-   * @return Some(name) for named sources, None for Unassigned
+   * @return Option value set to the source name (user-provided or flow-assigned) if available,
+   *         None otherwise
    */
   def nameOpt: Option[String] = this match {
     case UserProvided(name) => Some(name)

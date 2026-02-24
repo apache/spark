@@ -186,7 +186,14 @@ class MicroBatchExecution(
     val disabledSources =
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
-    val enforceNamed = sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution
+    // Read the source evolution enforcement from the last written offset log entry. If no entries
+    // are found, use the session config value.
+    val enforceNamed = offsetLog.getLatest().flatMap { case (_, offsetSeq) =>
+      offsetSeq.metadataOpt.flatMap { metadata =>
+        OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+          .map(_.toBoolean)
+      }
+    }.getOrElse(sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {

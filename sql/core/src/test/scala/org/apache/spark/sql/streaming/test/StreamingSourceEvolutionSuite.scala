@@ -24,10 +24,9 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Tag}
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
+import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.util.Utils
 
@@ -465,66 +464,6 @@ class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
     assert(offsetSeq.get.metadataOpt.get.conf(
       SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "true",
       "ENABLE_STREAMING_SOURCE_EVOLUTION should be true in offset metadata")
-  }
-
-  test("config mismatch detected when restarting with different enforcement mode") {
-    // Start query WITHOUT enforcement (unnamed sources)
-    withSQLConf(
-      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false",
-      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
-
-      LastOptions.clear()
-      val checkpointLocation = new Path(newMetadataDir)
-
-      val df1 = spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()  // No .name() call
-
-      val q1 = df1.writeStream
-        .format("org.apache.spark.sql.streaming.test")
-        .option("checkpointLocation", checkpointLocation.toString)
-        .trigger(ProcessingTime(10.seconds))
-        .start()
-      q1.processAllAvailable()
-      q1.stop()
-
-      // Verify enforcement=false was persisted
-      import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqLog
-      val offsetLog = new OffsetSeqLog(spark,
-        makeQualifiedPath(checkpointLocation.toString).toString + "/offsets")
-      val offsetSeq = offsetLog.get(0)
-      assert(offsetSeq.isDefined)
-      assert(offsetSeq.get.metadataOpt.get.conf(
-        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "false",
-        "ENABLE_STREAMING_SOURCE_EVOLUTION should be false in checkpoint")
-
-      // Try to restart with enforcement ENABLED - should fail with config mismatch
-      withSQLConf(
-        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true",
-        SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
-
-        LastOptions.clear()
-
-        val df2 = spark.readStream
-          .format("org.apache.spark.sql.streaming.test")
-          .name("source1")  // Must be named when enforcement=true
-          .load()
-
-        val e = intercept[StreamingQueryException] {
-          val q2 = df2.writeStream
-            .format("org.apache.spark.sql.streaming.test")
-            .option("checkpointLocation", checkpointLocation.toString)
-            .trigger(ProcessingTime(10.seconds))
-            .start()
-          q2.awaitTermination()
-        }
-
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkIllegalArgumentException],
-          condition = "STREAMING_QUERY_EVOLUTION_ERROR.CONFIG_MISMATCH",
-          parameters = Map("sessionValue" -> "true", "checkpointValue" -> "false"))
-      }
-    }
   }
 
   test("upgrade from old checkpoint without enforcement config uses default value") {

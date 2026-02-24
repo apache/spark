@@ -41,7 +41,6 @@ import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
@@ -338,29 +337,6 @@ abstract class StreamExecution(
         }
 
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
-
-        // Restore relevant SQL configs from checkpoint before evaluating logicalPlan.
-        // This ensures configs like ENABLE_STREAMING_SOURCE_EVOLUTION are set correctly
-        // when the logical plan determines source naming strategy.
-        val sessionEnforcementBeforeRestore =
-          sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution
-        offsetLog.getLatest().foreach { case (_, offsetSeq) =>
-          offsetSeq.metadataOpt.foreach { metadata =>
-            OffsetSeqMetadata.setSessionConf(metadata, sparkSessionForStream.sessionState.conf)
-
-            // Validate that critical configs haven't changed since checkpoint was created.
-            // This prevents config drift that could lead to incorrect query behavior.
-            val checkpointEnforcement =
-              OffsetSeqMetadata.readValueOpt(
-                metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION).getOrElse("false")
-            if (sessionEnforcementBeforeRestore.toString != checkpointEnforcement) {
-              throw QueryExecutionErrors.streamingSourceEvolutionConfigMismatchError(
-                sessionValue = sessionEnforcementBeforeRestore.toString,
-                checkpointValue = checkpointEnforcement)
-            }
-          }
-        }
-
         // force initialization of the logical plan so that the sources can be created
         logicalPlan
 
