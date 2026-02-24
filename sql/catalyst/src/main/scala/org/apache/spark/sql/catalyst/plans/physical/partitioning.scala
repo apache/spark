@@ -362,11 +362,10 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *
  * 2. '''In KeyGroupedShuffleSpec''': When used within `KeyGroupedShuffleSpec`, the `partitionKeys`
  *    may not be in sorted order. This occurs because `KeyGroupedShuffleSpec` can project the
- *    partition keys by join key positions (see `projectKeys` method), reordering them to match the
- *    join key order rather than the original sorted partition key order. The `EnsureRequirements`
- *    rule ensures that either the unordered keys from both sides of a join match exactly, or it
- *    builds a common ordered set of keys and pushes them down to `GroupPartitionsExec` on both
- *    sides to establish a compatible ordering.
+ *    partition keys by join key positions. The `EnsureRequirements` rule ensures that either the
+ *    unordered keys from both sides of a join match exactly, or it builds a common ordered set of
+ *    keys and pushes them down to `GroupPartitionsExec` on both sides to establish a compatible
+ *    ordering.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially

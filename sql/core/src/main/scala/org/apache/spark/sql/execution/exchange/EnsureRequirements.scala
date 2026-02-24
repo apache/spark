@@ -612,18 +612,18 @@ case class EnsureRequirements(
               replicateRightSide = false
             } else {
               // In partially clustered distribution, we should use un-grouped partition values
-              val (replicatedChild, replicatedSpec) = if (replicateLeftSide) {
+              val (partiallyClusteredChild, partiallyClusteredSpec) = if (replicateLeftSide) {
                 (right, rightSpec)
               } else {
                 (left, leftSpec)
               }
-              val originalPartitioning = (replicatedChild match {
+              val originalPartitioning = (partiallyClusteredChild match {
                 case g: GroupPartitionsExec => g.child
                 case o => o
               }).outputPartitioning.asInstanceOf[KeyedPartitioning]
               val dataTypes = partitionExprs.map(_.dataType)
               val projectedOriginalPartitionKeys =
-                replicatedSpec.joinKeyPositions.fold(originalPartitioning.partitionKeys)(
+                partiallyClusteredSpec.joinKeyPositions.fold(originalPartitioning.partitionKeys)(
                   KeyedPartitioning.projectKeys(originalPartitioning.partitionKeys, _, dataTypes))
               val internalRowComparableWrapperFactory =
                 InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
