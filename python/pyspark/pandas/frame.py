@@ -9966,38 +9966,39 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         has_numeric_type = len(psser_numeric) > 0
 
         if is_all_string_type:
+            # Handling string type columns
+            # We will retrieve the `count`, `unique`, `top` and `freq`.
             internal = self._internal.resolved_copy
             exprs_string = [
                 internal.spark_column_for(psser._column_label) for psser in psser_string
             ]
             sdf = internal.spark_frame.select(*exprs_string)
 
+            # Get `count` & `unique` for each column
             counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
+            # Handling Empty DataFrame
             if len(counts) == 0 or counts[0] == "0":
                 data = dict()
                 for psser in psser_string:
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            n_cols = len(column_names)
-            stack_args = ", ".join([f"'{col_name}', `{col_name}`" for col_name in column_names])
-            stack_expr = f"stack({n_cols}, {stack_args}) as (column_name, value)"
-            # Unpivot, group by (column_name, value), and count occurrences
-            unpivoted = sdf.selectExpr(stack_expr)
-            value_counts = unpivoted.groupBy("column_name", "value").count()
-            # Use window function to rank values by count within each column
-            # When counts tie, pick the first value alphabetically like pandas
-            window = Window.partitionBy("column_name").orderBy(F.desc("count"), F.asc("value"))
-            # Unfortunately, there's no straightforward way to get the top value and its frequency
-            # for each column without collecting the data to the driver side.
-            top_values = (
-                value_counts.withColumn("rank", F.row_number().over(window))
-                .filter(F.col("rank") == 1)
-                .select("column_name", "value", F.col("count").alias("freq"))
+            # Get `top` & `freq` for each column in a single pass.
+            # Unpivot all string columns into (idx, str_value) pairs using posexplode,
+            # then find the most frequent value per column using the struct min trick.
+            # The negative count ensures min(struct(neg_count, str_value)) picks the
+            # highest count, and among ties, the alphabetically first value (matching pandas).
+            rows = (
+                sdf.select(F.posexplode(F.array(*exprs_string)).alias("idx", "str_value"))
+                .groupby("idx", "str_value")
+                .agg(F.negative(F.count("*")).alias("neg_count"))
+                .groupby("idx")
+                .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
+                .sort("idx")
                 .collect()
             )
-            top_freq_dict = {row.column_name: (str(row.value), str(row.freq)) for row in top_values}
-            tops, freqs = map(list, zip(*(top_freq_dict[col_name] for col_name in column_names)))
+            tops = [str(r.s.str_value) for r in rows]
+            freqs = [str(-r.s.neg_count) for r in rows]
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
