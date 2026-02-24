@@ -72,7 +72,7 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
 
         if main.__module__ == "__main__":
             try:
-                worker_module = sys.modules["__main__"].__spec__.name
+                worker_module = sys.modules["__main__"].__spec__.name  # type: ignore[union-attr]
             except Exception:
                 worker_module = "__main__"
         else:
