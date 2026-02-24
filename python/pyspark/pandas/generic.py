@@ -2522,7 +2522,7 @@ class Frame(object, metaclass=ABCMeta):
         if LooseVersion(pd.__version__) < "3.0.0":
             if axis is _NoValue:
                 axis = 0
-            axis = validate_axis(axis)
+            axis = validate_axis(axis)  # type: ignore[arg-type]
             if axis != 0:
                 raise NotImplementedError('axis should be either 0 or "index" currently.')
         else:
