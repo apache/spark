@@ -612,7 +612,10 @@ class SparkSession(SparkConversionMixin):
                 with self._lock:
                     instantiated_session = SparkSession._instantiatedSession
                     # Get SparkContext
-                    if instantiated_session is not None and instantiated_session._sc._jsc is not None:
+                    if (
+                        instantiated_session is not None
+                        and instantiated_session._sc._jsc is not None
+                    ):
                         sc = instantiated_session._sc
                     else:
                         sparkConf = SparkConf()
