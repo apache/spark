@@ -2195,4 +2195,17 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Seq())
     }
   }
+
+  test("ConstantPropagation does not replace attributes with non-binary-stable collation") {
+    val tableName = "t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $tableName VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE"),
+        Row("HELLO")
+      )
+    }
+  }
 }
