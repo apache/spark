@@ -26,6 +26,8 @@ license: |
 
 - Since Spark 4.2, Spark will allocate executor pods with a batch size of `20`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `10`.
 
+- Since Spark 4.2, Spark configures a `NetworkPolicy` by default so that executor pods only accept ingress traffic from the driver and peer executors within the same job. To disable this and restore the legacy behavior, set `spark.kubernetes.driver.pod.excludedFeatureSteps` to `org.apache.spark.deploy.k8s.features.NetworkPolicyFeatureStep`.
+
 ## Upgrading from Core 4.0 to 4.1
 
 - Since Spark 4.1, Spark Master daemon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
