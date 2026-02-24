@@ -317,7 +317,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putShortsFromInts(rowId, total, buffer.array(), offset);
+      c.putShortsFromIntsLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putShort(rowId + i, (short) buffer.getInt());

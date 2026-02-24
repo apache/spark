@@ -285,7 +285,8 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets values from [src[srcIndex], src[srcIndex + count * 4]) to [rowId, rowId + count)
    * Each 4-byte little endian int is truncated to a short.
    */
-  public abstract void putShortsFromInts(int rowId, int count, byte[] src, int srcIndex);
+  public abstract void putShortsFromIntsLittleEndian(
+      int rowId, int count, byte[] src, int srcIndex);
 
   /**
    * Sets values from [src[srcIndex], src[srcIndex + count * 2]) to [rowId, rowId + count)
