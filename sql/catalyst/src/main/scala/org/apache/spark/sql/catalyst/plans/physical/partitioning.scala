@@ -419,15 +419,13 @@ case class KeyedPartitioning(
 
   @transient private lazy val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
 
-  @transient lazy val isGrouped: Boolean = {
-    partitionKeys.map(comparableWrapperFactory).distinct.size == partitionKeys.size
-  }
+  @transient lazy val isGrouped: Boolean =
+    partitionKeys.distinctBy(comparableWrapperFactory).size == partitionKeys.size
 
   def toGrouped: KeyedPartitioning = {
-    val distinctSortedPartitionKeys =
-      partitionKeys.distinctBy(comparableWrapperFactory).sorted(rowOrdering)
+    val groupedPartitionKeys = partitionKeys.distinctBy(comparableWrapperFactory)
 
-    KeyedPartitioning(expressions, distinctSortedPartitionKeys, originalPartitionKeys)
+    KeyedPartitioning(expressions, groupedPartitionKeys)
   }
 
   /**
