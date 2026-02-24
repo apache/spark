@@ -3258,4 +3258,28 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "mode" -> mode,
         "validModes" -> validModes.mkString(", ")))
   }
+
+  def tupleInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
+
+  def thetaInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
 }

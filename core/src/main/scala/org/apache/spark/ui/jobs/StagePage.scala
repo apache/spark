@@ -240,7 +240,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script type="module"
                   src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
-          <script type="module">{Unparsed(js)}</script>
+          <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
@@ -447,7 +447,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       </div>
       {TIMELINE_LEGEND}
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed("drawTaskAssignmentTimeline(" +
       s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
         s"${UIUtils.getTimeZoneOffset()})")}

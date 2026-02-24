@@ -3045,6 +3045,21 @@ object SQLConf {
       // 5 is the default table format version for RocksDB 6.20.3.
       .createWithDefault(5)
 
+  /**
+   * Note: this is defined in `RocksDBConf.MERGE_OPERATOR_VERSION_CONF`. These two places should
+   * be updated together.
+   */
+  val STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION =
+    buildConf("spark.sql.streaming.stateStore.rocksdb.mergeOperatorVersion")
+      .internal()
+      .doc("Set the RocksDB merge operator version. This will be stored in the checkpoint when " +
+        "starting a streaming query. The checkpoint will use this merge operator version for " +
+        "the entire lifetime of the query.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => v == 1 || v == 2, "Must be 1 or 2")
+      .createWithDefault(2)
+
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
@@ -3444,6 +3459,13 @@ object SQLConf {
         "Invalid value for 'spark.sql.streaming.multipleWatermarkPolicy'. " +
           "Valid values are 'min' and 'max'")
       .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
+
+  val STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN =
+    buildConf("spark.sql.streaming.validateEventTimeWatermarkColumn")
+      .doc("When true, check that eventTime in withWatermark is a top-level column.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
     buildConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
@@ -6873,6 +6895,15 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val PROTOBUF_EXTENSIONS_SUPPORT_ENABLED =
+    buildConf("spark.sql.function.protobufExtensions.enabled")
+      .doc("When true, the from_protobuf and to_protobuf operators will support proto2 " +
+        "extensions when a binary file descriptor set is provided. This property will have no " +
+        "effect for the overloads taking a Java class name instead of a file descriptor set.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

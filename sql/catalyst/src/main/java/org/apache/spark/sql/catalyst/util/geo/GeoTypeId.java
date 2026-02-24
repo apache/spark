@@ -20,27 +20,31 @@ package org.apache.spark.sql.catalyst.util.geo;
  * Enum type for geometry type IDs. The values chosen match the WKB specification
  * for 2D geometries and align with the values for 3DZ, 3DM, and 4D geometries.
  * <p>
- * These map to the type IDs used in the WKB (Well-Known Binary) format
+ * These map to the type IDs used in the WKB (Well-Known Binary) format.
  **/
 enum GeoTypeId {
-  ABSTRACT_GEOMETRY(-1),
-  DYNAMIC_GEOMETRY(0),
-  POINT(1),
-  LINESTRING(2),
-  POLYGON(3),
-  MULTI_POINT(4),
-  MULTI_LINESTRING(5),
-  MULTI_POLYGON(6),
-  GEOMETRY_COLLECTION(7);
+  POINT(1, "POINT"),
+  LINESTRING(2, "LINESTRING"),
+  POLYGON(3, "POLYGON"),
+  MULTI_POINT(4, "MULTIPOINT"),
+  MULTI_LINESTRING(5, "MULTILINESTRING"),
+  MULTI_POLYGON(6, "MULTIPOLYGON"),
+  GEOMETRY_COLLECTION(7, "GEOMETRYCOLLECTION");
 
   private final long value;
+  private final String wktName;
 
-  GeoTypeId(long value) {
+  GeoTypeId(long value, String wktName) {
     this.value = value;
+    this.wktName = wktName;
   }
 
   long getValue() {
     return value;
+  }
+
+  String getWktName() {
+    return wktName;
   }
 
   static GeoTypeId fromValue(long value) {

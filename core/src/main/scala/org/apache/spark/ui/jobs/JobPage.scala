@@ -215,7 +215,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         </div>
       </div>
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, " +
       s"${appStartTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
@@ -459,7 +459,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowActiveStages) {
       content ++=
         <span id="active" class="collapse-aggregated-activeStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeStages','aggregated-activeStages')">
+            data-collapse-name="collapse-aggregated-activeStages"
+            data-collapse-table="aggregated-activeStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>
@@ -472,8 +473,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowPendingStages) {
       content ++=
         <span id="pending" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
+            data-collapse-table="aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Pending Stages ({pendingOrSkippedStages.size})</a>
@@ -486,8 +487,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowCompletedStages) {
       content ++=
         <span id="completed" class="collapse-aggregated-completedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedStages',
-            'aggregated-completedStages')">
+            data-collapse-name="collapse-aggregated-completedStages"
+            data-collapse-table="aggregated-completedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Stages ({completedStages.size})</a>
@@ -500,8 +501,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowSkippedStages) {
       content ++=
         <span id="skipped" class="collapse-aggregated-pendingOrSkippedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-pendingOrSkippedStages',
-            'aggregated-pendingOrSkippedStages')">
+            data-collapse-name="collapse-aggregated-pendingOrSkippedStages"
+            data-collapse-table="aggregated-pendingOrSkippedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Skipped Stages ({pendingOrSkippedStages.size})</a>
@@ -514,7 +515,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     if (shouldShowFailedStages) {
       content ++=
         <span id ="failed" class="collapse-aggregated-failedStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-failedStages','aggregated-failedStages')">
+            data-collapse-name="collapse-aggregated-failedStages"
+            data-collapse-table="aggregated-failedStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Failed Stages ({failedStages.size})</a>

@@ -83,6 +83,7 @@ case class AtomicReplaceTableExec(
         .withColumns(columns)
         .withPartitions(partitioning.toArray)
         .withProperties(tableProperties.asJava)
+        .withConstraints(tableSpec.constraints.toArray)
         .build()
       catalog.stageCreateOrReplace(identifier, tableInfo)
     } else if (catalog.tableExists(identifier)) {
@@ -91,6 +92,7 @@ case class AtomicReplaceTableExec(
           .withColumns(columns)
           .withPartitions(partitioning.toArray)
           .withProperties(tableProperties.asJava)
+          .withConstraints(tableSpec.constraints.toArray)
           .build()
         catalog.stageReplace(identifier, tableInfo)
       } catch {

@@ -48,7 +48,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
 from pandas.api.extensions import no_default
 from pandas.api.types import (
     is_list_like,
@@ -57,6 +57,7 @@ from pandas.api.types import (
 )
 from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
 
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import (
     functions as F,
@@ -1082,9 +1083,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):
+        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):
+        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
@@ -2098,7 +2099,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def fillna(
         self,
         value: Optional[Any] = None,
-        method: Optional[str] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
         axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
@@ -2167,7 +2168,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         We can also propagate non-null values forward or backward.
 
-        >>> s.fillna(method='ffill')
+        >>> s.fillna(method='ffill')  # doctest: +SKIP
         0    NaN
         1    2.0
         2    3.0
@@ -2177,7 +2178,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Name: x, dtype: float64
 
         >>> s = ps.Series([np.nan, 'a', 'b', 'c', np.nan], name='x')
-        >>> s.fillna(method='ffill')
+        >>> s.fillna(method='ffill')  # doctest: +SKIP
         0    None
         1       a
         2       b
@@ -2185,6 +2186,28 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4       c
         Name: x, dtype: object
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if method is _NoValue:
+                method = None
+        else:
+            if method is not _NoValue:
+                raise TypeError(
+                    "The `method` parameter is not supported in pandas 3.0.0 and later. "
+                )
+            method = None
+
+        return self._fillna_with_method(
+            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+        )
+
+    def _fillna_with_method(
+        self,
+        value: Optional[Any] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ) -> Optional["Series"]:
         psser = self._fillna(value=value, method=method, axis=axis, limit=limit)
 
         if method is not None:
@@ -2783,7 +2806,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Get the rows for the last 3 days:
 
-        >>> psser.last('3D')
+        >>> psser.last('3D')  # doctest: +SKIP
         2018-04-13    3
         2018-04-15    4
         dtype: int64
@@ -2792,6 +2815,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-11 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._last(offset)
+        else:
+            raise AttributeError(
+                "The `last` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _last(self, offset: Union[str, DateOffset]) -> "Series":
         warnings.warn(
             "last is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -2837,7 +2869,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Get the rows for the first 3 days:
 
-        >>> psser.first('3D')
+        >>> psser.first('3D')  # doctest: +SKIP
         2018-04-09    1
         2018-04-11    2
         dtype: int64
@@ -2846,6 +2878,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-13 was
         not returned.
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._first(offset)
+        else:
+            raise AttributeError(
+                "The `first` method is not supported in pandas 3.0.0 and later. "
+                "Please create a mask and filter using `.loc` instead"
+            )
+
+    def _first(self, offset: Union[str, DateOffset]) -> "Series":
         warnings.warn(
             "first is deprecated and will be removed in a future version. "
             "Please create a mask and filter using `.loc` instead",
@@ -3217,12 +3258,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         z    3
         dtype: int64
         >>>
-        >>> psser.swapaxes(0, 0)
+        >>> psser.swapaxes(0, 0)  # doctest: +SKIP
         x    1
         y    2
         z    3
         dtype: int64
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._swapaxes(i, j, copy)
+        else:
+            raise AttributeError(
+                "The `swapaxes` method is not supported in pandas 3.0.0 and later. "
+                "Please use the `transpose` method instead"
+            )
+
+    def _swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "Series":
         warnings.warn(
             "'Series.swapaxes' is deprecated and will be removed in a future version. "
             "Please use 'Series.transpose' instead.",
@@ -5121,7 +5171,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ), "If 'regex' is True then 'to_replace' must be a string"
 
         if to_replace is None:
-            return self.fillna(method="ffill")
+            return self._fillna_with_method(method="ffill")
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
 

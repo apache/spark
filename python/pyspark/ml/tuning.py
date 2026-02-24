@@ -77,13 +77,13 @@ __all__ = [
 
 
 def _parallelFitTasks(
-    est: Estimator,
+    est: Estimator[Transformer],
     train: DataFrame,
     eva: Evaluator,
     validation: DataFrame,
     epm: Sequence["ParamMap"],
     collectSubModel: bool,
-) -> List[Callable[[], Tuple[int, float, Transformer]]]:
+) -> List[Callable[[], Tuple[int, float, Union[Transformer, None]]]]:
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
@@ -110,7 +110,7 @@ def _parallelFitTasks(
     """
     modelIter = est.fitMultiple(train, epm)
 
-    def singleTask() -> Tuple[int, float, Transformer]:
+    def singleTask() -> Tuple[int, float, Union[Transformer, None]]:
         index, model = next(modelIter)
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method

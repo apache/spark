@@ -774,7 +774,7 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
@@ -943,12 +943,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warning(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warning(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -964,7 +964,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        logger.warn(
+                        logger.warning(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )

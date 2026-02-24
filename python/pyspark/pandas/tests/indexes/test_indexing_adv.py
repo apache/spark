@@ -23,7 +23,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasNotImplementedError
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, compare_both
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 

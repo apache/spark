@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.SparkPod
 
 /**
@@ -27,8 +27,9 @@ import org.apache.spark.deploy.k8s.SparkPod
  * A collection of functions that together represent a "feature" in pods that are launched for
  * Spark drivers and executors.
  */
-@Unstable
+@Stable
 @DeveloperApi
+@Since("3.3.0")
 trait KubernetesFeatureConfigStep {
 
   /**

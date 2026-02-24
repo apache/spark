@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Sequence, Tuple, Type, Dict
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -27,8 +27,17 @@ from pyspark.sql.datasource import (
     InputPartition,
     SimpleDataSourceStreamReader,
 )
+from pyspark.sql.streaming.datasource import (
+    ReadAllAvailable,
+    ReadLimit,
+    ReadMaxBytes,
+    ReadMaxRows,
+    ReadMinRows,
+    ReadMaxFiles,
+)
 from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors.exceptions.base import PySparkException
 
 
 def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
@@ -62,13 +71,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
     ordinary :class:`DataSourceStreamReader`.
 
-    current_offset tracks the latest progress of the record prefetching, it is initialized to be
-    initialOffset() when query start for the first time or initialized to be the end offset of
-    the last planned batch when query restarts.
-
     When streaming engine calls latestOffset(), the wrapper calls read() that starts from
-    current_offset, prefetches and cache the data, then updates the current_offset to be
-    the end offset of the new data.
+    start provided via the parameter of latestOffset(), prefetches and cache the data, then updates
+    the current_offset to be the end offset of the new data.
 
     When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
     from cache and send it to JVM along with the input partitions.
@@ -79,28 +84,50 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def __init__(self, simple_reader: SimpleDataSourceStreamReader):
         self.simple_reader = simple_reader
-        self.initial_offset: Optional[dict] = None
-        self.current_offset: Optional[dict] = None
         self.cache: List[PrefetchedCacheEntry] = []
 
     def initialOffset(self) -> dict:
-        if self.initial_offset is None:
-            self.initial_offset = self.simple_reader.initialOffset()
-        return self.initial_offset
+        return self.simple_reader.initialOffset()
 
-    def latestOffset(self) -> dict:
-        # when query start for the first time, use initial offset as the start offset.
-        if self.current_offset is None:
-            self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
+    def getDefaultReadLimit(self) -> ReadLimit:
+        # We do not consider providing different read limit on simple stream reader.
+        return ReadAllAvailable()
+
+    def add_result_to_cache(self, start: dict, end: dict, it: Iterator[Tuple]) -> None:
+        """
+        Validates that read() did not return a non-empty batch with end equal to start,
+        which would cause the same batch to be processed repeatedly. When end != start,
+        appends the result to the cache; when end == start with empty iterator, does not
+        cache (avoids unbounded cache growth).
+        """
+        start_str = json.dumps(start)
+        end_str = json.dumps(end)
+        if end_str != start_str:
+            self.cache.append(PrefetchedCacheEntry(start, end, it))
+            return
+        try:
+            next(it)
+        except StopIteration:
+            return
+        raise PySparkException(
+            errorClass="SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            messageParameters={
+                "start_offset": start_str,
+                "end_offset": end_str,
+            },
+        )
+
+    def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+        assert start is not None, "start offset should not be None"
+        assert isinstance(
+            limit, ReadAllAvailable
+        ), "simple stream reader does not support read limit"
+
+        (iter, end) = self.simple_reader.read(start)
+        self.add_result_to_cache(start, end, iter)
         return end
 
     def commit(self, end: dict) -> None:
-        if self.current_offset is None:
-            self.current_offset = end
-
         end_idx = -1
         for idx, entry in enumerate(self.cache):
             if json.dumps(entry.end) == json.dumps(end):
@@ -112,11 +139,6 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self.simple_reader.commit(end)
 
     def partitions(self, start: dict, end: dict) -> Sequence["InputPartition"]:
-        # when query restart from checkpoint, use the last committed offset as the start offset.
-        # This depends on the streaming engine calling planInputPartitions() of the last batch
-        # in offset log when query restart.
-        if self.current_offset is None:
-            self.current_offset = end
         if len(self.cache) > 0:
             assert self.cache[-1].end == end
         return [SimpleInputPartition(start, end)]
@@ -144,3 +166,33 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         self, input_partition: SimpleInputPartition  # type: ignore[override]
     ) -> Iterator[Tuple]:
         return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+
+
+class ReadLimitRegistry:
+    def __init__(self) -> None:
+        self._registry: Dict[str, Type[ReadLimit]] = {}
+        # Register built-in ReadLimit types
+        self.__register(ReadAllAvailable)
+        self.__register(ReadMinRows)
+        self.__register(ReadMaxRows)
+        self.__register(ReadMaxFiles)
+        self.__register(ReadMaxBytes)
+
+    def __register(self, read_limit_type: Type["ReadLimit"]) -> None:
+        name = read_limit_type.__name__
+        if name in self._registry:
+            raise PySparkException(f"ReadLimit type '{name}' is already registered.")
+        self._registry[name] = read_limit_type
+
+    def get(self, params_with_type: dict) -> ReadLimit:
+        type_name = params_with_type["_type"]
+        if type_name is None:
+            raise PySparkException("ReadLimit type name is missing.")
+
+        read_limit_type = self._registry.get(type_name)
+        if read_limit_type is None:
+            raise PySparkException("name '{}' is not registered.".format(type_name))
+
+        params_without_type = params_with_type.copy()
+        del params_without_type["_type"]
+        return read_limit_type(**params_without_type)

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,6 +36,17 @@ class GeometryExecutionSuite {
   // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final byte[] testGeometryVal = new byte[] {
     (byte)0xE6, 0x10, 0x00, 0x00,
+    0x01, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, (byte)0xF0,
+    0x3F, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x40
+  };
+
+  // The same Geometry as before, representing a POINT(1 2), but with SRID 0 (i.e. undefined SRID).
+  private final byte[] testGeometryValNoSrid = new byte[] {
+    0x00, 0x00, 0x00, 0x00,
     0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0,
@@ -220,23 +232,23 @@ class GeometryExecutionSuite {
   /** Tests for Geometry WKT and EWKT converters. */
 
   @Test
-  void testToWktUnsupported() {
+  void testToWkt() {
+    // The test geometry is POINT(1 2) with SRID 4326.
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geometry::toWkt
-    );
-    assertEquals("Geometry WKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("POINT(1 2)", new String(geometry.toWkt(), StandardCharsets.UTF_8));
+    // WKT output should be the same regardless of whether the Geometry SRID value.
+    Geometry geometryNoSrid = Geometry.fromBytes(testGeometryValNoSrid);
+    assertEquals("POINT(1 2)", new String(geometryNoSrid.toWkt(), StandardCharsets.UTF_8));
   }
 
   @Test
-  void testToEwktUnsupported() {
+  void testToEwkt() {
+    // The test geometry is POINT(1 2) with SRID 4326.
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geometry::toEwkt
-    );
-    assertEquals("Geometry EWKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("SRID=4326;POINT(1 2)", new String(geometry.toEwkt(), StandardCharsets.UTF_8));
+    // If the Geometry has SRID 0 (undefined SRID), then the EWKT output does not include it.
+    Geometry geometryNoSrid = Geometry.fromBytes(testGeometryValNoSrid);
+    assertEquals("POINT(1 2)", new String(geometryNoSrid.toEwkt(), StandardCharsets.UTF_8));
   }
 
   /** Tests for other Geometry methods. */

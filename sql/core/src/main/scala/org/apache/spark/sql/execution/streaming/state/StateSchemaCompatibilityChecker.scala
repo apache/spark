@@ -81,7 +81,8 @@ class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
     oldSchemaFilePaths: List[Path] = List.empty,
-    newSchemaFilePath: Option[Path] = None) extends Logging {
+    newSchemaFilePath: Option[Path] = None,
+    createSchemaDir: Boolean = true) extends Logging {
 
   // For OperatorStateMetadataV1: Only one schema file present per operator
   // per query
@@ -96,7 +97,12 @@ class StateSchemaCompatibilityChecker(
 
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
 
-  fm.mkdirs(schemaFileLocation.getParent)
+  if (createSchemaDir && !fm.exists(schemaFileLocation.getParent)) {
+    fm.mkdirs(schemaFileLocation.getParent)
+  } else if (!createSchemaDir) {
+    logInfo(log"Skipping schema directory creation (createSchemaDir=false) " +
+      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, schemaFileLocation.getParent.toString)}")
+  }
 
   private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
 
@@ -112,7 +118,7 @@ class StateSchemaCompatibilityChecker(
   def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
     val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
     stateSchemaFilePaths.flatMap { schemaFile =>
-        if (fm.exists(schemaFile)) {
+        if (fm.exists(schemaFile.getParent) && fm.exists(schemaFile)) {
           val inStream = fm.open(schemaFile)
           StateSchemaCompatibilityChecker.readSchemaFile(inStream)
         } else {
@@ -163,7 +169,7 @@ class StateSchemaCompatibilityChecker(
    *         otherwise
    */
   private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
-    if (fm.exists(schemaFileLocation)) {
+    if (fm.exists(schemaFileLocation.getParent) && fm.exists(schemaFileLocation)) {
       readSchemaFile()
     } else {
       List.empty
