@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.client.retries import Retrying, RetryException
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from threading import RLock
 import uuid

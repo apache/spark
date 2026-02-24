@@ -21,8 +21,13 @@ from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_min
 from pyspark.errors import PySparkImportError
 
 
-def check_dependencies(mod_name: str) -> None:
-    if mod_name == "__main__" or mod_name == "pyspark.sql.connect.utils":
+def check_dependencies() -> None:
+    try:
+        mod_name = sys.modules["__main__"].__spec__.name
+    except Exception:
+        mod_name = "__main__"
+    if mod_name.startswith("pyspark.sql.connect.") or mod_name.startswith("pyspark.ml.connect."):
+        # If we invoke the module directly, we are doing doctests.
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:
