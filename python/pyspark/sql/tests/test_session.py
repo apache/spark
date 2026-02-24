@@ -616,6 +616,19 @@ class SparkSessionBuilderCreateTests(unittest.TestCase, PySparkErrorTestUtils):
         finally:
             session2.stop()
 
+    def test_create_does_not_construct_spark_conf_when_session_exists(self):
+        """Ensure SparkConf() is not called when a valid session already exists."""
+        self.session = self._get_builder().create()
+        with unittest.mock.patch(
+            "pyspark.sql.session.SparkConf"
+        ) as mock_spark_conf:
+            session2 = self._get_builder().create()
+            try:
+                mock_spark_conf.assert_not_called()
+                self.assertIs(session2.sparkContext, self.session.sparkContext)
+            finally:
+                session2.stop()
+
 
 class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
     def setUp(self):
