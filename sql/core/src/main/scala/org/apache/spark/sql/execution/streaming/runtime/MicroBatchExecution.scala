@@ -812,7 +812,7 @@ class MicroBatchExecution(
    * - If either of the above is true, then construct the next batch by committing to the offset
    *   log that range of offsets that the next batch will process.
    */
-  private def constructNextBatch(
+  protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = withProgressLocked {
     if (execCtx.isCurrentBatchConstructed) return true
@@ -934,7 +934,7 @@ class MicroBatchExecution(
    * Processes any data available between `endOffsets` and `startOffset`.
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
-  private def runBatch(
+  protected def runBatch(
       execCtx: MicroBatchExecutionContext,
       sparkSessionToRunBatch: SparkSession): Unit = {
     logDebug(s"Running batch ${execCtx.batchId}")

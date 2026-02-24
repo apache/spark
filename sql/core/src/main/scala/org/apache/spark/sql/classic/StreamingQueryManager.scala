@@ -222,6 +222,12 @@ class StreamingQueryManager private[sql] (
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
         .asInstanceOf[WriteToStream]
 
+    // Check if the plan contains a SequentialStreamingUnion
+    val hasSequentialUnion = analyzedStreamWritePlan.inputQuery.exists {
+      case _: org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion => true
+      case _ => false
+    }
+
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
         new StreamingQueryWrapper(new ContinuousExecution(
@@ -230,6 +236,16 @@ class StreamingQueryManager private[sql] (
           triggerClock,
           extraOptions,
           analyzedStreamWritePlan))
+      case _ if hasSequentialUnion =>
+        // Route to SequentialUnionExecution for queries with SequentialStreamingUnion
+        val sequentialUnionExecution =
+          new org.apache.spark.sql.execution.streaming.SequentialUnionExecution(
+            sparkSession,
+            trigger,
+            triggerClock,
+            extraOptions,
+            analyzedStreamWritePlan)
+        new StreamingQueryWrapper(sequentialUnionExecution)
       case _ =>
         val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
           if (trigger.isInstanceOf[RealTimeTrigger]) {

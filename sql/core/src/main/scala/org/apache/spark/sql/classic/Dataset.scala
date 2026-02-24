@@ -1178,6 +1178,75 @@ class Dataset[T] private[sql](
     }
   }
 
+  /**
+   * Returns a new Dataset that processes this Dataset followed by the other Dataset sequentially.
+   * This is used for backfill-to-live streaming scenarios where historical data should be
+   * processed completely before switching to live data.
+   *
+   * Unlike `union`, which processes both Datasets concurrently in streaming queries,
+   * `followedBy` processes this Dataset to completion before beginning to process the other
+   * Dataset. State from stateful operators (aggregations, joins, etc.) is preserved across
+   * the transition.
+   *
+   * Requirements:
+   * - Both Datasets must be streaming
+   * - Both Datasets must have explicit names (use `.name("source_name")`)
+   * - This Dataset (the first one) must support bounded execution (e.g., Delta, file sources)
+   * - The other Dataset (the second one) typically runs unbounded (e.g., Kafka, rate source)
+   *
+   * Example:
+   * {{{
+   *   val historical = spark.readStream.format("delta").load("/data").name("historical")
+   *   val live = spark.readStream.format("kafka").option("subscribe", "events").name("live")
+   *
+   *   // Process historical data first, then switch to live Kafka
+   *   historical.followedBy(live)
+   *     .groupBy("key").count()  // State preserved across transition
+   *     .writeStream
+   *     .trigger(Trigger.RealTime)
+   *     .start()
+   * }}}
+   *
+   * @param other the Dataset to process after this Dataset completes
+   * @return a new Dataset that processes this Dataset followed by the other Dataset
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def followedBy(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
+    import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
+    SequentialStreamingUnion(logicalPlan, other.logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset that processes this Dataset followed by multiple other Datasets
+   * sequentially. This is an extension of `followedBy` for chaining multiple sources.
+   *
+   * Example:
+   * {{{
+   *   val backfill2023 = spark.readStream.format("delta").load("/2023").name("backfill-2023")
+   *   val backfill2024 = spark.readStream.format("delta").load("/2024").name("backfill-2024")
+   *   val live = spark.readStream.format("kafka").option("subscribe", "events").name("live")
+   *
+   *   // Process 2023 data, then 2024 data, then go live
+   *   backfill2023.followedBy(backfill2024, live)
+   *     .writeStream
+   *     .start()
+   * }}}
+   *
+   * @param first the first Dataset to process after this Dataset completes
+   * @param rest additional Datasets to process in order
+   * @return a new Dataset that processes all Datasets sequentially
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def followedBy(first: sql.Dataset[T], rest: sql.Dataset[T]*): Dataset[T] = withSetOperator {
+    import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
+    val allPlans = logicalPlan +: first.logicalPlan +: rest.map(_.logicalPlan)
+    // Use flatten to handle chained followedBy calls
+    val flattenedPlans = SequentialStreamingUnion.flatten(allPlans)
+    SequentialStreamingUnion(flattenedPlans, byName = false, allowMissingCol = false)
+  }
+
   /** @inheritdoc */
   def intersect(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Intersect(logicalPlan, other.logicalPlan, isAll = false)
