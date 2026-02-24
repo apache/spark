@@ -86,4 +86,36 @@ class DataSourceV2SQLSessionCatalogSuite
       sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),
       Row(5, 5))
   }
+
+  test("SPARK-55024: data source metadata tables with multi-part identifiers") {
+    // This test querying data source tables with multi part identifiers,
+    // with the example of Iceberg's metadata table, eg db.table.snapshots
+    val t1 = "metadata_test_tbl"
+
+    def verifySnapshots(snapshots: DataFrame, expectedCount: Int, queryDesc: String): Unit = {
+      assert(snapshots.count() == expectedCount,
+        s"$queryDesc: expected $expectedCount snapshots")
+      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
+        s"$queryDesc: expected schema [committed_at, snapshot_id], " +
+          s"got: ${snapshots.schema.fieldNames.toSeq}")
+      val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
+      assert(snapshotIds.forall(_ > 0),
+        s"$queryDesc: all snapshot IDs should be positive, got: ${snapshotIds.toSeq}")
+    }
+
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'first')")
+      sql(s"INSERT INTO $t1 VALUES (2, 'second')")
+      sql(s"INSERT INTO $t1 VALUES (3, 'third')")
+
+      Seq(
+        s"$t1.snapshots",
+        s"default.$t1.snapshots",
+        s"spark_catalog.default.$t1.snapshots"
+      ).foreach { snapshotTable =>
+        verifySnapshots(sql(s"SELECT * FROM $snapshotTable"), 3, snapshotTable)
+      }
+    }
+  }
 }
