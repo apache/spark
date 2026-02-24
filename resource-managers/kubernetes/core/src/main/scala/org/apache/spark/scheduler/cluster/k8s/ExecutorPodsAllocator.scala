@@ -119,7 +119,7 @@ class ExecutorPodsAllocator(
   // Kubernetes services annotated with COOLDOWN_PERIOD_ANNOTATION are deleted
   // at least this number of seconds after the corresponding executor pod got deleted
   // known cooldown periods and their services
-  protected[k8s] val aliveServicesWithCooldown = new ConcurrentHashMap[Long, (Int, HasMetadata)]()
+  protected[k8s] val aliveServicesWithCooldown = new ConcurrentHashMap[Long, HasMetadata]()
   // elements encode the UNIX timestamp to delete the service, as well as the pod
   protected[k8s] val serviceDeletionQueue = new PriorityBlockingQueue[(Long, HasMetadata)](
     maxNumExecutors, Comparator.comparingLong[(Long, HasMetadata)](t => t._1))
@@ -243,14 +243,22 @@ class ExecutorPodsAllocator(
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
 
       // schedule all services for deletion that have a cooldown period but no alive executor
+      logInfo(s"alive services: ${aliveServicesWithCooldown.keySet().asScala.mkString(", ")}")
+      logInfo(s"existing executors: ${existingExecs.mkString(", ")}")
+      logInfo(s"newly created executors: ${newlyCreatedExecutors.keySet.mkString(", ")}")
+      logInfo(s"known executors: ${k8sKnownExecIds.toSet.mkString(", ")}")
+      logInfo(s"newly created minus known executors: " +
+        s"${newlyCreatedExecutors.keySet.diff(k8sKnownExecIds.toSet).mkString(", ")}")
       val deletedExecutorsWithCooldownService =
         aliveServicesWithCooldown.keySet().asScala
           .diff(existingExecs)
           .diff(newlyCreatedExecutors.keySet.diff(k8sKnownExecIds.toSet))
       deletedExecutorsWithCooldownService.foreach { deletedExecId =>
-        val (cooldown, service) = aliveServicesWithCooldown.remove(deletedExecId)
-        logInfo(s"Executor with service got deleted, service removal scheduled in ${cooldown}s")
-        serviceDeletionQueue.put((currentTime + cooldown, service))
+        val service = aliveServicesWithCooldown.remove(deletedExecId)
+        val cooldown = service.getMetadata.getAnnotations.get(COOLDOWN_PERIOD_ANNOTATION).toInt
+        logInfo(s"Executor with service got deleted, service removal scheduled in ${cooldown}s " +
+          s"($currentTime + $cooldown*1000 = ${currentTime + cooldown*1000})")
+        serviceDeletionQueue.put((currentTime + cooldown*1000, service))
       }
     }
 
@@ -516,11 +524,9 @@ class ExecutorPodsAllocator(
         resources.foreach {
           case resource if resource.getKind == "Service" &&
             resource.getMetadata.getAnnotations.containsKey(COOLDOWN_PERIOD_ANNOTATION) =>
-              val cooldown =
-                resource.getMetadata.getAnnotations.get(COOLDOWN_PERIOD_ANNOTATION).toInt
-              logInfo(s"Memorizing executor service $newExecutorId with cooldown period $cooldown")
-              val (_, existing) = {
-                aliveServicesWithCooldown.computeIfAbsent(newExecutorId, _ => (cooldown, resource))
+              logInfo(s"Memorizing executor service $newExecutorId with cooldown period")
+              val existing = {
+                aliveServicesWithCooldown.computeIfAbsent(newExecutorId, _ => resource)
               }
               if (existing != resource) {
                 throw new SparkException(
@@ -605,6 +611,18 @@ class ExecutorPodsAllocator(
         .inNamespace(namespace)
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .delete()
+    }
+    Utils.tryLogNonFatalError {
+      // delete all alive considered services
+      logInfo(s"Deleting ${aliveServicesWithCooldown.size()} alive services " +
+        s"and ${serviceDeletionQueue.size()} services scheduled for deletion.")
+      kubernetesClient
+        .resourceList(aliveServicesWithCooldown.values().asScala.asJavaCollection)
+        .delete()
+      // delete all services scheduled for deletion
+      kubernetesClient
+        .resourceList(serviceDeletionQueue.iterator().asScala.map(_._2).toSeq.asJavaCollection)
         .delete()
     }
   }
