@@ -17,7 +17,7 @@
 
 import numbers
 from abc import ABCMeta
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 from itertools import chain
 
 import numpy as np
@@ -424,9 +424,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
-            if _should_return_all_false(left, right):
-                return left._with_new_scol(F.lit(False)).rename(None)  # type: ignore[attr-defined]
+        from pyspark.pandas.base import IndexOpsMixin
+
+        if _should_return_all_false(left, right):
+            left_scol = left._with_new_scol(F.lit(False))
+            if isinstance(right, IndexOpsMixin):
+                return left_scol.rename(None)  # type: ignore[attr-defined]
+            else:
+                return cast(SeriesOrIndex, left_scol)
 
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
@@ -521,9 +526,16 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
+        from pyspark.pandas.base import column_op, IndexOpsMixin
 
         _sanitize_list_like(right)
+
+        if _should_return_all_false(left, right):
+            left_scol = left._with_new_scol(F.lit(True))
+            if isinstance(right, IndexOpsMixin):
+                return left_scol.rename(None)  # type: ignore[attr-defined]
+            else:
+                return cast(SeriesOrIndex, left_scol)
 
         return column_op(PySparkColumn.__ne__)(left, right)
 
