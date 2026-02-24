@@ -45,6 +45,7 @@ try:
 except Exception:
     has_memory_profiler = False
 
+import pyspark
 from pyspark.accumulators import AccumulatorParam
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
@@ -334,15 +335,14 @@ class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
                 if c1_line and c2_line:
                     # c1, c2 should have same keys - line number
                     udf_code_map[lineno] = (
-                        cast(MemoryTuple, c1_line)[0] + cast(MemoryTuple, c2_line)[0],  # increment
-                        cast(MemoryTuple, c1_line)[1] + cast(MemoryTuple, c2_line)[1],  # mem_usage
-                        cast(MemoryTuple, c1_line)[2]
-                        + cast(MemoryTuple, c2_line)[2],  # occurrences
+                        c1_line[0] + c2_line[0],  # increment
+                        c1_line[1] + c2_line[1],  # mem_usage
+                        c1_line[2] + c2_line[2],  # occurrences
                     )
                 elif c1_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c1_line)
+                    udf_code_map[lineno] = c1_line
                 elif c2_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c2_line)
+                    udf_code_map[lineno] = c2_line
                 else:
                     udf_code_map[lineno] = None
             value1[filename] = [(k, v) for k, v in udf_code_map.items()]
@@ -476,6 +476,17 @@ class MemoryProfiler(Profiler):
             stream.write("Filename: " + filename + "\n\n")
             stream.write(header + "\n")
             stream.write("=" * len(header) + "\n")
+
+            if "pyspark.zip/pyspark/" in filename:
+                # if the original filename is in pyspark.zip file, we try to find the actual
+                # file in pyspark module by concatenating pyspark module directory and the
+                # rest of the filename
+                # Eventually we should ask the data provider to provide the actual lines
+                # because there's no guarantee that we can always find the actual file
+                # on driver side
+                filename = os.path.join(
+                    os.path.dirname(pyspark.__file__), filename.rsplit("pyspark.zip/pyspark/", 1)[1]
+                )
 
             all_lines = linecache.getlines(filename)
             if len(all_lines) == 0:

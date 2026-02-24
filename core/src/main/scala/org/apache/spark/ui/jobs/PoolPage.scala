@@ -51,8 +51,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
     if (activeStages.nonEmpty) {
       content ++=
         <span class="collapse-aggregated-poolActiveStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-poolActiveStages',
-            'aggregated-poolActiveStages')">
+            data-collapse-name="collapse-aggregated-poolActiveStages"
+            data-collapse-table="aggregated-poolActiveStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>

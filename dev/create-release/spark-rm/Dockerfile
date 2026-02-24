@@ -43,7 +43,7 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
     mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
 
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 \
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 \
     googleapis-common-protos==1.71.0 graphviz==0.20.3"
 
 # Install Python 3.10 packages
@@ -60,7 +60,7 @@ RUN python3.10 -m pip install --ignore-installed 'blinker>=1.6.2' && \
 RUN python3.10 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' \
     sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
     ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.22' pyarrow pandas \
-    'plotly>=4.8' 'docutils<0.18.0' 'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' \
+    'plotly>=4.8' 'docutils<0.18.0' 'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' \
     'pytest-mypy-plugins==1.9.3' 'black==23.12.1' 'pandas-stubs==1.2.0.53' \
     'grpcio==1.76.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
     'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' \

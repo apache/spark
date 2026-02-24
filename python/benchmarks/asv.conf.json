@@ -1,0 +1,30 @@
+{
+    "version": 1,
+    "project": "pyspark",
+    "project_url": "https://spark.apache.org/",
+    "repo": "../..",
+    "branches": ["master"],
+    "dvcs": "git",
+    "environment_type": "virtualenv",
+    "show_commit_url": "https://github.com/apache/spark/commit/",
+    "benchmark_dir": ".",
+    "env_dir": ".asv/env",
+    "results_dir": ".asv/results",
+    "html_dir": ".asv/html",
+    "build_command": [
+        "python -m pip wheel --no-deps -w {build_cache_dir} {conf_dir}/../packaging/classic"
+    ],
+    "install_command": [
+        "python -m pip install --find-links {build_cache_dir} pyspark"
+    ],
+    "uninstall_command": [
+        "python -m pip uninstall -y pyspark"
+    ],
+    "matrix": {
+        "req": {
+            "pyarrow": [""],
+            "pandas": [""],
+            "numpy": [""]
+        }
+    }
+}

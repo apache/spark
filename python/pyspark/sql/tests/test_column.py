@@ -25,7 +25,8 @@ from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:

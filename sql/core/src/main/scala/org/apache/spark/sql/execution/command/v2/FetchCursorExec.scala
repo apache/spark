@@ -24,8 +24,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal, VariableReference}
-import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
@@ -34,9 +34,10 @@ import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 /**
  * Physical plan node for fetching from cursors.
  *
- * Transitions cursor from Opened to Fetching state on first fetch (creating result iterator),
- * then fetches rows from the iterator on subsequent calls. Assigns fetched values to target
- * variables with ANSI store assignment rules.
+ * Fetches the next row from the result iterator that was created at OPEN time.
+ * On first fetch, transitions from Opened to Fetching state.
+ *
+ * Assigns fetched values to target variables with ANSI store assignment rules.
  *
  * @param cursor CursorReference resolved during analysis phase
  * @param targetVariables Variables to fetch into
@@ -57,24 +58,20 @@ case class FetchCursorExec(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
-    // Get or create iterator based on current state
-    val (iterator, analyzedQuery) = currentState match {
-      case CursorOpened(query) =>
-        // First fetch - create iterator and transition to Fetching state
-        // Use executeToIterator() to get InternalRow directly, avoiding conversion overhead
-        val df = Dataset.ofRows(
-          session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
-          query)
-        val iter = df.queryExecution.executedPlan.executeToIterator()
+    // Get iterator based on current state
+    val (iterator, outputSchema) = currentState match {
+      case CursorOpened(iter, schema) =>
+        // First fetch - transition to Fetching state
+        // Iterator was already created at OPEN time
         scriptingContext.updateCursorState(
           cursorRef.normalizedName,
           cursorRef.scopeLabel,
-          CursorFetching(query, iter))
-        (iter, query)
+          CursorFetching(iter, schema))
+        (iter, schema)
 
-      case CursorFetching(query, iter) =>
+      case CursorFetching(iter, schema) =>
         // Subsequent fetch - use existing iterator
-        (iter, query)
+        (iter, schema)
 
       case _ =>
         throw new AnalysisException(
@@ -98,10 +95,10 @@ case class FetchCursorExec(
         targetVariables.head,
         targetVariables.head.dataType.asInstanceOf[org.apache.spark.sql.types.StructType],
         currentRow,
-        analyzedQuery)
+        outputSchema)
     } else {
       // Regular case: one-to-one column-to-variable assignment
-      fetchIntoVariables(targetVariables, currentRow, analyzedQuery)
+      fetchIntoVariables(targetVariables, currentRow, outputSchema)
     }
 
     Nil
@@ -127,7 +124,7 @@ case class FetchCursorExec(
   private def fetchIntoVariables(
       targetVariables: Seq[VariableReference],
       currentRow: InternalRow,
-      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan): Unit = {
+      outputSchema: Seq[Attribute]): Unit = {
     // Validate arity
     if (targetVariables.length != currentRow.numFields) {
       throw new AnalysisException(
@@ -139,10 +136,10 @@ case class FetchCursorExec(
 
     // Assign each column to its corresponding variable
     targetVariables.zipWithIndex.foreach { case (varRef, idx) =>
-      val sourceValue = currentRow.get(idx, analyzedQuery.output(idx).dataType)
+      val sourceValue = currentRow.get(idx, outputSchema(idx).dataType)
       val castedValue = applyCastIfNeeded(
         sourceValue,
-        analyzedQuery.output(idx).dataType,
+        outputSchema(idx).dataType,
         varRef.dataType)
 
       assignToVariable(varRef, castedValue)
@@ -225,7 +222,7 @@ case class FetchCursorExec(
       targetVar: VariableReference,
       structType: org.apache.spark.sql.types.StructType,
       currentRow: InternalRow,
-      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan): Unit = {
+      outputSchema: Seq[Attribute]): Unit = {
     import org.apache.spark.sql.catalyst.expressions.{Cast, CreateStruct, Literal}
     import org.apache.spark.sql.catalyst.InternalRow
 
@@ -240,11 +237,11 @@ case class FetchCursorExec(
 
     // Build struct fields by extracting and casting cursor columns
     val fieldExpressions = structType.fields.zipWithIndex.map { case (field, idx) =>
-      val sourceValue = currentRow.get(idx, analyzedQuery.output(idx).dataType)
-      val sourceLiteral = Literal(sourceValue, analyzedQuery.output(idx).dataType)
+      val sourceValue = currentRow.get(idx, outputSchema(idx).dataType)
+      val sourceLiteral = Literal(sourceValue, outputSchema(idx).dataType)
 
       // Apply ANSI cast if types differ
-      if (analyzedQuery.output(idx).dataType == field.dataType) {
+      if (outputSchema(idx).dataType == field.dataType) {
         sourceLiteral
       } else {
         Cast(

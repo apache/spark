@@ -36,6 +36,20 @@ import org.apache.spark.resource.ResourceProfile
 @DeveloperApi
 abstract class AbstractPodsAllocator {
   /*
+   * Optional lifecycle manager for tracking executor pod lifecycle events.
+   * Set via setExecutorPodsLifecycleManager for backward compatibility.
+   */
+  protected var executorPodsLifecycleManager: Option[ExecutorPodsLifecycleManager] = None
+
+  /*
+   * Set the lifecycle manager for tracking executor pod lifecycle events.
+   * This method is optional and may not exist in custom implementations based on older versions.
+   */
+  def setExecutorPodsLifecycleManager(manager: ExecutorPodsLifecycleManager): Unit = {
+    executorPodsLifecycleManager = Some(manager)
+  }
+
+  /*
    * Set the total expected executors for an application
    */
   def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit

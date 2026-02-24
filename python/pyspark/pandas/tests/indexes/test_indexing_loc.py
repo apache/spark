@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -207,7 +208,7 @@ class IndexingLocMixin:
     def test_loc_timestamp_str(self):
         pdf = pd.DataFrame(
             {"A": np.random.randn(100), "B": np.random.randn(100)},
-            index=pd.date_range("2011-01-01", freq="H", periods=100),
+            index=pd.date_range("2011-01-01", freq="h", periods=100),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -240,53 +241,64 @@ class IndexingLocMixin:
         self.assert_eq(pdf.B.loc["2011":"2015"], psdf.B.loc["2011":"2015"])
 
     def test_frame_loc_setitem(self):
+        def check(op, check_ser, almost):
+            pdf = pd.DataFrame(
+                [[1, 2], [4, 5], [7, 8]],
+                index=["cobra", "viper", "sidewinder"],
+                columns=["max_speed", "shield"],
+            )
+            psdf = ps.from_pandas(pdf)
+
+            if check_ser:
+                pser1 = pdf.max_speed
+                pser2 = pdf.shield
+                psser1 = psdf.max_speed
+                psser2 = psdf.shield
+
+            op(pdf)
+            op(psdf)
+
+            self.assert_eq(psdf, pdf, almost=almost)
+            if check_ser:
+                self.assert_eq(psser1, pser1)
+                self.assert_eq(psser2, pser2)
+
+        def op0(df):
+            df.loc[["viper", "sidewinder"], ["max_speed", "shield"]] = 10
+
+        def op1(df):
+            df.loc[["viper", "sidewinder"], ["shield", "max_speed"]] = 10
+
+        def op2(df):
+            df.loc[["viper", "sidewinder"], "shield"] = 50
+
+        def op3(df):
+            df.loc["cobra", "max_speed"] = 30
+
+        def op4(df):
+            df.loc[df.max_speed < 5, "max_speed"] = -df.max_speed
+
+        def op5(df):
+            df.loc[df.max_speed < 2, "max_speed"] = -df.max_speed
+
+        def op6(df):
+            df.loc[:, "min_speed"] = 0
+
+        for check_ser in [True, False]:
+            for op in [op0, op1, op2, op3, op4, op5, (op6, True)]:
+                if isinstance(op, tuple):
+                    op, almost = op
+                else:
+                    op, almost = op, False
+                with self.subTest(check_ser=check_ser, op=op.__name__):
+                    check(op, check_ser=check_ser, almost=almost)
+
         pdf = pd.DataFrame(
             [[1, 2], [4, 5], [7, 8]],
             index=["cobra", "viper", "sidewinder"],
             columns=["max_speed", "shield"],
         )
         psdf = ps.from_pandas(pdf)
-
-        pser1 = pdf.max_speed
-        pser2 = pdf.shield
-        psser1 = psdf.max_speed
-        psser2 = psdf.shield
-
-        pdf.loc[["viper", "sidewinder"], ["shield", "max_speed"]] = 10
-        psdf.loc[["viper", "sidewinder"], ["shield", "max_speed"]] = 10
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc[["viper", "sidewinder"], "shield"] = 50
-        psdf.loc[["viper", "sidewinder"], "shield"] = 50
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc["cobra", "max_speed"] = 30
-        psdf.loc["cobra", "max_speed"] = 30
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc[pdf.max_speed < 5, "max_speed"] = -pdf.max_speed
-        psdf.loc[psdf.max_speed < 5, "max_speed"] = -psdf.max_speed
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc[pdf.max_speed < 2, "max_speed"] = -pdf.max_speed
-        psdf.loc[psdf.max_speed < 2, "max_speed"] = -psdf.max_speed
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc[:, "min_speed"] = 0
-        psdf.loc[:, "min_speed"] = 0
-        self.assert_eq(psdf, pdf, almost=True)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
 
         with self.assertRaisesRegex(ValueError, "Incompatible indexer with Series"):
             psdf.loc["cobra", "max_speed"] = -psdf.max_speed
@@ -296,23 +308,49 @@ class IndexingLocMixin:
             psdf.loc[:, "max_speed"] = psdf
 
         # multi-index columns
-        columns = pd.MultiIndex.from_tuples(
-            [("x", "max_speed"), ("x", "shield"), ("y", "min_speed")]
+        def check(op, check_ser):
+            pdf = pd.DataFrame(
+                [[1, 2, 0], [4, 5, 0], [7, 8, 0]],
+                index=["cobra", "viper", "sidewinder"],
+                columns=pd.MultiIndex.from_tuples(
+                    [("x", "max_speed"), ("x", "shield"), ("y", "min_speed")]
+                ),
+            )
+            psdf = ps.from_pandas(pdf)
+
+            if check_ser:
+                pser1 = pdf[("x", "max_speed")]
+                pser2 = pdf[("x", "shield")]
+                psser1 = psdf[("x", "max_speed")]
+                psser2 = psdf[("x", "shield")]
+
+            op(pdf)
+            op(psdf)
+
+            self.assert_eq(psdf, pdf, almost=True)
+            if check_ser:
+                self.assert_eq(psser1, pser1)
+                self.assert_eq(psser2, pser2)
+
+        def mop0(df):
+            df.loc[:, ("y", "shield")] = -df[("x", "shield")]
+
+        def mop1(df):
+            df.loc[:, "z"] = 100
+
+        for check_ser in [True, False]:
+            for op in [mop0, mop1]:
+                with self.subTest(check_ser=check_ser, op=op.__name__):
+                    check(op, check_ser=check_ser)
+
+        pdf = pd.DataFrame(
+            [[1, 2, 0], [4, 5, 0], [7, 8, 0]],
+            index=["cobra", "viper", "sidewinder"],
+            columns=pd.MultiIndex.from_tuples(
+                [("x", "max_speed"), ("x", "shield"), ("y", "min_speed")]
+            ),
         )
-        pdf.columns = columns
-        psdf.columns = columns
-
-        pdf.loc[:, ("y", "shield")] = -pdf[("x", "shield")]
-        psdf.loc[:, ("y", "shield")] = -psdf[("x", "shield")]
-        self.assert_eq(psdf, pdf, almost=True)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
-
-        pdf.loc[:, "z"] = 100
-        psdf.loc[:, "z"] = 100
-        self.assert_eq(psdf, pdf, almost=True)
-        self.assert_eq(psser1, pser1)
-        self.assert_eq(psser2, pser2)
+        psdf = ps.from_pandas(pdf)
 
         with self.assertRaisesRegex(KeyError, "Key length \\(3\\) exceeds index depth \\(2\\)"):
             psdf.loc[:, [("x", "max_speed", "foo")]] = -psdf[("x", "shield")]
@@ -322,9 +360,10 @@ class IndexingLocMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        pdf.loc[:, "max_speed"] = pdf
-        psdf.loc[:, "max_speed"] = psdf
-        self.assert_eq(psdf, pdf)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            pdf.loc[:, "max_speed"] = pdf
+            psdf.loc[:, "max_speed"] = psdf
+            self.assert_eq(psdf, pdf)
 
     def test_series_loc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
