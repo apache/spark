@@ -1445,7 +1445,8 @@ class SparkConnectPlanner(
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
-          throw InvalidInputErrors.invalidDeduplicateColumn(colName)
+          val fieldNames = allColumns.map(_.name).mkString(", ")
+          throw InvalidInputErrors.invalidDeduplicateColumn(colName, fieldNames)
         }
         cols
       }
