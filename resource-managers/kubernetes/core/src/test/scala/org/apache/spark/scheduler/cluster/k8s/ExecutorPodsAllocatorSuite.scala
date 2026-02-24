@@ -988,53 +988,53 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
 
     // make pods allocator see an empty snapshot
-    waitForExecutorPodsClock.setTime(startTime + 10)
+    waitForExecutorPodsClock.setTime(startTime + 10*1000)
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
 
     // the executor is coming up
-    waitForExecutorPodsClock.setTime(startTime + 20)
+    waitForExecutorPodsClock.setTime(startTime + 20*1000)
     snapshotsStore.updatePod(pendingExecutor(1))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
 
     // ... and running
-    waitForExecutorPodsClock.setTime(startTime + 30)
+    waitForExecutorPodsClock.setTime(startTime + 30*1000)
     snapshotsStore.updatePod(runningExecutor(1))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
 
     // the executor gets unscheduled
-    waitForExecutorPodsClock.setTime(startTime + 40)
+    waitForExecutorPodsClock.setTime(startTime + 40*1000)
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> 0))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
 
     // the executor disappears, does not trigger anything
-    waitForExecutorPodsClock.setTime(startTime + 50)
+    waitForExecutorPodsClock.setTime(startTime + 50*1000)
     snapshotsStore.updatePod(deletedExecutor(1))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 1)
     assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
 
     // the executor disappears, this triggers scheduling service for deletion
-    waitForExecutorPodsClock.setTime(startTime + 60)
+    waitForExecutorPodsClock.setTime(startTime + 60*1000)
     snapshotsStore.removeDeletedExecutors()
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
     assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
 
     // one second passes by, cooldown period is two seconds
-    waitForExecutorPodsClock.setTime(startTime + 61)
+    waitForExecutorPodsClock.setTime(startTime + 61*1000)
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
     assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 1)
     verify(resourceList, never()).delete()
 
     // two seconds passed by, service is being deleted
-    waitForExecutorPodsClock.setTime(startTime + 62)
+    waitForExecutorPodsClock.setTime(startTime + 62*1000)
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.aliveServicesWithCooldown.size() == 0)
     assert(podsAllocatorUnderTest.serviceDeletionQueue.size() == 0)
