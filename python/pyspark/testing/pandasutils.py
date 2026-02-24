@@ -498,13 +498,13 @@ class PandasOnSparkTestUtils:
         else:
             if isinstance(obj, pd.DataFrame):
                 arrow_boolean_columns = [
-                    col
-                    for col in obj.columns
+                    name
+                    for name, col in obj.items()
                     if isinstance(col.dtype, pd.ArrowDtype)
                     and col.dtype.pyarrow_dtype == pa.bool_()
                 ]
                 if arrow_boolean_columns:
-                    return obj.astype({col: "boolean" for col in arrow_boolean_columns})
+                    return obj.astype({name: "boolean" for name in arrow_boolean_columns})
             elif isinstance(obj, (pd.Series, pd.Index)):
                 if isinstance(obj.dtype, pd.ArrowDtype) and obj.dtype.pyarrow_dtype == pa.bool_():
                     return obj.astype("boolean")
