@@ -22,27 +22,24 @@ from pyspark.errors import PySparkImportError
 
 
 def check_dependencies() -> None:
-    try:
-        mod_name = sys.modules["__main__"].__spec__.name
-    except Exception:
-        mod_name = "__main__"
-    if mod_name.startswith("pyspark.sql.connect.") or mod_name.startswith("pyspark.ml.connect."):
-        # If we invoke the module directly, we are doing doctests.
+    main_module = sys.modules["__main__"]
+    if main_module.__spec__ is None and not hasattr(main_module, "__file__"):
+        # The main module is not initialized at all at this point. We must be running doctests.
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:
             print(
-                f"Skipping {mod_name} doctests: {connect_requirement_message}",
+                f"Skipping doctests: {connect_requirement_message}",
                 file=sys.stderr,
             )
             sys.exit(0)
-    else:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-        require_minimum_grpc_version()
-        require_minimum_grpcio_status_version()
-        require_minimum_googleapis_common_protos_version()
-        require_minimum_zstandard_version()
+
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
+    require_minimum_grpc_version()
+    require_minimum_grpcio_status_version()
+    require_minimum_googleapis_common_protos_version()
+    require_minimum_zstandard_version()
 
 
 def require_minimum_grpc_version() -> None:
