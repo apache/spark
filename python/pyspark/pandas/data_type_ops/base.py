@@ -53,7 +53,6 @@ from pyspark.pandas.typedef.typehints import (
     handle_dtype_as_extension_dtype,
     spark_type_to_pandas_dtype,
 )
-from pyspark.pandas.utils import is_ansi_mode_enabled
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
