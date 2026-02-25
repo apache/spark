@@ -66,6 +66,20 @@ class SequentialUnionExecutionSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  protected def withTempDirs(
+      f: (java.io.File, java.io.File, java.io.File, java.io.File) => Unit): Unit = {
+    val dir1 = Utils.createTempDir()
+    val dir2 = Utils.createTempDir()
+    val dir3 = Utils.createTempDir()
+    val dir4 = Utils.createTempDir()
+    try f(dir1, dir2, dir3, dir4) finally {
+      Utils.deleteRecursively(dir1)
+      Utils.deleteRecursively(dir2)
+      Utils.deleteRecursively(dir3)
+      Utils.deleteRecursively(dir4)
+    }
+  }
+
   test("followedBy with file sources and rate source") {
     withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
       withTempDirs { (checkpointDir, dir1, dir2) =>
@@ -115,19 +129,27 @@ class SequentialUnionExecutionSuite extends StreamTest with BeforeAndAfter {
         assert(execution.isInstanceOf[SequentialUnionExecution],
           s"Expected SequentialUnionExecution but got ${execution.getClass.getName}")
 
-        // Wait for some batches to process
+        // Wait for some batches to process backfill
         query.processAllAvailable()
 
-        // Check we got data from backfill sources
-        val results = spark.sql("SELECT * FROM sequential_test ORDER BY value").collect()
-        assert(results.length >= 6,
-          s"Expected at least 6 rows from backfill, got ${results.length}")
+        // Give rate source time to produce at least one batch
+        Thread.sleep(2000)
 
-        // Verify backfill data
-        val backfillValues = results.take(6).map(_.getString(0)).toSet
-        val expectedValues = Set("file1-a", "file1-b", "file1-c", "file2-d", "file2-e", "file2-f")
-        assert(backfillValues == expectedValues,
-          s"Expected backfill values $expectedValues, got $backfillValues")
+        // Check we got data from all sources
+        val allResults = spark.sql("SELECT * FROM sequential_test ORDER BY value").collect()
+        val allValues = allResults.map(_.getString(0))
+
+        // Verify we got all backfill data
+        val backfillValues = allValues.filter(v => v.startsWith("file")).toSet
+        val expectedBackfill = Set("file1-a", "file1-b", "file1-c", "file2-d", "file2-e", "file2-f")
+        assert(backfillValues == expectedBackfill,
+          s"Expected backfill values $expectedBackfill, got $backfillValues")
+
+        // Verify we transitioned to rate source (should have at least one rate value)
+        val rateValues = allValues.filter(_.startsWith("rate-"))
+        assert(rateValues.nonEmpty,
+          s"Expected at least one value from rate source, but got none. " +
+          s"All values: ${allValues.mkString(", ")}")
 
       } finally {
         query.stop()
