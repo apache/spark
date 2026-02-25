@@ -1383,8 +1383,12 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[Exception] {
         sql(s"SELECT $fn(x, y, 'two') FROM VALUES (('a', 10)) AS tab(x, y)").collect()
       }
-      assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
-        error.getMessage.contains("cannot be cast"))
+      if (conf.ansiEnabled) {
+        assert(error.getMessage.contains("CAST_INVALID_INPUT") ||
+          error.getMessage.contains("cannot be cast"))
+      } else {
+        assert(error.getMessage.contains("VALUE_OUT_OF_RANGE"))
+      }
     }
 
     // Error: k must be positive
