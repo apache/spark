@@ -815,34 +815,10 @@ def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    def wrapped(key_series, value_batches):
+    def wrapped(key_series, value_series):
         import pandas as pd
 
-        # Convert value_batches (Iterator[list[pd.Series]]) to a single DataFrame
-        # Optimized: Collect all Series by column, then concat once per column
-        # This avoids the expensive pd.concat(axis=0) across many DataFrames
-        all_series_by_col = {}
-
-        for value_series in value_batches:
-            for col_idx, series in enumerate(value_series):
-                if col_idx not in all_series_by_col:
-                    all_series_by_col[col_idx] = []
-                all_series_by_col[col_idx].append(series)
-
-        # Concatenate each column separately (single concat per column)
-        if all_series_by_col:
-            columns = {}
-            for col_idx, series_list in all_series_by_col.items():
-                # Use the original series name if available
-                col_name = (
-                    series_list[0].name
-                    if hasattr(series_list[0], "name") and series_list[0].name
-                    else f"col{col_idx}"
-                )
-                columns[col_name] = pd.concat(series_list, ignore_index=True)
-            value_df = pd.DataFrame(columns)
-        else:
-            value_df = pd.DataFrame()
+        value_df = pd.concat(value_series, axis=1)
 
         if len(argspec.args) == 1:
             result = f(value_df)
@@ -2367,7 +2343,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
 
                 def raise_conversion_error(original_exception):
                     raise PySparkRuntimeError(
-                        errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                        errorClass="UDTF_ARROW_DATA_CONVERSION_ERROR",
                         messageParameters={
                             "data": str(data),
                             "schema": return_type.simpleString(),
@@ -2955,10 +2931,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             idx += offsets_len
         return parsed
 
-    if (
-        eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-        or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
-    ):
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         import pyarrow as pa
 
         # We assume there is only one UDF here because grouped map doesn't
@@ -2970,21 +2943,47 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        def mapper(series_iter):
-            # Need to materialize the first series list to get the keys
-            first_series_list = next(series_iter)
+        key_offsets = parsed_offsets[0][0]
+        value_offsets = parsed_offsets[0][1]
 
-            # Extract key Series from the first batch
-            key_series = [first_series_list[o] for o in parsed_offsets[0][0]]
+        def mapper(batch_iter):
+            # Collect all Arrow batches and merge at Arrow level
+            all_batches = list(batch_iter)
+            if all_batches:
+                table = pa.Table.from_batches(all_batches).combine_chunks()
+            else:
+                table = pa.table({})
+            # Convert to pandas once for the entire group
+            all_series = ArrowBatchTransformer.to_pandas(table, timezone=ser._timezone)
+            key_series = [all_series[o] for o in key_offsets]
+            value_series = [all_series[o] for o in value_offsets]
+            yield from f(key_series, value_series)
 
-            # Create generator for value Series lists (one list per batch)
-            value_series_gen = (
-                [series_list[o] for o in parsed_offsets[0][1]]
-                for series_list in itertools.chain((first_series_list,), series_iter)
-            )
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+        import pyarrow as pa
 
-            # Flatten one level: yield from wrapper to return Iterator[(df, spark_type)]
-            yield from f(key_series, value_series_gen)
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = udfs[0]
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        def mapper(batch_iter):
+            # Convert first Arrow batch to pandas to extract keys
+            first_series = ArrowBatchTransformer.to_pandas(next(batch_iter), timezone=ser._timezone)
+            key_series = [first_series[o] for o in parsed_offsets[0][0]]
+
+            # Lazily convert remaining Arrow batches to pandas Series
+            def value_series_gen():
+                yield [first_series[o] for o in parsed_offsets[0][1]]
+                for batch in batch_iter:
+                    series = ArrowBatchTransformer.to_pandas(batch, timezone=ser._timezone)
+                    yield [series[o] for o in parsed_offsets[0][1]]
+
+            yield from f(key_series, value_series_gen())
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't

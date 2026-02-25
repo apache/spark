@@ -149,7 +149,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -189,7 +189,7 @@ Project [rpad(utf8_binary#x, 8, a) AS rpad(utf8_binary, 8, a)#x, rpad(utf8_lcase
 -- !query
 select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t1
 -- !query analysis
-Project [rpad(cast(utf8_binary#x as string collate UTF8_LCASE), 8, collate(AaAA, utf8_lcase)) AS rpad(utf8_binary, 8, collate(AaAA, utf8_lcase))#x, rpad(cast(utf8_lcase#x as string), 8, collate(AAa, utf8_binary)) AS rpad(utf8_lcase, 8, collate(AAa, utf8_binary))#x]
+Project [rpad(cast(utf8_binary#x as string collate UTF8_LCASE), 8, collate(AaAA, utf8_lcase)) AS rpad(utf8_binary, 8, collate(AaAA, utf8_lcase))#x, rpad(cast(utf8_lcase#x as string collate UTF8_BINARY), 8, collate(AAa, utf8_binary)) AS rpad(utf8_lcase, 8, collate(AAa, utf8_binary))#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -218,7 +218,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -258,7 +258,7 @@ Project [lpad(utf8_binary#x, 8, a) AS lpad(utf8_binary, 8, a)#x, lpad(utf8_lcase
 -- !query
 select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t1
 -- !query analysis
-Project [lpad(cast(utf8_binary#x as string collate UTF8_LCASE), 8, collate(AaAA, utf8_lcase)) AS lpad(utf8_binary, 8, collate(AaAA, utf8_lcase))#x, lpad(cast(utf8_lcase#x as string), 8, collate(AAa, utf8_binary)) AS lpad(utf8_lcase, 8, collate(AAa, utf8_binary))#x]
+Project [lpad(cast(utf8_binary#x as string collate UTF8_LCASE), 8, collate(AaAA, utf8_lcase)) AS lpad(utf8_binary, 8, collate(AaAA, utf8_lcase))#x, lpad(cast(utf8_lcase#x as string collate UTF8_BINARY), 8, collate(AAa, utf8_binary)) AS lpad(utf8_lcase, 8, collate(AAa, utf8_binary))#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -299,7 +299,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -363,7 +363,7 @@ Project [trim(utf8_binary#x, Some(ABc)) AS TRIM(BOTH ABc FROM utf8_binary)#x, tr
 -- !query
 select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t1
 -- !query analysis
-Project [trim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(BOTH collate(ABc, utf8_lcase) FROM utf8_binary)#x, trim(cast(utf8_lcase#x as string), Some(collate(AAa, utf8_binary))) AS TRIM(BOTH collate(AAa, utf8_binary) FROM utf8_lcase)#x]
+Project [trim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(BOTH collate(ABc, utf8_lcase) FROM utf8_binary)#x, trim(cast(utf8_lcase#x as string collate UTF8_BINARY), Some(collate(AAa, utf8_binary))) AS TRIM(BOTH collate(AAa, utf8_binary) FROM utf8_lcase)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -404,7 +404,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -509,7 +509,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -573,7 +573,7 @@ Project [ltrim(utf8_binary#x, Some(ABc)) AS TRIM(LEADING ABc FROM utf8_binary)#x
 -- !query
 select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t1
 -- !query analysis
-Project [ltrim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(LEADING collate(ABc, utf8_lcase) FROM utf8_binary)#x, ltrim(cast(utf8_lcase#x as string), Some(collate(AAa, utf8_binary))) AS TRIM(LEADING collate(AAa, utf8_binary) FROM utf8_lcase)#x]
+Project [ltrim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(LEADING collate(ABc, utf8_lcase) FROM utf8_binary)#x, ltrim(cast(utf8_lcase#x as string collate UTF8_BINARY), Some(collate(AAa, utf8_binary))) AS TRIM(LEADING collate(AAa, utf8_binary) FROM utf8_lcase)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -614,7 +614,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -678,7 +678,7 @@ Project [rtrim(utf8_binary#x, Some(ABc)) AS TRIM(TRAILING ABc FROM utf8_binary)#
 -- !query
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t1
 -- !query analysis
-Project [rtrim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(TRAILING collate(ABc, utf8_lcase) FROM utf8_binary)#x, rtrim(cast(utf8_lcase#x as string), Some(collate(AAa, utf8_binary))) AS TRIM(TRAILING collate(AAa, utf8_binary) FROM utf8_lcase)#x]
+Project [rtrim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(ABc, utf8_lcase))) AS TRIM(TRAILING collate(ABc, utf8_lcase) FROM utf8_binary)#x, rtrim(cast(utf8_lcase#x as string collate UTF8_BINARY), Some(collate(AAa, utf8_binary))) AS TRIM(TRAILING collate(AAa, utf8_binary) FROM utf8_lcase)#x]
 +- SubqueryAlias spark_catalog.default.t1
    +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 

@@ -30,7 +30,7 @@ from pyspark.sql.utils import is_remote
 from pyspark.sql import functions as SF
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

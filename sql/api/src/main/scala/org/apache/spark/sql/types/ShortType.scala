@@ -34,6 +34,10 @@ class ShortType private () extends IntegralType {
 
   override def simpleString: String = "smallint"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[ShortType]
+
+  override def hashCode(): Int = classOf[ShortType].getSimpleName.hashCode
+
   private[spark] override def asNullable: ShortType = this
 }
 

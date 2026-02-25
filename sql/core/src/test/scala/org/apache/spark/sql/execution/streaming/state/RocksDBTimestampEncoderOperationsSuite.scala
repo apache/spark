@@ -223,7 +223,8 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
-  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
+  //  encoding
   Seq("unsaferow").foreach { encoding =>
     test(s"Event time as prefix: iterator operations (encoding = $encoding)") {
       tryWithProviderResource(
@@ -275,6 +276,70 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           assert(retrievedEntries(("key1", 2, -3000L)) === 300)
           assert(retrievedEntries(("key2", 1, 1000L)) === 200)
           assert(retrievedEntries(("key1", 1, 2000L)) === 100)
+        } finally {
+          store.abort()
+        }
+      }
+    }
+
+    test(s"Event time as prefix: iterator with multiple values (encoding = $encoding)") {
+      tryWithProviderResource(
+        newStoreProviderWithTimestampEncoder(
+          encoderType = "prefix",
+          useMultipleValuesPerKey = true,
+          dataEncoding = encoding)
+      ) { provider =>
+        val store = provider.getStore(0)
+
+        try {
+          // Put multiple values at different event times
+          // Insert in non-sorted order to verify ordering by event time
+          val values2 = Array(valueToRow(200), valueToRow(201))
+          store.putList(keyAndTimestampToRow("key1", 1, 1000L), values2)
+
+          val values1 = Array(valueToRow(100), valueToRow(101))
+          store.putList(keyAndTimestampToRow("key1", 1, -3000L), values1)
+
+          val values3 = Array(valueToRow(300), valueToRow(301))
+          store.putList(keyAndTimestampToRow("key2", 1, 2000L), values3)
+
+          // Test iteratorWithMultiValues
+          val iterator = store.iteratorWithMultiValues()
+          val results = iterator.map { pair =>
+            assert(pair.key.numFields() === 3) // key fields + timestamp
+
+            val keyStr = pair.key.getString(0)
+            val partitionId = pair.key.getInt(1)
+            // The timestamp will be placed at the end of the key row.
+            val timestamp = pair.key.getLong(2)
+            val value = pair.value.getInt(0)
+            (keyStr, partitionId, timestamp, value)
+          }.toList
+
+          iterator.close()
+
+          // Should return all individual values across different event times
+          assert(results.length === 6) // 2 values at each of 3 event times
+
+          // Verify results are ordered by event time (ascending)
+          val eventTimes = results.map(_._3)
+          val distinctEventTimes = eventTimes.distinct
+          assert(
+            distinctEventTimes === Seq(-3000L, 1000L, 2000L),
+            "Results should be ordered by event time"
+          )
+
+          // Verify the first 2 results are from time -3000L
+          assert(results.take(2).forall(_._3 === -3000L))
+          assert(results.take(2).map(_._4).toSet === Set(100, 101))
+
+          // Verify the next 2 results are from time 1000L
+          assert(results.slice(2, 4).forall(_._3 === 1000L))
+          assert(results.slice(2, 4).map(_._4).toSet === Set(200, 201))
+
+          // Verify the last 2 results are from time 2000L
+          assert(results.slice(4, 6).forall(_._3 === 2000L))
+          assert(results.slice(4, 6).map(_._4).toSet === Set(300, 301))
         } finally {
           store.abort()
         }
@@ -336,6 +401,81 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         }
       }
     }
+
+    test(s"Event time as postfix: prefix scan with multiple values (encoding = $encoding)") {
+      tryWithProviderResource(
+        newStoreProviderWithTimestampEncoder(
+          encoderType = "postfix",
+          useMultipleValuesPerKey = true,
+          dataEncoding = encoding
+        )
+      ) { provider =>
+        val store = provider.getStore(0)
+
+        try {
+          // Put multiple values for the same key at different event times
+
+          // Insert in non-sorted order to verify ordering by event time
+          val values2 = Array(valueToRow(200), valueToRow(201))
+          store.putList(keyAndTimestampToRow("key1", 1, 1000L), values2)
+
+          val values1 = Array(valueToRow(100), valueToRow(101))
+          store.putList(keyAndTimestampToRow("key1", 1, -3000L), values1)
+
+          val values3 = Array(valueToRow(300), valueToRow(301))
+          store.putList(keyAndTimestampToRow("key1", 1, 2000L), values3)
+
+          // Different key - should not be returned
+          val values4 = Array(valueToRow(400))
+          store.putList(keyAndTimestampToRow("key2", 1, 1500L), values4)
+
+          // Test prefixScanWithMultiValues - pass complete key to find all event times
+          val key1 = keyToRow("key1", 1)
+          val iterator = store.prefixScanWithMultiValues(key1)
+
+          val results = iterator.map { pair =>
+            assert(pair.key.numFields() === 3) // key fields + timestamp
+
+            val keyStr = pair.key.getString(0)
+            val partitionId = pair.key.getInt(1)
+            // The timestamp will be placed at the end of the key row.
+            val timestamp = pair.key.getLong(2)
+            val value = pair.value.getInt(0)
+            (keyStr, partitionId, timestamp, value)
+          }.toList
+          iterator.close()
+
+          // Should return all individual values for key1 across different event times
+          assert(results.length === 6) // 2 values at each of 3 event times
+
+          // Verify results are ordered by event time (ascending)
+          // Group by event time to verify ordering
+          val eventTimes = results.map(_._3)
+          val distinctEventTimes = eventTimes.distinct
+          assert(
+            distinctEventTimes === Seq(-3000L, 1000L, 2000L),
+            "Results should be ordered by event time"
+          )
+
+          // Verify the first 2 results are from time -3000L
+          assert(results.take(2).forall(_._3 === -3000L))
+          assert(results.take(2).map(_._4).toSet === Set(100, 101))
+
+          // Verify the next 2 results are from time 1000L
+          assert(results.slice(2, 4).forall(_._3 === 1000L))
+          assert(results.slice(2, 4).map(_._4).toSet === Set(200, 201))
+
+          // Verify the last 2 results are from time 2000L
+          assert(results.slice(4, 6).forall(_._3 === 2000L))
+          assert(results.slice(4, 6).map(_._4).toSet === Set(300, 301))
+
+          // Should not contain key2
+          assert(!results.exists(_._1 == "key2"))
+        } finally {
+          store.abort()
+        }
+      }
+    }
   }
 
   // Diverse set of timestamps that exercise binary lexicographic encoding edge cases,
@@ -351,15 +491,19 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
    * diverse timestamp values that exercise binary lexicographic encoding edge cases.
    *
    * @param encoderType "prefix" or "postfix"
+   * @param useMultipleValuesPerKey whether to store multiple values per (key, timestamp)
    * @param encoding data encoding format (e.g. "unsaferow")
    */
   private def testDiverseTimestampOrdering(
       encoderType: String,
+      useMultipleValuesPerKey: Boolean,
       encoding: String): Unit = {
+    val valuesPerKey = if (useMultipleValuesPerKey) 2 else 1
+
     tryWithProviderResource(
       newStoreProviderWithTimestampEncoder(
         encoderType = encoderType,
-        useMultipleValuesPerKey = false,
+        useMultipleValuesPerKey = useMultipleValuesPerKey,
         dataEncoding = encoding)
     ) { provider =>
       val store = provider.getStore(0)
@@ -368,7 +512,12 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         // Insert diverse timestamps in non-sorted order
         diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
           val keyRow = keyAndTimestampToRow("key1", 1, ts)
-          store.put(keyRow, valueToRow(idx))
+          if (useMultipleValuesPerKey) {
+            val values = Array(valueToRow(idx * 10), valueToRow(idx * 10 + 1))
+            store.putList(keyRow, values)
+          } else {
+            store.put(keyRow, valueToRow(idx))
+          }
         }
 
         // For postfix encoder, add a different key to verify prefix scan isolation
@@ -380,16 +529,24 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val iter = encoderType match {
           // For prefix encoder, we use iterator
           case "prefix" =>
-            store.iterator()
+            if (useMultipleValuesPerKey) {
+              store.iteratorWithMultiValues()
+            } else {
+              store.iterator()
+            }
           // For postfix encoder, we use prefix scan with ("key1", 1) as the prefix key
           case "postfix" =>
-            store.prefixScan(keyToRow("key1", 1))
+            if (useMultipleValuesPerKey) {
+              store.prefixScanWithMultiValues(keyToRow("key1", 1))
+            } else {
+              store.prefixScan(keyToRow("key1", 1))
+            }
         }
 
         val results = iter.map(_.key.getLong(2)).toList
         iter.close()
 
-        assert(results.length === diverseTimestamps.length)
+        assert(results.length === diverseTimestamps.length * valuesPerKey)
 
         // Verify event times are in ascending order
         val distinctEventTimes = results.distinct
@@ -405,9 +562,12 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   //  encoding
   Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
-      test(s"Event time as $encoderType: ordering with diverse timestamps" +
-        s" (encoding = $encoding)") {
-        testDiverseTimestampOrdering(encoderType, encoding)
+      Seq(false, true).foreach { useMultipleValuesPerKey =>
+        val multiValueSuffix = if (useMultipleValuesPerKey) " and multiple values" else ""
+        test(s"Event time as $encoderType: ordering with diverse timestamps" +
+          s"$multiValueSuffix (encoding = $encoding)") {
+          testDiverseTimestampOrdering(encoderType, useMultipleValuesPerKey, encoding)
+        }
       }
     }
   }

@@ -36,8 +36,8 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -260,6 +260,38 @@ class DataFrameCreationTestsMixin:
             with self.subTest(data=data):
                 sdf = self.spark.createDataFrame(data, schema)
                 assertDataFrameEqual(sdf, data)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_from_pandas_dataframe_with_zero_columns(self):
+        """SPARK-55600: Test that row count is preserved when creating DataFrame from
+        pandas with 0 columns but with explicit schema in classic Spark."""
+        import pandas as pd
+
+        # Create a pandas DataFrame with 5 rows but 0 columns
+        pdf = pd.DataFrame(index=range(5))
+        schema = StructType([])
+
+        # Test with Arrow optimization enabled
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+                "spark.sql.execution.arrow.pyspark.fallback.enabled": False,
+            }
+        ):
+            df = self.spark.createDataFrame(pdf, schema=schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(df.count(), 5)
+            self.assertEqual(len(df.collect()), 5)
+
+        # Test with Arrow optimization disabled
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema=schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(df.count(), 5)
+            self.assertEqual(len(df.collect()), 5)
 
 
 class DataFrameCreationTests(

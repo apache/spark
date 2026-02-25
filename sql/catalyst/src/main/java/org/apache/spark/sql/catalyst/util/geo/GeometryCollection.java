@@ -53,7 +53,7 @@ class GeometryCollection extends GeometryModel {
       if (i > 0) {
         sb.append(",");
       }
-      geometries.get(i).toWkt(sb);
+      geometries.get(i).appendWkt(sb);
     }
   }
 }

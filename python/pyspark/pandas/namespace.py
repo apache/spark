@@ -64,6 +64,7 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
     BooleanType,
+    NumericType,
     TimestampType,
     TimestampNTZType,
     DecimalType,
@@ -3651,6 +3652,8 @@ def to_numeric(arg, errors="raise"):
     1.0
     """
     if isinstance(arg, Series):
+        if isinstance(arg.spark.data_type, (NumericType, BooleanType)):
+            return arg.copy()
         if errors == "coerce":
             spark_session = arg._internal.spark_frame.sparkSession
             if is_ansi_mode_enabled(spark_session):

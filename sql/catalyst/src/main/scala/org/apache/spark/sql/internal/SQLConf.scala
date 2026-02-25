@@ -3460,6 +3460,13 @@ object SQLConf {
           "Valid values are 'min' and 'max'")
       .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
 
+  val STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN =
+    buildConf("spark.sql.streaming.validateEventTimeWatermarkColumn")
+      .doc("When true, check that eventTime in withWatermark is a top-level column.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
     buildConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
       .internal()
@@ -6888,6 +6895,15 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val PROTOBUF_EXTENSIONS_SUPPORT_ENABLED =
+    buildConf("spark.sql.function.protobufExtensions.enabled")
+      .doc("When true, the from_protobuf and to_protobuf operators will support proto2 " +
+        "extensions when a binary file descriptor set is provided. This property will have no " +
+        "effect for the overloads taking a Java class name instead of a file descriptor set.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

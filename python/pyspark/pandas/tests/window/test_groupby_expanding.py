@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupByExpandingTestingFuncMixin:

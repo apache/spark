@@ -57,6 +57,8 @@ public interface VectorizedValuesReader {
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
+  void readGeometry(int total, WritableColumnVector c, int rowId);
+  void readGeography(int total, WritableColumnVector c, int rowId);
 
    /*
     * Skips `total` values
