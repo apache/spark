@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+import argparse
 import os
 import re
 import subprocess
@@ -46,9 +47,6 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd).decode("utf-8")
     else:
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
-
-
-import argparse
 
 
 def create_jira_issue(title, parent_jira_id=None, issue_type=None, version=None, component=None):
