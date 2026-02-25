@@ -22,6 +22,8 @@ import java.util.ServiceLoader
 import javax.security.auth.login.Configuration
 
 import scala.collection.mutable
+import scala.util.control.Breaks.{break, breakable}
+import scala.util.control.ControlThrowable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SecurityConfigurationLock
@@ -39,15 +41,22 @@ protected abstract class ConnectionProviderBase extends Logging {
     val providers = mutable.ArrayBuffer[JdbcConnectionProvider]()
 
     val iterator = loader.iterator
-    while (iterator.hasNext) {
-      try {
-        val provider = iterator.next
-        logDebug(s"Loaded built-in provider: $provider")
-        providers += provider
-      } catch {
-        case t: Throwable =>
-          logError("Failed to load built-in provider.")
-          logInfo("Loading of the provider failed with the exception:", t)
+    breakable {
+      while (true) {
+        try {
+          if (!iterator.hasNext) {
+            break()
+          }
+          val provider = iterator.next
+          logDebug(s"Loaded built-in provider: $provider")
+          providers += provider
+        } catch {
+          case ct: ControlThrowable =>
+            throw ct
+          case t: Throwable =>
+            logError("Failed to load built-in provider.")
+            logInfo("Loading of the provider failed with the exception:", t)
+        }
       }
     }
 

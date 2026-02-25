@@ -1281,8 +1281,11 @@ object SparkSession extends SparkSessionCompanion with Logging {
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
 
-    while (loadedExts.hasNext) {
+    while (true) {
       try {
+        if (!loadedExts.hasNext) {
+          return
+        }
         val ext = loadedExts.next()
         ext(extensions)
       } catch {
