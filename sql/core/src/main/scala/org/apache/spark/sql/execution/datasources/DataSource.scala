@@ -734,6 +734,14 @@ object DataSource extends Logging {
         } else {
           throw e
         }
+      case e: NoClassDefFoundError =>
+        // NoClassDefFoundError's class name uses "/" rather than "." for packages
+        val className = e.getMessage.replaceAll("/", ".")
+        if (spark2RemovedClasses.contains(className)) {
+          throw QueryExecutionErrors.incompatibleDataSourceRegisterError(e)
+        } else {
+          throw e
+        }
     }
   }
 
