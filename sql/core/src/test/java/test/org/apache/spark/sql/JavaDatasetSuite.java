@@ -1918,6 +1918,98 @@ public class JavaDatasetSuite implements Serializable {
 
   }
 
+  /**
+   * Interface with JavaBean-style getters/setters for testing encoder with interface type.
+   * Used to verify that Encoders.bean(Interface.class) fails on deserialization (cannot
+   * instantiate interface) while Encoders.kryo(Interface.class) works with concrete implementations.
+   */
+  public interface BeanInterface extends Serializable {
+    String getValue();
+    void setValue(String value);
+    int getId();
+    void setId(int id);
+  }
+
+  public static class BeanImplA implements BeanInterface {
+    private String value;
+    private int id;
+
+    @Override
+    public String getValue() { return value; }
+    @Override
+    public void setValue(String value) { this.value = value; }
+    @Override
+    public int getId() { return id; }
+    @Override
+    public void setId(int id) { this.id = id; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof BeanImplA)) return false;
+      BeanImplA that = (BeanImplA) o;
+      return id == that.id && Objects.equals(value, that.value);
+    }
+    @Override
+    public int hashCode() { return Objects.hash(value, id); }
+  }
+
+  public static class BeanImplB implements BeanInterface {
+    private String value;
+    private int id;
+
+    @Override
+    public String getValue() { return value; }
+    @Override
+    public void setValue(String value) { this.value = value; }
+    @Override
+    public int getId() { return id; }
+    @Override
+    public void setId(int id) { this.id = id; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof BeanImplB)) return false;
+      BeanImplB that = (BeanImplB) o;
+      return id == that.id && Objects.equals(value, that.value);
+    }
+    @Override
+    public int hashCode() { return Objects.hash(value, id); }
+  }
+
+  @Test
+  public void testBeanEncoderRejectsInterface() {
+    // Bean encoder does not support interface types (deserialization would fail).
+    // Use Encoders.kryo() or Encoders.javaSerialization() for interface types instead.
+    Exception e = Assertions.assertThrows(Exception.class,
+        () -> Encoders.bean(BeanInterface.class));
+    Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("interface"),
+        "Expected message about interface not supported: " + e.getMessage());
+  }
+
+  @Test
+  public void testKryoEncoderWithInterfaceAndConcreteImplementations() {
+    BeanImplA a = new BeanImplA();
+    a.setValue("a");
+    a.setId(1);
+    BeanImplB b = new BeanImplB();
+    b.setValue("b");
+    b.setId(2);
+    List<BeanInterface> data = Arrays.asList(a, b);
+
+    Encoder<BeanInterface> kryoEncoder = Encoders.kryo(BeanInterface.class);
+    Dataset<BeanInterface> ds = spark.createDataset(data, kryoEncoder);
+    List<BeanInterface> collected = ds.collectAsList();
+    Assertions.assertEquals(2, collected.size());
+    Assertions.assertEquals("a", collected.get(0).getValue());
+    Assertions.assertEquals(1, collected.get(0).getId());
+    Assertions.assertEquals("b", collected.get(1).getValue());
+    Assertions.assertEquals(2, collected.get(1).getId());
+    Assertions.assertInstanceOf(BeanImplA.class, collected.get(0));
+    Assertions.assertInstanceOf(BeanImplB.class, collected.get(1));
+  }
+
   public class CircularReference1Bean implements Serializable {
     private CircularReference2Bean child;
 

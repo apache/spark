@@ -9484,6 +9484,11 @@
       "Primitive types are not supported."
     ]
   },
+  "_LEGACY_ERROR_TEMP_2231" : {
+    "message" : [
+      "Bean encoder does not support interface types: <className>."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2233" : {
     "message" : [
       "Only Data Sources providing FileFormat are supported: <providingClass>."

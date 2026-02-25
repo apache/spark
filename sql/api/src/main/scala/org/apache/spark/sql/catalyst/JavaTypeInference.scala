@@ -151,6 +151,11 @@ object JavaTypeInference {
       if (seenTypeSet.contains(c)) {
         throw ExecutionErrors.cannotHaveCircularReferencesInBeanClassError(c)
       }
+      // Encoders for interfaces are not supported because de-serialization uses its
+      // Deserializer to instantiate the class, which will not work for interfaces.
+      if (c.isInterface) {
+        throw ExecutionErrors.beanEncoderDoesNotSupportInterfaceError(c.getName)
+      }
 
       // TODO: we should only collect properties that have getter and setter. However, some tests
       //   pass in scala case class as java bean class which doesn't have getter and setter.
