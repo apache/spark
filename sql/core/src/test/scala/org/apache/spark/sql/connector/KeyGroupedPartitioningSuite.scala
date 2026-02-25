@@ -370,6 +370,12 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Column.create("price", FloatType),
     Column.create("time", TimestampType))
 
+  private val details: String = "details"
+  private val detailsColumns: Array[Column] = Array(
+    Column.create("item_id", LongType),
+    Column.create("description", StringType),
+    Column.create("updated", TimestampType))
+
   test("SPARK-48655: group by on partition keys should not introduce additional shuffle") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
@@ -2973,5 +2979,102 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val scans = collectScans(df.queryExecution.executedPlan)
     assert(scans(0).inputRDD.partitions.length === 3,
       "items scan should not group")
+  }
+
+  test("SPARK-55092: Multi table join granular partition grouping") {
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val items_partitions = Array(identity("id"), years("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(2, 'aa', 30.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"), years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(2, 10.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 20.0, cast('2022-01-01' as timestamp)), " +
+        "(3, 30.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 40.0, cast('2022-01-01' as timestamp))")
+
+      val details_partitions = Array(identity("item_id"))
+      createTable(details, detailsColumns, details_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$details VALUES " +
+        "(2, 'cc', cast('2021-01-01' as timestamp)), " +
+        "(3, 'cc', cast('2022-01-01' as timestamp))")
+
+      val df = sql(
+        s"""
+           |SELECT i.id, i.arrive_time, p.item_id, d.item_id
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |JOIN testcat.ns.$details d ON d.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(2, Timestamp.valueOf("2021-01-01 00:00:00"), 2, 2),
+        Row(2, Timestamp.valueOf("2022-01-01 00:00:00"), 2, 2)))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not contain any shuffle")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      // Expect 6 partitions in the inner join node legs because partitioning uses 2 attributes.
+      // Expect 3 partitions in the outer join node legs because partitioning uses 1 attributes.
+      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(3, 6, 6, 3))
+    }
+  }
+
+  test("SPARK-55092: Multi table join partial clustering") {
+    withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(2, 'aa', 30.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(2, 10.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 20.0, cast('2022-01-01' as timestamp))")
+
+      val details_partitions = Array(identity("item_id"))
+      createTable(details, detailsColumns, details_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$details VALUES " +
+        "(2, 'cc', cast('2021-01-01' as timestamp)), " +
+        "(4, 'cc', cast('2022-01-01' as timestamp))")
+
+      val df = sql(
+        s"""
+           |SELECT i.id, i.price, p.price, d.description
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |JOIN testcat.ns.$details d ON d.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(2, 30.0, 10.0, "cc"),
+        Row(2, 40.0, 10.0, "cc")))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not contain any shuffle")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      // Expect 5 partitions in the inner join node legs because 4 from the partially clustered
+      // items table and 1 new from clustered purchases table.
+      // Expect 6 partitions in the outer join node legs because 5 from the partially clustered
+      // inner join result and 1 new from clustered details table.
+      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(6, 5, 5, 6))
+    }
   }
 }

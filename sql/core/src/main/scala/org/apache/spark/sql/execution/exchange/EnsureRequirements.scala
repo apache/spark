@@ -404,26 +404,6 @@ case class EnsureRequirements(
   }
 
   /**
-   * Whether partial clustering can be applied to a given child query plan. This is true if the plan
-   * consists only of a sequence of unary nodes where each node does not use the scan's key-grouped
-   * partitioning to satisfy its required distribution. Otherwise, partially clustering could be
-   * applied to a key-grouped partitioning unrelated to this join.
-   */
-  private def canApplyPartialClusteredDistribution(plan: SparkPlan): Boolean = {
-    !plan.exists {
-      // Unary nodes are safe as long as they don't have a required distribution (for example, a
-      // project or filter). If they have a required distribution, then we should assume that this
-      // plan can't be partially clustered (since the key-grouped partitioning may be needed to
-      // satisfy this distribution unrelated to this JOIN).
-      case u if u.children.length == 1 =>
-        u.requiredChildDistribution.head != UnspecifiedDistribution
-      // Only allow a non-unary node if it's a leaf node - key-grouped partitionings other binary
-      // nodes (like another JOIN) aren't safe to partially cluster.
-      case other => other.children.nonEmpty
-    }
-  }
-
-  /**
    * Checks whether two children, `left` and `right`, of a join operator have compatible
    * `KeyedPartitioning`, and can benefit from storage-partitioned join.
    *
@@ -553,16 +533,9 @@ case class EnsureRequirements(
           // whether partially clustered distribution can be applied. For instance, the
           // optimization cannot be applied to a left outer join, where the left hand
           // side is chosen as the side to replicate partitions according to stats.
-          // Similarly, the partially clustered distribution cannot be applied if the
-          // partially clustered side must use the scan's key-grouped partitioning to
-          // satisfy some unrelated required distribution in its plan (for example, for an aggregate
-          // or window function), as this will give incorrect results (for example, duplicate
-          // row_number() values).
           // Otherwise, query result could be incorrect.
-          val canReplicateLeft = canReplicateLeftSide(joinType) &&
-            canApplyPartialClusteredDistribution(right)
-          val canReplicateRight = canReplicateRightSide(joinType) &&
-            canApplyPartialClusteredDistribution(left)
+          val canReplicateLeft = canReplicateLeftSide(joinType)
+          val canReplicateRight = canReplicateRightSide(joinType)
 
           if (!canReplicateLeft && !canReplicateRight) {
             logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
@@ -617,14 +590,23 @@ case class EnsureRequirements(
               } else {
                 (left, leftSpec)
               }
+              // Original `KeyedPartitioning` can be obtained from the child directly if the child
+              // satisfied the distribution requirement; or from the child's child if it didn't as
+              // the child must be a `GroupPartitionsExec` inserted by `EnsureRequirement`
+              // to satisfy the distribution requirement.
               val originalPartitioning = (partiallyClusteredChild match {
                 case g: GroupPartitionsExec => g.child
                 case o => o
-              }).outputPartitioning.asInstanceOf[KeyedPartitioning]
+              }).outputPartitioning.asInstanceOf[Partitioning with Expression]
+              // `originalPartitioning` can be a collection, but there must be `KeyedPartitioning`
+              // in it.
+              val originalKeyedPartitioning =
+                originalPartitioning.collectFirst { case k: KeyedPartitioning => k }.get
               val (projectedDataTypes, projectedOriginalPartitionKeys) =
                 partiallyClusteredSpec.joinKeyPositions.fold(
-                  (originalPartitioning.expressionDataTypes, originalPartitioning.partitionKeys)
-                )(originalPartitioning.projectKeys)
+                  (originalKeyedPartitioning.expressionDataTypes,
+                    originalKeyedPartitioning.partitionKeys)
+                )(originalKeyedPartitioning.projectKeys)
               val comparableKeyWrapperFactory = InternalRowComparableWrapper
                 .getInternalRowComparableWrapperFactory(projectedDataTypes)
 
