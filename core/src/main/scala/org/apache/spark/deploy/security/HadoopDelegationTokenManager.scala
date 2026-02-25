@@ -24,8 +24,6 @@ import java.util.ServiceLoader
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.collection.mutable
-import scala.util.control.Breaks.{break, breakable}
-import scala.util.control.ControlThrowable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
@@ -272,19 +270,17 @@ private[spark] class HadoopDelegationTokenManager(
     val providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
 
     val iterator = loader.iterator
-    breakable {
-      while (true) {
-        try {
-          if (!iterator.hasNext) {
-            break()
-          }
-          providers += iterator.next
-        } catch {
-          case ct: ControlThrowable =>
-            throw ct
-          case t: Throwable =>
-            logDebug(s"Failed to load built in provider.", t)
+    var keepLoading = true
+    while (keepLoading) {
+      try {
+        if (iterator.hasNext) {
+          providers += iterator.next()
+        } else {
+          keepLoading = false
         }
+      } catch {
+        case t: Throwable =>
+          logDebug(s"Failed to load built in provider.", t)
       }
     }
 
