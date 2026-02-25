@@ -1089,9 +1089,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]) -> (
         typing_extensions.Literal[
             "processing_time_interval",
             "available_now",

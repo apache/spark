@@ -8107,13 +8107,11 @@ def expr(str: str) -> Column:
 
 
 @overload
-def struct(*cols: "ColumnOrName") -> Column:
-    ...
+def struct(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def struct(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -8343,13 +8341,11 @@ def when(condition: Column, value: Any) -> Column:
 
 
 @overload
-def log(arg1: "ColumnOrName") -> Column:
-    ...
+def log(arg1: "ColumnOrName") -> Column: ...
 
 
 @overload
-def log(arg1: float, arg2: "ColumnOrName") -> Column:
-    ...
+def log(arg1: float, arg2: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -9288,13 +9284,11 @@ def current_timezone() -> Column:
 
 
 @overload
-def current_time() -> Column:
-    ...
+def current_time() -> Column: ...
 
 
 @overload
-def current_time(precision: int) -> Column:
-    ...
+def current_time(precision: int) -> Column: ...
 
 
 @_try_remote_functions
@@ -11701,13 +11695,11 @@ def unix_seconds(col: "ColumnOrName") -> Column:
 
 
 @overload
-def to_time(str: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -11769,13 +11761,11 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
 
 @overload
-def to_timestamp(col: "ColumnOrName") -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 
 @_try_remote_functions
@@ -11847,13 +11837,11 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @overload
-def try_to_time(str: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 @_try_remote_functions
@@ -12563,13 +12551,11 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
-    ...
+def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column: ...
 
 
 @overload
-def unix_timestamp() -> Column:
-    ...
+def unix_timestamp() -> Column: ...
 
 
 @_try_remote_functions
@@ -18324,13 +18310,11 @@ def quote(col: "ColumnOrName") -> Column:
 
 
 @overload
-def create_map(*cols: "ColumnOrName") -> Column:
-    ...
+def create_map(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def create_map(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -18491,13 +18475,11 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @overload
-def array(*cols: "ColumnOrName") -> Column:
-    ...
+def array(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def array(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23114,13 +23096,11 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def map_concat(*cols: "ColumnOrName") -> Column:
-    ...
+def map_concat(*cols: "ColumnOrName") -> Column: ...
 
 
 @overload
-def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
-    ...
+def map_concat(__cols: Union[Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23503,13 +23483,11 @@ def _invoke_higher_order_function(
 
 
 @overload
-def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-    ...
+def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column: ...
 
 
 @overload
-def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-    ...
+def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column: ...
 
 
 @_try_remote_functions
@@ -23657,13 +23635,11 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 
 
 @overload
-def filter(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-    ...
+def filter(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column: ...
 
 
 @overload
-def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-    ...
+def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column: ...
 
 
 @_try_remote_functions
@@ -25125,8 +25101,7 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25138,20 +25113,17 @@ def make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25355,8 +25327,7 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25368,20 +25339,17 @@ def try_make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def try_make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25806,8 +25774,7 @@ def make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25815,8 +25782,7 @@ def make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25963,8 +25929,7 @@ def try_make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25972,8 +25937,7 @@ def try_make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -30261,8 +30225,7 @@ def udf(
     returnType: "DataTypeOrString" = StringType(),
     *,
     useArrow: Optional[bool] = None,
-) -> "UserDefinedFunctionLike":
-    ...
+) -> "UserDefinedFunctionLike": ...
 
 
 @overload
@@ -30270,8 +30233,7 @@ def udf(
     f: Optional["DataTypeOrString"] = None,
     *,
     useArrow: Optional[bool] = None,
-) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
-    ...
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]: ...
 
 
 @overload
@@ -30279,8 +30241,7 @@ def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
     useArrow: Optional[bool] = None,
-) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
-    ...
+) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]: ...
 
 
 @_try_remote_functions

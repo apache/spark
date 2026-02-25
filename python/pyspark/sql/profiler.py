@@ -500,8 +500,7 @@ class Profile:
     @overload
     def render(
         self, id: Union[int, str], *, type: Optional[str] = None, renderer: Optional[str] = None
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     @overload
     def render(
@@ -510,8 +509,7 @@ class Profile:
         *,
         type: Optional[Literal["perf"]],
         renderer: Callable[[pstats.Stats], Any],
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     @overload
     def render(
@@ -520,8 +518,7 @@ class Profile:
         *,
         type: Literal["memory"],
         renderer: Callable[[CodeMapDict], Any],
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     def render(
         self,

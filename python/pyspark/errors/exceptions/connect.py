@@ -104,12 +104,16 @@ def convert_observation_errors(
 
     return _convert_exception(
         classes=list(root_error.error_type_hierarchy),
-        sql_state=root_error.spark_throwable.sql_state
-        if root_error.spark_throwable.HasField("sql_state")
-        else None,
-        error_class=root_error.spark_throwable.error_class
-        if root_error.spark_throwable.HasField("error_class")
-        else None,
+        sql_state=(
+            root_error.spark_throwable.sql_state
+            if root_error.spark_throwable.HasField("sql_state")
+            else None
+        ),
+        error_class=(
+            root_error.spark_throwable.error_class
+            if root_error.spark_throwable.HasField("error_class")
+            else None
+        ),
         reason=None,
         root_error_idx=root_error_idx,
         errors=errors,

@@ -1726,11 +1726,9 @@ class ArrowArrayToPandasConversion:
             udt: UserDefinedType = spark_type
             series = arr.to_pandas()
             series = series.apply(
-                lambda v: v
-                if hasattr(v, "__UDT__")
-                else udt.deserialize(v)
-                if v is not None
-                else None
+                lambda v: (
+                    v if hasattr(v, "__UDT__") else udt.deserialize(v) if v is not None else None
+                )
             )
         elif isinstance(spark_type, VariantType):
             series = arr.to_pandas(date_as_object=True)

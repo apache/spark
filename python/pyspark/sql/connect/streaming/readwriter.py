@@ -511,8 +511,7 @@ class DataStreamWriter:
     def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, realTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, realTime: str) -> "DataStreamWriter": ...
 
     def trigger(
         self,

@@ -1741,9 +1741,9 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 raise PySparkRuntimeError(
                     errorClass="INVALID_ARROW_UDTF_TABLE_ARGUMENT",
                     messageParameters={
-                        "actual_type": str(type(original_batch))
-                        if original_batch is not None
-                        else "None"
+                        "actual_type": (
+                            str(type(original_batch)) if original_batch is not None else "None"
+                        )
                     },
                 )
 

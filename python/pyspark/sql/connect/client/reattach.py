@@ -60,9 +60,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     _lock: ClassVar[RLock] = RLock()
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
-    _instances: ClassVar[
-        weakref.WeakSet["ExecutePlanResponseReattachableIterator"]
-    ] = weakref.WeakSet()
+    _instances: ClassVar[weakref.WeakSet["ExecutePlanResponseReattachableIterator"]] = (
+        weakref.WeakSet()
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "ExecutePlanResponseReattachableIterator":
         instance = super().__new__(cls)

@@ -10098,9 +10098,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # we also need to calculate the `std` for numeric columns
             if has_numeric_type:
                 std_exprs = [
-                    F.lit(None).alias("stddev_samp({})".format(label[0]))
-                    if isinstance(spark_data_type, (TimestampType, TimestampNTZType))
-                    else F.stddev(label[0])
+                    (
+                        F.lit(None).alias("stddev_samp({})".format(label[0]))
+                        if isinstance(spark_data_type, (TimestampType, TimestampNTZType))
+                        else F.stddev(label[0])
+                    )
                     for label, spark_data_type in zip(column_labels, spark_data_types)
                 ]
                 exprs.extend(std_exprs)

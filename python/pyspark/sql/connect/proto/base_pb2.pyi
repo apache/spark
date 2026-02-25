@@ -1631,6 +1631,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             """A list of errors that occurred while collecting the observed metrics.
             If the length is 0, it means no errors occurred.
             """
+
         def __init__(
             self,
             *,
@@ -1870,6 +1871,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """A signal from the server to the client to execute the query function for a flow, and to
         register its result with the server.
         """
+
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
@@ -1923,12 +1925,15 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
-        pipeline_event_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult
-        | None = ...,
-        pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
-        | None = ...,
-        pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
-        | None = ...,
+        pipeline_event_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult | None
+        ) = ...,
+        pipeline_command_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult | None
+        ) = ...,
+        pipeline_query_function_execution_signal: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal | None
+        ) = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: (
@@ -3950,6 +3955,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
             """Additional information if the error was caused by a breaking change."""
+
         def __init__(
             self,
             *,
@@ -3959,8 +3965,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 collections.abc.Iterable[global___FetchErrorDetailsResponse.QueryContext] | None
             ) = ...,
             sql_state: builtins.str | None = ...,
-            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
-            | None = ...,
+            breaking_change_info: (
+                global___FetchErrorDetailsResponse.BreakingChangeInfo | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -4031,6 +4038,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             """A message explaining how the user can migrate their job to work
             with the breaking change.
             """
+
         @property
         def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
@@ -4431,6 +4439,7 @@ class GetStatusRequest(google.protobuf.message.Message):
             """Get status of operations with these operation_ids.
             If unset or empty, returns status of all operations in the session.
             """
+
         @property
         def extensions(
             self,
@@ -4438,6 +4447,7 @@ class GetStatusRequest(google.protobuf.message.Message):
             google.protobuf.any_pb2.Any
         ]:
             """Extension point for custom operation-level status requests."""
+
         def __init__(
             self,
             *,
@@ -4489,6 +4499,7 @@ class GetStatusRequest(google.protobuf.message.Message):
 
         Get status of operations in the session.
         """
+
     @property
     def extensions(
         self,
@@ -4496,6 +4507,7 @@ class GetStatusRequest(google.protobuf.message.Message):
         google.protobuf.any_pb2.Any
     ]:
         """Extension point for custom status request types."""
+
     def __init__(
         self,
         *,
@@ -4587,13 +4599,25 @@ class GetStatusResponse(google.protobuf.message.Message):
             builtins.type,
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-            OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 0
-            OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus._OperationState.ValueType  # 1
-            OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 2
-            OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 3
-            OPERATION_STATE_SUCCEEDED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 4
+            OPERATION_STATE_UNSPECIFIED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 0
+            OPERATION_STATE_UNKNOWN: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 1
+            OPERATION_STATE_RUNNING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 2
+            OPERATION_STATE_TERMINATING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 3
+            OPERATION_STATE_SUCCEEDED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 4
             OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 5
-            OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 6
+            OPERATION_STATE_CANCELLED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 6
 
         class OperationState(_OperationState, metaclass=_OperationStateEnumTypeWrapper): ...
         OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 0
@@ -4618,6 +4642,7 @@ class GetStatusResponse(google.protobuf.message.Message):
             google.protobuf.any_pb2.Any
         ]:
             """Extension point for custom operation-level status fields."""
+
         def __init__(
             self,
             *,
@@ -4649,6 +4674,7 @@ class GetStatusResponse(google.protobuf.message.Message):
         global___GetStatusResponse.OperationStatus
     ]:
         """Status information about requested operations."""
+
     @property
     def extensions(
         self,
@@ -4656,13 +4682,15 @@ class GetStatusResponse(google.protobuf.message.Message):
         google.protobuf.any_pb2.Any
     ]:
         """Extension point for custom status response types."""
+
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         server_side_session_id: builtins.str = ...,
-        operation_statuses: collections.abc.Iterable[global___GetStatusResponse.OperationStatus]
-        | None = ...,
+        operation_statuses: (
+            collections.abc.Iterable[global___GetStatusResponse.OperationStatus] | None
+        ) = ...,
         extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def ClearField(

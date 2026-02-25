@@ -929,6 +929,7 @@ class DataType(google.protobuf.message.Message):
     @property
     def geometry(self) -> global___DataType.Geometry:
         """Geospatial types"""
+
     @property
     def geography(self) -> global___DataType.Geography: ...
     @property
