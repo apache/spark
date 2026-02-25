@@ -502,12 +502,18 @@ private[sql] class SparkConnectClient(
    * @param operationIds
    *   Optional sequence of operation IDs to get status for. If empty, returns status of all
    *   operations in the session.
+   * @param operationExtensions
+   *   Optional per-operation extensions to include in the OperationStatusRequest.
+   * @param requestExtensions
+   *   Optional request-level extensions to include in the GetStatusRequest.
    * @return
-   *   A sequence of [[proto.GetStatusResponse.OperationStatus]] for the requested operations.
+   *   The [[proto.GetStatusResponse]] for the requested operations, including any extensions.
    */
   @Experimental
   def getOperationStatuses(
-      operationIds: Seq[String] = Seq.empty): Seq[proto.GetStatusResponse.OperationStatus] = {
+      operationIds: Seq[String] = Seq.empty,
+      operationExtensions: Seq[protobuf.Any] = Seq.empty,
+      requestExtensions: Seq[protobuf.Any] = Seq.empty): proto.GetStatusResponse = {
     val requestBuilder = proto.GetStatusRequest.newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
@@ -519,10 +525,12 @@ private[sql] class SparkConnectClient(
 
     val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
     operationIds.foreach(opStatusRequest.addOperationIds)
+    operationExtensions.foreach(opStatusRequest.addExtensions)
     requestBuilder.setOperationStatus(opStatusRequest)
 
-    val response = bstub.getStatus(requestBuilder.build())
-    response.getOperationStatusesList.asScala.toSeq
+    requestExtensions.foreach(requestBuilder.addExtensions)
+
+    bstub.getStatus(requestBuilder.build())
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {

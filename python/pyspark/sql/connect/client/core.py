@@ -1931,8 +1931,11 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _get_operation_statuses(
-        self, operation_ids: Optional[List[str]] = None
-    ) -> List["pb2.GetStatusResponse.OperationStatus"]:
+        self,
+        operation_ids: Optional[List[str]] = None,
+        operation_extensions: Optional[List[any_pb2.Any]] = None,
+        request_extensions: Optional[List[any_pb2.Any]] = None,
+    ) -> "pb2.GetStatusResponse":
         """
         Get status of operations in the session.
 
@@ -1941,11 +1944,16 @@ class SparkConnectClient(object):
         operation_ids : list of str, optional
             List of operation IDs to get status for.
             If None or empty, returns status of all operations in the session.
+        operation_extensions : list of google.protobuf.any_pb2.Any, optional
+            Per-operation extension messages to include in the OperationStatusRequest to request
+            additional per-operation information.
+        request_extensions : list of google.protobuf.any_pb2.Any, optional
+            Request-level extension messages to include in the GetStatusRequest.
 
         Returns
         -------
-        list of OperationStatus
-            List of operation statuses.
+        pb2.GetStatusResponse
+            The full GetStatusResponse, including operation_statuses and any extensions.
         """
         req = pb2.GetStatusRequest()
         req.session_id = self._session_id
@@ -1959,13 +1967,17 @@ class SparkConnectClient(object):
 
         if operation_ids:
             req.operation_status.operation_ids.extend(operation_ids)
+        if operation_extensions:
+            req.operation_status.extensions.extend(operation_extensions)
+        if request_extensions:
+            req.extensions.extend(request_extensions)
 
         try:
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.GetStatus(req, metadata=self.metadata())
                     self._verify_response_integrity(resp)
-                    return list(resp.operation_statuses)
+                    return resp
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)

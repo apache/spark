@@ -18,6 +18,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
@@ -44,7 +46,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
         )
       }
 
-      val runningStatuses = client.getOperationStatuses(Seq(operationId))
+      val runningStatuses =
+        client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
       assert(runningStatuses.size == 1)
       assert(
         runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING
@@ -55,7 +58,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
       // Use eventually to skip the intermediate TERMINATING status
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        val succeededStatuses = client.getOperationStatuses(Seq(operationId))
+        val succeededStatuses =
+          client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
         assert(succeededStatuses.size == 1)
         assert(
           succeededStatuses.head.getState == OperationState.OPERATION_STATE_SUCCEEDED
@@ -80,7 +84,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
         )
       }
 
-      val runningStatuses = client.getOperationStatuses(Seq(operationId))
+      val runningStatuses =
+        client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
       assert(runningStatuses.size == 1)
       assert(
         runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING
@@ -96,7 +101,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
       // Use eventually to skip the intermediate TERMINATING status
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        val cancelledStatuses = client.getOperationStatuses(Seq(operationId))
+        val cancelledStatuses =
+          client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
         assert(cancelledStatuses.size == 1)
         assert(
           cancelledStatuses.head.getState == OperationState.OPERATION_STATE_CANCELLED
@@ -130,7 +136,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
       // Use eventually to skip the intermediate TERMINATING status
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        val statuses = client.getOperationStatuses(Seq(operationId))
+        val statuses =
+          client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
         assert(statuses.size == 1)
         assert(statuses.head.getOperationId == operationId)
         assert(statuses.head.getState == OperationState.OPERATION_STATE_FAILED)
@@ -147,7 +154,8 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
       // Query for a random operation ID that was never created
       val nonExistentOperationId = UUID.randomUUID().toString
-      val statuses = client.getOperationStatuses(Seq(nonExistentOperationId))
+      val statuses =
+        client.getOperationStatuses(Seq(nonExistentOperationId)).getOperationStatusesList.asScala
       assert(statuses.size == 1)
       assert(statuses.head.getOperationId == nonExistentOperationId)
       assert(statuses.head.getState == OperationState.OPERATION_STATE_UNKNOWN)
@@ -183,7 +191,7 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
       // the active map and the inactive operations cache being updated with the final
       // Closed status.
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        val statuses = client.getOperationStatuses()
+        val statuses = client.getOperationStatuses().getOperationStatusesList.asScala
         val operationIdToStatus = statuses.map(s => s.getOperationId -> s.getState).toMap
 
         assert(statuses.size == 2)

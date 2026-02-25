@@ -201,8 +201,15 @@ if should_test_connect:
             self.received_custom_server_session_id = req.client_observed_server_side_session_id
             resp = proto.GetStatusResponse(session_id=self._session_id)
 
+            # Echo top-level request extensions back in the response
+            if req.extensions:
+                resp.extensions.extend(req.extensions)
+
             if not req.HasField("operation_status"):
                 return resp
+
+            # Collect operation-status-level extensions from the request to echo back
+            op_status_extensions = list(req.operation_status.extensions)
 
             requested_ids = list(req.operation_status.operation_ids)
             if len(requested_ids) == 0:
@@ -214,14 +221,17 @@ if should_test_connect:
             for op_id in requested_ids:
                 status = self._operation_statuses.get(op_id)
                 if status is not None:
-                    resp.operation_statuses.append(status)
-                else:
-                    resp.operation_statuses.append(
-                        OperationStatus(
-                            operation_id=op_id,
-                            state=OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
-                        )
+                    op_status = OperationStatus(
+                        operation_id=status.operation_id,
+                        state=status.state,
                     )
+                else:
+                    op_status = OperationStatus(
+                        operation_id=op_id,
+                        state=OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
+                    )
+                op_status.extensions.extend(op_status_extensions)
+                resp.operation_statuses.append(op_status)
             return resp
 
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
@@ -450,7 +460,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id, operation_statuses=statuses)
         client._stub = mock
 
-        result = client._get_operation_statuses()
+        resp = client._get_operation_statuses()
+        result = list(resp.operation_statuses)
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0].operation_id, "op-1")
         self.assertEqual(
@@ -486,7 +497,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id, operation_statuses=statuses)
         client._stub = mock
 
-        result = client._get_operation_statuses(operation_ids=["op-1", "op-999"])
+        resp = client._get_operation_statuses(operation_ids=["op-1", "op-999"])
+        result = list(resp.operation_statuses)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].operation_id, "op-1")
         self.assertEqual(
@@ -507,8 +519,93 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id, operation_statuses=[])
         client._stub = mock
 
-        result = client._get_operation_statuses()
-        self.assertEqual(len(result), 0)
+        resp = client._get_operation_statuses()
+        self.assertEqual(len(list(resp.operation_statuses)), 0)
+
+    def test_get_operations_statuses_with_extensions(self):
+        """Test get_operations_statuses passes extensions and echoes them back per operation."""
+        from google.protobuf import any_pb2, wrappers_pb2
+
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        statuses = [
+            OperationStatus(
+                operation_id="op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+            OperationStatus(
+                operation_id="op-2",
+                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+            ),
+        ]
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=statuses)
+        client._stub = mock
+
+        op_ext = any_pb2.Any()
+        op_ext.Pack(wrappers_pb2.StringValue(value="op_extension"))
+
+        resp = client._get_operation_statuses(
+            operation_ids=["op-1", "op-2"],
+            operation_extensions=[op_ext],
+        )
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].operation_id, "op-1")
+        self.assertEqual(result[1].operation_id, "op-2")
+
+        # Verify operation-level extensions were included in the request
+        self.assertEqual(len(mock.req.operation_status.extensions), 1)
+        unpacked = wrappers_pb2.StringValue()
+        mock.req.operation_status.extensions[0].Unpack(unpacked)
+        self.assertEqual(unpacked.value, "op_extension")
+
+        # Verify operation-level extensions were echoed back per operation
+        for op_status in result:
+            self.assertEqual(len(op_status.extensions), 1)
+            echoed = wrappers_pb2.StringValue()
+            op_status.extensions[0].Unpack(echoed)
+            self.assertEqual(echoed.value, "op_extension")
+
+    def test_get_operations_statuses_with_request_extensions(self):
+        """Test _get_operation_statuses sends request-level extensions and echoes them back."""
+        from google.protobuf import any_pb2, wrappers_pb2
+
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        statuses = [
+            OperationStatus(
+                operation_id="op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+        ]
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=statuses)
+        client._stub = mock
+
+        req_ext = any_pb2.Any()
+        req_ext.Pack(wrappers_pb2.StringValue(value="request_extension"))
+
+        resp = client._get_operation_statuses(
+            operation_ids=["op-1"],
+            request_extensions=[req_ext],
+        )
+
+        # Verify the operation status is returned
+        result = list(resp.operation_statuses)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].operation_id, "op-1")
+
+        # Verify request-level extensions were included in the request
+        self.assertEqual(len(mock.req.extensions), 1)
+        unpacked = wrappers_pb2.StringValue()
+        mock.req.extensions[0].Unpack(unpacked)
+        self.assertEqual(unpacked.value, "request_extension")
+
+        # Verify request-level extensions were echoed back in the response
+        self.assertEqual(len(resp.extensions), 1)
+        resp_echoed = wrappers_pb2.StringValue()
+        resp.extensions[0].Unpack(resp_echoed)
+        self.assertEqual(resp_echoed.value, "request_extension")
+
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
