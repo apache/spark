@@ -332,12 +332,13 @@ class PandasToArrowConversion:
 
             mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
 
-            # Unified conversion path: broad ArrowException catch so that both ArrowInvalid
-            # AND ArrowTypeError (e.g. dict→struct) trigger the cast fallback.
+            # Unified conversion path: only ArrowInvalid triggers the cast fallback.
+            # ArrowTypeError (e.g. int→decimal, string→struct) is not retried with arrow_cast
+            # to preserve type-safety: such mismatches should raise an error immediately.
             try:
                 try:
                     return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
-                except pa.lib.ArrowException:  # broad: includes ArrowTypeError and ArrowInvalid
+                except pa.lib.ArrowInvalid:  # narrow: only ArrowInvalid triggers cast fallback
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
                             target_type=arrow_type, safe=safecheck
