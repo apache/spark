@@ -33,7 +33,7 @@ import io.grpc._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.SparkThrowable
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.internal.Logging
@@ -494,6 +494,35 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
     bstub.releaseSession(request.build())
+  }
+
+  /**
+   * Get status of operations in the session.
+   *
+   * @param operationIds
+   *   Optional sequence of operation IDs to get status for. If empty, returns status of all
+   *   operations in the session.
+   * @return
+   *   A sequence of [[proto.GetStatusResponse.OperationStatus]] for the requested operations.
+   */
+  @Experimental
+  def getOperationStatuses(
+      operationIds: Seq[String] = Seq.empty): Seq[proto.GetStatusResponse.OperationStatus] = {
+    val requestBuilder = proto.GetStatusRequest.newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+
+    serverSideSessionId.foreach(session =>
+      requestBuilder.setClientObservedServerSideSessionId(session)
+    )
+
+    val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
+    operationIds.foreach(opStatusRequest.addOperationIds)
+    requestBuilder.setOperationStatus(opStatusRequest)
+
+    val response = bstub.getStatus(requestBuilder.build())
+    response.getOperationStatusesList.asScala.toSeq
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {

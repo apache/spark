@@ -1930,6 +1930,46 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    def _get_operation_statuses(
+        self, operation_ids: Optional[List[str]] = None
+    ) -> List["pb2.GetStatusResponse.OperationStatus"]:
+        """
+        Get status of operations in the session.
+
+        Parameters
+        ----------
+        operation_ids : list of str, optional
+            List of operation IDs to get status for.
+            If None or empty, returns status of all operations in the session.
+
+        Returns
+        -------
+        list of OperationStatus
+            List of operation statuses.
+        """
+        req = pb2.GetStatusRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        if self._server_session_id:
+            req.client_observed_server_side_session_id = self._server_session_id
+
+        req.operation_status.SetInParent()
+
+        if operation_ids:
+            req.operation_status.operation_ids.extend(operation_ids)
+
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.GetStatus(req, metadata=self.metadata())
+                    self._verify_response_integrity(resp)
+                    return list(resp.operation_statuses)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
     def add_tag(self, tag: str) -> None:
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):

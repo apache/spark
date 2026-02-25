@@ -548,6 +548,60 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     observer.onCompleted()
   }
 
+  test("getOperationStatuses returns operation statuses for requested IDs") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response =
+      client.getOperationStatuses(Seq("default-op-1", "unknown-op"))
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(
+      statuses.map(_.getOperationId).toSet == Set("default-op-1", "unknown-op")
+    )
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
+    )
+    assert(
+      statusMap("unknown-op") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
+    )
+  }
+
+  test("getOperationStatuses with no IDs returns all operations from server") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
+    val response = client.getOperationStatuses()
+    val statuses = response.getOperationStatusesList.asScala.toSeq
+    assert(statuses.size == 2)
+    assert(
+      statuses.map(_.getOperationId).toSet == Set(
+        "default-op-1",
+        "default-op-2"
+      )
+    )
+
+    val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
+    assert(
+      statusMap("default-op-1") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
+    )
+    assert(
+      statusMap("default-op-2") ==
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING
+    )
+  }
+
   test("client can set a custom operation id for ExecutePlan requests") {
     startDummyServer(0)
     client = SparkConnectClient
@@ -925,6 +979,53 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       .setOperationId(request.getOperationId)
       .build()
     responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+
+  // Default operations stored in the mock session
+  private val default_operation_statuses = Map(
+    "default-op-1" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+    "default-op-2" ->
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING
+  )
+
+  override def getStatus(
+      request: proto.GetStatusRequest,
+      responseObserver: StreamObserver[proto.GetStatusResponse]): Unit = {
+    addUserContextExtensions(request.getUserContext)
+    val responseBuilder = proto.GetStatusResponse
+      .newBuilder()
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(UUID.randomUUID().toString)
+
+    if (request.hasOperationStatus) {
+      val requestedIds = request.getOperationStatus.getOperationIdsList.asScala.toSeq
+      if (requestedIds.isEmpty) {
+        // No specific IDs requested - return all default operations
+        default_operation_statuses.foreach { case (opId, state) =>
+          responseBuilder.addOperationStatuses(
+            proto.GetStatusResponse.OperationStatus.newBuilder()
+              .setOperationId(opId)
+              .setState(state)
+              .build())
+        }
+      } else {
+        // Return status for each requested operation ID
+        // Unknown operations return OPERATION_STATE_UNKNOWN
+        requestedIds.foreach { opId =>
+          val state = default_operation_statuses.getOrElse(opId,
+            proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
+          responseBuilder.addOperationStatuses(
+            proto.GetStatusResponse.OperationStatus.newBuilder()
+              .setOperationId(opId)
+              .setState(state)
+              .build())
+        }
+      }
+    }
+
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 }

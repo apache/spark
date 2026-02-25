@@ -134,10 +134,13 @@ if should_test_connect:
 
         req: Optional[proto.ExecutePlanRequest]
 
-        def __init__(self, session_id: str):
+        def __init__(self, session_id: str, operation_statuses=None):
             self._session_id = session_id
             self.req = None
             self.client_user_context_extensions = []
+            self._operation_statuses = {
+                s.operation_id: s for s in (operation_statuses or [])
+            }
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
@@ -189,6 +192,36 @@ if should_test_connect:
             resp.session_id = self._session_id
             # Return a minimal response with a semantic hash
             resp.semantic_hash.result = 12345
+            return resp
+
+        def GetStatus(self, req: proto.GetStatusRequest, metadata):
+            self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
+            self._update_client_call_context()  # EDGE
+            self.received_custom_server_session_id = req.client_observed_server_side_session_id
+            resp = proto.GetStatusResponse(session_id=self._session_id)
+
+            if not req.HasField("operation_status"):
+                return resp
+
+            requested_ids = list(req.operation_status.operation_ids)
+            if len(requested_ids) == 0:
+                # Empty list — return all statuses
+                resp.operation_statuses.extend(self._operation_statuses.values())
+                return resp
+
+            OperationStatus = proto.GetStatusResponse.OperationStatus
+            for op_id in requested_ids:
+                status = self._operation_statuses.get(op_id)
+                if status is not None:
+                    resp.operation_statuses.append(status)
+                else:
+                    resp.operation_statuses.append(
+                        OperationStatus(
+                            operation_id=op_id,
+                            state=OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
+                        )
+                    )
             return resp
 
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
@@ -395,6 +428,87 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
         for resp in client._stub.ExecutePlan(req, metadata=None):
             assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+
+    def test_get_operations_statuses_all(self):
+        """Test get_operations_statuses returns all operation statuses when no IDs specified."""
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        statuses = [
+            OperationStatus(
+                operation_id="op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+            OperationStatus(
+                operation_id="op-2",
+                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+            ),
+            OperationStatus(
+                operation_id="op-3",
+                state=OperationStatus.OperationState.OPERATION_STATE_FAILED,
+            ),
+        ]
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=statuses)
+        client._stub = mock
+
+        result = client._get_operation_statuses()
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0].operation_id, "op-1")
+        self.assertEqual(
+            result[0].state, OperationStatus.OperationState.OPERATION_STATE_RUNNING
+        )
+        self.assertEqual(result[1].operation_id, "op-2")
+        self.assertEqual(
+            result[1].state, OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
+        )
+        self.assertEqual(result[2].operation_id, "op-3")
+        self.assertEqual(
+            result[2].state, OperationStatus.OperationState.OPERATION_STATE_FAILED
+        )
+
+    def test_get_operations_statuses_specific_ids(self):
+        """Test get_operations_statuses filters by specific operation IDs."""
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        statuses = [
+            OperationStatus(
+                operation_id="op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+            OperationStatus(
+                operation_id="op-2",
+                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+            ),
+            OperationStatus(
+                operation_id="op-3",
+                state=OperationStatus.OperationState.OPERATION_STATE_CANCELLED,
+            ),
+        ]
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=statuses)
+        client._stub = mock
+
+        result = client._get_operation_statuses(operation_ids=["op-1", "op-999"])
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].operation_id, "op-1")
+        self.assertEqual(
+            result[0].state, OperationStatus.OperationState.OPERATION_STATE_RUNNING
+        )
+        self.assertEqual(result[1].operation_id, "op-999")
+        self.assertEqual(
+            result[1].state, OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
+        )
+        # Verify the request included the operation IDs
+        self.assertEqual(
+            list(mock.req.operation_status.operation_ids), ["op-1", "op-999"]
+        )
+
+    def test_get_operations_statuses_empty(self):
+        """Test get_operations_statuses returns empty list when no operations exist."""
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
+        mock = MockService(client._session_id, operation_statuses=[])
+        client._stub = mock
+
+        result = client._get_operation_statuses()
+        self.assertEqual(len(result), 0)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
