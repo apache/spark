@@ -912,6 +912,12 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
+    "message" : [
+      "Unidentified Error: <message>"
+    ],
+    "sqlState" : "XXKCM"
+  },
   "CONNECT_INVALID_PLAN" : {
     "message" : [
       "The Spark Connect plan is invalid."
@@ -1036,6 +1042,48 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "CURSOR_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot declare cursor <cursorName> because it already exists in the current scope."
+    ],
+    "sqlState" : "42723"
+  },
+  "CURSOR_ALREADY_OPEN" : {
+    "message" : [
+      "Cannot open cursor <cursorName> because it is already open."
+    ],
+    "sqlState" : "24502"
+  },
+  "CURSOR_NOT_FOUND" : {
+    "message" : [
+      "Cursor <cursorName> not found in the current scope."
+    ],
+    "sqlState" : "42883"
+  },
+  "CURSOR_NOT_OPEN" : {
+    "message" : [
+      "Cannot fetch from or close cursor <cursorName> because it is not open."
+    ],
+    "sqlState" : "24501"
+  },
+  "CURSOR_NO_MORE_ROWS" : {
+    "message" : [
+      "No more rows available to fetch from cursor <cursorName>."
+    ],
+    "sqlState" : "02000"
+  },
+  "CURSOR_OUTSIDE_SCRIPT" : {
+    "message" : [
+      "Cursor operations can only be used within SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
+  "CURSOR_REFERENCE_INVALID_QUALIFIER" : {
+    "message" : [
+      "Cursor reference <cursorName> is invalid. Cursor references can only have at most one qualifier (e.g., label.cursor)."
+    ],
+    "sqlState" : "42601"
   },
   "CYCLIC_FUNCTION_REFERENCE" : {
     "message" : [
@@ -1624,6 +1672,12 @@
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ],
+    "sqlState" : "42K09"
+  },
+  "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "The event time column <eventExpr> must be a top-level column in the schema."
     ],
     "sqlState" : "42K09"
   },
@@ -2790,6 +2844,12 @@
     },
     "sqlState" : "HY109"
   },
+  "INVALID_CURSOR_DECLARATION" : {
+    "message" : [
+      "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
       "Unrecognized datetime pattern: <pattern>."
@@ -3149,7 +3209,7 @@
       },
       "WRONG_PLACE_OF_DECLARATION" : {
         "message" : [
-          "Handlers must be declared after variable/condition declaration, and before other statements."
+          "Handlers must be declared after variable/condition/cursor declarations, and before other statements."
         ]
       }
     },
@@ -4196,6 +4256,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VECTOR_NORM_DEGREE" : {
+    "message" : [
+      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -4650,6 +4716,15 @@
     ],
     "sqlState" : "07501"
   },
+  "NESTED_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Nested SequentialStreamingUnion is not supported. <hint>",
+      "SequentialStreamingUnion can only be used at the top level of a streaming query.",
+      "Each source in followedBy() should be a base streaming source or simple transformations,",
+      "not another followedBy() result wrapped in other operators."
+    ],
+    "sqlState" : "42601"
+  },
   "NEW_CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
       "The new check constraint (<expression>) cannot be added because it would be violated by existing data in table <tableName>. Please ensure all existing rows satisfy the constraint before adding it."
@@ -4811,6 +4886,15 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_STREAMING_DATASET" : {
+    "message" : [
+      "All sources in <operator> must be streaming relations.",
+      "Ensure all DataFrames are created using spark.readStream() rather than spark.read().",
+      "Example: df1 = spark.readStream.format(\"delta\").load(...); df2 = spark.readStream.format(\"kafka\").load(...)",
+      "Then use: df1.followedBy(df2)"
+    ],
+    "sqlState" : "42K0A"
   },
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
@@ -5202,6 +5286,12 @@
     ],
     "sqlState" : "38000"
   },
+  "PYTHON_EXCEPTION" : {
+    "message" : [
+      "<msg>: <traceback>"
+    ],
+    "sqlState" : "38000"
+  },
   "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR" : {
     "message" : [
       "Failed when Python streaming data source perform <action>: <msg>"
@@ -5282,7 +5372,7 @@
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+      "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
   },
@@ -5391,6 +5481,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22003"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -5460,6 +5556,15 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ],
     "sqlState" : "0A000"
+  },
+  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Stateful operations are not supported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
+      "Incorrect: historical.groupBy(\"key\").count().followedBy(live.groupBy(\"key\").count())",
+      "Correct: historical.followedBy(live).groupBy(\"key\").count()",
+      "This ensures state is preserved across source transitions from historical to live data."
+    ],
+    "sqlState" : "42601"
   },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
@@ -5942,6 +6047,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -6065,6 +6176,13 @@
     ],
     "sqlState" : "42K03"
   },
+  "STREAMING_UNFINISHED_REPARTITION_DETECTED" : {
+    "message" : [
+      "The latest batch <batchId> is for an unfinished state repartitioning i.e. last committed batch is: <lastCommittedBatchId>).",
+      "Please retry the repartitioning operation and let it finish successfully before starting the streaming query."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
@@ -6186,13 +6304,13 @@
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
-  "THETA_INVALID_LG_NOM_ENTRIES" : {
+  "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
     "message" : [
-      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Theta sketch buffers (produced by `theta_sketch_agg`) are supported as inputs."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
@@ -6237,6 +6355,24 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
+    "message" : [
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Tuple sketch buffers (produced by `tuple_sketch_agg_*` functions) are supported as inputs."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_SKETCH_MODE" : {
+    "message" : [
+      "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
+    ],
+    "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
@@ -7013,6 +7149,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SQL_CURSOR" : {
+        "message" : [
+          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
         ]
       },
       "SQL_SCRIPTING" : {

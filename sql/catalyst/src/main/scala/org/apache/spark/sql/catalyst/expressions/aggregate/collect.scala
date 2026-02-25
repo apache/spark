@@ -48,11 +48,16 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(child.dataType, false)
+  // Subclasses can override bufferContainsNull to indicate if the result array contains nulls
+  override def dataType: DataType = ArrayType(child.dataType, bufferContainsNull)
 
   override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
   protected def convertToBufferElement(value: Any): Any
+
+  // Subclasses can override this to allow nulls in buffer
+  // (e.g., CollectList with ignoreNulls=false)
+  protected def bufferContainsNull: Boolean = false
 
   override def update(buffer: T, input: InternalRow): T = {
     val value = child.eval(input)
@@ -72,7 +77,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   protected val bufferElementType: DataType
 
   private lazy val projection = UnsafeProjection.create(
-    Array[DataType](ArrayType(elementType = bufferElementType, containsNull = false)))
+    Array[DataType](ArrayType(elementType = bufferElementType, containsNull = bufferContainsNull)))
   private lazy val row = new UnsafeRow(1)
 
   override def serialize(obj: T): Array[Byte] = {
@@ -90,6 +95,9 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
 /**
  * Collect a list of elements.
+ *
+ * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
+ *                    When false (RESPECT NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
@@ -107,14 +115,31 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
+    inputAggBufferOffset: Int = 0,
+    ignoreNulls: Boolean = true) extends Collect[mutable.ArrayBuffer[Any]]
   with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, 0, 0, true)
+
+  // Buffer can contain nulls when ignoreNulls is false (RESPECT NULLS)
+  override protected def bufferContainsNull: Boolean = !ignoreNulls
 
   override lazy val bufferElementType = child.dataType
 
   override def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+
+  override def update(
+      buffer: mutable.ArrayBuffer[Any],
+      input: InternalRow): mutable.ArrayBuffer[Any] = {
+    val value = child.eval(input)
+    if (value != null) {
+      buffer += convertToBufferElement(value)
+    } else if (!ignoreNulls) {
+      // RESPECT NULLS: preserve null values in result
+      buffer += null
+    }
+    buffer
+  }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -130,12 +155,20 @@ case class CollectList(
     new GenericArrayData(buffer.toArray)
   }
 
+  override def toString: String = {
+    val ignoreNullsStr = if (ignoreNulls) "" else " respect nulls"
+    s"$prettyName($child)$ignoreNullsStr"
+  }
+
   override protected def withNewChildInternal(newChild: Expression): CollectList =
     copy(child = newChild)
 }
 
 /**
  * Collect a set of unique elements.
+ *
+ * @param ignoreNulls when true (IGNORE NULLS), null values are excluded from the result array.
+ *                    When false (RESPECT NULLS), null values are included in the result array.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
@@ -154,14 +187,31 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    ignoreNulls: Boolean = true)
   extends Collect[mutable.HashSet[Any]] with QueryErrorsBase with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, 0, 0, true)
+
+  // Buffer can contain nulls when ignoreNulls is false (RESPECT NULLS)
+  override protected def bufferContainsNull: Boolean = !ignoreNulls
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
     case other => other
+  }
+
+  override def update(
+      buffer: mutable.HashSet[Any],
+      input: InternalRow): mutable.HashSet[Any] = {
+    val value = child.eval(input)
+    if (value != null) {
+      buffer += convertToBufferElement(value)
+    } else if (!ignoreNulls) {
+      // RESPECT NULLS: preserve null value in result
+      buffer += null
+    }
+    buffer
   }
 
   override def convertToBufferElement(value: Any): Any = child.dataType match {
@@ -177,7 +227,10 @@ case class CollectSet(
   override def eval(buffer: mutable.HashSet[Any]): Any = {
     val array = child.dataType match {
       case BinaryType =>
-        buffer.iterator.map(_.asInstanceOf[ArrayData].toByteArray()).toArray[Any]
+        buffer.iterator.map {
+          case null => null
+          case v => v.asInstanceOf[ArrayData].toByteArray()
+        }.toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
@@ -207,6 +260,11 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
+
+  override def toString: String = {
+    val ignoreNullsStr = if (ignoreNulls) "" else " respect nulls"
+    s"$prettyName($child)$ignoreNullsStr"
+  }
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =
     copy(child = newChild)

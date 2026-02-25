@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -45,6 +45,7 @@ import org.apache.spark.util.Utils
  */
 class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array(conf.defaultDatabase)
@@ -367,26 +368,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 
-  implicit class TableIdentifierHelper(ident: Identifier) {
-    def asTableIdentifier: TableIdentifier = {
-      ident.namespace match {
-        case Array(db) =>
-          TableIdentifier(ident.name, Some(db))
-        case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
-      }
-    }
-
-    def asFunctionIdentifier: FunctionIdentifier = {
-      ident.namespace match {
-        case Array(db) =>
-          FunctionIdentifier(ident.name, Some(db))
-        case other =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other.toImmutableArraySeq)
-      }
-    }
-  }
-
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       catalog.databaseExists(db)
@@ -427,13 +408,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = namespace match {
-    case Array(db) if !catalog.databaseExists(db) =>
+    case Array(db) =>
       catalog.createDatabase(
         toCatalogDatabase(db, metadata, defaultLocation = Some(catalog.getDefaultDBPath(db))),
         ignoreIfExists = false)
-
-    case Array(_) =>
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(namespace)
 
     case _ =>
       throw QueryExecutionErrors.invalidNamespaceNameError(namespace)

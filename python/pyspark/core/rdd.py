@@ -1664,7 +1664,7 @@ class RDD(Generic[T_co]):
             # a generator, so it could return an iterator that we need to
             # go through. We check the common case first, then deal with
             # the undocumented behavior.
-            r = f(it)
+            r = f(it)  # type: ignore[func-returns-value]
             if r is None:
                 return iter([])
             try:

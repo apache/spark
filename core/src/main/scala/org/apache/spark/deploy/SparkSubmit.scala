@@ -310,8 +310,11 @@ private[spark] class SparkSubmit extends Logging {
         error("Cluster deploy mode is not applicable to Spark SQL shell.")
       case (_, CLUSTER) if isThriftServer(args.mainClass) =>
         error("Cluster deploy mode is not applicable to Spark Thrift server.")
+      case (YARN, CLUSTER) if isConnectServer(args.mainClass) =>
+        logInfo("SparkConnectServer is starting in cluster deploy mode. " +
+          "Use `yarn application -kill` command or YARN client API to stop the server.")
       case (_, CLUSTER) if isConnectServer(args.mainClass) =>
-        error("Cluster deploy mode is not applicable to Spark Connect server.")
+        error("Launching Spark Connect server in cluster deploy mode is supported only for YARN")
       case _ =>
     }
 

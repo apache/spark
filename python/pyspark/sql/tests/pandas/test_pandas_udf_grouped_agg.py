@@ -33,14 +33,14 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.types import ArrayType, YearMonthIntervalType
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 
 if have_pandas:
@@ -215,7 +215,7 @@ class GroupedAggPandasUDFTestsMixin:
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
             @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
-            def mean_and_std_udf(v):  # noqa: F811
+            def mean_and_std_udf(v):
                 return {v.mean(): v.std()}
 
         self.check_error(

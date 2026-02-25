@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
@@ -37,6 +37,43 @@ import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkLis
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.{Utils, UUIDv7Generator}
+
+/**
+ * Captures SQL-specific thread-local variables so they can be restored on a different thread.
+ * Use [[SQLExecution.captureThreadLocals]] to create an instance on the originating thread,
+ * then call [[runWith]] on the target thread to execute a block with these thread locals applied.
+ */
+case class SQLExecutionThreadLocalCaptured(
+  sparkSession: SparkSession,
+  localProps: java.util.Properties,
+  artifactState: JobArtifactState) {
+
+  /**
+   * Run the given body with the captured thread-local variables applied on the current thread.
+   * Original thread-local values are saved and restored after the body completes.
+   */
+  def runWith[T](body: => T): T = {
+    val sc = sparkSession.sparkContext
+    JobArtifactSet.withActiveJobArtifactState(artifactState) {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
+      SparkSession.setActiveSession(sparkSession)
+      val res = SQLExecution.withSessionTagsApplied(sparkSession) {
+        sc.setLocalProperties(localProps)
+        val res = body
+        // reset active session and local props.
+        sc.setLocalProperties(originalLocalProps)
+        res
+      }
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
+    }
+  }
+}
 
 object SQLExecution extends Logging {
 
@@ -108,11 +145,14 @@ object SQLExecution extends Logging {
     // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
     // root execution if the root execution ID is null.
     // And for the root execution, rootExecutionId == executionId.
-    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
+    val existingRootId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY)
+    val rootExecutionId = if (existingRootId != null) {
+      existingRootId.toLong
+    } else {
       sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
       sc.addJobTag(executionIdJobTag(sparkSession, executionId))
+      executionId
     }
-    val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
     val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
     if (originalInterruptOnCancel == null) {
@@ -238,7 +278,21 @@ object SQLExecution extends Logging {
               event.duration = endTime - startTime
               event.qe = queryExecution
               event.executionFailure = ex
+              if (Utils.isTesting) {
+                import scala.jdk.CollectionConverters._
+                event.jobIds = Option(sc.dagScheduler.activeQueryToJobs.get(executionId))
+                  .map(_.asScala.map(_.jobId).toSet)
+                  .getOrElse(Set.empty)
+              }
+
+              // Clean up jobs tracked by DAGScheduler for this query execution.
+              sc.dagScheduler.cleanupQueryJobs(executionId)
+
               sc.listenerBus.post(event)
+
+              // Observation.tryComplete is called here to ensure the observation is completed,
+              // but it is not high priority, so it is fine to call it later.
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }
@@ -326,36 +380,25 @@ object SQLExecution extends Logging {
     }
   }
 
+  def captureThreadLocals(sparkSession: SparkSession): SQLExecutionThreadLocalCaptured = {
+    val sc = sparkSession.sparkContext
+    val localProps = Utils.cloneProperties(sc.getLocalProperties)
+    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
+    // mode, we default back to the resources of the current Spark session.
+    val artifactState =
+      JobArtifactSet.getCurrentJobArtifactState.getOrElse(sparkSession.artifactManager.state)
+    SQLExecutionThreadLocalCaptured(sparkSession, localProps, artifactState)
+  }
+
   /**
    * Wrap passed function to ensure necessary thread-local variables like
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
       sparkSession: SparkSession, exec: ExecutorService) (body: => T): CompletableFuture[T] = {
-    val activeSession = sparkSession
-    val sc = sparkSession.sparkContext
-    val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
-    // mode, we default back to the resources of the current Spark session.
-    val artifactState = JobArtifactSet.getCurrentJobArtifactState.getOrElse(
-      activeSession.artifactManager.state)
-    CompletableFuture.supplyAsync(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
-      val originalSession = SparkSession.getActiveSession
-      val originalLocalProps = sc.getLocalProperties
-      SparkSession.setActiveSession(activeSession)
-      val res = withSessionTagsApplied(activeSession) {
-        sc.setLocalProperties(localProps)
-        val res = body
-        // reset active session and local props.
-        sc.setLocalProperties(originalLocalProps)
-        res
-      }
-      if (originalSession.nonEmpty) {
-        SparkSession.setActiveSession(originalSession.get)
-      } else {
-        SparkSession.clearActiveSession()
-      }
-      res
+    val threadLocalCaptured = captureThreadLocals(sparkSession)
+    CompletableFuture.supplyAsync(() => {
+      threadLocalCaptured.runWith(body)
     }, exec)
   }
 }

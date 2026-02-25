@@ -18,9 +18,11 @@ import sys
 from typing import (
     Any,
     Callable,
+    Iterable,
     List,
     Optional,
     Sequence,
+    Tuple,
     Union,
     cast,
     no_type_check,
@@ -48,11 +50,130 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
     import pyarrow as pa
     from py4j.java_gateway import JavaObject
 
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
+
+
+def create_arrow_array_from_pandas(
+    series: "pd.Series",
+    spark_type: Optional[DataType],
+    *,
+    timezone: Optional[str] = None,
+    safecheck: bool = False,
+    prefers_large_types: bool = False,
+) -> "pa.Array":
+    """
+    Create an Arrow Array from the given pandas.Series and Spark type.
+
+    Parameters
+    ----------
+    series : pandas.Series
+        A single series
+    spark_type : DataType, optional
+        The Spark return type. If None, pyarrow's inferred type will be used.
+    timezone : str, optional
+        The timezone to use for timestamp conversions.
+    safecheck : bool, optional
+        Whether to enable safe type checking during conversion.
+    prefers_large_types : bool, optional
+        Whether to prefer large Arrow types (e.g., large_string instead of string).
+
+    Returns
+    -------
+    pyarrow.Array
+    """
+    import pyarrow as pa
+    import pandas as pd
+    from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
+
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        series = series.astype(series.dtype.categories.dtype)
+
+    # Derive arrow_type from spark_type
+    arrow_type = (
+        to_arrow_type(spark_type, timezone=timezone, prefers_large_types=prefers_large_types)
+        if spark_type is not None
+        else None
+    )
+
+    if spark_type is not None:
+        conv = _create_converter_from_pandas(
+            spark_type,
+            timezone=timezone,
+            error_on_duplicated_field_names=False,
+        )
+        series = conv(series)
+
+    if hasattr(series.array, "__arrow_array__"):
+        mask = None
+    else:
+        mask = series.isnull()
+    try:
+        return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+    except TypeError as e:
+        error_msg = (
+            "Exception thrown when converting pandas.Series (%s) "
+            "with name '%s' to Arrow Array (%s)."
+        )
+        raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
+    except ValueError as e:
+        error_msg = (
+            "Exception thrown when converting pandas.Series (%s) "
+            "with name '%s' to Arrow Array (%s)."
+        )
+        if safecheck:
+            error_msg = error_msg + (
+                " It can be caused by overflows or other "
+                "unsafe conversions warned by Arrow. Arrow safe type check "
+                "can be disabled by using SQL config "
+                "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+            )
+        raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
+
+
+def create_arrow_batch_from_pandas(
+    series_with_types: Iterable[Tuple["pd.Series", Optional[DataType]]],
+    *,
+    timezone: Optional[str] = None,
+    safecheck: bool = False,
+    prefers_large_types: bool = False,
+) -> "pa.RecordBatch":
+    """
+    Create an Arrow record batch from the given iterable of (series, spark_type) tuples.
+
+    Parameters
+    ----------
+    series_with_types : iterable
+        Iterable of (series, spark_type) tuples.
+    timezone : str, optional
+        The timezone to use for timestamp conversions.
+    safecheck : bool, optional
+        Whether to enable safe type checking during conversion.
+    prefers_large_types : bool, optional
+        Whether to prefer large Arrow types (e.g., large_string instead of string).
+
+    Returns
+    -------
+    pyarrow.RecordBatch
+        Arrow RecordBatch
+    """
+    import pyarrow as pa
+
+    arrs = [
+        create_arrow_array_from_pandas(
+            s,
+            spark_type,
+            timezone=timezone,
+            safecheck=safecheck,
+            prefers_large_types=prefers_large_types,
+        )
+        for s, spark_type in series_with_types
+    ]
+    return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
 
 def _convert_arrow_table_to_pandas(
@@ -740,6 +861,12 @@ class SparkConversionMixin:
                         ser.dt.to_pytimedelta(), index=ser.index, dtype="object", name=ser.name
                     )
 
+        # Handle the 0-column case separately to preserve row count
+        if len(pdf.columns) == 0:
+            from pyspark.sql import Row
+
+            return [Row()] * len(pdf)
+
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.set_axis(
             [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"
@@ -775,15 +902,15 @@ class SparkConversionMixin:
         col_names = cur_dtypes.names
         record_type_list = []
         has_rec_fix = False
-        for i in range(len(cur_dtypes)):
+        for i in range(len(cur_dtypes)):  # type: ignore[arg-type]
             curr_type = cur_dtypes[i]
             # If type is a datetime64 timestamp, convert to microseconds
             # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
             # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
             if curr_type == np.dtype("datetime64[ns]"):
-                curr_type = "datetime64[us]"
+                curr_type = "datetime64[us]"  # type: ignore[assignment]
                 has_rec_fix = True
-            record_type_list.append((str(col_names[i]), curr_type))
+            record_type_list.append((str(col_names[i]), curr_type))  # type: ignore[index]
         return np.dtype(record_type_list) if has_rec_fix else None
 
     def _create_from_pandas_with_arrow(
@@ -807,11 +934,10 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
-            to_arrow_type,
             _deduplicate_field_names,
         )
         from pyspark.sql.pandas.utils import (
@@ -878,24 +1004,25 @@ class SparkConversionMixin:
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
-        # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
-        arrow_data = [
-            [
-                (
-                    c,
-                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types)
-                    if t is not None
-                    else None,
-                    t,
+        # Handle the 0-column case separately to preserve row count.
+        # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
+        if len(pdf.columns) == 0:
+            arrow_batches = [pa.RecordBatch.from_pandas(pdf_slice) for pdf_slice in pdf_slices]
+        else:
+            # Create Arrow batches directly using the standalone function
+            arrow_batches = [
+                create_arrow_batch_from_pandas(
+                    [(c, t) for (_, c), t in zip(pdf_slice.items(), spark_types)],
+                    timezone=timezone,
+                    safecheck=safecheck,
+                    prefers_large_types=prefers_large_var_types,
                 )
-                for (_, c), t in zip(pdf_slice.items(), spark_types)
+                for pdf_slice in pdf_slices
             ]
-            for pdf_slice in pdf_slices
-        ]
 
         jsparkSession = self._jsparkSession
 
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
+        ser = ArrowStreamSerializer()
 
         @no_type_check
         def reader_func(temp_filename):
@@ -906,7 +1033,7 @@ class SparkConversionMixin:
             return self._jvm.ArrowIteratorServer()
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
+        jiter = self._sc._serialize_to_jvm(arrow_batches, ser, reader_func, create_iter_server)
         assert self._jvm is not None
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
         df = DataFrame(jdf, self)
@@ -958,14 +1085,16 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(
-                schema,
-                error_on_duplicated_field_names_in_struct=True,
-                timezone="UTC",
-                prefers_large_types=prefers_large_var_types,
+        # Skip cast for 0-column tables as it loses row count
+        if len(schema.fields) > 0:
+            table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
+                to_arrow_schema(
+                    schema,
+                    error_on_duplicated_field_names_in_struct=True,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
+                )
             )
-        )
 
         # Chunk the Arrow Table into RecordBatches
         chunk_size = arrow_batch_size

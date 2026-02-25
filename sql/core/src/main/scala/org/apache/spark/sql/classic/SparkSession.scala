@@ -246,7 +246,9 @@ class SparkSession private(
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
-  private[spark] def streamingCheckpointManager = sessionState.streamingCheckpointManager
+  @Unstable
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    sessionState.streamingCheckpointManager
 
   /**
    * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
@@ -907,6 +909,7 @@ class SparkSession private(
       override protected def conf: SQLConf = sessionState.conf
     }
 
+  @transient
   private[sql] lazy val observationManager = new ObservationManager(this)
 
   override private[sql] def isUsable: Boolean = !sparkContext.isStopped
@@ -1278,12 +1281,18 @@ object SparkSession extends SparkSessionCompanion with Logging {
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
 
-    while (loadedExts.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        val ext = loadedExts.next()
-        ext(extensions)
+        if (loadedExts.hasNext) {
+          val ext = loadedExts.next()
+          ext(extensions)
+        } else {
+          keepLoading = false
+        }
       } catch {
-        case e: Throwable => logWarning("Failed to load session extension", e)
+        case e: Throwable =>
+          logWarning("Failed to load session extension", e)
       }
     }
   }

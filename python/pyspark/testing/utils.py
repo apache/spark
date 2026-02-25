@@ -105,7 +105,7 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 googleapis_common_protos_requirement_message = ""
 
 try:
-    from google.rpc import error_details_pb2
+    from google.rpc import error_details_pb2  # noqa: F401
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = not googleapis_common_protos_requirement_message
@@ -186,6 +186,7 @@ def eventually(
     catch_timeout=False,
     quiet=True,
     interval=0.1,
+    expected_exceptions=tuple(),
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -222,6 +223,14 @@ def eventually(
     assert isinstance(catch_timeout, bool)
     assert isinstance(quiet, bool)
     assert isinstance(interval, float)
+    assert isinstance(expected_exceptions, (tuple, list))
+
+    expected_exceptions = list(expected_exceptions)
+    if catch_assertions:
+        expected_exceptions.append(AssertionError)
+    if catch_timeout:
+        expected_exceptions.append(TimeoutError)
+    expected_exceptions = tuple(expected_exceptions)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -236,16 +245,8 @@ def eventually(
 
                 try:
                     lastValue = condition(*args, **kwargs)
-                except AssertionError as e:
-                    if catch_assertions:
-                        lastValue = e
-                    else:
-                        raise e
-                except TimeoutError as e:
-                    if catch_timeout:
-                        lastValue = e
-                    else:
-                        raise e
+                except expected_exceptions as e:
+                    lastValue = e
 
                 if lastValue is True or lastValue is None:
                     return
@@ -254,7 +255,7 @@ def eventually(
                     print(f"\nAttempt #{numTries} failed!\n{lastValue}")
                 sleep(interval)
 
-            if isinstance(lastValue, (AssertionError, TimeoutError)):
+            if isinstance(lastValue, expected_exceptions):
                 raise lastValue
             else:
                 raise AssertionError(
@@ -959,7 +960,7 @@ def assertDataFrameEqual(
 
     has_arrow = False
     try:
-        import pyarrow
+        import pyarrow  # noqa: F401
 
         has_arrow = True
     except ImportError:

@@ -31,14 +31,14 @@ from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.window import Window
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    PySparkTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
-from pyspark.testing.utils import PySparkTestCase
 
 
 def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
@@ -380,6 +380,28 @@ class MemoryProfiler2TestsMixin:
             df.mapInPandas(filter_func, df.schema).show()
 
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            self.assert_udf_memory_profile_present(udf_id=id)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_memory_profiler_different_function(self):
+        df = self.spark.createDataFrame([(1,), (2,), (3,)], ["x"])
+
+        def ident(batches):
+            for b in batches:
+                yield b
+
+        def func(batches):
+            return ident(batches)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df.mapInArrow(func, schema="y long").show()
+
+        self.assertEqual(1, len(self.profile_results))
 
         for id in self.profile_results:
             self.assert_udf_memory_profile_present(udf_id=id)

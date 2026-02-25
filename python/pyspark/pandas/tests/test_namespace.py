@@ -206,13 +206,13 @@ class NamespaceTestsMixin:
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="ME"),
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="3M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="3M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="3ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="3ME"),
         )
 
         self.assert_eq(
@@ -299,8 +299,8 @@ class NamespaceTestsMixin:
             pd.timedelta_range(end="3 days", periods=3, closed="right"),
         )
         self.assert_eq(
-            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
-            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            ps.timedelta_range(start="1 day", end="3 days", freq="6h"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6h"),
         )
         self.assert_eq(
             ps.timedelta_range(start="1 day", end="3 days", periods=4),
@@ -606,6 +606,11 @@ class NamespaceTestsMixin:
             "'ignore' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
+
+        # SPARK-54666: Series with numeric dtype should be returned as-is.
+        pser = pd.Series([-1554478299, 2])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pd.to_numeric(pser), ps.to_numeric(psser))
 
     def test_json_normalize(self):
         # Basic test case with a simple JSON structure

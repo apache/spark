@@ -200,9 +200,10 @@ object OffsetSeqMetadata extends Logging {
     STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
-    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
+    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION,
+    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN, STREAMING_STATE_STORE_ENCODING_FORMAT,
-    STATE_STORE_ROW_CHECKSUM_ENABLED
+    STATE_STORE_ROW_CHECKSUM_ENABLED, PROTOBUF_EXTENSIONS_SUPPORT_ENABLED
   )
 
   /**
@@ -249,7 +250,9 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false",
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true",
     STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "unsaferow",
-    STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false"
+    STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false",
+    STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1",
+    PROTOBUF_EXTENSIONS_SUPPORT_ENABLED.key -> "false"
   )
 
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
@@ -359,6 +362,47 @@ case class OffsetSeqControlBatchInfo(
 
 object OffsetSeqControlBatchInfo {
   private implicit val format: Formats = Serialization.formats(NoTypeHints)
+}
+
+/**
+ * An offset type for Sequential Union operations, stored directly in the offset log.
+ * Sequential Union enables seamless backfill-to-live streaming scenarios by processing multiple
+ * sources sequentially rather than concurrently.
+ *
+ * This is stored as an entry in the offset map (just like source offsets), allowing multiple
+ * sequential unions per query to each track their own state.
+ *
+ * All source tracking is name-based (not index-based) to ensure stability across query restarts
+ * and to integrate with the query evolution feature.
+ *
+ * @param activeSourceName The name of the currently active source being processed.
+ * @param allSourceNames All source names in the order they should be processed.
+ * @param completedSourceNames Set of source names that have finished processing.
+ */
+case class SequentialUnionOffset(
+    activeSourceName: String,
+    allSourceNames: Seq[String],
+    completedSourceNames: Set[String]) extends OffsetV2 {
+
+  // Validate on construction
+  require(allSourceNames.nonEmpty, "allSourceNames must not be empty")
+  require(allSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' must be in allSourceNames: " +
+      s"${allSourceNames.mkString(", ")}")
+  require(completedSourceNames.subsetOf(allSourceNames.toSet),
+    s"completedSourceNames must be a subset of allSourceNames")
+  require(!completedSourceNames.contains(activeSourceName),
+    s"activeSourceName '$activeSourceName' cannot be in completedSourceNames")
+
+  override def json(): String = Serialization.write(this)(SequentialUnionOffset.format)
+}
+
+object SequentialUnionOffset {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): SequentialUnionOffset = {
+    Serialization.read[SequentialUnionOffset](json)
+  }
 }
 
 /**

@@ -21,6 +21,7 @@ import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.UTF8String;
 
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
@@ -101,6 +102,15 @@ public final class STUtils {
     return fromPhysVal(geo).toWkb();
   }
 
+  // ST_AsEWKT
+  public static UTF8String stAsEwkt(GeographyVal geo) {
+    return UTF8String.fromBytes(fromPhysVal(geo).toEwkt());
+  }
+
+  public static UTF8String stAsEwkt(GeometryVal geo) {
+    return UTF8String.fromBytes(fromPhysVal(geo).toEwkt());
+  }
+
   // ST_GeogFromWKB
   public static GeographyVal stGeogFromWKB(byte[] wkb) {
     return toPhysVal(Geography.fromWkb(wkb));
@@ -112,6 +122,10 @@ public final class STUtils {
   }
 
   public static GeometryVal stGeomFromWKB(byte[] wkb, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
     return toPhysVal(Geometry.fromWkb(wkb, srid));
   }
 

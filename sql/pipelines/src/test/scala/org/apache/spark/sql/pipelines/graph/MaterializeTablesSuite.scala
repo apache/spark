@@ -20,8 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, FieldReference}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -269,7 +268,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
   test("invalid schema merge") {
     val session = spark
-    implicit val sparkSession: SparkSession = spark
+    implicit val sqlCtx: SQLContext = spark.sqlContext
     import session.implicits._
 
     val streamInts = MemoryStream[Int]
@@ -353,7 +352,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val ex = intercept[TableMaterializationException] {
       materializeGraph(new TestGraphRegistrationContext(spark) {
-        implicit val sparkSession: SparkSession = spark
         val source: MemoryStream[Int] = MemoryStream[Int]
         source.addData(1, 2)
         registerTable(
@@ -646,7 +644,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
     ) {
       val session = spark
-      implicit val sparkSession: SparkSession = spark
+      implicit val sqlCtx: SQLContext = spark.sqlContext
       import session.implicits._
 
       val streamInts = MemoryStream[Int]

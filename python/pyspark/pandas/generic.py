@@ -39,6 +39,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
@@ -2395,7 +2397,7 @@ class Frame(object, metaclass=ABCMeta):
     def groupby(
         self: FrameLike,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
@@ -2516,9 +2518,16 @@ class Frame(object, metaclass=ABCMeta):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         if not len(new_by):
             raise ValueError("No group keys passed!")
-        axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if axis is _NoValue:
+                axis = 0
+            axis = validate_axis(axis)  # type: ignore[arg-type]
+            if axis != 0:
+                raise NotImplementedError('axis should be either 0 or "index" currently.')
+        else:
+            if axis is not _NoValue:
+                raise TypeError("The 'axis' keyword is not supported in pandas 3.0.0 and later.")
 
         return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
 
@@ -3312,6 +3321,17 @@ class Frame(object, metaclass=ABCMeta):
     def fillna(
         self: FrameLike,
         value: Optional[Any] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        pass
+
+    @abstractmethod
+    def _fillna_with_method(
+        self: FrameLike,
+        value: Optional[Any] = None,
         method: Optional[str] = None,
         axis: Optional[Axis] = None,
         inplace: bool_type = False,
@@ -3394,9 +3414,23 @@ class Frame(object, metaclass=ABCMeta):
         3    1.0
         dtype: float64
         """
-        return self.fillna(method="bfill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="bfill", axis=axis, inplace=inplace, limit=limit)
 
-    backfill = bfill
+    def backfill(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.bfill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `backfill` method is not supported in pandas 3.0.0 and later. Use `bfill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        backfill.__doc__ = bfill.__doc__
 
     # TODO: add 'downcast' when value parameter exists
     def ffill(
@@ -3473,9 +3507,23 @@ class Frame(object, metaclass=ABCMeta):
         3    3.0
         dtype: float64
         """
-        return self.fillna(method="ffill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="ffill", axis=axis, inplace=inplace, limit=limit)
 
-    pad = ffill
+    def pad(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.ffill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `pad` method is not supported in pandas 3.0.0 and later. Use `ffill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        pad.__doc__ = ffill.__doc__
 
     # TODO: add 'axis', 'inplace', 'downcast'
     def interpolate(

@@ -65,12 +65,14 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
+)
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd

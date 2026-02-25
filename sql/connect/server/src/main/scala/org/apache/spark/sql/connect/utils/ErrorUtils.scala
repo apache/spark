@@ -67,17 +67,17 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] val MAX_ERROR_CHAIN_LENGTH = 5
 
   /**
-   * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
+   * Convert Throwable to a sequence of protobuf Error messages.
    * @param st
    *   the Throwable to be converted
    * @param serverStackTraceEnabled
    *   whether to return the server stack trace.
    * @return
-   *   FetchErrorDetailsResponse
+   *   A tuple of (rootErrorIdx, sequence of FetchErrorDetailsResponse.Error)
    */
-  private[connect] def throwableToFetchErrorDetailsResponse(
+  private[connect] def throwableToProtoErrors(
       st: Throwable,
-      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
+      serverStackTraceEnabled: Boolean = false): (Int, Seq[FetchErrorDetailsResponse.Error]) = {
 
     var currentError = st
     val buffer = mutable.Buffer.empty[FetchErrorDetailsResponse.Error]
@@ -177,10 +177,28 @@ private[connect] object ErrorUtils extends Logging {
       currentError = currentError.getCause
     }
 
+    (0, buffer.toSeq)
+  }
+
+  /**
+   * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
+   * @param st
+   *   the Throwable to be converted
+   * @param serverStackTraceEnabled
+   *   whether to return the server stack trace.
+   * @return
+   *   FetchErrorDetailsResponse
+   */
+  private[connect] def throwableToFetchErrorDetailsResponse(
+      st: Throwable,
+      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
+
+    val (rootErrorIdx, errors) = throwableToProtoErrors(st, serverStackTraceEnabled)
+
     FetchErrorDetailsResponse
       .newBuilder()
-      .setRootErrorIdx(0)
-      .addAllErrors(buffer.asJava)
+      .setRootErrorIdx(rootErrorIdx)
+      .addAllErrors(errors.asJava)
       .build()
   }
 

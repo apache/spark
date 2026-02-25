@@ -27,9 +27,10 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
-  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
+  GlobalTempView, LocalTempView, PersistedView,
+  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -412,13 +413,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    withCatalogIdentClause(ctx.catalogIdentifierReference, identifiers => {
-      if (identifiers.size > 1) {
-        // can occur when user put multipart string in IDENTIFIER(...) clause
-        throw QueryParsingErrors.invalidNameForSetCatalog(identifiers, ctx)
-      }
-      SetCatalogCommand(identifiers.head)
-    })
+    val expr = expression(ctx.expression())
+    SetCatalogCommand(expr)
   }
 
   /**
@@ -702,12 +698,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        val tableIdentifier = ident.asTableIdentifier
-        if (tableIdentifier.database.isDefined) {
+        if (ident.length > 1) {
           // Temporary view names should NOT contain database prefix like "database.table"
           throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
+            .notAllowedToAddDBPrefixForTempViewError(ident, ctx)
         }
+        val tableIdentifier = TableIdentifier(ident.head)
 
         CreateViewCommand(
           tableIdentifier,

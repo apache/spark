@@ -34,6 +34,10 @@ class LongType private () extends IntegralType {
 
   override def simpleString: String = "bigint"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[LongType]
+
+  override def hashCode(): Int = classOf[LongType].getSimpleName.hashCode
+
   private[spark] override def asNullable: LongType = this
 }
 
