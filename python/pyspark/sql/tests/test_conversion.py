@@ -314,6 +314,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         error_msg = str(ctx.exception)
         self.assertIn("Cannot convert column 'val'", error_msg)
         self.assertIn("double", error_msg)
+        self.assertIn("Please verify the data values are compatible", error_msg)
 
         # TypeError path (int -> struct): ArrowTypeError inherits from TypeError.
         # ignore_unexpected_complex_type_values=True lets the bad value pass through

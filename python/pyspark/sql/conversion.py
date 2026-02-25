@@ -357,17 +357,14 @@ class PandasToArrowConversion:
                 error_msg = (
                     f"Cannot convert column '{field_name}' of pandas type "
                     f"'{series.dtype}' to Arrow type '{arrow_type}'."
+                    " Please verify the data values are compatible with the "
+                    "specified return type."
                 )
                 if safecheck:
                     error_msg += (
                         " It can be caused by overflows or other unsafe conversions "
                         "warned by Arrow. Arrow safe type check can be disabled by using "
                         "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`."
-                    )
-                else:
-                    error_msg += (
-                        " Please verify the data values are compatible with the "
-                        "specified return type."
                     )
                 raise PySparkValueError(error_msg) from e
 
