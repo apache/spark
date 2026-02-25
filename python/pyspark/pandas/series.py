@@ -495,6 +495,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def _column_label(self) -> Optional[Label]:
         return self._col_label
 
+    def _update_internal_frame(
+        self, internal: InternalFrame, check_same_anchor: bool = True
+    ) -> None:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self._psdf._update_internal_frame(internal, check_same_anchor=check_same_anchor)
+        else:
+            self._update_anchor(DataFrame(internal.select_column(self._column_label)))
+
     def _update_anchor(self, psdf: DataFrame) -> None:
         assert psdf._internal.column_labels == [self._column_label], (
             psdf._internal.column_labels,
@@ -2220,7 +2228,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._psdf._update_internal_frame(psser._psdf._internal, check_same_anchor=False)
+            self._update_internal_frame(psser._psdf._internal, check_same_anchor=False)
             return None
         else:
             return psser.copy()
@@ -2529,7 +2537,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
                     data_fields=[self._internal.data_fields[0]],
                 )
-                self._psdf._update_internal_frame(internal, check_same_anchor=False)
+                self._update_internal_frame(internal, check_same_anchor=False)
                 return None
             else:
                 return self._with_new_scol(
@@ -5332,7 +5340,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             internal = self._psdf._internal.with_new_spark_column(
                 self._column_label, scol  # TODO: dtype?
             )
-            self._psdf._update_internal_frame(internal)
+            self._update_internal_frame(internal)
         else:
             combined = combine_frames(self._psdf, other._psdf, how="leftouter")
 
@@ -5349,7 +5357,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._column_label, scol  # TODO: dtype?
             )
 
-            self._psdf._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
+            self._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
 
     def where(self, cond: "Series", other: Any = np.nan) -> "Series":
         """
@@ -7195,7 +7203,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def groupby(
         self,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "SeriesGroupBy":
