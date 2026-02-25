@@ -381,9 +381,8 @@ class RocksDBFileManager(
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
-      // TODO(SPARK-51988): We are using fs here to read the file, checksum verification
-      //  wouldn't happen for the file if enabled, since it is not using fm to open it.
-      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
+      Utils.unzipFilesFromInputStream(
+        fm.open(dfsBatchZipFile(version, checkpointUniqueId)), localDir)
 
       // Copy the necessary immutable files
       val metadataFile = localMetadataFile(localDir)
@@ -929,7 +928,8 @@ class RocksDBFileManager(
       version: Long, checkpointUniqueId: Option[String] = None): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
     Utils.createDirectory(localTempDir)
-    Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localTempDir)
+    Utils.unzipFilesFromInputStream(
+      fm.open(dfsBatchZipFile(version, checkpointUniqueId)), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
     metadata.immutableFiles
