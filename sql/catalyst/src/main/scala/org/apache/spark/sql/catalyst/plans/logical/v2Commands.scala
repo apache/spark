@@ -38,10 +38,9 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -65,6 +64,7 @@ trait V2WriteCommand
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
+  def withSchemaEvolution: Boolean
 
   override def child: LogicalPlan = query
 
@@ -76,6 +76,19 @@ trait V2WriteCommand
     // If the table doesn't require schema match, we don't need to resolve the output columns.
     table.skipSchemaResolution || areCompatible(query.output, table.output)
   }
+
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(table) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
+
+  lazy val needSchemaEvolution: Boolean =
+    schemaEvolutionEnabled && changesForSchemaEvolution.nonEmpty
+
+  lazy val changesForSchemaEvolution: Array[TableChange] =
+    ResolveSchemaEvolution.schemaChanges(table.schema, query.schema, isByName)
 
   protected def areCompatible(inAttrs: Seq[Attribute], outAttrs: Seq[Attribute]): Boolean = {
     inAttrs.size == outAttrs.size && inAttrs.zip(outAttrs).forall {
@@ -107,6 +120,7 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
@@ -120,15 +134,19 @@ object AppendData {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(table, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(table, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -141,6 +159,7 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
@@ -164,16 +183,20 @@ object OverwriteByExpression {
       table: NamedRelation,
       df: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -185,6 +208,7 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean = false,
     write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
@@ -204,15 +228,19 @@ object OverwritePartitionsDynamic {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false,
+      withSchemaEvolution = withSchemaEvolution)
   }
 }
 
@@ -256,6 +284,7 @@ case class ReplaceData(
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -338,6 +367,7 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
   override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
@@ -844,11 +874,11 @@ case class UpdateTable(
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
 
-  def skipSchemaResolution: Boolean = table match {
-    case r: NamedRelation => r.skipSchemaResolution
-    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
-    case _ => false
-  }
+  def skipSchemaResolution: Boolean =
+    EliminateSubqueryAliases(table) match {
+      case r: NamedRelation => r.skipSchemaResolution
+      case _ => false
+    }
 }
 
 /**
@@ -887,11 +917,11 @@ case class MergeIntoTable(
   lazy val duplicateResolved: Boolean =
     targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
-  lazy val skipSchemaResolution: Boolean = targetTable match {
-    case r: NamedRelation => r.skipSchemaResolution
-    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
-    case _ => false
-  }
+  lazy val skipSchemaResolution: Boolean =
+    EliminateSubqueryAliases(targetTable) match {
+      case r: NamedRelation => r.skipSchemaResolution
+      case _ => false
+    }
 
   lazy val needSchemaEvolution: Boolean =
     evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty

@@ -450,6 +450,7 @@ class Analyzer(
       DeduplicateRelations ::
       ResolveCollationName ::
       ResolveMergeIntoSchemaEvolution ::
+      ResolveInsertSchemaEvolution ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -1177,24 +1178,28 @@ class Analyzer(
             AppendData.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             AppendData.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwritePartitionsDynamic.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
           if (isByName) {
@@ -1202,13 +1207,15 @@ class Analyzer(
               table = r,
               df = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              writeOptions = schemaEvolutionWriteOption,
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         }
     }
@@ -3593,7 +3600,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
+            !v2Write.needSchemaEvolution =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
