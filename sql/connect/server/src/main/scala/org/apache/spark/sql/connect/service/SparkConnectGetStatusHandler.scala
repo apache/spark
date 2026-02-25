@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import scala.jdk.CollectionConverters._
 import scala.jdk.OptionConverters._
+import scala.util.control.NonFatal
 
 import io.grpc.stub.StreamObserver
 
@@ -182,7 +183,7 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
           case None => Seq.empty
         }
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           logWarning(
             log"Plugin ${MDC(LogKeys.CLASS_NAME, plugin.getClass.getName)} failed to process " +
               log"request extensions",
@@ -205,7 +206,7 @@ class SparkConnectGetStatusHandler(responseObserver: StreamObserver[proto.GetSta
           case None => Seq.empty
         }
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           logWarning(
             log"Plugin ${MDC(LogKeys.CLASS_NAME, plugin.getClass.getName)} failed to process " +
               log"operation extensions for operation ${MDC(LogKeys.OPERATION_ID, operationId)}",
