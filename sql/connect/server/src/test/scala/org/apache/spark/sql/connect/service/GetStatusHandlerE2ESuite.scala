@@ -27,31 +27,22 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.GetStatusResponse.OperationStatus.OperationState
 import org.apache.spark.sql.connect.SparkConnectServerTest
 
-
 class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
-  test(
-    "GetStatus tracks operation through lifecycle: RUNNING -> SUCCEEDED"
-  ) {
+  test("GetStatus tracks operation through lifecycle: RUNNING -> SUCCEEDED") {
     withClient { client =>
-      val plan = buildPlan(
-        "SELECT java_method('java.lang.Thread', 'sleep', 2000L) as value"
-      )
+      val plan = buildPlan("SELECT java_method('java.lang.Thread', 'sleep', 2000L) as value")
       val iter = client.execute(plan)
       val operationId = iter.next().getOperationId
 
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        assert(
-          SparkConnectService.executionManager.listExecuteHolders.length == 1
-        )
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
       }
 
       val runningStatuses =
         client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
       assert(runningStatuses.size == 1)
-      assert(
-        runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING
-      )
+      assert(runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING)
 
       while (iter.hasNext) iter.next()
       assertEventuallyExecutionReleased(operationId)
@@ -61,35 +52,25 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
         val succeededStatuses =
           client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
         assert(succeededStatuses.size == 1)
-        assert(
-          succeededStatuses.head.getState == OperationState.OPERATION_STATE_SUCCEEDED
-        )
+        assert(succeededStatuses.head.getState == OperationState.OPERATION_STATE_SUCCEEDED)
       }
     }
   }
 
-  test(
-    "GetStatus tracks operation through lifecycle: RUNNING -> CANCELLED"
-  ) {
+  test("GetStatus tracks operation through lifecycle: RUNNING -> CANCELLED") {
     withClient { client =>
-      val plan = buildPlan(
-        "SELECT java_method('java.lang.Thread', 'sleep', 3000L) as value"
-      )
+      val plan = buildPlan("SELECT java_method('java.lang.Thread', 'sleep', 3000L) as value")
       val iter = client.execute(plan)
       val operationId = iter.next().getOperationId
 
       Eventually.eventually(timeout(eventuallyTimeout)) {
-        assert(
-          SparkConnectService.executionManager.listExecuteHolders.length == 1
-        )
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
       }
 
       val runningStatuses =
         client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
       assert(runningStatuses.size == 1)
-      assert(
-        runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING
-      )
+      assert(runningStatuses.head.getState == OperationState.OPERATION_STATE_RUNNING)
 
       client.interruptOperation(operationId)
 
@@ -104,9 +85,7 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
         val cancelledStatuses =
           client.getOperationStatuses(Seq(operationId)).getOperationStatusesList.asScala
         assert(cancelledStatuses.size == 1)
-        assert(
-          cancelledStatuses.head.getState == OperationState.OPERATION_STATE_CANCELLED
-        )
+        assert(cancelledStatuses.head.getState == OperationState.OPERATION_STATE_CANCELLED)
       }
     }
   }

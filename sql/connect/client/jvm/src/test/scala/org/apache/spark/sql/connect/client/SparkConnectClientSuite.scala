@@ -560,19 +560,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       client.getOperationStatuses(Seq("default-op-1", "unknown-op"))
     val statuses = response.getOperationStatusesList.asScala.toSeq
     assert(statuses.size == 2)
-    assert(
-      statuses.map(_.getOperationId).toSet == Set("default-op-1", "unknown-op")
-    )
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "unknown-op"))
 
     val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
     assert(
       statusMap("default-op-1") ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
     assert(
       statusMap("unknown-op") ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
   }
 
   test("getOperationStatuses with no IDs returns all operations from server") {
@@ -585,22 +581,15 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     val response = client.getOperationStatuses()
     val statuses = response.getOperationStatusesList.asScala.toSeq
     assert(statuses.size == 2)
-    assert(
-      statuses.map(_.getOperationId).toSet == Set(
-        "default-op-1",
-        "default-op-2"
-      )
-    )
+    assert(statuses.map(_.getOperationId).toSet == Set("default-op-1", "default-op-2"))
 
     val statusMap = statuses.map(s => s.getOperationId -> s.getState).toMap
     assert(
       statusMap("default-op-1") ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
     assert(
       statusMap("default-op-2") ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
   }
 
   test("getOperationStatuses sends extensions and returns them per operation") {
@@ -614,8 +603,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
     val response = client.getOperationStatuses(
       operationIds = Seq("default-op-1", "default-op-2"),
-      operationExtensions = Seq(extension)
-    )
+      operationExtensions = Seq(extension))
 
     // Verify operation statuses are returned
     val statuses = response.getOperationStatusesList.asScala.toSeq
@@ -624,12 +612,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     val statusMap = statuses.map(s => s.getOperationId -> s).toMap
     assert(
       statusMap("default-op-1").getState ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED)
     assert(
       statusMap("default-op-2").getState ==
-        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING
-    )
+        proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
 
     // Verify that extensions are echoed back per operation
     statuses.foreach { status =>
@@ -639,14 +625,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       assert(
         opExtensions.head
           .unpack(classOf[StringValue])
-          .getValue == "custom_extension"
-      )
+          .getValue == "custom_extension")
     }
   }
 
-  test(
-    "getOperationStatuses sends request-level extensions and echoes them in the response"
-  ) {
+  test("getOperationStatuses sends request-level extensions and echoes them in the response") {
     startDummyServer(0)
     client = SparkConnectClient
       .builder()
@@ -657,8 +640,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
     val response = client.getOperationStatuses(
       operationIds = Seq("default-op-1"),
-      requestExtensions = Seq(reqExtension)
-    )
+      requestExtensions = Seq(reqExtension))
 
     // Verify the operation status is returned
     val statuses = response.getOperationStatusesList.asScala.toSeq
@@ -672,8 +654,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(
       responseExtensions.head
         .unpack(classOf[StringValue])
-        .getValue == "request_extension"
-    )
+        .getValue == "request_extension")
   }
 
   test("client can set a custom operation id for ExecutePlan requests") {
@@ -1057,18 +1038,15 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   }
 
   // Default operations stored in the mock session
-  private val default_operation_statuses = Map(
+  private val defaultOperationStatuses = Map(
     "default-op-1" ->
       proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
     "default-op-2" ->
-      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING
-  )
+      proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_RUNNING)
 
   override def getStatus(
       request: proto.GetStatusRequest,
-      responseObserver: StreamObserver[proto.GetStatusResponse]
-  ): Unit = {
-    addUserContextExtensions(request.getUserContext)
+      responseObserver: StreamObserver[proto.GetStatusResponse]): Unit = {
     val responseBuilder = proto.GetStatusResponse
       .newBuilder()
       .setSessionId(request.getSessionId)
@@ -1082,7 +1060,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
 
       if (requestedIds.isEmpty) {
         // No specific IDs requested - return all default operations
-        defaultOperations.foreach { case (opId, state) =>
+        defaultOperationStatuses.foreach { case (opId, state) =>
           val statusBuilder = proto.GetStatusResponse.OperationStatus
             .newBuilder()
             .setOperationId(opId)
@@ -1094,10 +1072,9 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
         // Return status for each requested operation ID
         // Unknown operations return OPERATION_STATE_UNKNOWN
         requestedIds.foreach { opId =>
-          val state = defaultOperations.getOrElse(
+          val state = defaultOperationStatuses.getOrElse(
             opId,
-            proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
-          )
+            proto.GetStatusResponse.OperationStatus.OperationState.OPERATION_STATE_UNKNOWN)
           val statusBuilder = proto.GetStatusResponse.OperationStatus
             .newBuilder()
             .setOperationId(opId)

@@ -514,14 +514,14 @@ private[sql] class SparkConnectClient(
       operationIds: Seq[String] = Seq.empty,
       operationExtensions: Seq[protobuf.Any] = Seq.empty,
       requestExtensions: Seq[protobuf.Any] = Seq.empty): proto.GetStatusResponse = {
-    val requestBuilder = proto.GetStatusRequest.newBuilder()
+    val requestBuilder = proto.GetStatusRequest
+      .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
 
     serverSideSessionId.foreach(session =>
-      requestBuilder.setClientObservedServerSideSessionId(session)
-    )
+      requestBuilder.setClientObservedServerSideSessionId(session))
 
     val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
     operationIds.foreach(opStatusRequest.addOperationIds)
