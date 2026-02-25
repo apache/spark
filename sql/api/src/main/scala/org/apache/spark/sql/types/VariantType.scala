@@ -32,6 +32,10 @@ class VariantType private () extends AtomicType {
   // picked and we currently don't have any data to support it. This may need revisiting later.
   override def defaultSize: Int = 2048
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[VariantType]
+
+  override def hashCode(): Int = classOf[VariantType].getSimpleName.hashCode
+
   /** This is a no-op because values with VARIANT type are always nullable. */
   private[spark] override def asNullable: VariantType = this
 }
