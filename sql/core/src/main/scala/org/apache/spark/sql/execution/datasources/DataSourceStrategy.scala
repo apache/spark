@@ -305,7 +305,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       userSpecifiedSchema = Some(table.schema),
       options = dsOptions,
       catalogTable = Some(table),
-      userSpecifiedStreamingSourceName = Some(sourceIdentifyingName))
+      userSpecifiedStreamingSourceName = sourceIdentifyingName.toUserProvided)
     StreamingRelation(dataSource)
   }
 

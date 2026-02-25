@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.execution.command.SetCatalogCommand
 
 /**
@@ -32,8 +33,10 @@ object ResolveSetCatalogCommand extends Rule[LogicalPlan] {
     case cmd @ SetCatalogCommand(expr) =>
       val resolvedExpr = expr match {
         case UnresolvedAttribute(nameParts) =>
-          // Convert `SET CATALOG foo` into Literal("foo").
-          Literal(nameParts.mkString("."))
+          // Convert `SET CATALOG foo` into Literal("`foo`").
+          // Wrap each identifier part with backticks to handle
+          // special characters.
+          Literal(QuotingUtils.quoteNameParts(nameParts))
 
         case other =>
           // Other expressions (identifier(), CAST, CONCAT, etc.) are resolved
