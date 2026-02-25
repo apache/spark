@@ -130,9 +130,6 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     val catalogTable = spark.sessionState.catalog.getTableMetadata(
       TableIdentifier("t")
     )
-    // During streaming resolution, the CatalogTable gets streamingSourceIdentifyingName set
-    val catalogTableWithSourceName = catalogTable.copy(
-      streamingSourceIdentifyingName = Some(Unassigned))
     val idAttr = AttributeReference(name = "id", dataType = IntegerType)()
 
     val expectedAnalyzedPlan = Project(
@@ -148,7 +145,8 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
               "path" -> catalogTable.location.toString
             ),
             userSpecifiedSchema = Option(catalogTable.schema),
-            catalogTable = Option(catalogTableWithSourceName)
+            catalogTable = Option(catalogTable),
+            userSpecifiedStreamingSourceName = Some(Unassigned)
           ),
           sourceName = s"FileSource[${catalogTable.location.toString}]",
           output = Seq(idAttr)

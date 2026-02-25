@@ -25,29 +25,60 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reader for parsing Well-Known Binary (WKB) format geometries.
+ * Reader for parsing Well-Known Binary (WKB) format geometries and geographies.
  * This class implements the OGC Simple Features specification for WKB parsing.
+ * For geographies, coordinate bounds validation is enforced:
+ *   - X (longitude) must be between -180 and 180 (inclusive),
+ *   - Y (latitude) must be between -90 and 90 (inclusive).
  * This class is not thread-safe. Create a new instance for each thread.
  * This class should be catalyst-internal.
  */
 public class WkbReader {
   private ByteBuffer buffer;
   private final int validationLevel;
+  private final boolean isGeography;
   private byte[] currentWkb;
 
+  // Geography coordinate bounds.
+  private static final double MIN_LONGITUDE = -180.0;
+  private static final double MAX_LONGITUDE = 180.0;
+  private static final double MIN_LATITUDE = -90.0;
+  private static final double MAX_LATITUDE = 90.0;
+  // Default WKB reader settings.
+  private static final int DEFAULT_VALIDATION_LEVEL = 1; // basic validation
+
   /**
-   * Constructor for WkbReader with default validation level (1 = basic validation).
+   * Constructor for WkbReader with default validation level (1 = basic validation)
+   * and geometry mode (no geography coordinate bounds checking).
    */
   public WkbReader() {
-    this(1);
+    this(DEFAULT_VALIDATION_LEVEL, false);
   }
 
   /**
-   * Constructor for WkbReader with specified validation level.
+   * Constructor for WkbReader with specified validation level and geometry mode.
    * @param validationLevel validation level (0 = no validation, 1 = basic validation)
    */
   public WkbReader(int validationLevel) {
+    this(validationLevel, false);
+  }
+
+  /**
+   * Constructor for WkbReader with default validation level and geography mode.
+   * @param isGeography if true, validates geography coordinate bounds for longitude and latitude
+   */
+  public WkbReader(boolean isGeography) {
+    this(DEFAULT_VALIDATION_LEVEL, isGeography);
+  }
+
+  /**
+   * Constructor for WkbReader with specified validation level and geography mode.
+   * @param validationLevel validation level (0 = no validation, 1 = basic validation)
+   * @param isGeography if true, validates geography coordinate bounds for longitude and latitude
+   */
+  public WkbReader(int validationLevel, boolean isGeography) {
     this.validationLevel = validationLevel;
+    this.isGeography = isGeography;
   }
 
   // ========== Coordinate Validation Helpers ==========
@@ -67,6 +98,32 @@ public class WkbReader {
    */
   private static boolean isValidCoordinateAllowEmpty(double value) {
     return Double.isFinite(value) || Double.isNaN(value);
+  }
+
+  /**
+   * Returns true if the longitude value is within valid geography bounds [-180, 180].
+   */
+  private static boolean isValidLongitude(double value) {
+    return value >= MIN_LONGITUDE && value <= MAX_LONGITUDE;
+  }
+
+  /**
+   * Returns true if the latitude value is within valid geography bounds [-90, 90].
+   */
+  private static boolean isValidLatitude(double value) {
+    return value >= MIN_LATITUDE && value <= MAX_LATITUDE;
+  }
+
+  /**
+   * Validates geography coordinate bounds for a point. In geography mode with validation
+   * level > 0, longitude must be between -180 and 180, and latitude must be between -90 and 90.
+   */
+  private void validateGeographyBounds(Point point, long pos) {
+    if (isGeography && validationLevel > 0 && !point.isEmpty()) {
+      if (!isValidLongitude(point.getX()) || !isValidLatitude(point.getY())) {
+        throw new WkbParseException("Invalid coordinate value found", pos, currentWkb);
+      }
+    }
   }
 
   /**
@@ -301,11 +358,14 @@ public class WkbReader {
    * Reads a top-level point geometry (allows empty points with NaN coordinates).
    */
   private Point readPoint(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
+    long coordsStartPos = buffer.position();
     double[] coords = new double[dimensionCount];
     for (int i = 0; i < dimensionCount; i++) {
       coords[i] = readDoubleAllowEmpty();
     }
-    return new Point(coords, srid, hasZ, hasM);
+    Point point = new Point(coords, srid, hasZ, hasM);
+    validateGeographyBounds(point, coordsStartPos);
+    return point;
   }
 
   /**
@@ -314,11 +374,14 @@ public class WkbReader {
    */
   private Point readInternalPoint(int srid, int dimensionCount, boolean hasZ,
                                   boolean hasM) {
+    long coordsStartPos = buffer.position();
     double[] coords = new double[dimensionCount];
     for (int i = 0; i < dimensionCount; i++) {
       coords[i] = readDoubleNoEmpty();
     }
-    return new Point(coords, srid, hasZ, hasM);
+    Point point = new Point(coords, srid, hasZ, hasM);
+    validateGeographyBounds(point, coordsStartPos);
+    return point;
   }
 
   private LineString readLineString(int srid, int dimensionCount, boolean hasZ, boolean hasM) {

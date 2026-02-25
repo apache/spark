@@ -19,9 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A trait to encapsulate catalog lookup function and helpful extractors.
@@ -109,8 +107,8 @@ private[sql] trait LookupCatalog extends Logging {
 
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
       assert(nameParts.nonEmpty)
-      val (catalog, ident) = if (nameParts.length == 1) {
-        (currentCatalog, Identifier.of(catalogManager.currentNamespace, nameParts.head))
+      if (nameParts.length == 1) {
+        Some((currentCatalog, Identifier.of(catalogManager.currentNamespace, nameParts.head)))
       } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp
@@ -118,20 +116,15 @@ private[sql] trait LookupCatalog extends Logging {
         // in the session catalog. The special namespace has higher priority during name resolution.
         // For example, if the name of a custom catalog is the same with `GLOBAL_TEMP_DATABASE`,
         // this custom catalog can't be accessed.
-        (catalogManager.v2SessionCatalog, nameParts.asIdentifier)
+        Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
         try {
-          (catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier)
+          Some((catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier))
         } catch {
           case _: CatalogNotFoundException =>
-            (currentCatalog, nameParts.asIdentifier)
+            Some((currentCatalog, nameParts.asIdentifier))
         }
       }
-      if (CatalogV2Util.isSessionCatalog(catalog) && ident.namespace().length != 1) {
-        throw QueryCompilationErrors.requiresSinglePartNamespaceError(
-          ident.namespace().toImmutableArraySeq)
-      }
-      Some((catalog, ident))
     }
   }
 

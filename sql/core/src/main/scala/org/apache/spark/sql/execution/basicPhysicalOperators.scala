@@ -93,12 +93,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
     if (conf.usePartitionEvaluator) {
-      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+      child.execute().mapPartitionsWithEvaluator(
+        evaluatorFactory, preservesPartitionSizes = true
+      )
     } else {
-      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-        val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(index, iter)
-      }
+      child.execute().mapPartitionsWithIndexInternal(
+        f = (index, iter) => {
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, iter)
+        }, preservesPartitionSizes = true
+      )
     }
   }
 

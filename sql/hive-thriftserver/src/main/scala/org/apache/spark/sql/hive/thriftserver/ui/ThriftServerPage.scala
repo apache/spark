@@ -100,8 +100,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
     val content =
       <span id="sqlstat" class="collapse-aggregated-sqlstat collapse-table"
-            onClick="collapseTable('collapse-aggregated-sqlstat',
-                'aggregated-sqlstat')">
+            data-collapse-name="collapse-aggregated-sqlstat"
+            data-collapse-table="aggregated-sqlstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>SQL Statistics ({numStatement})</a>
@@ -147,8 +147,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
     val content =
     <span id="sessionstat" class="collapse-aggregated-sessionstat collapse-table"
-          onClick="collapseTable('collapse-aggregated-sessionstat',
-                'aggregated-sessionstat')">
+          data-collapse-name="collapse-aggregated-sessionstat"
+          data-collapse-table="aggregated-sessionstat">
       <h4>
         <span class="collapse-table-arrow arrow-open"></span>
         <a>Session Statistics ({numSessions})</a>

@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -82,11 +84,20 @@ class GeographyExecutionSuite {
 
   /** Tests for Geography WKB parsing. */
 
+  // Helper method to create a simple WKB for POINT(0, 1).
+  private byte[] getTestWKBPoint() {
+    ByteBuffer bb = ByteBuffer.allocate(1 + 4 + 8 + 8);
+    bb.order(ByteOrder.LITTLE_ENDIAN);
+    bb.put((byte) 1); // byte order (LE)
+    bb.putInt(1); // type = 1 (Point)
+    bb.putDouble(0.0); // X = 0
+    bb.putDouble(1.0); // Y = 0
+    return bb.array();
+  }
+
   @Test
   void testFromWkbWithSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb, 4326);
     assertNotNull(geography);
     assertArrayEquals(wkb, geography.toWkb());
@@ -95,9 +106,7 @@ class GeographyExecutionSuite {
 
   @Test
   void testFromWkbNoSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb);
     assertNotNull(geography);
     assertArrayEquals(wkb, geography.toWkb());
@@ -171,11 +180,9 @@ class GeographyExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geography.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geography WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test
@@ -211,23 +218,17 @@ class GeographyExecutionSuite {
   /** Tests for Geography WKT and EWKT converters. */
 
   @Test
-  void testToWktUnsupported() {
+  void testToWkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toWkt
-    );
-    assertEquals("Geography WKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("POINT(1 2)", new String(geography.toWkt(), StandardCharsets.UTF_8));
   }
 
   @Test
-  void testToEwktUnsupported() {
+  void testToEwkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toEwkt
-    );
-    assertEquals("Geography EWKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("SRID=4326;POINT(1 2)", new String(geography.toEwkt(), StandardCharsets.UTF_8));
   }
 
   /** Tests for other Geography methods. */

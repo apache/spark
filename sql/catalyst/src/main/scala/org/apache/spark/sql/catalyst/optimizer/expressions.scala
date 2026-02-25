@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -217,8 +218,17 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
   // null result of the enclosed expression means.
+  //
+  // Also, we shouldn't replace attributes with non-binary-stable data types, since this can lead
+  // to incorrect results. For example:
+  // `CREATE TABLE t (c STRING COLLATE UTF8_LCASE);`
+  // `INSERT INTO t VALUES ('HELLO'), ('hello');`
+  // `SELECT * FROM t WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE;`
+  // If we replace `c` with `'hello'`, we get `'hello' = 'HELLO' COLLATE UNICODE` for the right
+  // condition, which is false, while the original `c = 'HELLO' COLLATE UNICODE` is true for
+  // 'HELLO' and false for 'hello'.
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
-    !ar.nullable || nullIsFalse
+    (!ar.nullable || nullIsFalse) && isBinaryStable(ar.dataType)
 
   private def replaceConstants(
       condition: Expression,
@@ -497,6 +507,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
+    case not: Not => simplifyNot(not)
+  }
+
+  /**
+   * Simplify Not expressions. This method is extracted to allow recursive calls for
+   * Not(a Or b) and Not(a And b) cases, which avoids calling the entire actualExprTransformer
+   * and only focuses on Not simplification.
+   */
+  private def simplifyNot(not: Not): Expression = not match {
     case Not(TrueLiteral) => FalseLiteral
     case Not(FalseLiteral) => TrueLiteral
 
@@ -506,22 +525,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case Not(a LessThan b) => GreaterThanOrEqual(a, b)
     case Not(a LessThanOrEqual b) => GreaterThan(a, b)
 
-    // SPARK-54881: push down the NOT operators on children, before attaching the junction Node
-    // to the main tree. This ensures idempotency in an optimal way and avoids an extra rule
-    // iteration.
+    // De Morgan's Laws can create new Not expressions that need further simplification.
     case Not(a Or b) =>
-      And(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
-        actualExprTransformer
-      }
+      And(simplifyNot(Not(a)), simplifyNot(Not(b)))
     case Not(a And b) =>
-      Or(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
-        actualExprTransformer
-      }
+      Or(simplifyNot(Not(a)), simplifyNot(Not(b)))
 
     case Not(Not(e)) => e
 
     case Not(IsNull(e)) => IsNotNull(e)
     case Not(IsNotNull(e)) => IsNull(e)
+
+    case _ => not
   }
 }
 

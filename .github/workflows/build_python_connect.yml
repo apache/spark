@@ -33,9 +33,9 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Cache SBT and Maven
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/apache-maven-*
@@ -45,19 +45,19 @@ jobs:
           restore-keys: |
             build-spark-connect-python-only-
       - name: Cache Coursier local repository
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
           key: coursier-build-spark-connect-python-only-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             coursier-build-spark-connect-python-only-
       - name: Install Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: 17
       - name: Install Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           architecture: x64
@@ -126,7 +126,7 @@ jobs:
           mv pyspark.back python/pyspark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-spark-connect-python-only
           path: |
@@ -134,7 +134,7 @@ jobs:
             **/target/surefire-reports/*.xml
       - name: Upload Spark Connect server log file
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-tests-log-spark-connect-python-only
           path: logs/*.out

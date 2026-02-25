@@ -63,8 +63,8 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
-      <artifactId>roaringbitmap</artifactId>
+      <groupId>org.roaringbitmap</groupId>
+      <artifactId>RoaringBitmap</artifactId>
     </dependency>
     <!-- Test dependencies -->
     <dependency>

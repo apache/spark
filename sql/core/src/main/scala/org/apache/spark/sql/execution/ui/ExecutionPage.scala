@@ -160,7 +160,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     <div>
       <div>
-        <span style="cursor: pointer;" onclick="togglePlanViz();">
+        <span data-action="togglePlanViz">
           <h4>
             <span id="plan-viz-graph-arrow" class="arrow-open"></span>
             <a>Plan Visualization</a>
@@ -188,7 +188,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>
-      <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
+      <span data-action="clickPhysicalPlanDetails">
         <h4>
           <span id="physical-plan-details-arrow" class="arrow-closed"></span>
           <a>Plan Details</a>
@@ -212,7 +212,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     <div>
       <span class="collapse-sql-properties collapse-table"
-            onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
+            data-collapse-name="collapse-sql-properties"
+            data-collapse-table="sql-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>SQL / DataFrame Properties</a>
@@ -251,8 +252,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     <div>
       <span class="collapse-pandas-on-spark-properties collapse-table"
-            onClick="collapseTable('collapse-pandas-on-spark-properties',
-             'pandas-on-spark-properties')">
+            data-collapse-name="collapse-pandas-on-spark-properties"
+            data-collapse-table="pandas-on-spark-properties">
         <h4>
           <span class="collapse-table-arrow arrow-closed"></span>
           <a>Pandas API Properties</a>

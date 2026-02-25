@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.Utils.{getLog, DEFAULT_BYTES}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 
 private[history] class LogPage(conf: SparkConf) extends WebUIPage("logPage") with Logging {
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -42,12 +42,12 @@ private[history] class LogPage(conf: SparkConf) extends WebUIPage("logPage") wit
       </span>
 
     val moreButton =
-      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-secondary">
+      <button type="button" class="log-more-btn btn btn-secondary">
         Load More
       </button>
 
     val newButton =
-      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-secondary">
+      <button type="button" class="log-new-btn btn btn-secondary">
         Load New
       </button>
 
@@ -71,7 +71,7 @@ private[history] class LogPage(conf: SparkConf) extends WebUIPage("logPage") wit
           {alert}
           <div>{newButton}</div>
         </div>
-        <script>{Unparsed(jsOnload)}</script>
+        <script nonce={CspNonce.get}>{Unparsed(jsOnload)}</script>
       </div>
 
     UIUtils.basicSparkPage(request, content, logType + " log page for history server")

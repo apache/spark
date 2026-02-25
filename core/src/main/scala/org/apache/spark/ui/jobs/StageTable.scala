@@ -221,19 +221,11 @@ private[ui] class StagePagedTable(
     val basePathUri = UIUtils.prependBaseUri(request, basePath)
 
     val killLink = if (killEnabled) {
-      val confirm =
-        s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
-        "{ this.parentNode.submit(); return true; } else { return false; }"
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      /*
-      val killLinkUri = s"$basePathUri/stages/stage/kill/"
-      <form action={killLinkUri} method="POST" style="display:inline">
-        <input type="hidden" name="id" value={s.stageId.toString}/>
-        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
-      </form>
-       */
       val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
-      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+      <a href={killLinkUri}
+         data-kill-message={s"Are you sure you want to kill stage ${s.stageId} ?"}
+         class="kill-link">(kill)</a>
     } else {
       Seq.empty
     }
@@ -243,7 +235,7 @@ private[ui] class StagePagedTable(
 
     val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
     val details = if (s.details != null && s.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+      <span data-toggle-details=".stage-details"
             class="expand-details">
         +details
       </span> ++

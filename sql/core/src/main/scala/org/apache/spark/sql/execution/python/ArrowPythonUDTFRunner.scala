@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -48,6 +49,7 @@ class ArrowPythonUDTFRunner(
       jobArtifactUUID, pythonMetrics)
   with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
@@ -87,8 +89,6 @@ class ArrowPythonUDTFRunner(
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
   override val killWorkerOnFlushFailure: Boolean =
     SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
-
-  override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback

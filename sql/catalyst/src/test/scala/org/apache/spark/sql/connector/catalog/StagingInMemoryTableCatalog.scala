@@ -36,7 +36,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     new TestStagedCreateTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
   override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
@@ -44,7 +45,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     new TestStagedReplaceTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
   override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable = {
@@ -52,7 +54,8 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     new TestStagedCreateOrReplaceTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties))
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
   private def validateStagedTable(

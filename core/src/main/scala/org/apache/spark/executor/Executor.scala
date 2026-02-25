@@ -257,6 +257,7 @@ private[spark] class Executor(
 
   logInfo(log"Starting executor ID ${MDC(LogKeys.EXECUTOR_ID, executorId)}" +
     log" on host ${MDC(HOST, executorHostname)}")
+  logInfo(log"Running Spark version ${MDC(LogKeys.SPARK_VERSION, org.apache.spark.SPARK_VERSION)}")
   logInfo(log"OS info ${MDC(OS_NAME, Utils.osName)}," +
     log" ${MDC(OS_VERSION, Utils.osVersion)}, " +
     log"${MDC(OS_ARCH, Utils.osArch)}")
