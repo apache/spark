@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.functions.expr
 
@@ -47,7 +48,7 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
   private[sql] val sparkSession = ds.sparkSession
   import sparkSession.toRichColumn
 
-  private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
+  private val tableName = parseTableName(table)
 
   private val logicalPlan = df.queryExecution.logical
 
@@ -125,5 +126,22 @@ class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
 
   private def mapToAssignments(map: Map[String, Column]): Seq[Assignment] = {
     map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq
+  }
+
+  private def parseTableName(tableName: String): Seq[String] = {
+    try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    } catch {
+      case _: ParseException if isPathLike(tableName) =>
+        Seq(sparkSession.sessionState.conf.defaultDataSourceName, tableName)
+    }
+  }
+
+  private def isPathLike(target: String): Boolean = {
+    target.startsWith("/") ||
+      target.startsWith("./") ||
+      target.startsWith("../") ||
+      target.contains("://") ||
+      target.matches("^[A-Za-z]:[\\\\/].*")
   }
 }
