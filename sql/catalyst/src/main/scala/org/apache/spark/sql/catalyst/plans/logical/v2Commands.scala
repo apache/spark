@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -943,7 +943,8 @@ case class MergeIntoTable(
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
   lazy val changesForSchemaEvolution: Array[TableChange] =
-    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
+    ResolveSchemaEvolution.schemaChanges(
+      targetTable.schema, sourceSchemaForEvolution, isByName = true)
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
@@ -966,73 +967,6 @@ object MergeIntoTable {
       }
       .toSet
       .toSeq
-  }
-
-  def schemaChanges(
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String] = Array()): Array[TableChange] = {
-    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
-  }
-
-  private def schemaChanges(
-      current: DataType,
-      newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String]): Array[TableChange] = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updates = {
-          currentFields collect {
-            case currentField: StructField if newFieldMap.contains(currentField.name) =>
-              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
-                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }
-        }.flatten
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
-          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
-
-        updates ++ adds
-
-      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
-        schemaChanges(currentElementType, newElementType,
-          originalTarget, originalSource, fieldPath ++ Seq("element"))
-
-      case (MapType(currentKeyType, currentElementType, _),
-      MapType(updateKeyType, updateElementType, _)) =>
-        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
-          fieldPath ++ Seq("key")) ++
-          schemaChanges(currentElementType, updateElementType,
-            originalTarget, originalSource, fieldPath ++ Seq("value"))
-
-      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath, newType))
-
-      case (currentType, newType) if currentType == newType =>
-        // No change needed
-        Array.empty[TableChange]
-
-      case _ =>
-        // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
-    }
-  }
-
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(field => field.name -> field).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
-    }
   }
 
   // A pruned version of source schema that only contains columns/nested fields

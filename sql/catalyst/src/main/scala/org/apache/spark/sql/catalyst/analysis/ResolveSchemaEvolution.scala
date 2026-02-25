@@ -19,15 +19,18 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
 
 
 /**
@@ -49,7 +52,8 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
         val newTarget = m.targetTable.transform {
           case r: DataSourceV2Relation =>
             val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
-            val newTarget = performSchemaEvolution(r, referencedSourceSchema, changes)
+            val newTarget =
+              ResolveSchemaEvolution.performSchemaEvolution(r, referencedSourceSchema, changes)
             val oldTargetOutput = m.targetTable.output
             val newTargetOutput = newTarget.output
             val attributeMapping = oldTargetOutput.zip(newTargetOutput)
@@ -60,8 +64,11 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
         res.rewriteAttrs(AttributeMap(finalAttrMapping.toSeq))
       }
   }
+}
 
-  private def performSchemaEvolution(
+object ResolveSchemaEvolution extends Logging {
+
+  def performSchemaEvolution(
       relation: DataSourceV2Relation,
       referencedSourceSchema: StructType,
       changes: Array[TableChange]): DataSourceV2Relation = {
@@ -71,7 +78,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
         val newTable = c.loadTable(i)
         val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
         // Check if there are any remaining changes not applied.
-        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, referencedSourceSchema)
+        val remainingChanges = schemaChanges(newSchema, referencedSourceSchema)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
             remainingChanges, i.toQualifiedNameParts(c))
@@ -80,6 +87,73 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
       case _ => logWarning(s"Schema Evolution enabled but data source $relation " +
         s"does not support it, skipping.")
         relation
+    }
+  }
+
+  def schemaChanges(
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
+  }
+
+  private def schemaChanges(
+      current: DataType,
+      newType: DataType,
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String]): Array[TableChange] = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updates = {
+          currentFields collect {
+            case currentField: StructField if newFieldMap.contains(currentField.name) =>
+              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
+          }
+        }.flatten
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
+          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
+
+        updates ++ adds
+
+      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
+        schemaChanges(currentElementType, newElementType,
+          originalTarget, originalSource, fieldPath ++ Seq("element"))
+
+      case (MapType(currentKeyType, currentElementType, _),
+      MapType(updateKeyType, updateElementType, _)) =>
+        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+          fieldPath ++ Seq("key")) ++
+          schemaChanges(currentElementType, updateElementType,
+            originalTarget, originalSource, fieldPath ++ Seq("value"))
+
+      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
+        Array(TableChange.updateColumnType(fieldPath, newType))
+
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
+        Array.empty[TableChange]
+
+      case _ =>
+        // Do not support change between atomic and complex types for now
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
     }
   }
 }
