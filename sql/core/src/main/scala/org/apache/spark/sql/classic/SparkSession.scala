@@ -1281,12 +1281,18 @@ object SparkSession extends SparkSessionCompanion with Logging {
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
 
-    while (loadedExts.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        val ext = loadedExts.next()
-        ext(extensions)
+        if (loadedExts.hasNext) {
+          val ext = loadedExts.next()
+          ext(extensions)
+        } else {
+          keepLoading = false
+        }
       } catch {
-        case e: Throwable => logWarning("Failed to load session extension", e)
+        case e: Throwable =>
+          logWarning("Failed to load session extension", e)
       }
     }
   }

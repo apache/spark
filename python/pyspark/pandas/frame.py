@@ -663,7 +663,7 @@ class DataFrame(Frame, Generic[T]):
         self,
         internal: InternalFrame,
         check_same_anchor: bool = True,
-        anchor_force_disconnect: bool = False,
+        anchor_force_disconnect: Optional[bool] = None,
     ) -> None:
         """
         Update InternalFrame with the given one.
@@ -686,6 +686,9 @@ class DataFrame(Frame, Generic[T]):
             Force to disconnect the original anchor and create a new one
         """
         from pyspark.pandas.series import Series
+
+        if anchor_force_disconnect is None:
+            anchor_force_disconnect = LooseVersion(pd.__version__) >= "3.0.0"
 
         if hasattr(self, "_psseries"):
             psseries = {}
@@ -13719,7 +13722,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def groupby(
         self,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "DataFrameGroupBy":
