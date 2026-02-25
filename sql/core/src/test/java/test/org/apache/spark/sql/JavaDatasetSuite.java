@@ -1979,7 +1979,6 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testBeanEncoderRejectsInterface() {
     // Bean encoder does not support interface types (deserialization would fail).
-    // Use Encoders.kryo() or Encoders.javaSerialization() for interface types instead.
     Exception e = Assertions.assertThrows(Exception.class,
         () -> Encoders.bean(BeanInterface.class));
     Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("interface"),
@@ -1987,7 +1986,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testKryoEncoderWithInterfaceAndConcreteImplementations() {
+  public void testKryoEncoderWithInterface() {
     BeanImplA a = new BeanImplA();
     a.setValue("a");
     a.setId(1);
@@ -1998,6 +1997,28 @@ public class JavaDatasetSuite implements Serializable {
 
     Encoder<BeanInterface> kryoEncoder = Encoders.kryo(BeanInterface.class);
     Dataset<BeanInterface> ds = spark.createDataset(data, kryoEncoder);
+    List<BeanInterface> collected = ds.collectAsList();
+    Assertions.assertEquals(2, collected.size());
+    Assertions.assertEquals("a", collected.get(0).getValue());
+    Assertions.assertEquals(1, collected.get(0).getId());
+    Assertions.assertEquals("b", collected.get(1).getValue());
+    Assertions.assertEquals(2, collected.get(1).getId());
+    Assertions.assertInstanceOf(BeanImplA.class, collected.get(0));
+    Assertions.assertInstanceOf(BeanImplB.class, collected.get(1));
+  }
+
+  @Test
+  public void testJavaSerializationEncoderWithInterface() {
+    BeanImplA a = new BeanImplA();
+    a.setValue("a");
+    a.setId(1);
+    BeanImplB b = new BeanImplB();
+    b.setValue("b");
+    b.setId(2);
+    List<BeanInterface> data = Arrays.asList(a, b);
+
+    Encoder<BeanInterface> javaEncoder = Encoders.javaSerialization(BeanInterface.class);
+    Dataset<BeanInterface> ds = spark.createDataset(data, javaEncoder);
     List<BeanInterface> collected = ds.collectAsList();
     Assertions.assertEquals(2, collected.size());
     Assertions.assertEquals("a", collected.get(0).getValue());
