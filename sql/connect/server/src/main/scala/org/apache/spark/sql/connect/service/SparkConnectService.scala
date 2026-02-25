@@ -246,6 +246,19 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     }
   }
 
+  override def getStatus(
+      request: proto.GetStatusRequest,
+      responseObserver: StreamObserver[proto.GetStatusResponse]): Unit = {
+    try {
+      new SparkConnectGetStatusHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "getStatus",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
   private def methodWithCustomMarshallers(
       methodDesc: MethodDescriptor[Message, Message]): MethodDescriptor[Message, Message] = {
     val recursionLimit =

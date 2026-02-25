@@ -20,14 +20,12 @@ package org.apache.spark.serializer
 import java.io._
 import java.lang.invoke.MethodHandles
 import java.lang.reflect.{Field, Method}
-import java.security.{AccessController, PrivilegedAction}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.SparkClassUtils
 
 private[spark] object SerializationDebugger extends Logging {
 
@@ -69,15 +67,20 @@ private[spark] object SerializationDebugger extends Logging {
     new SerializationDebugger().visit(obj, List.empty)
   }
 
-  private[serializer] var enableDebugging: Boolean = {
-    val lookup = MethodHandles.lookup()
-    val clazz = SparkClassUtils.classForName("sun.security.action.GetBooleanAction")
-    val constructor = clazz.getConstructor(classOf[String])
-    val mh = lookup.unreflectConstructor(constructor)
-    val action = mh.invoke("sun.io.serialization.extendedDebugInfo")
-      .asInstanceOf[PrivilegedAction[Boolean]]
-    !AccessController.doPrivileged(action).booleanValue()
-  }
+  private[serializer] var enableDebugging: Boolean =
+    if (Runtime.version().feature() >= 24) {
+      // Access plain system property on modern JDKs.
+      // https://github.com/openjdk/jdk/commit/9b0ab92b16f682e65e9847e8127b6ce09fc5759c
+      !java.lang.Boolean.getBoolean("sun.io.serialization.extendedDebugInfo")
+    } else {
+      // Try to access the private static boolean ObjectOutputStream.extendedDebugInfo
+      // to avoid handling SecurityManager changes across different version of JDKs.
+      // See details at - JEP 486: Permanently Disable the Security Manager (JDK 24)
+      val clazz = classOf[ObjectOutputStream]
+      val lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup())
+      val vh = lookup.findStaticVarHandle(clazz, "extendedDebugInfo", java.lang.Boolean.TYPE)
+      !vh.get().asInstanceOf[Boolean]
+    }
 
   private class SerializationDebugger {
 
