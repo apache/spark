@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.read.streaming.SupportsTriggerAvailableNow
+import org.apache.spark.sql.connector.read.streaming.{SparkDataStream, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, SequentialUnionOffset}
-import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, MicroBatchExecutionContext}
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution,
+  MicroBatchExecutionContext, StreamingExecutionRelation}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Clock
 
@@ -56,6 +57,9 @@ class SequentialUnionExecution(
   // Track which child of the SequentialUnion is currently active
   @volatile private var activeChildIndex: Int = 0
 
+  // Track whether we should transition after the current batch completes
+  @volatile private var shouldTransitionAfterBatch: Boolean = false
+
   // Cache the SequentialUnion node from the ORIGINAL plan (before transformation)
   private lazy val sequentialUnionNode: SequentialStreamingUnion = {
     plan.inputQuery.collectFirst {
@@ -67,6 +71,43 @@ class SequentialUnionExecution(
   }
 
   private lazy val numChildren: Int = sequentialUnionNode.children.size
+
+  /**
+   * Get the sources that correspond to the active child index.
+   * Since MicroBatchExecution collects sources in order from the logical plan,
+   * and SequentialStreamingUnion has its children in order, we can map child indices
+   * to source indices. Each child may have multiple leaf sources, so we need to
+   * count the sources for each child.
+   */
+  private def getSourcesForChild(childIndex: Int): Seq[SparkDataStream] = {
+    if (childIndex >= numChildren) {
+      logWarning(s"getSourcesForChild: childIndex $childIndex >= numChildren $numChildren")
+      return Seq.empty
+    }
+
+    // Get the logical plan for this child
+    val childPlan = sequentialUnionNode.children(childIndex)
+
+    // Count how many sources are in each child by collecting streaming relations
+    import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
+    val childSourceCounts = sequentialUnionNode.children.map { child =>
+      child.collect {
+        case _: StreamingExecutionRelation => 1
+        case _: StreamingDataSourceV2ScanRelation => 1
+      }.size
+    }
+
+    logInfo(s"getSourcesForChild: childIndex=$childIndex, childSourceCounts=$childSourceCounts")
+
+    // Calculate the starting index for this child's sources in the sources array
+    val startIndex = childSourceCounts.take(childIndex).sum
+    val endIndex = startIndex + childSourceCounts(childIndex)
+
+    logInfo(s"getSourcesForChild: startIndex=$startIndex, endIndex=$endIndex, " +
+      s"totalSources=${sources.size}")
+
+    sources.slice(startIndex, endIndex)
+  }
 
   /**
    * Override populateStartOffsets to:
@@ -133,17 +174,41 @@ class SequentialUnionExecution(
 
   /**
    * Check if current source is exhausted (no more data).
-   * A source is exhausted when endOffset == startOffset for all sources.
+   * A source is exhausted when endOffset == startOffset for all sources
+   * that correspond to the active child index.
+   *
+   * IMPORTANT: We must only check sources for the active child, not all sources.
+   * Since all children of SequentialStreamingUnion are instantiated (so the Union
+   * can combine them), checking ALL sources would include inactive children
+   * (e.g., the rate source) which may always have data, causing premature transitions.
    */
   private def isCurrentSourceExhausted(execCtx: MicroBatchExecutionContext): Boolean = {
-    // Check if any source has new data
-    val hasNewData = execCtx.endOffsets.exists {
-      case (source, endOffset) =>
-        execCtx.startOffsets.get(source) match {
-          case Some(startOffset) => startOffset != endOffset
-          case None => true // First batch, has data
-        }
+    val activeChildSources = getSourcesForChild(activeChildIndex)
+    logInfo(s"Checking exhaustion for activeChildIndex=$activeChildIndex, " +
+      s"activeChildSources=${activeChildSources.mkString("[", ", ", "]")}, " +
+      s"allSources=${sources.mkString("[", ", ", "]")}")
+
+    // Check if any source for the active child has new data
+    val hasNewData = activeChildSources.exists { source =>
+      val result = execCtx.endOffsets.get(source) match {
+        case Some(endOffset) =>
+          execCtx.startOffsets.get(source) match {
+            case Some(startOffset) =>
+              val hasData = startOffset != endOffset
+              logInfo(s"Source $source: startOffset=$startOffset, endOffset=$endOffset, " +
+                s"hasData=$hasData")
+              hasData
+            case None =>
+              logInfo(s"Source $source: no startOffset, endOffset=$endOffset, hasData=true")
+              true // First batch, has data
+          }
+        case None =>
+          logInfo(s"Source $source: no endOffset, hasData=false")
+          false // No end offset for this source
+      }
+      result
     }
+    logInfo(s"Overall hasNewData=$hasNewData, exhausted=${!hasNewData}")
     !hasNewData
   }
 
@@ -209,29 +274,41 @@ class SequentialUnionExecution(
       logInfo(s"Committed offsets for batch ${execCtx.batchId} with SequentialUnionOffset " +
         s"(activeChildIndex=$activeChildIndex)")
     } else {
+      // For RealTimeTrigger, just log (matching parent behavior)
       logInfo(s"Delay offset logging for batch ${execCtx.batchId} in real time mode.")
     }
   }
 
   /**
-   * Override constructNextBatch to check for source exhaustion after construction.
-   * When a non-final source is exhausted, transition to the next child.
+   * Override constructNextBatch to check for source exhaustion.
+   * When a non-final source is exhausted, transition to the next source after the batch executes.
    */
   override protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = {
+
+    // If we're pending a transition from the previous batch, do it now BEFORE constructing
+    if (shouldTransitionAfterBatch) {
+      val oldIndex = activeChildIndex
+      transitionToNextSource()
+      shouldTransitionAfterBatch = false
+      logInfo(s"Transitioned from child $oldIndex to child $activeChildIndex before constructing")
+    }
 
     // Call parent to construct the batch normally
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
 
     // After construction, check if current source is exhausted (only for non-final sources)
     if (batchConstructed && activeChildIndex < numChildren - 1) {
-      if (isCurrentSourceExhausted(execCtx)) {
-        logInfo(s"Source at index $activeChildIndex is exhausted, transitioning to next source")
-        transitionToNextSource()
+      val exhausted = isCurrentSourceExhausted(execCtx)
+      logInfo(s"After batch construction: batchId=${execCtx.batchId}, " +
+        s"activeChildIndex=$activeChildIndex, exhausted=$exhausted")
 
-        // Recursively construct next batch for the new source
-        return constructNextBatch(execCtx, noDataBatchesEnabled)
+      if (exhausted) {
+        logInfo(s"Source $activeChildIndex exhausted, will transition before next batch")
+        // Mark for transition BEFORE the next batch is constructed
+        // This ensures the next batch is constructed with the new activeChildIndex
+        shouldTransitionAfterBatch = true
       }
     }
 

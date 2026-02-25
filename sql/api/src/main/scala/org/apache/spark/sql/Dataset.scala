@@ -1961,6 +1961,55 @@ abstract class Dataset[T] extends Serializable {
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T]
 
   /**
+   * Returns a new Dataset that sequentially processes this Dataset followed by another Dataset.
+   * This is primarily useful for streaming scenarios where you want to backfill historical data
+   * before processing live streams.
+   *
+   * The returned Dataset will first process all data from this Dataset until it completes,
+   * then automatically transition to processing the other Dataset. This is different from
+   * [[union]] which interleaves data from both Datasets.
+   *
+   * Example use case:
+   * {{{
+   *   // Process historical file data, then transition to live streaming
+   *   val historical = spark.readStream.format("json").load("/historical")
+   *   val live = spark.readStream.format("kafka").load()
+   *   val combined = historical.followedBy(live)
+   * }}}
+   *
+   * @param other the Dataset to process after this Dataset completes
+   * @return a new Dataset that processes this Dataset followed by the other Dataset
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def followedBy(other: Dataset[T]): Dataset[T]
+
+  /**
+   * Returns a new Dataset that sequentially processes this Dataset followed by multiple other
+   * Datasets in the specified order. This is an extension of [[followedBy(Dataset)]] that allows
+   * chaining multiple sequential sources.
+   *
+   * The returned Dataset will process sources in order: this Dataset, then first, then each
+   * Dataset in rest. Each source is fully processed before moving to the next one.
+   *
+   * Example use case:
+   * {{{
+   *   // Process multiple backfill sources before live data
+   *   val backfill1 = spark.readStream.format("json").load("/year2023")
+   *   val backfill2 = spark.readStream.format("json").load("/year2024")
+   *   val live = spark.readStream.format("kafka").load()
+   *   val combined = backfill1.followedBy(backfill2, live)
+   * }}}
+   *
+   * @param first the first Dataset to process after this Dataset completes
+   * @param rest additional Datasets to process in order
+   * @return a new Dataset that processes all Datasets sequentially
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def followedBy(first: Dataset[T], rest: Dataset[T]*): Dataset[T]
+
+  /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset. This is
    * equivalent to `INTERSECT` in SQL.
    *

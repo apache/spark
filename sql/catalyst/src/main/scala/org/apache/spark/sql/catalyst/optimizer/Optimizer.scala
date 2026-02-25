@@ -1111,8 +1111,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
     case p @ Project(_, _: Distinct) => p
-    // Eliminate unneeded attributes from children of Union.
-    case p @ Project(_, u: Union) =>
+    // Eliminate unneeded attributes from children of Union or SequentialStreamingUnion.
+    case p @ Project(_, SequentialOrSimpleUnion(u)) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
         val newOutput = prunedChild(firstChild, p.references).output
@@ -1123,7 +1123,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           }.map(_._1)
           Project(selected, p)
         }
-        p.copy(child = u.withNewChildren(newChildren))
+        p.copy(child = SequentialOrSimpleUnion.withNewChildren(u, newChildren))
       } else {
         p
       }

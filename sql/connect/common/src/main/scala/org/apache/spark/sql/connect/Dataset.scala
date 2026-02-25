@@ -676,6 +676,20 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def followedBy(other: sql.Dataset[T]): Dataset[T] = {
+    throw new UnsupportedOperationException(
+      "followedBy is not supported in Spark Connect. " +
+      "This operation is only available for streaming queries in classic Spark.")
+  }
+
+  /** @inheritdoc */
+  def followedBy(first: sql.Dataset[T], rest: sql.Dataset[T]*): Dataset[T] = {
+    throw new UnsupportedOperationException(
+      "followedBy is not supported in Spark Connect. " +
+      "This operation is only available for streaming queries in classic Spark.")
+  }
+
+  /** @inheritdoc */
   def intersect(other: sql.Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT) { builder =>
       builder.setIsAll(false)
