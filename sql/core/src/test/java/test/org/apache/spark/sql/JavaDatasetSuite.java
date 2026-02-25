@@ -1920,8 +1920,6 @@ public class JavaDatasetSuite implements Serializable {
 
   /**
    * Interface with JavaBean-style getters/setters for testing encoder with interface type.
-   * Used to verify that Encoders.bean(Interface.class) fails on deserialization (cannot
-   * instantiate interface) while Encoders.kryo(Interface.class) works with concrete implementations.
    */
   public interface BeanInterface extends Serializable {
     String getValue();
