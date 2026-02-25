@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.Exists
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -174,6 +175,83 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(6, 0, "hr"))) // insert
 
       checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("merge does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        sql(
+          s"""CREATE TEMP VIEW source AS
+             |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
+             |""".stripMargin)
+
+        val (_, groupFilterCond) = executeAndKeepConditions {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET t.salary = s.salary + 1
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'new')
+               |""".stripMargin)
+        }
+
+        groupFilterCond match {
+          case Some(p: Exists) => assertNoScanPlanning(p.plan)
+          case _ => fail(s"unexpected group filter: $groupFilterCond")
+        }
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(Row(1, 100, "hr"), Row(2, 201, "software"), Row(3, 301, "hr")))
+
+        checkReplacedPartitions(Seq("software", "hr"))
+      }
+    }
+  }
+
+  test("merge does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        sql(
+          s"""CREATE TEMP VIEW source AS
+             |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
+             |""".stripMargin)
+
+        val (_, groupFilterCond) = executeAndKeepConditions {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET t.salary = s.salary + 1
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'new')
+               |""".stripMargin)
+        }
+
+        assert(groupFilterCond.isEmpty, "group filter must be disabled")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(Row(1, 100, "hr"), Row(2, 201, "software"), Row(3, 301, "hr")))
+
+        checkReplacedPartitions(Seq("hr", "software"))
+      }
     }
   }
 }
