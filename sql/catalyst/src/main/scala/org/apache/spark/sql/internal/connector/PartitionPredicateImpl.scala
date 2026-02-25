@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  * <p>
  * Supporting data sources receive these via
  * [[org.apache.spark.sql.connector.read.SupportsPushDownV2Filters#pushPredicates pushPredicates]]
- * and may use them for partition filtering.
+ * and may use them for additional partition filtering.
  */
 class PartitionPredicateImpl(
     private val catalystExpression: Expression,

@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import scala.collection.mutable.{ArrayBuffer, Buffer}
+
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -57,38 +59,34 @@ class InMemoryEnhancedPartitionFilterTable(
     with SupportsPushDownRequiredColumns {
 
     private var readSchema: StructType = tableSchema
-    private var partitionPredicates: Array[PartitionPredicate] = Array.empty
-    private var firstPassPushedPredicates: Array[Predicate] = Array.empty
-    private var _pushedPredicates: Array[Predicate] = Array.empty
+    private val partitionPredicates: Buffer[PartitionPredicate] = ArrayBuffer.empty
+    private val firstPassPushedPredicates: Buffer[Predicate] = ArrayBuffer.empty
 
     override def supportsEnhancedPartitionFiltering(): Boolean = true
 
-    override def pushPredicates(
-        predicates: Array[Predicate])
-    : Array[Predicate] = {
-      val partitionOnly = predicates.filter(_.isInstanceOf[PartitionPredicate])
-      if (partitionOnly.nonEmpty) {
-        // Second call: partition-only predicates (e.g. UDF(partition_col) = value)
-        partitionPredicates = partitionOnly.map(_.asInstanceOf[PartitionPredicate]).toArray
-        _pushedPredicates = firstPassPushedPredicates ++
-          partitionPredicates.map(p => p: Predicate)
-        Array.empty
-      } else {
-        // First call: push partition-only predicates we can evaluate to prune InputPartitions
-        val partNames = InMemoryEnhancedPartitionFilterTable.this.partCols
-          .flatMap(_.toSeq).toSet
-        def referencesOnlyPartitionCols(p: Predicate): Boolean =
-          p.references().forall(ref =>
-            partNames.contains(ref.fieldNames().mkString(".")))
-        val partitionOnlyFirstPass = predicates.filter(referencesOnlyPartitionCols)
-        firstPassPushedPredicates = partitionOnlyFirstPass.filter(p =>
-          InMemoryTableWithV2Filter.supportsPredicates(Array(p)))
-        _pushedPredicates = firstPassPushedPredicates
-        predicates.filterNot(firstPassPushedPredicates.contains)
+    override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+      val partNames = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet
+      def referencesOnlyPartitionCols(p: Predicate): Boolean =
+        p.references().forall(ref => partNames.contains(ref.fieldNames().mkString(".")))
+
+      val returned = ArrayBuffer.empty[Predicate]
+
+      predicates.foreach {
+        case p: PartitionPredicate =>
+          partitionPredicates += p
+        case p if referencesOnlyPartitionCols(p) &&
+            InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
+          firstPassPushedPredicates += p
+        case p =>
+          returned += p
       }
+
+      if (partitionPredicates.nonEmpty) Array.empty[Predicate]
+      else returned.toArray
     }
 
-    override def pushedPredicates(): Array[Predicate] = _pushedPredicates
+    override def pushedPredicates(): Array[Predicate] =
+      (firstPassPushedPredicates ++ partitionPredicates.map(p => p: Predicate)).toArray
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       readSchema = requiredSchema
@@ -104,17 +102,13 @@ class InMemoryEnhancedPartitionFilterTable(
             .toImmutableArraySeq
         val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
         val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(
-          allKeys, partNames, firstPassPushedPredicates).toSet
+          allKeys, partNames, firstPassPushedPredicates.toArray).toSet
         allPartitions.filter(p =>
           matchingKeys.contains(p.asInstanceOf[BufferedRows].key))
       }
-      val filtered = if (partitionPredicates.isEmpty) {
-        filteredByFirstPass
-      } else {
-        filteredByFirstPass.filter { p =>
-          val partRow = p.asInstanceOf[BufferedRows].partitionKey()
-          partitionPredicates.forall(_.accept(partRow))
-        }
+      val filtered = filteredByFirstPass.filter { p =>
+        val partRow = p.asInstanceOf[BufferedRows].partitionKey()
+        partitionPredicates.forall(_.accept(partRow))
       }
       InMemoryEnhancedPartitionFilterBatchScan(filtered, readSchema, tableSchema)
     }
