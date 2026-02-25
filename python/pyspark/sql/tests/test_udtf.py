@@ -3548,7 +3548,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield 1,
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3575,7 +3575,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield "1",
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
 
         for ret_type, expected in [
             ("x: boolean", err),
@@ -3604,7 +3604,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield "hello",
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3632,7 +3632,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield [0, 1.1, 2],
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3664,7 +3664,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3695,7 +3695,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield {"a": 0, "b": 1.1, "c": 2},
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3725,7 +3725,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             def eval(self):
                 yield Row(a=0, b=1.1, c=2),
 
-        err = "UDTF_ARROW_DATA_CONVERSION_ERROR"
+        err = "UDTF_ARROW_TYPE_CONVERSION_ERROR"
         for ret_type, expected in [
             ("x: boolean", err),
             ("x: tinyint", err),
@@ -3761,7 +3761,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
     def test_decimal_round(self):
