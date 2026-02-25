@@ -839,6 +839,13 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_EXECUTOR_MEMORY_USE_CONTAINER_SUPPORT =
+    ConfigBuilder("spark.kubernetes.executor.memory.useContainerSupport")
+      .doc("If true, executor pods use JVM `(Initial|Min|Max)Percentage` options.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."

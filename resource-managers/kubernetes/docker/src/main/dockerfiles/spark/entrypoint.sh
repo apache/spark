@@ -107,6 +107,25 @@ case "$1" in
       --podName $SPARK_EXECUTOR_POD_NAME
     )
     ;;
+  executor-with-container-support)
+    shift 1
+    CMD=(
+      ${JAVA_HOME}/bin/java
+      "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
+      -XX:InitialRAMPercentage=$SPARK_EXECUTOR_MEMORY_PERCENTAGE
+      -XX:MinRAMPercentage=$SPARK_EXECUTOR_MEMORY_PERCENTAGE
+      -XX:MaxRAMPercentage=$SPARK_EXECUTOR_MEMORY_PERCENTAGE
+      -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
+      org.apache.spark.scheduler.cluster.k8s.KubernetesExecutorBackend
+      --driver-url $SPARK_DRIVER_URL
+      --executor-id $SPARK_EXECUTOR_ID
+      --cores $SPARK_EXECUTOR_CORES
+      --app-id $SPARK_APPLICATION_ID
+      --hostname $SPARK_EXECUTOR_POD_IP
+      --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
+      --podName $SPARK_EXECUTOR_POD_NAME
+    )
+    ;;
 
   *)
     echo "Non-spark-on-k8s command provided, proceeding in pass-through mode..."

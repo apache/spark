@@ -340,6 +340,15 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("SPARK-55669: Support spark.kubernetes.executor.memory.useContainerSupport") {
+    val conf = baseConf.clone().set(KUBERNETES_EXECUTOR_MEMORY_USE_CONTAINER_SUPPORT, true)
+    val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
+    val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(
+      ENV_EXECUTOR_MEMORY_PERCENTAGE -> "72.73"))
+  }
+
   test("test executor pyspark memory") {
     baseConf.set("spark.kubernetes.resource.type", "python")
     baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)

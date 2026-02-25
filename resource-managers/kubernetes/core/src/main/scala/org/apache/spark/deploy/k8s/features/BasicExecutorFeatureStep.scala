@@ -64,6 +64,8 @@ private[spark] class BasicExecutorFeatureStep(
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
   private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
+  private val useContainerSupport =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_MEMORY_USE_CONTAINER_SUPPORT)
   private val minimumMemoryOverhead = kubernetesConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
   private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
     kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
@@ -82,6 +84,8 @@ private[spark] class BasicExecutorFeatureStep(
   assert(execResources.cores.nonEmpty)
 
   private val executorMemoryString = s"${execResources.executorMemoryMiB}m"
+  private val executorMemoryPercentageString =
+    "%.2f".format(100.0 * execResources.executorMemoryMiB / execResources.totalMemMiB)
   // we don't include any kubernetes conf specific requests or limits when using custom
   // ResourceProfiles because we don't have a way of overriding them if needed
   private val executorCoresRequest =
@@ -171,6 +175,8 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
           ENV_EXECUTOR_ID -> kubernetesConf.executorId,
           ENV_RESOURCE_PROFILE_ID -> resourceProfile.id.toString)
+          ++ Option.when(useContainerSupport)(
+            ENV_EXECUTOR_MEMORY_PERCENTAGE -> executorMemoryPercentageString)
           ++ attributes
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
@@ -231,7 +237,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endEnv()
       .addAllToEnv(executorEnv.asJava)
       .addAllToPorts(requiredPorts.asJava)
-      .addToArgs("executor")
+      .addToArgs(if (useContainerSupport) "executor-with-container-support" else "executor")
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {
       executorContainer
