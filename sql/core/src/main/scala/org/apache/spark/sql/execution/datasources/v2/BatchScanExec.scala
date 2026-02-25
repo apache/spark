@@ -156,7 +156,8 @@ case class BatchScanExec(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
-        output))
+        output),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(QueryPlan.normalizePredicates(_, output)))
   }
 
   override def simpleString(maxFields: Int): String = {
