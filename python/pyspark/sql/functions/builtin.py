@@ -1329,16 +1329,22 @@ def min(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
     """
-    Returns the value from the `col` parameter that is associated with the maximum value
+    Returns the value(s) from the `col` parameter that are associated with the maximum value(s)
     from the `ord` parameter. This function is often used to find the `col` parameter value
     corresponding to the maximum `ord` parameter value within each group when used with groupBy().
+
+    When `k` is specified, returns an array of up to `k` values associated with the top `k`
+    maximum values from `ord`.
 
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added optional `k` parameter to return top-k values.
 
     Notes
     -----
@@ -1353,12 +1359,16 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be maximized. This could be the column instance
         or the column name as string.
+    k : int, optional
+        If specified, returns an array of up to `k` values associated with the top `k`
+        maximum ordering values, sorted in descending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         A column object representing the value from `col` that is associated with
-        the maximum value from `ord`.
+        the maximum value from `ord`. If `k` is specified, returns an array of values.
 
     Examples
     --------
@@ -1410,21 +1420,42 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Consult|                      Henry|
     |   Finance|                     George|
     +----------+---------------------------+
+
+    Example 4: Using `max_by` with `k` to get top-k values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
+    ...     schema=("x", "y"))
+    >>> df.select(sf.max_by("x", "y", 2)).show()
+    +---------------+
+    |max_by(x, y, 2)|
+    +---------------+
+    |         [b, d]|
+    +---------------+
     """
+    if k is not None:
+        return _invoke_function_over_columns("max_by", col, ord, lit(k))
     return _invoke_function_over_columns("max_by", col, ord)
 
 
 @_try_remote_functions
-def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
     """
-    Returns the value from the `col` parameter that is associated with the minimum value
+    Returns the value(s) from the `col` parameter that are associated with the minimum value(s)
     from the `ord` parameter. This function is often used to find the `col` parameter value
     corresponding to the minimum `ord` parameter value within each group when used with groupBy().
+
+    When `k` is specified, returns an array of up to `k` values associated with the bottom `k`
+    minimum values from `ord`.
 
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added optional `k` parameter to return bottom-k values.
 
     Notes
     -----
@@ -1439,12 +1470,16 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be minimized. This could be the column instance
         or the column name as string.
+    k : int, optional
+        If specified, returns an array of up to `k` values associated with the bottom `k`
+        minimum ordering values, sorted in ascending order by the ordering column.
+        Must be a positive integer literal <= 100000.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         Column object that represents the value from `col` associated with
-        the minimum value from `ord`.
+        the minimum value from `ord`. If `k` is specified, returns an array of values.
 
     Examples
     --------
@@ -1496,7 +1531,22 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Consult|                        Eva|
     |   Finance|                      Frank|
     +----------+---------------------------+
+
+    Example 4: Using `min_by` with `k` to get bottom-k values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("a", 10), ("b", 50), ("c", 20), ("d", 40)],
+    ...     schema=("x", "y"))
+    >>> df.select(sf.min_by("x", "y", 2)).show()
+    +---------------+
+    |min_by(x, y, 2)|
+    +---------------+
+    |         [a, c]|
+    +---------------+
     """
+    if k is not None:
+        return _invoke_function_over_columns("min_by", col, ord, lit(k))
     return _invoke_function_over_columns("min_by", col, ord)
 
 
@@ -28666,6 +28716,318 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
     +-------------------------------------------------------------------------+
     """
     return _invoke_function_over_columns("tuple_difference_integer", col1, col2)
+
+
+@_try_remote_functions
+def tuple_difference_theta_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Subtracts a Datasketches ThetaSketch from a TupleSketch with double summaries
+    (elements in TupleSketch but not in ThetaSketch).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(5, 5.0, 4), (1, 1.0, 4), (2, 2.0, 5), (3, 3.0, 1)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_difference_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_difference_theta_double(sketch1, sketch2))|
+    +-----------------------------------------------------------------------------+
+    |                                                                          2.0|
+    +-----------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_theta_double", col1, col2)
+
+
+@_try_remote_functions
+def tuple_difference_theta_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Subtracts a Datasketches ThetaSketch from a TupleSketch with integer summaries
+    (elements in TupleSketch but not in ThetaSketch).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(5, 5, 4), (1, 1, 4), (2, 2, 5), (3, 3, 1)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_difference_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_difference_theta_integer(sketch1, sketch2))|
+    +-------------------------------------------------------------------------------+
+    |                                                                            2.0|
+    +-------------------------------------------------------------------------------+
+    """
+    return _invoke_function_over_columns("tuple_difference_theta_integer", col1, col2)
+
+
+@_try_remote_functions
+def tuple_intersection_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Intersects a Datasketches TupleSketch with double summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1.0, 1), (2, 2.0, 2), (3, 3.0, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_intersection_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +------------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_intersection_theta_double(sketch1, sketch2, sum))|
+    +------------------------------------------------------------------------------------+
+    |                                                                                 2.0|
+    +------------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_theta_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_intersection_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Intersects a Datasketches TupleSketch with integer summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_theta_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_agg_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 1, 1), (2, 2, 2), (3, 3, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_intersection_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +--------------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_intersection_theta_integer(sketch1, sketch2, sum))|
+    +--------------------------------------------------------------------------------------+
+    |                                                                                   2.0|
+    +--------------------------------------------------------------------------------------+
+    """
+    fn = "tuple_intersection_theta_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+@_try_remote_functions
+def tuple_union_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Merges a Datasketches TupleSketch with double summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with double summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_double`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_agg_double`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_double`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10.0, 3), (2, 20.0, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_double("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_double(sf.tuple_union_theta_double(df.sketch1, "sketch2"))).show()  # noqa
+    +---------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_double(tuple_union_theta_double(sketch1, sketch2, 12, sum))|
+    +---------------------------------------------------------------------------------+
+    |                                                                              4.0|
+    +---------------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_theta_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+@_try_remote_functions
+def tuple_union_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    """
+    Merges a Datasketches TupleSketch with integer summaries with a ThetaSketch.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+        The TupleSketch column with integer summaries
+    col2 : :class:`~pyspark.sql.Column` or column name
+        The ThetaSketch column
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+    mode : :class:`~pyspark.sql.Column` or str, optional
+        The summary mode: "sum" (default), "min", "max", or "alwaysone"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged TupleSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tuple_sketch_agg_integer`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.tuple_union_agg_integer`
+    :meth:`pyspark.sql.functions.tuple_intersection_theta_integer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 10, 3), (2, 20, 4)], ["key1", "v1", "key2"])  # noqa
+    >>> df = df.agg(
+    ...     sf.tuple_sketch_agg_integer("key1", "v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("key2").alias("sketch2")
+    ... )
+    >>> df.select(sf.tuple_sketch_estimate_integer(sf.tuple_union_theta_integer(df.sketch1, "sketch2"))).show()  # noqa
+    +-----------------------------------------------------------------------------------+
+    |tuple_sketch_estimate_integer(tuple_union_theta_integer(sketch1, sketch2, 12, sum))|
+    +-----------------------------------------------------------------------------------+
+    |                                                                                4.0|
+    +-----------------------------------------------------------------------------------+
+    """
+    fn = "tuple_union_theta_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
 
 
 # ---------------------- Predicates functions ------------------------------

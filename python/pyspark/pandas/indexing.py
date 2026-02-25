@@ -587,6 +587,16 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         from pyspark.pandas.series import Series, first_series
 
         if self._is_series:
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas 3 CoW: mutating a Series view should not mutate the parent DataFrame.
+                self._psdf_or_psser._update_anchor(
+                    DataFrame(
+                        self._psdf_or_psser._psdf._internal.select_column(
+                            self._psdf_or_psser._column_label
+                        )
+                    )
+                )
+
             if (
                 isinstance(key, Series)
                 and (isinstance(self, iLocIndexer) or not same_anchor(key, self._psdf_or_psser))
@@ -626,7 +636,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if self._psdf_or_psser.name is None:
                     psser = psser.rename()
 
-                self._psdf_or_psser._psdf._update_internal_frame(
+                self._psdf_or_psser._update_internal_frame(
                     psser._psdf[
                         self._psdf_or_psser._psdf._internal.column_labels
                     ]._internal.resolved_copy,
@@ -663,7 +673,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_spark_column(
                 self._psdf_or_psser._column_label, scol  # TODO: dtype?
             )
-            self._psdf_or_psser._psdf._update_internal_frame(internal, check_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
         else:
             assert self._is_df
 
@@ -1858,7 +1868,7 @@ class iLocIndexer(LocIndexerLike):
                         )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
-        self._psdf._update_internal_frame(
+        self._psdf_or_psser._update_internal_frame(
             self._psdf._internal.resolved_copy, check_same_anchor=False
         )
 
