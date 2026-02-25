@@ -3093,8 +3093,20 @@ private[spark] object Utils
    * addressing the directory here. Also, we rely on the caller side to address any exceptions.
    */
   def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+    val files = unzipFilesFromInputStream(fs.open(dfsZipFile), localDir)
+    logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
+    files
+  }
+
+  /**
+   * Decompress a zip input stream into a local dir. File names are read from the zip entries.
+   * Note, we skip addressing the directory here. Also, we rely on the caller side to address
+   * any exceptions. The caller is responsible for opening the stream with whatever abstraction
+   * is appropriate (e.g. a CheckpointFileManager to enable checksum verification on close).
+   */
+  def unzipFilesFromInputStream(inputStream: InputStream, localDir: File): Seq[File] = {
     val files = new ArrayBuffer[File]()
-    val in = new ZipInputStream(fs.open(dfsZipFile))
+    val in = new ZipInputStream(inputStream)
     var out: OutputStream = null
     try {
       var entry = in.getNextEntry()
@@ -3111,7 +3123,6 @@ private[spark] object Utils
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
       Utils.closeQuietly(in)
