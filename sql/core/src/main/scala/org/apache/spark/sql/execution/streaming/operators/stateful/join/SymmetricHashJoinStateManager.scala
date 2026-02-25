@@ -512,8 +512,11 @@ class SymmetricHashJoinStateManagerV4(
         key: UnsafeRow,
         timestamp: Long,
         valuesWithMatched: Seq[(UnsafeRow, Boolean)]): Unit = {
+      // copy() is required because convertToValueRow reuses its internal UnsafeProjection output
+      // TODO: StateStore.putList should allow iterator to be passed in, so that we don't need to
+      //   materialize the array and copy the values here.
       val valuesToPut = valuesWithMatched.map { case (value, matched) =>
-        valueRowConverter.convertToValueRow(value, matched)
+        valueRowConverter.convertToValueRow(value, matched).copy()
       }.toArray
       stateStore.putList(createKeyRow(key, timestamp), valuesToPut, colFamilyName)
     }
