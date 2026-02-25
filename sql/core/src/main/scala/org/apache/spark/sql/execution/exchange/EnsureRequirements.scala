@@ -476,9 +476,9 @@ case class EnsureRequirements(
       }
     }
 
-    // We don't need to add alter or add any `GroupPartitionsExec` when the child partitionings are
-    // not modified (projected) in specs and left and right side partitionings are compatible with
-    // each other.
+    // We don't need to alter the existing or add new `GroupPartitionsExec` when the child
+    // partitionings are not modified (projected) in specs and left and right side partitionings are
+    // compatible with each other.
     var isCompatible = containsPartitioning(left.outputPartitioning, leftSpec.partitioning) &&
       containsPartitioning(right.outputPartitioning, rightSpec.partitioning) &&
       leftSpec.isCompatibleWith(rightSpec)
@@ -522,8 +522,8 @@ case class EnsureRequirements(
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
         val leftReducers = leftSpec.reducers(rightSpec)
-        val leftReducedKeys = leftReducers.fold(leftSpec.partitioning.partitionKeys)(
-          leftSpec.partitioning.reduceKeys)
+        val leftReducedKeys =
+          leftReducers.fold(leftSpec.partitioning.partitionKeys)(leftSpec.partitioning.reduceKeys)
         val rightReducers = rightSpec.reducers(leftSpec)
         val rightReducedKeys = rightReducers.fold(rightSpec.partitioning.partitionKeys)(
           rightSpec.partitioning.reduceKeys)
@@ -621,20 +621,19 @@ case class EnsureRequirements(
                 case g: GroupPartitionsExec => g.child
                 case o => o
               }).outputPartitioning.asInstanceOf[KeyedPartitioning]
-              val dataTypes = partitionExprs.map(_.dataType)
-              val projectedOriginalPartitionKeys =
-                partiallyClusteredSpec.joinKeyPositions.fold(originalPartitioning.partitionKeys)(
-                  KeyedPartitioning.projectKeys(originalPartitioning.partitionKeys, _, dataTypes))
-              val internalRowComparableWrapperFactory =
-                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+              val (projectedDataTypes, projectedOriginalPartitionKeys) =
+                partiallyClusteredSpec.joinKeyPositions.fold(
+                  (originalPartitioning.expressionDataTypes, originalPartitioning.partitionKeys)
+                )(originalPartitioning.projectKeys)
+              val comparableKeyWrapperFactory = InternalRowComparableWrapper
+                .getInternalRowComparableWrapperFactory(projectedDataTypes)
 
               val numExpectedPartitions = projectedOriginalPartitionKeys
-                .groupBy(internalRowComparableWrapperFactory)
+                .groupBy(comparableKeyWrapperFactory)
                 .view.mapValues(_.size)
 
               mergedPartitionKeys = mergedPartitionKeys.map { case (key, numParts) =>
-                (key, numExpectedPartitions.getOrElse(
-                  internalRowComparableWrapperFactory(key), numParts))
+                (key, numExpectedPartitions.getOrElse(comparableKeyWrapperFactory(key), numParts))
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +

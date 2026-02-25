@@ -101,19 +101,15 @@ case class BatchScanExec(
                 "partition values that are not present in the original partitioning.")
           }
 
-          val dataTypes = p.expressions.map(_.dataType)
-          val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-          val internalRowComparableWrapperFactory =
-            InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-
+          val comparableKeyWrapperFactory = p.comparableKeyWrapperFactory
           val inputMap = inputPartitions.groupBy(p =>
-            internalRowComparableWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+            comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           ).view.mapValues(_.size)
           val filteredMap = newPartitions.groupBy(p =>
-            internalRowComparableWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+            comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
           )
           inputMap.toSeq
-            .sortBy { case (keyWrapper, _) => keyWrapper.row }(rowOrdering)
+            .sortBy { case (keyWrapper, _) => keyWrapper.row }(p.keyOrdering)
             .flatMap { case (keyWrapper, size) =>
               val fps = filteredMap.getOrElse(keyWrapper, Array.empty)
               assert(fps.size <= size)
@@ -128,9 +124,7 @@ case class BatchScanExec(
     } else {
       (originalPartitioning match {
         case p: KeyedPartitioning =>
-          val dataTypes = p.expressions.map(_.dataType)
-          val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(rowOrdering)
+          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(p.keyOrdering)
 
         case _ => inputPartitions
       }).map(Some)

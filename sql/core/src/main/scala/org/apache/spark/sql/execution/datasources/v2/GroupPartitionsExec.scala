@@ -76,10 +76,10 @@ case class GroupPartitionsExec(
    */
   private def distributeByCommonKeys(
       keyWrapperMap: Map[InternalRowComparableWrapper, Seq[Int]],
-      comparableWrapperFactory: InternalRow => InternalRowComparableWrapper
+      comparableKeyWrapperFactory: InternalRow => InternalRowComparableWrapper
   ): Seq[(InternalRow, Seq[Int])] = {
     commonPartitionKeys.get.flatMap { case (key, numSplits) =>
-      val splits = keyWrapperMap.getOrElse(comparableWrapperFactory(key), Seq.empty)
+      val splits = keyWrapperMap.getOrElse(comparableKeyWrapperFactory(key), Seq.empty)
       if (applyPartialClustering && !replicatePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
@@ -125,32 +125,24 @@ case class GroupPartitionsExec(
 
     // Project partition keys if join key positions are specified
     val (projectedDataTypes, projectedKeys) =
-      joinKeyPositions match {
-        case Some(positions) =>
-          val (_, projectedDataTypes, projectedKeys) = keyedPartitioning.projectKeys(positions)
-          (projectedDataTypes, projectedKeys)
-        case None =>
-          val dataTypes = keyedPartitioning.expressions.map(_.dataType)
-          (dataTypes, keyedPartitioning.partitionKeys)
-      }
+      joinKeyPositions.fold(
+        (keyedPartitioning.expressionDataTypes, keyedPartitioning.partitionKeys)
+      )(keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
-    val reducedKeys = reducers match {
-      case Some(reducers) =>
-        KeyedPartitioning.reduceKeys(projectedKeys, reducers, projectedDataTypes)
-      case None => projectedKeys
-    }
+    val reducedKeys = reducers.fold(projectedKeys)(
+      KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
 
     // Create map from partition keys to their indices
-    val comparableWrapperFactory =
+    val comparableKeyWrapperFactory =
       InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
 
     val keyWrapperToPartitionIndices = reducedKeys.zipWithIndex.groupMap {
-      case (key, _) => comparableWrapperFactory(key)
+      case (key, _) => comparableKeyWrapperFactory(key)
     }(_._2)
 
     if (commonPartitionKeys.isDefined) {
-      distributeByCommonKeys(keyWrapperToPartitionIndices, comparableWrapperFactory)
+      distributeByCommonKeys(keyWrapperToPartitionIndices, comparableKeyWrapperFactory)
     } else {
       groupAndSortByKeys(keyWrapperToPartitionIndices, projectedDataTypes)
     }
