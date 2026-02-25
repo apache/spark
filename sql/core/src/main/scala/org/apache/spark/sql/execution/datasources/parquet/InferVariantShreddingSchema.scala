@@ -95,13 +95,23 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
   private val COUNT_METADATA_KEY = "COUNT"
 
-  // Field statistics for efficient single-pass cardinality tracking
-  private case class FieldStats(
+  // Node for tree-based field tracking
+  private case class FieldNode(
     var dataType: DataType,
     var rowCount: Int = 0,           // Count of distinct rows containing this field
     var lastSeenRow: Int = -1,       // Last row index that incremented rowCount
-    var arrayElementCount: Long = 0  // Total occurrences across all array elements
-  )
+    var arrayElementCount: Long = 0, // Total occurrences across all array elements
+    children: mutable.Map[String, FieldNode] = mutable.Map.empty
+  ) {
+
+    def getOrCreateChild(fieldName: String): FieldNode = {
+      children.getOrElseUpdate(fieldName, FieldNode(NullType))
+    }
+
+    def hasChildren: Boolean = children.nonEmpty
+
+    def getChildren: Seq[(String, FieldNode)] = children.toSeq
+  }
 
   private def getFieldCount(field: StructField): Long = {
     field.metadata.getLong(COUNT_METADATA_KEY)
@@ -295,8 +305,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
     val maxFields = MaxFields(maxShreddedFieldsPerFile)
 
     val inferredSchemas = pathsToVariant.map { path =>
-      // Map from field path to statistics (type + occurrence tracking)
-      val fieldRegistry = mutable.Map[String, FieldStats]()
+      val rootNode = FieldNode(NullType)
       var numNonNullVariants = 0
 
       // Single pass: process all rows for this variant path
@@ -304,14 +313,14 @@ class InferVariantShreddingSchema(val schema: StructType) {
         getValueAtPath(schema, row, path).foreach { variantVal =>
           numNonNullVariants += 1
           val v = new Variant(variantVal.getValue, variantVal.getMetadata)
-          // Traverse variant and update field registry
-          collectFieldStats(v, "", rowIdx, fieldRegistry, 0, inArrayContext = false)
+          // Traverse variant and update field stats tree
+          collectFieldStats(v, rootNode, rowIdx, 0, inArrayContext = false)
         }
       }
 
       // Build final schema from collected statistics
       val minCardinality = (numNonNullVariants + 9) / 10
-      val simpleSchema = buildSchemaFromStats(fieldRegistry, "", minCardinality, numNonNullVariants)
+      val simpleSchema = buildSchemaFromStats(rootNode, minCardinality, numNonNullVariants)
       val finalizedSchema = finalizeSimpleSchema(simpleSchema, minCardinality, maxFields)
       val shreddingSchema = SparkShreddingUtils.variantShreddingSchema(finalizedSchema)
       val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(shreddingSchema)
@@ -323,15 +332,14 @@ class InferVariantShreddingSchema(val schema: StructType) {
   }
 
   /**
-   * Recursively traverse a variant value and collect field statistics.
+   * Recursively traverse a variant value and build field statistics tree.
    * For each field encountered, record its type and track distinct row count.
    * For fields inside arrays, also increment the occurrence count.
    */
   private def collectFieldStats(
       v: Variant,
-      pathPrefix: String,
+      currentNode: FieldNode,
       rowIdx: Int,
-      fieldRegistry: mutable.Map[String, FieldStats],
       depth: Int,
       inArrayContext: Boolean): Unit = {
 
@@ -355,45 +363,38 @@ class InferVariantShreddingSchema(val schema: StructType) {
         // Process each field
         for (i <- 0 until size) {
           val field = v.getFieldAtIndex(i)
-          val fieldPath = if (pathPrefix.isEmpty) field.key else s"$pathPrefix.${field.key}"
+          val fieldName = field.key
 
-          // Get or create field stats
-          val stats = fieldRegistry.getOrElseUpdate(
-            fieldPath,
-            FieldStats(NullType)
-          )
+          // Get or create child node (O(1) map access - no path string building!)
+          val childNode = currentNode.getOrCreateChild(fieldName)
 
           // Track distinct row count (deduplicate using lastSeenRow)
-          if (stats.lastSeenRow != rowIdx) {
-            stats.rowCount += 1
-            stats.lastSeenRow = rowIdx
+          if (childNode.lastSeenRow != rowIdx) {
+            childNode.rowCount += 1
+            childNode.lastSeenRow = rowIdx
           }
 
           // Track occurrence count for array elements
           if (inArrayContext) {
-            stats.arrayElementCount += 1
+            childNode.arrayElementCount += 1
           }
 
           // Infer and merge type
           val fieldType = inferPrimitiveType(field.value, depth)
-          stats.dataType = mergeSchema(stats.dataType, fieldType)
+          childNode.dataType = mergeSchema(childNode.dataType, fieldType)
 
-          // Recurse into nested structures (keep array context)
-          collectFieldStats(field.value, fieldPath, rowIdx, fieldRegistry, depth + 1,
-            inArrayContext)
+          // Recurse into nested structures (pass child node, not path string)
+          collectFieldStats(field.value, childNode, rowIdx, depth + 1, inArrayContext)
         }
 
       case Type.ARRAY =>
-        val arrayPath = if (pathPrefix.isEmpty) "[]" else s"$pathPrefix[]"
-        val stats = fieldRegistry.getOrElseUpdate(
-          arrayPath,
-          FieldStats(NullType)
-        )
+        // Use "[]" as special child key for array elements
+        val arrayNode = currentNode.getOrCreateChild("[]")
 
         // Track distinct row count for the array field itself
-        if (stats.lastSeenRow != rowIdx) {
-          stats.rowCount += 1
-          stats.lastSeenRow = rowIdx
+        if (arrayNode.lastSeenRow != rowIdx) {
+          arrayNode.rowCount += 1
+          arrayNode.lastSeenRow = rowIdx
         }
 
         val arraySize = v.arraySize()
@@ -407,12 +408,11 @@ class InferVariantShreddingSchema(val schema: StructType) {
             // For objects/arrays, collectFieldStats handles type via field traversal
             if (elementTypeClass != Type.OBJECT && elementTypeClass != Type.ARRAY) {
               val primitiveType = inferPrimitiveType(element, depth)
-              stats.dataType = mergeSchema(stats.dataType, primitiveType)
+              arrayNode.dataType = mergeSchema(arrayNode.dataType, primitiveType)
             }
 
             // Recurse into element to collect nested fields, now IN array context
-            collectFieldStats(element, arrayPath, rowIdx, fieldRegistry, depth + 1,
-              inArrayContext = true)
+            collectFieldStats(element, arrayNode, rowIdx, depth + 1, inArrayContext = true)
           }
         }
 
@@ -459,93 +459,93 @@ class InferVariantShreddingSchema(val schema: StructType) {
   }
 
   /**
-   * Build a schema from collected field statistics, filtering by cardinality.
+   * Build a schema from collected field statistics tree.
    * For fields in array contexts, use arrayElementCount / total rows.
    * For top-level fields, use distinct row count.
    */
   private def buildSchemaFromStats(
-      fieldRegistry: mutable.Map[String, FieldStats],
-      pathPrefix: String,
+      currentNode: FieldNode,
       minCardinality: Int,
-      numNonNullVariants: Int): DataType = {
+      numNonNullVariants: Int,
+      inArrayContext: Boolean = false): DataType = {
 
-    // Check if we're in an array context (path contains "[]")
-    val inArrayContext = pathPrefix.contains("[]")
-
-    // Check if this is an array path first (before checking for children)
-    val arrayPath = if (pathPrefix.isEmpty) "[]" else s"$pathPrefix[]"
-    fieldRegistry.get(arrayPath).foreach { stats =>
-      if (stats.rowCount >= minCardinality) {
-        val elementType = buildSchemaFromStats(fieldRegistry, arrayPath, minCardinality,
-          numNonNullVariants)
-        return ArrayType(if (elementType == VariantType) stats.dataType else elementType)
-      }
+    // Check if this node represents an array (has "[]" child)
+    val arrayChild = currentNode.children.get("[]")
+    if (arrayChild.isDefined && arrayChild.get.rowCount >= minCardinality) {
+      val arrayNode = arrayChild.get
+      val elementType = buildSchemaFromStats(
+        arrayNode,
+        minCardinality,
+        numNonNullVariants,
+        inArrayContext = true
+      )
+      return ArrayType(if (elementType == VariantType) arrayNode.dataType else elementType)
     }
 
-    // Find all direct children of this path (for struct fields)
-    // Limit to 1000 fields before filtering by cardinality, matching original behavior
+    // Get all direct children, filter by cardinality, sort by cardinality descending,
+    // take top N, then sort alphabetically for determinism.
     val maxStructSize = 1000
-    val allDirectChildren = fieldRegistry.filter { case (fieldPath, stats) =>
-      // Check if this field is a direct child
-      if (pathPrefix.isEmpty) {
-        !fieldPath.contains(".") && !fieldPath.contains("[")
-      } else {
-        fieldPath.startsWith(pathPrefix + ".") && {
-          val suffix = fieldPath.substring(pathPrefix.length + 1)
-          !suffix.contains(".") && !suffix.contains("[")
+    val children = currentNode.getChildren
+      .filter { case (fieldName, _) => fieldName != "[]" }  // Exclude array marker
+      .filter { case (_, childNode) =>
+        val cardinality = if (inArrayContext) {
+          childNode.arrayElementCount
+        } else {
+          childNode.rowCount
         }
+        cardinality >= minCardinality
       }
-    }.toSeq.sortBy(_._1).take(maxStructSize)
-
-    // Filter by cardinality
-    val children = allDirectChildren.filter { case (fieldPath, stats) =>
-      val cardinality = if (inArrayContext) {
-        stats.arrayElementCount
-      } else {
-        stats.rowCount
+      .sortBy { case (fieldName, childNode) =>
+        val cardinality = if (inArrayContext) {
+          childNode.arrayElementCount
+        } else {
+          childNode.rowCount
+        }
+        // Sort by cardinality descending, then by name ascending for stability
+        (-cardinality, fieldName)
       }
-      cardinality >= minCardinality
-    }
+      .take(maxStructSize)
+      .sortBy(_._1)  // Sort alphabetically
 
     if (children.isEmpty) {
       return VariantType
     }
 
     // Build struct from children
-    val fields = children.toSeq.sortBy(_._1).map { case (fieldPath, stats) =>
-      val fieldName = if (pathPrefix.isEmpty) {
-        fieldPath
-      } else {
-        fieldPath.substring(pathPrefix.length + 1)
-      }
-
-      val fieldType = stats.dataType match {
+    val fields = children.map { case (fieldName, childNode) =>
+      val fieldType = childNode.dataType match {
         case StructType(_) =>
-          // Recurse to build nested struct
-          buildSchemaFromStats(fieldRegistry, fieldPath, minCardinality, numNonNullVariants)
+          // Recurse to build nested struct (pass child node directly)
+          buildSchemaFromStats(childNode, minCardinality, numNonNullVariants, inArrayContext)
+
         case ArrayType(_, _) =>
-          // Recurse to build array element type
-          val arrayPath = s"$fieldPath[]"
-          fieldRegistry.get(arrayPath) match {
-            case Some(elementStats) =>
-              val elementType = buildSchemaFromStats(fieldRegistry, arrayPath, minCardinality,
-                numNonNullVariants)
-              ArrayType(if (elementType == VariantType) elementStats.dataType else elementType)
+          // Check for array child
+          childNode.children.get("[]") match {
+            case Some(arrayNode) =>
+              val elementType = buildSchemaFromStats(
+                arrayNode,
+                minCardinality,
+                numNonNullVariants,
+                inArrayContext = true
+              )
+              ArrayType(if (elementType == VariantType) arrayNode.dataType else elementType)
             case None =>
-              stats.dataType
+              childNode.dataType
           }
+
         case other => other
       }
 
       val cardinality = if (inArrayContext) {
-        stats.arrayElementCount
+        childNode.arrayElementCount
       } else {
-        stats.rowCount
+        childNode.rowCount
       }
+
       StructField(fieldName, fieldType,
         metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, cardinality).build())
     }
 
-    StructType(fields)
+    StructType(fields.toSeq)
   }
 }
