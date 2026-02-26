@@ -123,7 +123,7 @@ private[sql] trait LookupCatalog extends Logging {
           val catalog = catalogManager.catalog(nameParts.head)
           val ident = nameParts.tail.asIdentifier
           if (CatalogV2Util.isSessionCatalog(catalog) && ident.namespace().length != 1) {
-            val ns = ident.namespace().toImmutableArraySeq
+            val ns = ident.namespace().toSeq
             if (ns.nonEmpty && ns.last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
               throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
                 "CREATE", ident.name())

@@ -815,7 +815,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
               "CREATE", ident.name())
           }
           throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq)
         }
         Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
