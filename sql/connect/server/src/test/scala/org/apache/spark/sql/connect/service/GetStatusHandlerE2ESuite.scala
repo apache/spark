@@ -166,9 +166,7 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
 
       assertEventuallyExecutionReleased(operationId2)
 
-      // Use eventually because there is a race between executions being removed from
-      // the active map and the inactive operations cache being updated with the final
-      // Closed status.
+      // Use eventually to skip the intermediate TERMINATING status
       Eventually.eventually(timeout(eventuallyTimeout)) {
         val statuses = client.getOperationStatuses().getOperationStatusesList.asScala
         val operationIdToStatus = statuses.map(s => s.getOperationId -> s.getState).toMap
@@ -183,6 +181,7 @@ class GetStatusHandlerE2ESuite extends SparkConnectServerTest {
   test("GetStatus returns session info even when no operation status is requested") {
     // This test needs raw stub to send a request without operation_status field
     withRawBlockingStub { stub =>
+      // Execute a simple query to establish the session on the server.
       val plan = buildPlan("SELECT 1")
       val executeRequest = buildExecutePlanRequest(plan)
       val sessionId = executeRequest.getSessionId

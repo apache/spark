@@ -1975,7 +1975,7 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.GetStatus(req, metadata=self.metadata())
+                    resp = self._stub.GetStatus(req, metadata=self._builder.metadata())
                     self._verify_response_integrity(resp)
                     return resp
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -2221,6 +2221,7 @@ class SparkConnectClient(object):
             pb2.AnalyzePlanResponse,
             pb2.FetchErrorDetailsResponse,
             pb2.ReleaseSessionResponse,
+            pb2.GetStatusResponse,
         ],
     ) -> None:
         """

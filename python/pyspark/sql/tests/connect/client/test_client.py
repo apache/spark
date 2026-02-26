@@ -134,13 +134,25 @@ if should_test_connect:
 
         req: Optional[proto.ExecutePlanRequest]
 
+        OperationStatus = proto.GetStatusResponse.OperationStatus
+        DEFAULT_OPERATION_STATUSES = [
+            OperationStatus(
+                operation_id="default-op-1",
+                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
+            ),
+            OperationStatus(
+                operation_id="default-op-2",
+                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
+            ),
+        ]
+
         def __init__(self, session_id: str, operation_statuses=None):
             self._session_id = session_id
             self.req = None
             self.client_user_context_extensions = []
-            self._operation_statuses = {
-                s.operation_id: s for s in (operation_statuses or [])
-            }
+            if operation_statuses is None:
+                operation_statuses = self.DEFAULT_OPERATION_STATUSES
+            self._operation_statuses = {s.operation_id: s for s in operation_statuses}
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
@@ -196,8 +208,7 @@ if should_test_connect:
 
         def GetStatus(self, req: proto.GetStatusRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
-            self._update_client_call_context()  # EDGE
+            self.client_user_context_extensions = list(req.user_context.extensions)
             self.received_custom_server_session_id = req.client_observed_server_side_session_id
             resp = proto.GetStatusResponse(session_id=self._session_id)
 
@@ -442,75 +453,45 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_get_operations_statuses_all(self):
         """Test get_operations_statuses returns all operation statuses when no IDs specified."""
         OperationStatus = proto.GetStatusResponse.OperationStatus
-        statuses = [
-            OperationStatus(
-                operation_id="op-1",
-                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
-            ),
-            OperationStatus(
-                operation_id="op-2",
-                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
-            ),
-            OperationStatus(
-                operation_id="op-3",
-                state=OperationStatus.OperationState.OPERATION_STATE_FAILED,
-            ),
-        ]
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
-        mock = MockService(client._session_id, operation_statuses=statuses)
+        mock = MockService(client._session_id)
         client._stub = mock
 
         resp = client._get_operation_statuses()
         result = list(resp.operation_statuses)
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0].operation_id, "op-1")
+        self.assertEqual(len(result), 2)
+        status_map = {s.operation_id: s.state for s in result}
         self.assertEqual(
-            result[0].state, OperationStatus.OperationState.OPERATION_STATE_RUNNING
+            status_map["default-op-1"],
+            OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
         )
-        self.assertEqual(result[1].operation_id, "op-2")
         self.assertEqual(
-            result[1].state, OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED
-        )
-        self.assertEqual(result[2].operation_id, "op-3")
-        self.assertEqual(
-            result[2].state, OperationStatus.OperationState.OPERATION_STATE_FAILED
+            status_map["default-op-2"],
+            OperationStatus.OperationState.OPERATION_STATE_RUNNING,
         )
 
     def test_get_operations_statuses_specific_ids(self):
         """Test get_operations_statuses filters by specific operation IDs."""
         OperationStatus = proto.GetStatusResponse.OperationStatus
-        statuses = [
-            OperationStatus(
-                operation_id="op-1",
-                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
-            ),
-            OperationStatus(
-                operation_id="op-2",
-                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
-            ),
-            OperationStatus(
-                operation_id="op-3",
-                state=OperationStatus.OperationState.OPERATION_STATE_CANCELLED,
-            ),
-        ]
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
-        mock = MockService(client._session_id, operation_statuses=statuses)
+        mock = MockService(client._session_id)
         client._stub = mock
 
-        resp = client._get_operation_statuses(operation_ids=["op-1", "op-999"])
+        resp = client._get_operation_statuses(operation_ids=["default-op-1", "unknown-op"])
         result = list(resp.operation_statuses)
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0].operation_id, "op-1")
+        status_map = {s.operation_id: s.state for s in result}
         self.assertEqual(
-            result[0].state, OperationStatus.OperationState.OPERATION_STATE_RUNNING
+            status_map["default-op-1"],
+            OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
         )
-        self.assertEqual(result[1].operation_id, "op-999")
         self.assertEqual(
-            result[1].state, OperationStatus.OperationState.OPERATION_STATE_UNKNOWN
+            status_map["unknown-op"],
+            OperationStatus.OperationState.OPERATION_STATE_UNKNOWN,
         )
         # Verify the request included the operation IDs
         self.assertEqual(
-            list(mock.req.operation_status.operation_ids), ["op-1", "op-999"]
+            set(mock.req.operation_status.operation_ids), {"default-op-1", "unknown-op"}
         )
 
     def test_get_operations_statuses_empty(self):
@@ -522,36 +503,24 @@ class SparkConnectClientTestCase(unittest.TestCase):
         resp = client._get_operation_statuses()
         self.assertEqual(len(list(resp.operation_statuses)), 0)
 
-    def test_get_operations_statuses_with_extensions(self):
-        """Test get_operations_statuses passes extensions and echoes them back per operation."""
+    def test_get_operations_statuses_with_operation_extensions(self):
+        """Test get_operations_statuses passes operation-level extensions and echoes them back per operation."""
         from google.protobuf import any_pb2, wrappers_pb2
 
-        OperationStatus = proto.GetStatusResponse.OperationStatus
-        statuses = [
-            OperationStatus(
-                operation_id="op-1",
-                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
-            ),
-            OperationStatus(
-                operation_id="op-2",
-                state=OperationStatus.OperationState.OPERATION_STATE_SUCCEEDED,
-            ),
-        ]
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
-        mock = MockService(client._session_id, operation_statuses=statuses)
+        mock = MockService(client._session_id)
         client._stub = mock
 
         op_ext = any_pb2.Any()
         op_ext.Pack(wrappers_pb2.StringValue(value="op_extension"))
 
         resp = client._get_operation_statuses(
-            operation_ids=["op-1", "op-2"],
+            operation_ids=["default-op-1", "default-op-2"],
             operation_extensions=[op_ext],
         )
         result = list(resp.operation_statuses)
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0].operation_id, "op-1")
-        self.assertEqual(result[1].operation_id, "op-2")
+        self.assertEqual({s.operation_id for s in result}, {"default-op-1", "default-op-2"})
 
         # Verify operation-level extensions were included in the request
         self.assertEqual(len(mock.req.operation_status.extensions), 1)
@@ -570,29 +539,22 @@ class SparkConnectClientTestCase(unittest.TestCase):
         """Test _get_operation_statuses sends request-level extensions and echoes them back."""
         from google.protobuf import any_pb2, wrappers_pb2
 
-        OperationStatus = proto.GetStatusResponse.OperationStatus
-        statuses = [
-            OperationStatus(
-                operation_id="op-1",
-                state=OperationStatus.OperationState.OPERATION_STATE_RUNNING,
-            ),
-        ]
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
-        mock = MockService(client._session_id, operation_statuses=statuses)
+        mock = MockService(client._session_id)
         client._stub = mock
 
         req_ext = any_pb2.Any()
         req_ext.Pack(wrappers_pb2.StringValue(value="request_extension"))
 
         resp = client._get_operation_statuses(
-            operation_ids=["op-1"],
+            operation_ids=["default-op-1"],
             request_extensions=[req_ext],
         )
 
         # Verify the operation status is returned
         result = list(resp.operation_statuses)
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].operation_id, "op-1")
+        self.assertEqual(result[0].operation_id, "default-op-1")
 
         # Verify request-level extensions were included in the request
         self.assertEqual(len(mock.req.extensions), 1)
@@ -605,7 +567,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
         resp_echoed = wrappers_pb2.StringValue()
         resp.extensions[0].Unpack(resp_echoed)
         self.assertEqual(resp_echoed.value, "request_extension")
-
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
