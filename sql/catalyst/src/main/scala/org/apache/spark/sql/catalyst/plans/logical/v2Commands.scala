@@ -78,7 +78,7 @@ trait V2WriteCommand
   }
 
   lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(table) match {
+    table match {
       case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
       case _ => false
     }

@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog, TableChange}
@@ -40,7 +41,8 @@ import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, Str
  */
 object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND), ruleId) {
     // This rule should run only if all assignments are resolved, except those
     // that will be satisfied by schema evolution
     case m@MergeIntoTable(_, _, _, _, _, _, _) if m.evaluateSchemaEvolution =>
@@ -73,14 +75,15 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
  */
 object ResolveInsertSchemaEvolution extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(COMMAND), ruleId) {
     case v2Write: V2WriteCommand
         if v2Write.table.resolved && v2Write.query.resolved && v2Write.schemaEvolutionEnabled =>
       val changes = v2Write.changesForSchemaEvolution
       if (changes.isEmpty) {
         v2Write
       } else {
-        EliminateSubqueryAliases(v2Write.table) match {
+        v2Write.table match {
           case r: DataSourceV2Relation =>
             val newRelation = ResolveSchemaEvolution.performSchemaEvolution(
               r, v2Write.query.schema, changes, isByName = v2Write.isByName)
@@ -180,7 +183,8 @@ object ResolveSchemaEvolution extends Logging {
     }
   }
 
-  /** Match fields by name: look up each target field in the source by name to collect schema
+  /**
+   * Match fields by name: look up each target field in the source by name to collect schema
    * differences. Nested struct fields are also matched by name.
    */
   private def schemaChangesByName(

@@ -76,15 +76,22 @@ abstract class DataSourceV2SQLSuite
   protected def doInsertWithSchemaEvolution(
       tableName: String,
       insert: DataFrame,
-      mode: SaveMode = null,
-      byName: Boolean = false): Unit = {
+      mode: SaveMode = SaveMode.Append,
+      byName: Boolean = false,
+      replaceWhere: Option[String] = None): Unit = {
     val tmpView = "tmp_view"
     withTempView(tmpView) {
       insert.createOrReplaceTempView(tmpView)
-      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       val byNameClause = if (byName) " BY NAME" else ""
-      sql(s"INSERT WITH SCHEMA EVOLUTION $overwrite TABLE $tableName$byNameClause" +
-        s" SELECT * FROM $tmpView")
+      replaceWhere match {
+        case Some(predicate) =>
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName$byNameClause" +
+            s" REPLACE WHERE $predicate SELECT * FROM $tmpView")
+        case None =>
+          val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+          sql(s"INSERT WITH SCHEMA EVOLUTION $overwrite TABLE $tableName$byNameClause" +
+            s" SELECT * FROM $tmpView")
+      }
     }
   }
 

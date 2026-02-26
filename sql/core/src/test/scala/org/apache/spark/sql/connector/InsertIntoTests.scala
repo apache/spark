@@ -23,6 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -494,8 +496,9 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
   protected def doInsertWithSchemaEvolution(
       tableName: String,
       insert: DataFrame,
-      mode: SaveMode = null,
-      byName: Boolean = false): Unit
+      mode: SaveMode = SaveMode.Append,
+      byName: Boolean = false,
+      replaceWhere: Option[String] = None): Unit
 
   test("Insert schema evolution: extra column - no auto-schema-evolution capability") {
     val t1 = s"${catalogAndNamespace}tbl"
@@ -513,6 +516,18 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`id`, `data`, `active`")
       )
+    }
+  }
+
+  test("Insert schema evolution: no-op without AUTOMATIC_SCHEMA_EVOLUTION capability") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        s"TBLPROPERTIES ('auto-schema-evolution' = 'false')")
+      doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      // Same column count, no evolution needed: should succeed even without capability.
+      doInsertWithSchemaEvolution(t1, Seq((2L, "b")).toDF("id", "data"))
+      verifyTable(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
     }
   }
 
@@ -584,10 +599,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format")
-      sql(s"""INSERT INTO $t1 VALUES (1, named_struct('name', 'Alice'))""")
+      doInsert(t1,
+        Seq((1, "Alice")).toDF("id", "name")
+          .select($"id", struct($"name").as("info")))
       doInsertWithSchemaEvolution(t1,
-        sql("SELECT 2 as id, named_struct('name', 'Bob', 'age', 30) as info"))
-      // Verify using SELECT * to check that new fields are added at the end.
+        Seq((2, "Bob", 30)).toDF("id", "name", "age")
+          .select($"id", struct($"name", $"age").as("info")))
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -598,9 +615,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format")
-      sql(s"""INSERT INTO $t1 VALUES (1, named_struct('name', 'Alice'))""")
+      doInsert(t1,
+        Seq((1, "Alice")).toDF("id", "name")
+          .select($"id", struct($"name").as("info")))
       doInsertWithSchemaEvolution(t1,
-        sql("SELECT 2 as id, named_struct('firstName', 'Bob', 'age', 30) as info"))
+        Seq((2, "Bob", 30)).toDF("id", "firstName", "age")
+          .select($"id", struct($"firstName", $"age").as("info")))
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -625,11 +645,13 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format")
-      sql(s"""INSERT INTO $t1 VALUES (1, named_struct('name', 'Alice'))""")
+      doInsert(t1,
+        Seq((1, "Alice")).toDF("id", "name")
+          .select($"id", struct($"name").as("info")))
       doInsertWithSchemaEvolution(t1,
-        sql("SELECT 2 as id, named_struct('age', 30, 'name', 'Bob') as info"),
+        Seq((2, 30, "Bob")).toDF("id", "age", "name")
+          .select($"id", struct($"age", $"name").as("info")),
         byName = true)
-      // Verify using SELECT * to check that new fields are added at the end.
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -640,9 +662,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format")
-      sql(s"""INSERT INTO $t1 VALUES (1, named_struct('name', 'Alice'))""")
+      doInsert(t1,
+        Seq((1, "Alice")).toDF("id", "name")
+          .select($"id", struct($"name").as("info")))
       doInsertWithSchemaEvolution(t1,
-        sql("SELECT 2 as id, named_struct('age', 30, 'name', 'Bob', 'city', 'NYC') as info"),
+        Seq((2, 30, "Bob", "NYC")).toDF("id", "age", "name", "city")
+          .select($"id", struct($"age", $"name", $"city").as("info")),
         byName = true)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
@@ -673,6 +698,96 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
         (1L, "a", null, null),
         (null, null, "b", 2L)
       ).toDF("id", "data", "x", "y"))
+    }
+  }
+
+  test("Insert schema evolution: extra nested field by name in overwrite") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format")
+      doInsert(t1,
+        Seq((1, "Alice")).toDF("id", "name")
+          .select($"id", struct($"name").as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2, 30, "Bob")).toDF("id", "age", "name")
+          .select($"id", struct($"age", $"name").as("info")),
+        mode = SaveMode.Overwrite,
+        byName = true)
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(2, Row("Bob", 30))))
+    }
+  }
+
+  test("Insert schema evolution: REPLACE WHERE with extra column by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+      doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+      // REPLACE WHERE only deletes rows matching the predicate, then inserts new data.
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "x", true), (4L, "y", false)).toDF("id", "data", "active"),
+        replaceWhere = Some("id = 2"))
+      verifyTable(t1, Seq[(java.lang.Long, String, java.lang.Boolean)](
+        (1L, "a", null),
+        (2L, "x", true),
+        (4L, "y", false)
+      ).toDF("id", "data", "active"))
+    }
+  }
+
+  test("Insert schema evolution: REPLACE WHERE with extra column by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+      doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq((true, "x", 2L), (false, "y", 4L)).toDF("active", "data", "id"),
+        byName = true,
+        replaceWhere = Some("id = 2"))
+      verifyTable(t1, Seq[(java.lang.Long, String, java.lang.Boolean)](
+        (1L, "a", null),
+        (2L, "x", true),
+        (4L, "y", false)
+      ).toDF("id", "data", "active"))
+    }
+  }
+
+  test("Insert schema evolution: REPLACE WHERE with nested struct evolution by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format " +
+        s"PARTITIONED BY (id)")
+      val initDf = Seq((1L, "Alice"), (2L, "Bob")).toDF("id", "name")
+        .select($"id", struct($"name").as("info"))
+      doInsert(t1, initDf)
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bobby", 25)).toDF("id", "name", "age")
+          .select($"id", struct($"name", $"age").as("info")),
+        replaceWhere = Some("id = 2"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, Row("Alice", null)), Row(2L, Row("Bobby", 25))))
+    }
+  }
+
+
+  test("Insert schema evolution: REPLACE WHERE with nested struct evolution by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, info struct<name:string>) USING $v2Format " +
+        s"PARTITIONED BY (id)")
+      val initDf = Seq((1L, "Alice"), (2L, "Bob")).toDF("id", "name")
+        .select($"id", struct($"name").as("info"))
+      doInsert(t1, initDf)
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bobby", 25)).toDF("id", "name", "age")
+          .select($"id", struct($"age", $"name").as("info")),
+        byName = true,
+        replaceWhere = Some("id = 2"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, Row("Alice", null)), Row(2L, Row("Bobby", 25))))
     }
   }
 
@@ -707,6 +822,117 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`id`, `data`, `active`")
       )
+    }
+  }
+
+  test("Insert schema evolution: INSERT OVERWRITE with dynamic partition mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        // Overwrite with schema evolution adding a new column, dynamic mode should only replace
+        // partitions present in the inserted data.
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, "x", true), (3L, "y", false)).toDF("id", "data", "active"),
+          mode = SaveMode.Overwrite)
+        checkAnswer(
+          sql(s"SELECT * FROM $t1"),
+          Seq(
+            Row(1L, "a", null),
+            Row(2L, "x", true),
+            Row(3L, "y", false)))
+      }
+    }
+  }
+
+  test("Insert schema evolution: INSERT OVERWRITE with dynamic partition mode by name") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        doInsertWithSchemaEvolution(t1,
+          Seq((true, "x", 2L), (false, "y", 3L)).toDF("active", "data", "id"),
+          mode = SaveMode.Overwrite,
+          byName = true)
+        checkAnswer(
+          sql(s"SELECT * FROM $t1"),
+          Seq(
+            Row(1L, "a", null),
+            Row(2L, "x", true),
+            Row(3L, "y", false)))
+      }
+    }
+  }
+
+  test("Insert schema evolution: INSERT OVERWRITE with static partition mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        // Static mode overwrites the entire table.
+        doInsertWithSchemaEvolution(t1,
+          Seq((2L, "x", true), (3L, "y", false)).toDF("id", "data", "active"),
+          mode = SaveMode.Overwrite)
+        checkAnswer(
+          sql(s"SELECT * FROM $t1"),
+          Seq(
+            Row(2L, "x", true),
+            Row(3L, "y", false)))
+      }
+    }
+  }
+
+  test("Insert schema evolution: case-insensitive column matching by name") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        // Column names differ only in case - should match and not create new columns,
+        // while "active" is truly new and should be added.
+        doInsertWithSchemaEvolution(t1,
+          Seq(("b", true, 2L)).toDF("DATA", "active", "ID"), byName = true)
+        verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
+          (1L, "a", null),
+          (2L, "b", true)
+        ).toDF("id", "data", "active"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: case-sensitive column matching by name") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+        // In case-sensitive mode, "ID" and "DATA" don't match "id" and "data",
+        // so all source columns are new.
+        doInsertWithSchemaEvolution(t1,
+          Seq(("b", 2L)).toDF("DATA", "ID"), byName = true)
+        verifyTable(t1, Seq[(java.lang.Long, String, String, java.lang.Long)](
+          (1L, "a", null, null),
+          (null, null, "b", 2L)
+        ).toDF("id", "data", "DATA", "ID"))
+      }
+    }
+  }
+
+  test("Insert schema evolution: multiple inserts accumulate schema changes") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint) USING $v2Format")
+      doInsertWithSchemaEvolution(t1,
+        Seq((1L, "a")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "b", true)).toDF("id", "data", "active"))
+      verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
+        (1L, "a", null),
+        (2L, "b", true)
+      ).toDF("id", "data", "active"))
     }
   }
 }
