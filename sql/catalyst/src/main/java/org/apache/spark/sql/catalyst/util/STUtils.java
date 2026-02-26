@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
+import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
@@ -51,6 +53,23 @@ public final class STUtils {
   }
 
   /** Geospatial type casting utility methods. */
+
+  // Cast geometry to geography.
+  public static GeographyVal geometryToGeography(GeometryVal geometryVal) {
+    // We first need to check whether the input geometry has a geographic SRID.
+    int srid = stSrid(geometryVal);
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(String.valueOf(srid));
+    }
+    // We also need to check whether the input geometry has coordinates in geography bounds.
+    try {
+      byte[] wkb = stAsBinary(geometryVal);
+      new WkbReader(true).read(wkb, srid);
+    } catch (WkbParseException e) {
+      throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());
+    }
+    return toPhysVal(Geography.fromBytes(geometryVal.getBytes()));
+  }
 
   // Cast geography to geometry.
   public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
