@@ -64,6 +64,7 @@ class ExecutorServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
   }
 
   private def assertSparkPod(sparkPod: SparkPod): Unit = {
+    assert(sparkPod.pod.getSpec.getEnableServiceLinks === false)
     val env = sparkPod.container.getEnv.asScala.map(v => v.getName -> v.getValue).toMap
     assert(env.get("EXECUTOR_SERVICE_NAME") === Some("svc-appId-exec-1"))
   }

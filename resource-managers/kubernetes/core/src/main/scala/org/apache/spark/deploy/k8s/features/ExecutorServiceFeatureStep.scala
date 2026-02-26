@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, ServiceBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, ServiceBuilder}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
@@ -65,7 +65,13 @@ class ExecutorServiceFeatureStep(conf: KubernetesExecutorConf) extends Kubernete
 
   override def configurePod(pod: SparkPod): SparkPod = {
     SparkPod(
-      pod.pod,
+      new PodBuilder(pod.pod)
+        .editSpec()
+        // otherwise, executor pods get 8 environment variables for each other executor service
+        // with some thousands executor pods you would see ARG_MAX limit issues in endpoint.sh
+        .withEnableServiceLinks(false)
+        .endSpec()
+        .build(),
       // tell the executor entry point its Kubernetes service name
       new ContainerBuilder(pod.container)
         .addNewEnv()
