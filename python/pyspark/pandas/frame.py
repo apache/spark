@@ -12537,7 +12537,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels = self._internal.column_labels
 
             if len(column_labels) == 0:
-                return ps.Series([], dtype=np.int64)
+                # Check if DataFrame has rows - if yes, raise error; if no, return empty Series
+                # to match pandas behavior
+                if len(self) > 0:
+                    raise ValueError("attempt to get argmin of an empty sequence")
+                else:
+                    return ps.Series([], dtype=np.int64)
 
             if self._internal.column_labels_level > 1:
                 raise NotImplementedError(
@@ -12553,6 +12558,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             result = None
+            # Iterate over the column labels in reverse order to get the first occurrence of the
+            # minimum value.
             for label in reversed(column_labels):
                 scol = self._internal.spark_column_for(label)
                 label_value = label[0] if len(label) == 1 else label
@@ -12566,22 +12573,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             result = F.when(min_value == float("inf"), F.lit(None)).otherwise(result)
 
-            sdf = self._internal.spark_frame.select(
-                *self._internal.index_spark_columns,
-                result.alias(SPARK_DEFAULT_SERIES_NAME),
+            internal = self._internal.with_new_columns(
+                [result.alias(SPARK_DEFAULT_SERIES_NAME)],
+                column_labels=[None],
             )
 
-            return first_series(
-                DataFrame(
-                    InternalFrame(
-                        spark_frame=sdf,
-                        index_spark_columns=self._internal.index_spark_columns,
-                        index_names=self._internal.index_names,
-                        index_fields=self._internal.index_fields,
-                        column_labels=[None],
-                    )
-                )
-            )
+            return first_series(DataFrame(internal))
 
     def info(
         self,
