@@ -259,6 +259,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     // throws NumberFormatException("Zero length BigInteger").
     if (msbIndex == offset && src[offset] == 0) {
       scratch[0] = 0x00;
+      // putByteArray copies the bytes into arrayData(), so scratch can be safely reused
       c.putByteArray(rowId, scratch, 0, 1);
       return;
     }
