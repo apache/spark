@@ -47,12 +47,10 @@ if have_pandas:
 
 class StatefulProcessorFactory:
     @abstractmethod
-    def pandas(self):
-        ...
+    def pandas(self): ...
 
     @abstractmethod
-    def row(self):
-        ...
+    def row(self): ...
 
     def get(self, use_pandas: bool = False):
         return self.pandas() if use_pandas else self.row()

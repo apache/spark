@@ -182,8 +182,9 @@ class DataFrameObservationTestsMixin:
 
         # DataFrameWriter
         for cache_enabled in [False, True]:
-            with self.subTest(cache_enabled=cache_enabled), self.sql_conf(
-                {"spark.connect.session.planCache.enabled": cache_enabled}
+            with (
+                self.subTest(cache_enabled=cache_enabled),
+                self.sql_conf({"spark.connect.session.planCache.enabled": cache_enabled}),
             ):
                 for command, action in [
                     ("collect", lambda df: df.collect()),
@@ -192,8 +193,9 @@ class DataFrameObservationTestsMixin:
                     ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
                 ]:
                     for select_star in [True, False]:
-                        with self.subTest(command=command, select_star=select_star), self.table(
-                            test_table
+                        with (
+                            self.subTest(command=command, select_star=select_star),
+                            self.table(test_table),
                         ):
                             observation = Observation()
                             observed_df = df.observe(observation, F.count(F.lit(1)).alias("cnt"))

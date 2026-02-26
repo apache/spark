@@ -786,11 +786,13 @@ def _check_series_convert_timestamps_localize(
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
         return s.apply(
-            lambda ts: ts.tz_localize(from_tz, ambiguous=False)  # type: ignore[arg-type, return-value]
-            .tz_convert(to_tz)
-            .tz_localize(None)
-            if ts is not pd.NaT
-            else pd.NaT
+            lambda ts: (  # type: ignore[arg-type]
+                ts.tz_localize(from_tz, ambiguous=False)  # type: ignore[return-value]
+                .tz_convert(to_tz)
+                .tz_localize(None)
+                if ts is not pd.NaT
+                else pd.NaT
+            )
         )
     else:
         return s
@@ -1404,9 +1406,11 @@ def _create_converter_from_pandas(
                             return [
                                 (
                                     _key_conv(k) if _key_conv is not None and k is not None else k,
-                                    _value_conv(v)
-                                    if _value_conv is not None and v is not None
-                                    else v,
+                                    (
+                                        _value_conv(v)
+                                        if _value_conv is not None and v is not None
+                                        else v
+                                    ),
                                 )
                                 for k, v in value.items()
                             ]

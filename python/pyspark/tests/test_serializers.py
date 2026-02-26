@@ -161,7 +161,6 @@ class SerializationTestCase(unittest.TestCase):
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
-
     """General PySpark tests that depend on scipy"""
 
     def test_serialize(self):
@@ -175,7 +174,6 @@ class SciPyTests(PySparkTestCase):
 
 @unittest.skipIf(not have_numpy, "NumPy not installed")
 class NumPyTests(PySparkTestCase):
-
     """General PySpark tests that depend on numpy"""
 
     def test_statcounter_array(self):

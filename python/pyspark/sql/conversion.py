@@ -949,9 +949,11 @@ class ArrowTableToRowsConversion:
                     assert isinstance(value, dict)
 
                     _values = [
-                        field_convs[i](value.get(name, None))  # type: ignore[misc]
-                        if field_convs[i] is not None
-                        else value.get(name, None)
+                        (
+                            field_convs[i](value.get(name, None))  # type: ignore[misc]
+                            if field_convs[i] is not None
+                            else value.get(name, None)
+                        )
                         for i, name in enumerate(dedup_field_names)
                     ]
                     return _create_row(field_names, _values)
@@ -1724,11 +1726,9 @@ class ArrowArrayToPandasConversion:
             udt: UserDefinedType = spark_type
             series = arr.to_pandas()
             series = series.apply(
-                lambda v: v
-                if hasattr(v, "__UDT__")
-                else udt.deserialize(v)
-                if v is not None
-                else None
+                lambda v: (
+                    v if hasattr(v, "__UDT__") else udt.deserialize(v) if v is not None else None
+                )
             )
         elif isinstance(spark_type, VariantType):
             series = arr.to_pandas(date_as_object=True)
