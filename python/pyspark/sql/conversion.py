@@ -1654,33 +1654,7 @@ class ArrowArrayToPandasConversion:
 
         series: pd.Series
 
-        # TODO(SPARK-55332): Create benchmark for pa.array -> pd.series integer conversion
-        # 1, benchmark a nullable integral array
-        # a = pa.array(list(range(10000000)) + [9223372036854775707, None], type=pa.int64())
-        # %timeit a.to_pandas(types_mapper=pd.ArrowDtype)
-        # 11.9 μs ± 407 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit a.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int64Dtype())
-        # 589 ms ± 9.35 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # %timeit pd.Series(a.to_pylist(), dtype=pd.Int64Dtype())
-        # 2.94 s ± 19.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # %timeit a.to_pandas(integer_object_nulls=True).astype(pd.Int64Dtype())
-        # 2.05 s ± 22.9 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        # pd.Series(a, dtype=pd.Int64Dtype())
-        # fails due to internal np.float64 coercion
-        # OverflowError: Python int too large to convert to C long
-        #
-        # 2, benchmark a nullable integral array
-        # b = pa.array(list(range(10000000)) + [9223372036854775707, 1], type=pa.int64())
-        # %timeit b.to_pandas(types_mapper=pd.ArrowDtype).astype(np.int64)
-        # 30.2 μs ± 831 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        # %timeit pd.Series(b.to_pandas(types_mapper=pd.ArrowDtype), dtype=np.int64)
-        # 33.3 μs ± 928 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        # %timeit pd.Series(b, dtype=np.int64) <- lose the name
-        # 11.9 μs ± 125 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit b.to_pandas()
-        # 7.56 μs ± 96.5 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
-        # %timeit b.to_pandas().astype(np.int64) <- astype is non-trivial
-        # 19.1 μs ± 242 ns per loop (mean ± std. dev. of 7 runs, 100,000 loops each)
+        # conversion methods are selected based on benchmark python/benchmarks/bench_arrow.py
         if isinstance(spark_type, ByteType):
             if arr.null_count > 0:
                 series = arr.to_pandas(types_mapper=pd.ArrowDtype).astype(pd.Int8Dtype())
