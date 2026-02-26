@@ -156,7 +156,7 @@ object JavaTypeInference {
       // Deserializer to instantiate the class, which will not work for interfaces.
       if (c.isInterface) {
         throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_2231",
+          errorClass = "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED",
           messageParameters = Map("className" -> c.getName))
       }
 

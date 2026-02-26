@@ -212,6 +212,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
+    "message" : [
+      "Bean encoder does not support interface types: <className>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -9482,11 +9488,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "Bean encoder does not support interface types: <className>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
