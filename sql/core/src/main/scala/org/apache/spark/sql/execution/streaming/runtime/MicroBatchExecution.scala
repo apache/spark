@@ -845,6 +845,18 @@ class MicroBatchExecution(
    * - If either of the above is true, then construct the next batch by committing to the offset
    *   log that range of offsets that the next batch will process.
    */
+  /**
+   * Checks if a source should be active for offset collection.
+   * For SequentialUnionExecution, only sources in the active child are active.
+   * For normal execution, all sources are active.
+   */
+  protected def isSourceActiveForOffsetCollection(source: SparkDataStream): Boolean = {
+    this match {
+      case seqExec: SequentialUnionExecution => seqExec.isSourceActive(source)
+      case _ => true // Normal execution - all sources are active
+    }
+  }
+
   protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = withProgressLocked {
@@ -853,31 +865,48 @@ class MicroBatchExecution(
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: AvailableNowDataStreamWrapper, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
         val originalSource = s.delegate
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
-          val latest = s.reportLatestOffset()
-          ((originalSource, Option(next)), (originalSource, Option(latest)))
+        if (isSourceActiveForOffsetCollection(originalSource)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
+            val latest = s.reportLatestOffset()
+            ((originalSource, Option(next)), (originalSource, Option(latest)))
+          }
+        } else {
+          // Inactive source - return None to skip offset collection
+          ((originalSource, None), (originalSource, None))
         }
       case (s: SupportsAdmissionControl, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, s), limit)
-          val latest = s.reportLatestOffset()
-          ((s, Option(next)), (s, Option(latest)))
+        if (isSourceActiveForOffsetCollection(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, s), limit)
+            val latest = s.reportLatestOffset()
+            ((s, Option(next)), (s, Option(latest)))
+          }
+        } else {
+          ((s, None), (s, None))
         }
       case (s: Source, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("getOffset") {
-          val offset = s.getOffset
-          ((s, offset), (s, offset))
+        if (isSourceActiveForOffsetCollection(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("getOffset") {
+            val offset = s.getOffset
+            ((s, offset), (s, offset))
+          }
+        } else {
+          ((s, None), (s, None))
         }
       case (s: MicroBatchStream, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val latest = s.latestOffset()
-          ((s, Option(latest)), (s, Option(latest)))
+        if (isSourceActiveForOffsetCollection(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val latest = s.latestOffset()
+            ((s, Option(latest)), (s, Option(latest)))
+          }
+        } else {
+          ((s, None), (s, None))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, SequentialStreamingUnion}
+import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -45,13 +45,8 @@ class SequentialUnionExecution(
     trigger: Trigger,
     triggerClock: Clock,
     extraOptions: Map[String, String],
-    originalPlan: WriteToStream)
-  extends MicroBatchExecution(
-    sparkSession,
-    trigger,
-    triggerClock,
-    extraOptions,
-    SequentialUnionExecution.transformPlanForActiveChild(originalPlan, 0)) {
+    plan: WriteToStream)
+  extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
 
   // Tracks which child is currently active (initialized lazily)
   @volatile private var activeChildIndex: Int = 0
@@ -61,6 +56,15 @@ class SequentialUnionExecution(
 
   // The original SequentialStreamingUnion node from the logical plan
   @volatile private var sequentialUnion: Option[SequentialStreamingUnion] = None
+
+  /**
+   * Checks if a source is active in the sequential union.
+   * This is called from constructNextBatch to determine which sources should receive offsets.
+   */
+  def isSourceActive(source: SparkDataStream): Boolean = {
+    initializeChildMapping()
+    getActiveChildSources().contains(source)
+  }
 
   /**
    * Returns the sources that belong to the specified child index.
@@ -152,9 +156,8 @@ class SequentialUnionExecution(
   }
 
   /**
-   * Override to detect when the active child is exhausted and transition to the next.
-   * Since inactive children are replaced with empty LocalRelations, only the active
-   * child's sources are materialized and present in the batch.
+   * Override to skip offset collection for inactive sources.
+   * This is the key method that enforces sequential semantics.
    */
   override protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
@@ -168,40 +171,13 @@ class SequentialUnionExecution(
     if (batchConstructed) {
       // Check if active child is exhausted and transition if needed
       if (!isOnFinalChild && isActiveChildExhausted(execCtx)) {
+        logInfo(s"Transitioning from child $activeChildIndex to ${activeChildIndex + 1}")
         transitionToNextChild()
-        // TODO: We'll need to reinitialize logicalPlan with the new active child
-        // For now, this won't work correctly across transitions
       }
 
-      logDebug(s"Active child: $activeChildIndex, sources: ${sources.size}")
+      logDebug(s"Active child: $activeChildIndex, active sources: ${getActiveChildSources().size}")
     }
 
     batchConstructed
-  }
-}
-
-object SequentialUnionExecution {
-  /**
-   * Transforms a WriteToStream plan to replace inactive children in SequentialStreamingUnion
-   * with empty LocalRelations. This is called during construction.
-   */
-  private def transformPlanForActiveChild(
-      plan: WriteToStream,
-      activeChild: Int): WriteToStream = {
-    val transformedQuery = plan.inputQuery.transformUp {
-      case union: SequentialStreamingUnion =>
-        // Replace inactive children with empty LocalRelations
-        val newChildren = union.children.zipWithIndex.map { case (child, idx) =>
-          if (idx == activeChild) {
-            child  // Keep the active child as-is
-          } else {
-            // Replace with empty relation that will be optimized out
-            LocalRelation(child.output, data = Seq.empty, isStreaming = true)
-          }
-        }
-        union.copy(children = newChildren)
-    }
-
-    plan.copy(inputQuery = transformedQuery)
   }
 }
