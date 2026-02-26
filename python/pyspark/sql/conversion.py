@@ -1750,3 +1750,89 @@ class ArrowArrayToPandasConversion:
             assert False, f"Need converter for {spark_type} but failed to find one."
 
         return series.rename(ser_name)
+
+    @classmethod
+    def convert_pyarrow(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        ser_name: Optional[str] = None,
+    ) -> "pd.Series":
+        """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series backed by ArrowDtype.
+
+        This is similar to :meth:`convert_numpy`, but instead of producing
+        numpy-backed pandas Series, it produces ArrowDtype-backed Series via
+        ``arr.to_pandas(types_mapper=pd.ArrowDtype)``.
+
+        Parameters
+        ----------
+        arr : pa.Array or pa.ChunkedArray
+            The Arrow column to convert.
+        spark_type : DataType
+            The target Spark type for the column to be converted to.
+        ser_name : str, optional
+            The name of returned pd.Series. If not set, will try to get it from arr._name.
+
+        Returns
+        -------
+        pd.Series
+            Converted pandas Series backed by ArrowDtype.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if ser_name is None:
+            ser_name = arr._name
+
+        arr = ArrowArrayConversion.preprocess_time(arr)
+
+        series: pd.Series
+
+        if isinstance(
+            spark_type,
+            (
+                NullType,
+                BinaryType,
+                BooleanType,
+                FloatType,
+                DoubleType,
+                ByteType,
+                ShortType,
+                IntegerType,
+                LongType,
+                DecimalType,
+                StringType,
+                DateType,
+                TimeType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            series = arr.to_pandas(types_mapper=pd.ArrowDtype)
+        # elif isinstance(spark_type, UserDefinedType):
+        #     TODO: Support UserDefinedType
+        # elif isinstance(spark_type, VariantType):
+        #     TODO: Support VariantType
+        # elif isinstance(spark_type, GeographyType):
+        #     TODO: Support GeographyType
+        # elif isinstance(spark_type, GeometryType):
+        #     TODO: Support GeometryType
+        # elif isinstance(
+        #     spark_type,
+        #     (
+        #         ArrayType,
+        #         MapType,
+        #         StructType,
+        #     ),
+        # ):
+        #     TODO: Support complex types
+        else:  # pragma: no cover
+            assert False, f"Need converter for {spark_type} but failed to find one."
+
+        return series.rename(ser_name)

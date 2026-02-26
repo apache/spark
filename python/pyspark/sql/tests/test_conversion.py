@@ -30,8 +30,13 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    BooleanType,
+    ByteType,
+    DateType,
+    DayTimeIntervalType,
     DecimalType,
     DoubleType,
+    FloatType,
     GeographyType,
     GeometryType,
     IntegerType,
@@ -39,13 +44,17 @@ from pyspark.sql.types import (
     MapType,
     NullType,
     Row,
+    ShortType,
     StringType,
     StructField,
     StructType,
+    TimeType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT, PythonOnlyPoint, PythonOnlyUDT
 from pyspark.testing.utils import (
@@ -655,6 +664,91 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             pa.array([], type=variant_type), VariantType()
         )
         self.assertEqual(len(result), 0)
+
+    def test_convert_pyarrow(self):
+        import pyarrow as pa
+        import pandas as pd
+
+        from decimal import Decimal
+
+        # Cases where input data equals expected output
+        cases = [
+            ([None, None], pa.null(), NullType()),
+            ([b"\x01", None], pa.binary(), BinaryType()),
+            ([True, None, False], pa.bool_(), BooleanType()),
+            ([1.0, None], pa.float32(), FloatType()),
+            ([1.0, None], pa.float64(), DoubleType()),
+            ([1, None, 3], pa.int8(), ByteType()),
+            ([1, None, 3], pa.int16(), ShortType()),
+            ([1, None, 3], pa.int32(), IntegerType()),
+            ([1, None, 3], pa.int64(), LongType()),
+            ([Decimal("1.23"), None], pa.decimal128(10, 2), DecimalType(10, 2)),
+            (["a", None, "c"], pa.string(), StringType()),
+            ([1, None], pa.int32(), YearMonthIntervalType()),
+        ]
+        for data, arrow_type, spark_type in cases:
+            arr = pa.array(data, type=arrow_type)
+            result = ArrowArrayToPandasConversion.convert_pyarrow(arr, spark_type)
+            self.assertIsInstance(result.dtype, pd.ArrowDtype, f"Failed for {spark_type}")
+            for i, val in enumerate(data):
+                msg = f"Failed for {spark_type} at index {i}: expected {val}, got {result.iloc[i]}"
+                if val is None:
+                    self.assertTrue(pd.isna(result.iloc[i]), msg)
+                else:
+                    self.assertEqual(result.iloc[i], val, msg)
+
+    def test_convert_pyarrow_temporal(self):
+        import pyarrow as pa
+        import pandas as pd
+
+        cases = [
+            ([1, None], pa.date32(), DateType(), [datetime.date(1970, 1, 2), None]),
+            ([1000000, None], pa.time64("us"), TimeType(), [datetime.time(0, 0, 1), None]),
+            (
+                [1000000, None],
+                pa.timestamp("us", tz="UTC"),
+                TimestampType(),
+                [datetime.datetime(1970, 1, 1, 0, 0, 1), None],
+            ),
+            (
+                [1000000, None],
+                pa.timestamp("us"),
+                TimestampNTZType(),
+                [datetime.datetime(1970, 1, 1, 0, 0, 1), None],
+            ),
+            (
+                [1000000, None],
+                pa.duration("us"),
+                DayTimeIntervalType(),
+                [datetime.timedelta(seconds=1), None],
+            ),
+        ]
+        for data, arrow_type, spark_type, expected in cases:
+            arr = pa.array(data, type=arrow_type)
+            result = ArrowArrayToPandasConversion.convert_pyarrow(arr, spark_type)
+            self.assertIsInstance(result.dtype, pd.ArrowDtype, f"Failed for {spark_type}")
+            for i, exp in enumerate(expected):
+                msg = f"Failed for {spark_type} at index {i}: expected {exp}, got {result.iloc[i]}"
+                if exp is None:
+                    self.assertTrue(pd.isna(result.iloc[i]), msg)
+                else:
+                    self.assertEqual(result.iloc[i], exp, msg)
+
+    def test_convert_pyarrow_ser_name(self):
+        import pyarrow as pa
+        import pandas as pd
+
+        # explicit ser_name
+        arr = pa.array([1, 2, 3], type=pa.int64())
+        result = ArrowArrayToPandasConversion.convert_pyarrow(arr, LongType(), ser_name="col")
+        self.assertEqual(result.name, "col")
+        self.assertIsInstance(result.dtype, pd.ArrowDtype)
+
+        # default name from arrow array (set via RecordBatch column extraction)
+        batch = pa.record_batch({"my_col": [1, 2, 3]})
+        arr = batch.column("my_col")
+        result = ArrowArrayToPandasConversion.convert_pyarrow(arr, LongType())
+        self.assertEqual(result.name, "my_col")
 
 
 if __name__ == "__main__":
