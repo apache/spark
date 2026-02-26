@@ -104,7 +104,8 @@ private case class KafkaBatchPartitionReader(
     }
   }
 
-  override def nextWithTimeout(timeoutMs: java.lang.Long): RecordStatus = {
+  override def nextWithTimeout(
+      startTime: java.lang.Long,, timeoutMs: java.lang.Long): RecordStatus = {
     if (!iteratorForRealTimeMode.isDefined) {
       logInfo(s"Getting a new kafka consuming iterator for ${offsetRange.topicPartition} " +
         s"starting from ${nextOffset}, timeoutMs ${timeoutMs}")

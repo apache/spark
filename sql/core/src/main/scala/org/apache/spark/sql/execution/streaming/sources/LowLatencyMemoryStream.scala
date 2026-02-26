@@ -277,8 +277,12 @@ class LowLatencyMemoryStreamPartitionReader(
   if (TaskContext.get() == null) {
     throw new IllegalStateException("Task context was not set!")
   }
-  override def nextWithTimeout(timeout: java.lang.Long): RecordStatus = {
-    val startReadTime = clock.nanoTime()
+  override def nextWithTimeout(
+      startTime: java.lang.Long, timeout: java.lang.Long): RecordStatus = {
+    // SPARK-55699: Use the reference time passed in by the caller instead of getting the latest
+    // time from LowLatencyClock, to avoid inconsistent reading when LowLatencyClock is a
+    // manual clock.
+    val startReadTime = startTime
     var elapsedTimeMs = 0L
     current = getRecordWithTimestamp
     while (current.isEmpty) {

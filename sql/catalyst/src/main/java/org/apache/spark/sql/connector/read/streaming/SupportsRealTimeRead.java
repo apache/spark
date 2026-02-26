@@ -78,9 +78,12 @@ public interface SupportsRealTimeRead<T> extends PartitionReader<T> {
      * Alternative function to be called than next(), that proceed to the next record. The different
      * from next() is that, if there is no more records, the call needs to keep waiting until
      * the timeout.
+     * @param startTime the base time (milliseconds) the was used to calculate the timeout.
+     *                  Sources should use it as the reference time to start waiting for the next
+     *                  record instead of getting the latest time from LowLatencyClock.
      * @param timeout if no result is available after this timeout (milliseconds), return
      * @return {@link RecordStatus} describing whether a record is available and its arrival time
      * @throws IOException
      */
-    RecordStatus nextWithTimeout(Long timeout) throws IOException;
+    RecordStatus nextWithTimeout(Long startTime, Long timeout) throws IOException;
 }
