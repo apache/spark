@@ -206,17 +206,17 @@
     ],
     "sqlState" : "42K03"
   },
-  "BINARY_ARITHMETIC_OVERFLOW" : {
-    "message" : [
-      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
-    ],
-    "sqlState" : "22003"
-  },
   "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
     "message" : [
       "Bean encoder does not support interface type <className>."
     ],
     "sqlState" : "0A000"
+  },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
+    ],
+    "sqlState" : "22003"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
