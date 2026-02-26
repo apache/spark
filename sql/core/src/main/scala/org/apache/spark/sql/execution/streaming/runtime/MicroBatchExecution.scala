@@ -874,8 +874,9 @@ class MicroBatchExecution(
             ((originalSource, Option(next)), (originalSource, Option(latest)))
           }
         } else {
-          // Inactive source - return None to skip offset collection
-          ((originalSource, None), (originalSource, None))
+          // Inactive source - return startOffset as endOffset (no new data)
+          val start = getStartOffset(execCtx, originalSource)
+          ((originalSource, Option(start)), (originalSource, Option(start)))
         }
       case (s: SupportsAdmissionControl, limit) =>
         if (isSourceActiveForOffsetCollection(s)) {
@@ -886,7 +887,9 @@ class MicroBatchExecution(
             ((s, Option(next)), (s, Option(latest)))
           }
         } else {
-          ((s, None), (s, None))
+          // Inactive source - return startOffset as endOffset (no new data)
+          val start = getStartOffset(execCtx, s)
+          ((s, Option(start)), (s, Option(start)))
         }
       case (s: Source, _) =>
         if (isSourceActiveForOffsetCollection(s)) {
@@ -896,7 +899,9 @@ class MicroBatchExecution(
             ((s, offset), (s, offset))
           }
         } else {
-          ((s, None), (s, None))
+          // Inactive source - return startOffset as endOffset (no new data)
+          val start = execCtx.startOffsets.get(s).map(_.asInstanceOf[Offset])
+          ((s, start), (s, start))
         }
       case (s: MicroBatchStream, _) =>
         if (isSourceActiveForOffsetCollection(s)) {
@@ -906,7 +911,9 @@ class MicroBatchExecution(
             ((s, Option(latest)), (s, Option(latest)))
           }
         } else {
-          ((s, None), (s, None))
+          // Inactive source - return startOffset as endOffset (no new data)
+          val start = execCtx.startOffsets.get(s)
+          ((s, start), (s, start))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
