@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
-import org.apache.spark.sql.catalyst.plans.logical.SequentialStreamingUnion
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.plans.logical.{
+  LogicalPlan,
+  SequentialStreamingUnion
+}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -58,12 +63,53 @@ class SequentialUnionExecution(
   @volatile private var sequentialUnion: Option[SequentialStreamingUnion] = None
 
   /**
+   * Initialize the child-to-source mapping by traversing the logical plan.
+   * Extracts sources from each child of the SequentialStreamingUnion.
+   */
+  private def initializeChildToSourcesMap(plan: LogicalPlan): Unit = {
+    if (childToSourcesMap.nonEmpty) {
+      return  // Already initialized
+    }
+
+    plan.collectFirst {
+      case union: SequentialStreamingUnion => union
+    }.foreach { union =>
+      sequentialUnion = Some(union)
+
+      // Extract sources from each child
+      val mapping = mutable.Map[Int, Set[SparkDataStream]]()
+
+      union.children.zipWithIndex.foreach { case (child, childIdx) =>
+        val childSources = child.collect {
+          case s: StreamingExecutionRelation => s.source
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+        }.toSet
+
+        if (childSources.nonEmpty) {
+          mapping(childIdx) = childSources
+        }
+      }
+
+      childToSourcesMap = mapping.toMap
+
+      val numChildren = union.children.size
+      logInfo(s"Initialized SequentialUnionExecution with $numChildren children:")
+      childToSourcesMap.foreach { case (idx, srcs) =>
+        logInfo(s"  Child $idx has ${srcs.size} source(s)")
+      }
+    }
+  }
+
+  /**
    * Checks if a source is active in the sequential union.
-   * This is called from constructNextBatch to determine which sources should receive offsets.
+   * This is called from constructNextBatch to determine which
+   * sources should receive offsets.
    */
   def isSourceActive(source: SparkDataStream): Boolean = {
-    initializeChildMapping()
-    getActiveChildSources().contains(source)
+    val isActive = getActiveChildSources().contains(source)
+    logDebug(
+      s"isSourceActive: source=$source, activeChild=$activeChildIndex, isActive=$isActive")
+    isActive
   }
 
   /**
@@ -78,49 +124,6 @@ class SequentialUnionExecution(
    */
   private def getActiveChildSources(): Set[SparkDataStream] = {
     getSourcesForChild(activeChildIndex)
-  }
-
-  /**
-   * Initializes the child-to-sources mapping by traversing the logical plan.
-   * This is called lazily since logicalPlan may not be available during construction.
-   */
-  private def initializeChildMapping(): Unit = {
-    if (childToSourcesMap.isEmpty) {
-      try {
-        // Find the SequentialStreamingUnion node in the plan
-        val unionOpt = logicalPlan.collectFirst {
-          case union: SequentialStreamingUnion => union
-        }
-
-        val union = unionOpt.getOrElse {
-          throw new IllegalStateException(
-            "SequentialUnionExecution requires a SequentialStreamingUnion in the logical plan")
-        }
-
-        sequentialUnion = Some(union)
-
-        // For each child, extract the sources it contains
-        val mapping = union.children.zipWithIndex.map { case (child, childIdx) =>
-          val childSources = child.collect {
-            case s: StreamingExecutionRelation => s.source
-            case r: StreamingDataSourceV2ScanRelation => r.stream
-          }.toSet
-
-          childIdx -> childSources
-        }.toMap
-
-        childToSourcesMap = mapping
-
-        logInfo(s"Initialized SequentialUnionExecution with ${union.children.size} children:")
-        childToSourcesMap.foreach { case (idx, srcs) =>
-          logInfo(s"  Child $idx has ${srcs.size} source(s)")
-        }
-      } catch {
-        case e: Exception =>
-          logError(s"Error initializing SequentialUnionExecution: ${e.getMessage}", e)
-          throw e
-      }
-    }
   }
 
   /**
@@ -168,8 +171,10 @@ class SequentialUnionExecution(
   override protected def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = {
-    // Initialize child mapping on first call
-    initializeChildMapping()
+    // Initialize mapping on first use using the logical plan
+    if (childToSourcesMap.isEmpty) {
+      initializeChildToSourcesMap(logicalPlan)
+    }
 
     // Let parent construct the batch
     val batchConstructed = super.constructNextBatch(execCtx, noDataBatchesEnabled)
