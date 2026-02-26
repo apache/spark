@@ -52,8 +52,8 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
    * the scan may detect that some {@link InputPartition}s have no matching data, in which case
    * it can either replace the initially planned {@link InputPartition}s that have no matching data
    * with empty {@link InputPartition}s, or report only a subset of the original partition values
-   * (omitting those with no data). The scan must not report new partition values that were not
-   * present in the original partitioning.
+   * (omitting those with no data) via {@link Batch#planInputPartitions()}. The scan must not report
+   * new partition values that were not present in the original partitioning.
    * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *
