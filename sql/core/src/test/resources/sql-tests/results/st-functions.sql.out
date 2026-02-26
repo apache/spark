@@ -378,6 +378,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT CAST(ST_GeomFromWKB(X'010100000000000000000069400000000000005940', 4326) AS GEOGRAPHY(4326)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "WKB_PARSE_ERROR",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "parseError" : "Invalid coordinate value found",
+    "pos" : "5"
+  }
+}
+
+
+-- !query
 SELECT typeof(array(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
 -- !query schema
 struct<typeof(array(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)))):string>

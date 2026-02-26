@@ -78,9 +78,23 @@ class STUtilsSuite {
     assertNotNull(geographyVal);
     assertArrayEquals(geometryVal.getBytes(), geographyVal.getBytes());
     // Non-geographic SRID should not be allowed for geometry to geography casting.
-    SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+    SparkIllegalArgumentException sridException = assertThrows(
+      SparkIllegalArgumentException.class,
       () -> STUtils.geometryToGeography(GeometryVal.fromBytes(testGeometryBytes)));
-    assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+    assertEquals("ST_INVALID_SRID_VALUE", sridException.getCondition());
+    // Coordinates outside geography bounds should not be allowed even with a valid SRID.
+    ByteBuffer oobWkbBuf = ByteBuffer.allocate(21).order(ByteOrder.LITTLE_ENDIAN);
+    oobWkbBuf.put((byte) 0x01).putInt(1).putDouble(200.0).putDouble(100.0);
+    // For example: POINT(200 100) geometry with SRID 4326.
+    byte[] oobWkb = oobWkbBuf.array();
+    byte[] oobGeomBytes = new byte[sridLen + oobWkb.length];
+    byte[] srid4326 = ByteBuffer.allocate(sridLen).order(end).putInt(testGeographySrid).array();
+    System.arraycopy(srid4326, 0, oobGeomBytes, 0, sridLen);
+    System.arraycopy(oobWkb, 0, oobGeomBytes, sridLen, oobWkb.length);
+    SparkIllegalArgumentException coordinateException = assertThrows(
+      SparkIllegalArgumentException.class,
+      () -> STUtils.geometryToGeography(GeometryVal.fromBytes(oobGeomBytes)));
+    assertEquals("WKB_PARSE_ERROR", coordinateException.getCondition());
   }
 
   @Test

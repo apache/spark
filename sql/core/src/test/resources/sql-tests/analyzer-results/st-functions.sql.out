@@ -338,6 +338,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT CAST(ST_GeomFromWKB(X'010100000000000000000069400000000000005940', 4326) AS GEOGRAPHY(4326)) AS result
+-- !query analysis
+Project [cast(st_geomfromwkb(0x010100000000000000000069400000000000005940, 4326) as geography(4326)) AS result#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(array(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
 -- !query analysis
 Project [typeof(array(cast(st_geogfromwkb(wkb#x) as geography(any)), cast(st_geogfromwkb(wkb#x) as geography(any)))) AS typeof(array(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY))))#x]

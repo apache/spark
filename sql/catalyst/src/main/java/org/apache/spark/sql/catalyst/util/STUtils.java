@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
@@ -61,6 +62,12 @@ public final class STUtils {
       throw QueryExecutionErrors.stInvalidSridValueError(String.valueOf(srid));
     }
     // We also need to check whether the input geometry has coordinates in geography bounds.
+    try {
+      byte[] wkb = stAsBinary(geometryVal);
+      new WkbReader(true).read(wkb, srid);
+    } catch (WkbParseException e) {
+      throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());
+    }
     return toPhysVal(Geography.fromBytes(geometryVal.getBytes()));
   }
 
